@@ -59,7 +59,7 @@ int usage() {
         "                [--island-outline O] [--island-forest F] [--island-mountains M]\n"
         "                [--screenshot out.png] [--no-sound] [--no-music] [--no-panel] [--no-videos] [--intro]\n"
         "                [--video N] [--message ID] [--input EVENTS] [--select ISLAND,X,Y|ship:N]\n"
-        "                [--host [--port N] | --join HOST[:PORT]] [--name NAME]\n"
+        "                [--host [--port N] | --join HOST[:PORT]] [--name NAME] [--editor [FILE]]\n"
         "  --new-game D       new endless game, difficulty 0 (easy) .. 3 (hard); layout: one of the three maps,\n"
         "                     chosen by the seed\n"
         "  --seed N           the world of an endless game: its map and islands (default: random)\n"
@@ -115,6 +115,8 @@ int usage() {
         "  --select ship:N    select the N-th ship of the game (index) and look at it; unit:N a land unit\n"
         "  --load FILE        open a savegame of Open1602 (.o1602) or a file of the original by its path\n"
         "  --menu             start in the main menu (the default when no game is named)\n"
+        "  --editor [FILE]    start in the editor: with FILE (Open1602's own, or a scenario or savegame of the\n"
+        "                     original), or with a new map\n"
         "  --host             host a multiplayer game of the game named (UDP port 16020, --port N); others join\n"
         "                     into the free human slots, or watch\n"
         "  --join HOST[:PORT] join the multiplayer game of a host (name or IPv4 address); the game comes from it\n"
@@ -208,6 +210,11 @@ int run_program(int argc, char** argv) {
             }
         }
         scenario = savegame_path;
+    }
+    if (!command.editor_file.empty()) {
+        // As --scenario: a relative path in the game directory first.
+        const auto resolved = game->resolve(command.editor_file);
+        options.editor_file = resolved ? *resolved : core::path_from_utf8(command.editor_file);
     }
     if (!command.load.empty()) {
         options.scenario = core::path_from_utf8(command.load);

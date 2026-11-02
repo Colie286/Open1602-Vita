@@ -27,22 +27,34 @@ public:
     /// A document of `world`, unchanged (as if just saved).
     explicit Document(sim::World world, std::size_t history_limit = History::kDefaultLimit);
 
-    /// Opens a file: an Open1602 savegame or scenario, or a scenario (.szs, .szm) or savegame
-    /// (.gam) of the original. Problems that do not stop it are added to `warnings`. With the
-    /// `figures` an Open1602 file whose running game cannot be read is refused (sim::read_game).
-    /// Files of the original need the `game` (its islands); without it only Open1602's open.
+    /// A document that edits a world kept elsewhere (the one the game's view shows), unchanged.
+    /// The world must outlive the document and change only through it.
+    [[nodiscard]] static Document edit(sim::World& world, std::size_t history_limit = History::kDefaultLimit);
+
+    /// The world of a file as the editor opens it: an Open1602 savegame or scenario, or a scenario
+    /// (.szs, .szm) or savegame (.gam) of the original, whose world plan is kept (ADR 0013).
+    /// Problems that do not stop it are added to `warnings`. With the `figures` an Open1602 file
+    /// whose running game cannot be read is refused (sim::read_game). Files of the original need
+    /// the `game` (its islands); without it only Open1602's open.
+    [[nodiscard]] static core::Result<sim::World> read(std::span<const std::uint8_t> bytes,
+                                                       const assets::BuildingTable& buildings,
+                                                       const assets::GameDirectory* game,
+                                                       std::vector<std::string>* warnings = nullptr,
+                                                       const assets::FigureTable* figures = nullptr);
+
+    /// Opens a file as read() reads it.
     [[nodiscard]] static core::Result<Document> open(std::span<const std::uint8_t> bytes,
                                                      const assets::BuildingTable& buildings,
                                                      const assets::GameDirectory* game,
                                                      std::vector<std::string>* warnings = nullptr,
                                                      const assets::FigureTable* figures = nullptr);
 
-    [[nodiscard]] const sim::World& world() const noexcept { return m_world; }
+    [[nodiscard]] const sim::World& world() const noexcept { return *m_world; }
 
     /// Does `op` and keeps it for undo.
-    void perform(std::unique_ptr<Operation> op) { m_history.perform(m_world, std::move(op)); }
-    bool undo() { return m_history.undo(m_world); }
-    bool redo() { return m_history.redo(m_world); }
+    void perform(std::unique_ptr<Operation> op) { m_history.perform(*m_world, std::move(op)); }
+    bool undo() { return m_history.undo(*m_world); }
+    bool redo() { return m_history.redo(*m_world); }
     [[nodiscard]] const History& history() const noexcept { return m_history; }
 
     /// Whether the world differs from what was opened or saved last (undo back to it: not modified).
@@ -58,7 +70,10 @@ public:
     [[nodiscard]] std::vector<std::string> check_scenario() const;
 
 private:
-    sim::World m_world;
+    Document(sim::World* world, std::size_t history_limit) noexcept : m_world(world), m_history(history_limit) {}
+
+    std::unique_ptr<sim::World> m_own;  ///< the world, unless it is kept elsewhere (edit())
+    sim::World* m_world;                ///< never null; does not move with the document
     History m_history;
     std::uint64_t m_saved_state = 0;
 };

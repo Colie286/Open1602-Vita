@@ -155,6 +155,12 @@ core::Result<CommandLine> parse_command_line(int argc, const char* const* argv) 
             game_named = true;
         } else if (arg == "--menu") {
             menu = true;
+        } else if (arg == "--editor") {
+            // The editor, with the file after it if one follows (ADR 0013).
+            options.editor = true;
+            if (has_value && !std::string_view(argv[i + 1]).starts_with("--")) {
+                out.editor_file = argv[++i];
+            }
         } else if (arg == "--no-panel") {
             options.frame = false;
         } else if (arg == "--no-sound") {
@@ -589,6 +595,13 @@ core::Result<CommandLine> parse_command_line(int argc, const char* const* argv) 
     // No game named: the main menu, as the original starts (with --frame off there is none). A
     // computer joining a host gets the game from it.
     options.menu = options.frame && !multiplayer_given && (menu || (!game_named && !new_game));
+    if (options.editor) {
+        if (!options.frame || multiplayer_given || game_named || new_game) {
+            return core::make_error(core::ErrorCode::InvalidFormat,
+                                    "--editor opens its own file: not with a game, --no-panel or multiplayer");
+        }
+        options.menu = true;  // the sea behind the menu, until the editor takes its place
+    }
     if (options.max_frames != 0) {
         out.dialogs = false;
     }

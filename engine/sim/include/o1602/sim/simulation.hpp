@@ -175,6 +175,14 @@ public:
 
     Simulation(World& world, const assets::BuildingTable& buildings, const assets::FigureTable& figures,
                Rules rules = Rules::open1602());
+    /// A simulation that only shows the world, as the editor does (ADR 0013): its parts are built
+    /// as for a game, but nothing a load does to a world for the game to run happens (no deer at
+    /// their spots, no towns revealed, the running state a savegame carries stays in the world).
+    /// advance() must not be called on it.
+    struct ViewOnly {};
+    Simulation(World& world, const assets::BuildingTable& buildings, const assets::FigureTable& figures, Rules rules,
+               ViewOnly)
+        : Simulation(world, buildings, figures, rules, Parts{}) {}
 
     /// Whether the state of the running game a world carries (a game saved by Open1602) can be
     /// read whole (the error names the part that is not); Ok for a world without one. Builds the parts of a game on the

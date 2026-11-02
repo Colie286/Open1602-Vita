@@ -110,6 +110,7 @@ struct MenuEvent {
         Mods,          ///< the screen "Mods" opened: its model is due (set_mods)
         ToggleMod,     ///< turn the package `name` (its id, UTF-8) in the folder `path` on or off
         AdoptMod,      ///< copy the received package `name` in the folder `path` into the mods folder
+        Editor,        ///< the editor (ADR 0013)
     };
     Kind kind = Kind::Quit;
     std::uint8_t level = 0;

@@ -63,6 +63,10 @@ struct ViewerOptions {
     std::string language;
     /// Start in the main menu instead of a game (no game was named on the command line).
     bool menu = false;
+    /// Start in the editor (--editor, ADR 0013): with the file `editor_file`, or a new map if it is
+    /// empty.
+    bool editor = false;
+    std::filesystem::path editor_file;
     /// The player's name given on the command line (--name, Windows-1252): the multiplayer menu
     /// starts with it for this run, until the person types another; empty: the name in the settings.
     std::string player_name;

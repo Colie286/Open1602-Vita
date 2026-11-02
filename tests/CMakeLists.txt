@@ -99,6 +99,7 @@ add_executable(o1602_tests
     unit/test_multiplayer_menu.cpp
     unit/test_blueprint_window.cpp
     unit/test_templates.cpp
+    unit/test_editor_panel.cpp
     unit/test_chat_window.cpp
     unit/test_main_menu.cpp
     unit/test_sea_paths.cpp

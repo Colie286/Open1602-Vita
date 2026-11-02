@@ -139,6 +139,35 @@ MapInput::MapInput(const Parts& parts)
     setup_keys();
 }
 
+bool MapInput::editor_key(ui::KeyAction action) noexcept {
+    using ui::KeyAction;
+    switch (action) {
+        case KeyAction::ScrollUp:
+        case KeyAction::ScrollDown:
+        case KeyAction::ScrollLeft:
+        case KeyAction::ScrollRight:
+        case KeyAction::RotateViewLeft:
+        case KeyAction::RotateViewRight:
+        case KeyAction::ZoomIn:
+        case KeyAction::ZoomOut:
+        case KeyAction::Screenshot:
+        case KeyAction::Help:
+        case KeyAction::Cancel:
+        case KeyAction::PixelScaleUp:
+        case KeyAction::PixelScaleDown:
+        case KeyAction::ShowFps:
+        case KeyAction::ShowCoordinates:
+        case KeyAction::Fullscreen:
+        case KeyAction::Quit:
+        case KeyAction::EditorUndo:
+        case KeyAction::EditorRedo:
+        case KeyAction::EditorSave:
+            return true;
+        default:
+            return false;
+    }
+}
+
 void MapInput::setup_keys() {
     using ui::KeyAction;
     using ui::KeyContext;
@@ -229,6 +258,12 @@ void MapInput::setup_keys() {
     general(chord(SDLK_F11), KeyAction::Fullscreen);
     general(ui::KeyChord{static_cast<std::int32_t>(SDLK_RETURN), false, false, true}, KeyAction::Fullscreen);
     general(chord(SDLK_Q, true), KeyAction::Quit);
+    // The editor (ADR 0013)
+    const auto editor = [&](ui::KeyChord c, KeyAction a) { k.bind(KeyContext::Editor, c, a); };
+    editor(chord(SDLK_Z, true), KeyAction::EditorUndo);
+    editor(chord(SDLK_Y, true), KeyAction::EditorRedo);
+    editor(chord(SDLK_Z, true, true), KeyAction::EditorRedo);
+    editor(chord(SDLK_S, true), KeyAction::EditorSave);
     // Building
     building(chord(SDLK_R), KeyAction::RotateBuilding);
     building(chord(SDLK_R, false, true), KeyAction::RotateBuildingBack);
@@ -290,6 +325,9 @@ void MapInput::show_key_help() {
     using ui::KeyAction;
     std::vector<KeyHelpEntry> entries;
     for (const ui::KeyBinding& b : m_keys.all()) {
+        if (m_editor ? !editor_key(b.action) : b.context == ui::KeyContext::Editor) {
+            continue;
+        }
         std::string key = key_label(b.chord);
         if (b.action == KeyAction::GroupStore || b.action == KeyAction::GroupAdd ||
             b.action == KeyAction::GroupRecall) {
@@ -306,6 +344,9 @@ void MapInput::show_key_help() {
 }
 
 ui::KeyContext MapInput::key_context() const {
+    if (m_editor) {
+        return ui::KeyContext::Editor;
+    }
     if (m_tool.active() || (m_hud && m_hud->mode() == Hud::kModeBuild)) {
         return ui::KeyContext::Building;
     }
@@ -527,6 +568,9 @@ void MapInput::run_action(const ui::KeyBinding& b) {
     m_window.output_size(w, h);
     const double cx = w / 2.0;
     const double cy = h / 2.0;
+    if (m_editor && !editor_key(b.action)) {
+        return;  // a key of the game: the editor's world does not run (ADR 0013)
+    }
     switch (b.action) {
         case KeyAction::ScrollUp:
         case KeyAction::ScrollDown:
@@ -610,7 +654,20 @@ void MapInput::run_action(const ui::KeyBinding& b) {
             show_key_help();
             break;
         case KeyAction::Cancel:
+            if (m_editor) {
+                if (m_hud) {
+                    (void)m_hud->back();
+                }
+                break;
+            }
             cancel_action();
+            break;
+        case KeyAction::EditorUndo:
+        case KeyAction::EditorRedo:
+        case KeyAction::EditorSave:
+            if (m_editor) {
+                m_host.editor_key(b.action);
+            }
             break;
         case KeyAction::ModeBuild:
             set_mode(m_hud && m_hud->mode() == Hud::kModeBuild ? Hud::kModeInfo : Hud::kModeBuild);
@@ -951,8 +1008,8 @@ void MapInput::handle_event(const SDL_Event& event) {
                                                     static_cast<std::int32_t>(event.button.y), true)) {
                         m_host.apply_hud(*a);
                     }
-                } else if (event.button.button == SDL_BUTTON_RIGHT && m_hud->menu_active()) {
-                    // The menus' settings: the previous value.
+                } else if (event.button.button == SDL_BUTTON_RIGHT && (m_hud->menu_active() || m_editor)) {
+                    // The menus' settings and the editor's: the previous value.
                     (void)m_hud->mouse(static_cast<std::int32_t>(event.button.x),
                                        static_cast<std::int32_t>(event.button.y), true, ui::MouseButton::Right);
                 } else if (event.button.button == SDL_BUTTON_RIGHT) {
@@ -977,6 +1034,8 @@ void MapInput::handle_event(const SDL_Event& event) {
             }
             if (event.button.button == SDL_BUTTON_RIGHT || event.button.button == SDL_BUTTON_MIDDLE) {
                 m_drag.press();
+            } else if (m_editor) {
+                // The editor's map: no selection, tool or order of the game (ADR 0013).
             } else if (event.button.button == SDL_BUTTON_LEFT && m_tool.active()) {
                 if (const auto spot = spot_at_mouse()) {
                     m_tool.press(*spot);
@@ -1007,7 +1066,7 @@ void MapInput::handle_event(const SDL_Event& event) {
             }
             if (event.button.button == SDL_BUTTON_RIGHT || event.button.button == SDL_BUTTON_MIDDLE) {
                 // A right click (not a drag): an order (ADR 0010), or back with the original's mouse.
-                if (m_drag.release() && event.button.button == SDL_BUTTON_RIGHT &&
+                if (m_drag.release() && event.button.button == SDL_BUTTON_RIGHT && !m_editor &&
                     !(m_hud && (m_hud->modal() || m_hud->menu_active()))) {
                     if (m_original_mouse) {
                         cancel_action();

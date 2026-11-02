@@ -29,6 +29,7 @@ struct CommandLine {
     std::string scenario = "Szenes/Das Atoll.szs";  ///< --scenario, as typed
     std::string savegame;                           ///< --savegame: a name of Game.dat or a file name
     std::string load;                               ///< --load: a file by its path
+    std::string editor_file;                        ///< --editor FILE, as typed; empty: a new map
     /// --new-game: difficulty, name, colour and an own world; layout and game id are still to roll.
     std::optional<sim::NewGameOptions> new_game;
     std::optional<std::uint8_t> layout;  ///< --layout

@@ -72,6 +72,9 @@ KeyHelpPlace key_help_place(KeyAction action) noexcept {
         case KeyAction::Help:
         case KeyAction::Cancel:
         case KeyAction::Quit:
+        case KeyAction::EditorUndo:
+        case KeyAction::EditorRedo:
+        case KeyAction::EditorSave:
             return {0, 1};
         case KeyAction::ModeBuild:
         case KeyAction::ModeMilitary:

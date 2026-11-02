@@ -185,3 +185,23 @@ TEST_CASE("command line: scripted input") {
     CHECK(!app::parse_input("move 1,2@x", bad));
     CHECK(!error_of({"--input", "move 1@2"}).empty());
 }
+
+TEST_CASE("command line: --editor starts the editor, with the file after it or a new map") {
+    const auto plain = parse({"--editor"});
+    REQUIRE(plain.ok());
+    CHECK(plain->options.editor);
+    CHECK(plain->editor_file.empty());
+    CHECK(plain->options.menu);  // the sea behind the menu until the editor takes its place
+    const auto file = parse({"--editor", "Szenes/Das Atoll.szs", "--no-sound"});
+    REQUIRE(file.ok());
+    CHECK(file->options.editor);
+    CHECK(file->editor_file == "Szenes/Das Atoll.szs");
+    CHECK(!file->options.effects);
+    const auto flag_after = parse({"--editor", "--no-sound"});
+    REQUIRE(flag_after.ok());
+    CHECK(flag_after->editor_file.empty());
+    // The editor opens its own file: not with a game named, nor without the frame.
+    CHECK(!parse({"--editor", "--scenario", "a.szs"}).ok());
+    CHECK(!parse({"--editor", "--no-panel"}).ok());
+    CHECK(!parse({"--editor", "--new-game", "1"}).ok());
+}

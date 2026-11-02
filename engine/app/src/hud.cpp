@@ -314,6 +314,7 @@ Hud::Hud(SDL_Renderer* renderer, const assets::GameDirectory& game, const assets
         m_chat = std::make_unique<ChatWindow>(style);
         m_blueprint = std::make_unique<BlueprintWindow>(style);
         m_templates = std::make_unique<TemplateWindow>(style);
+        m_editor = std::make_unique<EditorPanel>(style);
         // The templates' views from above: land, buildings, houses, roads, fields, forest.
         TemplateColours colours;
         colours.ground = ui::nearest_colour(palette, 125, 150, 70);
@@ -679,6 +680,9 @@ bool Hud::back() {
         m_templates->close();
         return true;
     }
+    if (m_editing && m_editor && !m_menu_active && m_editor->back()) {
+        return true;
+    }
     if (m_display_open) {
         m_display_open = false;
         return true;
@@ -832,6 +836,35 @@ bool Hud::covers(std::int32_t x, std::int32_t y) const noexcept {
            (templates_open() && templates_rect().contains(x, y)) || m_regions.side_panel.contains(x, y) ||
            m_regions.status_bar.contains(x, y) ||
            (m_options_model.mission_window && m_tutor && m_regions.tutor.contains(x, y));
+}
+
+void Hud::set_editing(bool on) {
+    m_editing = on;
+    // The modes' buttons go while the editor runs (the duplicate of the military one stays hidden).
+    for (const std::int32_t mode : {kModeBuild, kModeMilitary, kModeInfo, kModeOptions}) {
+        m_ctrl.set_visible(mode, !on);
+    }
+    if (m_editor) {
+        m_editor->show_document();
+    }
+    m_editor_requests.clear();
+}
+
+void Hud::place_editor_panel() {
+    if (!m_editor) {
+        return;
+    }
+    // Below the head: the lowest of the modes' buttons, as the game's panels begin there.
+    std::int32_t top = 0;
+    for (const std::int32_t mode : {kModeBuild, kModeMilitary, kModeInfo, kModeOptions}) {
+        if (const assets::Gadget* g = m_ctrl.layout().find(mode)) {
+            top = std::max(top, g->pos[1] + g->size[1]);
+        }
+    }
+    const double s = m_regions.scale;
+    const auto height = static_cast<std::int32_t>(m_regions.side_panel.h / std::max(s, 0.01));
+    m_editor->set_scale(s);
+    m_editor->set_room(top + 8, std::max(0, height - top - 16));
 }
 
 ui::Rect Hud::minimap_rect() const {
@@ -1494,6 +1527,16 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
             return std::nullopt;
         }
     }
+    if (button != ui::MouseButton::Left && m_editing && !m_menu_active && !m_help && !m_question && !m_end_active &&
+        m_editor) {
+        // The right button goes back through the values of the editor's panel, and does nothing else.
+        place_editor_panel();
+        const ui::Rect& side = m_regions.side_panel;
+        if (auto r = m_editor->mouse(x - side.x, y - side.y, down, m_editor_model, button)) {
+            m_editor_requests.push_back(std::move(*r));
+        }
+        return std::nullopt;
+    }
     if (button != ui::MouseButton::Left && (m_help || m_question || m_end_active || !m_menu_active || !m_menu)) {
         return std::nullopt;  // the right button only goes through the values of the menus' dialogs
     }
@@ -1518,7 +1561,7 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
         }
         return std::nullopt;
     }
-    if (!m_menu_active && m_options_model.mission_window && m_tutor && m_regions.tutor.contains(x, y)) {
+    if (!m_menu_active && !m_editing && m_options_model.mission_window && m_tutor && m_regions.tutor.contains(x, y)) {
         // The mission's window: X closes it, the arrows scroll its text. In the tutorial X ends the
         // chapter and „weiter“ turns the page.
         for (const ui::PanelEvent& e : m_tutor->mouse(x - m_regions.tutor.x, y - m_regions.tutor.y, down)) {
@@ -1582,7 +1625,14 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
     const ui::Rect& panel = m_regions.side_panel;
     const ui::Rect& bar = m_regions.status_bar;
     // The mode's panel first: an open pop-up takes every press on the side panel.
-    if (m_mode == kModeBuild && m_build) {
+    if (m_editing) {
+        if (m_editor) {
+            place_editor_panel();
+            if (auto r = m_editor->mouse(x - panel.x, y - panel.y, down, m_editor_model)) {
+                m_editor_requests.push_back(std::move(*r));
+            }
+        }
+    } else if (m_mode == kModeBuild && m_build) {
         const BuildPanel::Available available =
             m_available ? m_available : BuildPanel::Available([](std::uint32_t) { return true; });
         const bool popup = m_build->popup_open();
@@ -1691,7 +1741,7 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
                 action = Action{Action::Kind::ZoomOut};
                 break;
             default:
-                if (e.id >= kModeBuild && e.id <= kModeOptions) {
+                if (e.id >= kModeBuild && e.id <= kModeOptions && !m_editing) {
                     action = set_mode(e.id);
                 }
                 break;
@@ -1890,7 +1940,9 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
                const std::array<std::pair<double, double>, 4>& view, std::uint64_t now_ms,
                const sim::PlayerFigures& figures, std::uint8_t colour) {
     const double s = m_regions.scale;
-    draw_resources();
+    if (!m_editing) {
+        draw_resources();
+    }
     // Black under the art where the window is larger than it.
     m_renderer->fill(m_regions.side_panel, 0);
     m_renderer->fill(m_regions.status_bar, 0);
@@ -1950,7 +2002,16 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
     // The mode's panel below the head, and its help texts.
     const BuildPanel::Available available =
         m_available ? m_available : BuildPanel::Available([](std::uint32_t) { return true; });
-    if (m_mode == kModeBuild && m_build) {
+    if (m_editing) {
+        if (m_editor) {
+            place_editor_panel();
+            m_renderer->draw(m_editor->draw(m_editor_model, m_renderer->fonts(s)), m_regions.side_panel.x,
+                             m_regions.side_panel.y, s);
+            if (!m_editor_model.notice.empty()) {
+                status = m_editor_model.notice;
+            }
+        }
+    } else if (m_mode == kModeBuild && m_build) {
         m_build->refresh(
             buildings, available, static_cast<std::uint8_t>((m_rotation + m_building_rotation) & 3U),
             [this](std::int32_t block, std::int32_t gfx) { return m_renderer->sprite_size(block, gfx); },
@@ -1989,12 +2050,14 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
             status = *text;
         }
     }
-    // The name being typed ends with its window (or its ship or city).
-    if (auto c = m_names.end_frame(world)) {
-        m_commands.push_back(std::move(*c));
+    if (!m_editing) {
+        // The name being typed ends with its window (or its ship or city).
+        if (auto c = m_names.end_frame(world)) {
+            m_commands.push_back(std::move(*c));
+        }
+        step_tutorial(available, now_ms);
+        draw_mission(world);
     }
-    step_tutorial(available, now_ms);
-    draw_mission(world);
     // The minimap on the parchment.
     // Built in full once per game; then one island per frame is brought up to date and the texture
     // is uploaded again only when a pixel changed, at most every kMinimapMs. A pending upload no

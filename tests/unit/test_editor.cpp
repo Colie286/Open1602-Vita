@@ -358,3 +358,29 @@ TEST_CASE("editor original limits: a world of the original's size passes, more i
     REQUIRE(many.size() == 2);
     CHECK(many[0] == "5 players, the original holds 4");
 }
+
+TEST_CASE("editor document: edits a world kept elsewhere, which stays where it is when the document moves") {
+    const auto buildings = make_buildings();
+    sim::World shown = make_world(buildings);
+    std::optional<editor::Document> document;
+    document.emplace(editor::Document::edit(shown));
+    CHECK(&document->world() == &shown);
+    CHECK(!document->modified());
+    document->perform(std::make_unique<editor::ScriptEdit>("", "print('hi')\n"));
+    CHECK(shown.scenario_script() == "print('hi')\n");  // the world shown changed, not a copy
+
+    editor::Document moved = std::move(*document);
+    document.reset();
+    CHECK(&moved.world() == &shown);
+    CHECK(moved.undo());
+    CHECK(shown.scenario_script().empty());
+    CHECK(!moved.modified());
+
+    // Saved, read back as the editor reads files: the same world.
+    auto bytes = moved.save(buildings);
+    REQUIRE(bytes.ok());
+    auto read = editor::Document::read(*bytes, buildings, nullptr);
+    REQUIRE(read.ok());
+    CHECK(read->islands().size() == 1);
+    CHECK(read->scenario_info().has_value());
+}

@@ -82,6 +82,9 @@ constexpr std::pair<KeyAction, std::string_view> kNames[] = {
     {KeyAction::ShowUnitArms, "show_unit_arms"},
     {KeyAction::Fullscreen, "fullscreen"},
     {KeyAction::Quit, "quit"},
+    {KeyAction::EditorUndo, "editor_undo"},
+    {KeyAction::EditorRedo, "editor_redo"},
+    {KeyAction::EditorSave, "editor_save"},
 };
 
 }  // namespace
@@ -162,6 +165,7 @@ constexpr std::pair<KeyContext, std::string_view> kContexts[] = {
     {KeyContext::General, "general"},
     {KeyContext::Building, "building"},
     {KeyContext::Units, "units"},
+    {KeyContext::Editor, "editor"},
 };
 
 std::string_view trim(std::string_view s) {

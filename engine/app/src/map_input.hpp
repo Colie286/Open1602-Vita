@@ -81,6 +81,8 @@ public:
         virtual void toggle_pause_video() = 0;
         /// A short note in the status line (EventPresenter::notify).
         virtual void notify(std::string text, std::string_view log) = 0;
+        /// A key of the editor (undo, redo, save) while it runs.
+        virtual void editor_key(ui::KeyAction action) = 0;
         /// Where Home goes without a selection.
         [[nodiscard]] virtual render::TilePos home_tile() const = 0;
         /// The graphics of the zoom level shown; null while they are not there.
@@ -168,6 +170,12 @@ public:
     void drop_units();
     /// Another game: no selection, pick, order or press of the old one is left.
     void reset_game();
+    /// The editor runs (ADR 0013): the map scrolls, turns and zooms, but takes no selection, tool
+    /// or order, and of the keys only the view's, the program's and the editor's count.
+    void set_editor(bool on) noexcept { m_editor = on; }
+    [[nodiscard]] bool editor() const noexcept { return m_editor; }
+    /// Whether a key's action counts in the editor.
+    [[nodiscard]] static bool editor_key(ui::KeyAction action) noexcept;
     /// The groups the player stored, for the savegame, and back from a loaded one.
     [[nodiscard]] sim::UnitGroups saved_groups() const { return m_units.saved_groups(); }
     void restore_groups(const sim::UnitGroups& groups) { m_units.restore_groups(groups); }
@@ -294,6 +302,7 @@ private:
     double m_mouse_x = 0.0;                            ///< in output pixels
     double m_mouse_y = 0.0;
     bool m_left_down = false;   ///< the left mouse button, for the frame's buttons
+    bool m_editor = false;      ///< the editor runs (set_editor)
     float m_wheel_rest = 0.0F;  ///< wheel notches begun (touchpads) the goods window did not scroll yet
     bool m_text_input = false;  ///< the platform's text input is on (a name is typed)
 };

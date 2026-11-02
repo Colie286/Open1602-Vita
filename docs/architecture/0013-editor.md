@@ -12,7 +12,12 @@ with, and those made for it, must open in the editor too.
 
 1. **A mode in the game.** The editor is started from the main menu and runs in the game's window
    with the game's renderer, interface building blocks (`ui::Form`, `FormStyle`) and data. It is not
-   a program of its own. A scenario can be played from the editor and edited again afterwards.
+   a program of its own. A scenario can be played from the editor and edited again afterwards. The
+   world the editor shows has a simulation that is built but never runs (`sim::Simulation::ViewOnly`:
+   nothing a load does for the game to run happens to the world), and the document edits that world
+   in place (`editor::Document::edit`). The editor's panel takes the place of the game's modes below
+   the head of the side panel (`app::EditorPanel`); the map takes no selection, tool or order of the
+   game, and only the view's, the program's and the editor's keys count (key context `editor`).
 2. **Always `.o1602`.** The editor saves only Open1602's own format ([ADR 0009](0009-own-save-format.md),
    [o1602-save.md](../formats/o1602-save.md)). It never writes a scenario of the original (`.szs`,
    `.szm`). Files of the original are opened and saved as `.o1602`.

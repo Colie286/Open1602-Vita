@@ -36,6 +36,8 @@ constexpr std::int32_t kHistoryQuit = 30007;
 // Open1602's own button on BASE.GAD's screen, below the original's.
 constexpr std::int32_t kModsButton = 1;
 constexpr ui::Rect kModsButtonRect{24, 714, 160, 38};
+constexpr std::int32_t kEditorButton = 2;
+constexpr ui::Rect kEditorButtonRect{192, 714, 160, 38};
 // HOST.GAD
 constexpr std::int32_t kNewGame = 31002;
 constexpr std::int32_t kLoadGame = 31003;
@@ -867,6 +869,7 @@ std::vector<ui::DrawItem> MainMenu::draw(const std::array<const ui::Font*, ui::k
 void MainMenu::layout_base_form() {
     m_base_form.clear();
     m_base_form.button(kModsButton, kModsButtonRect, ui::tr("menu.mods"));
+    m_base_form.button(kEditorButton, kEditorButtonRect, ui::tr("menu.editor"));
 }
 
 std::vector<MenuEvent> MainMenu::mouse(std::int32_t x, std::int32_t y, bool down, ui::MouseButton button) {
@@ -928,11 +931,16 @@ std::vector<MenuEvent> MainMenu::mouse(std::int32_t x, std::int32_t y, bool down
     }
     if (m_screen == Screen::Base && button == ui::MouseButton::Left) {
         layout_base_form();
-        if (m_base_form.mouse(x, y, down) == kModsButton) {
+        const auto clicked = m_base_form.mouse(x, y, down);
+        if (clicked == kModsButton) {
             m_mods.open();
             m_mods_model.notice.clear();
             m_screen = Screen::Mods;
             out.push_back(MenuEvent{MenuEvent::Kind::Mods});
+            return out;
+        }
+        if (clicked == kEditorButton) {
+            out.push_back(MenuEvent{MenuEvent::Kind::Editor});
             return out;
         }
     }

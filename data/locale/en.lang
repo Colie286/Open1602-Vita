@@ -174,6 +174,9 @@ keys.action.show_coordinates = Show coordinates
 keys.action.show_unit_arms = Unit identification (coat of arms over own units)
 keys.action.fullscreen = Window or full screen
 keys.action.quit = Quit
+keys.action.editor_undo = Editor: undo
+keys.action.editor_redo = Editor: redo
+keys.action.editor_save = Editor: save
 
 # The multiplayer menu and messages (net.*). {1}: a name, a number or a reason, as noted.
 net.multiplayer = Multiplayer
@@ -1029,3 +1032,57 @@ overlay.fps = {1} fps
 overlay.coordinates = {1}, {2}
 overlay.fertility_none = Select a farm or pick a field to build to see where its crop grows
 overlay.coordinates_island = {1}, {2} (island {3}: {4}, {5})
+# The editor (editor_panel.cpp, ADR 0013)
+menu.editor = Editor
+editor.title = Editor
+editor.untitled = New map, not saved
+editor.map_size = Map
+# {1} wide, {2} high, in tiles
+editor.size = {1} × {2}
+editor.islands = Islands
+# {1}: islands the plan makes when a game starts
+editor.islands_planned = {1}, made at the start
+editor.players = Players
+editor.new = New map
+editor.open = Open
+editor.save = Save
+editor.save_as = Save as
+editor.undo = Undo
+editor.redo = Redo
+editor.close = Leave the editor
+editor.cancel = Cancel
+editor.previous = Back
+editor.next = More
+editor.new.title = New map
+editor.new.size = Size
+# {1}: the size, e.g. 500 × 350
+editor.new.size_original = {1} (as the original)
+editor.new.islands = Islands
+editor.new.islands.none = None, only sea
+editor.new.islands.few = Few
+editor.new.islands.normal = As in the original
+editor.new.islands.many = Many
+editor.new.players = Players with a start
+editor.new.seed = World number
+editor.new.reroll = Another world
+editor.new.note_islands = The islands, players and their ships are made as for a new endless game.
+editor.new.note_sea = Only sea, without players. Islands come with the island tools.
+editor.new.create = Create
+editor.open.title = Open a map
+editor.open.empty = There are no scenarios to open.
+editor.open.own = Own scenarios
+editor.open.original = Scenarios of the game
+editor.save.title = Save as
+editor.save.name = Name of the scenario
+editor.save.where = It is saved in the folder of own scenarios and shows in the scenario list.
+editor.save.taken = An own scenario has this name already: saving replaces it.
+editor.save.replace = Replace
+# {1}: the file's name
+editor.saved = Saved: {1}
+editor.save_failed = Not saved: {1}
+editor.open_failed = Could not be opened: {1}
+editor.new_failed = The map could not be made: {1}
+editor.discard = Discard the changes to this map?
+editor.undone = Undone: {1}
+editor.redone = Redone: {1}
+editor.nothing = Nothing to undo
