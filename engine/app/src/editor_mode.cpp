@@ -485,7 +485,7 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
             break;
         case Kind::LoadIsland:
             if (request.index < m_editor_files.size()) {
-                editor_load_island(m_editor_files[request.index]);
+                editor_load_island(m_editor_files[request.index], request.island.climate);
             }
             break;
         case Kind::SetFertility: {
@@ -516,6 +516,11 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
 }
 
 namespace {
+
+/// Whether the panel's page is about what is picked: the selection, or a selected island's fertility.
+bool shows_pick(EditorPanel::Page page) {
+    return page == EditorPanel::Page::Selection || page == EditorPanel::Page::Fertility;
+}
 
 /// The note of why an island cannot be turned, copied or taken out; empty if it can.
 std::string use_note(sim::World::IslandUse use) {
@@ -659,10 +664,10 @@ void MapViewer::editor_save_island(std::size_t index) {
                   "island saved " + core::path_to_utf8(file));
 }
 
-void MapViewer::editor_load_island(const std::filesystem::path& file) {
+void MapViewer::editor_load_island(const std::filesystem::path& file, std::uint8_t climate) {
     auto bytes = core::read_file(file);
     std::vector<std::string> warnings;
-    auto island = bytes ? editor::load_island(*bytes, m_buildings, &m_game, &warnings)
+    auto island = bytes ? editor::load_island(*bytes, m_buildings, &m_game, &warnings, climate)
                         : core::Result<sim::WorldIsland>(bytes.error());
     for (const std::string& w : warnings) {
         std::fprintf(stderr, "warning: %s\n", w.c_str());
@@ -994,8 +999,7 @@ void MapViewer::draw_editor_marks() {
     }
     // The mark of what the panel shows: a cross on the tile, or over the ship, unit or building.
     const EditorPick& pick = m_editor->pick;
-    const bool shown =
-        m_hud->editor_panel() != nullptr && m_hud->editor_panel()->page() == EditorPanel::Page::Selection;
+    const bool shown = m_hud->editor_panel() != nullptr && shows_pick(m_hud->editor_panel()->page());
     if (shown) {
         using Kind = EditorPick::Kind;
         const std::string mark = "\xD7";
@@ -1040,7 +1044,7 @@ void MapViewer::apply_editor() {
         }
     }
     // The page of the selection left (Escape, Back, another page): nothing is picked any more.
-    if (m_hud->editor_panel() != nullptr && m_hud->editor_panel()->page() != EditorPanel::Page::Selection) {
+    if (m_hud->editor_panel() != nullptr && !shows_pick(m_hud->editor_panel()->page())) {
         m_editor->pick = EditorPick{};
     }
     // The page an island is placed from left: it goes back.

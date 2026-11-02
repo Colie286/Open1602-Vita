@@ -123,11 +123,13 @@ struct NewIsland {
                                                     const assets::BuildingTable& buildings);
 
 /// The island of an island file at (0, 0): one save_island() wrote (the first island of an
-/// Open1602 world), or one of the original's island files (.scp). Who knew it and a drought go.
+/// Open1602 world), or one of the original's island files (.scp), which takes the `climate` of
+/// the folder it came from (0 north, 1 south): the file does not tell. Who knew it and a drought go.
 [[nodiscard]] core::Result<sim::WorldIsland> load_island(std::span<const std::uint8_t> bytes,
                                                          const assets::BuildingTable& buildings,
                                                          const assets::GameDirectory* game,
-                                                         std::vector<std::string>* warnings = nullptr);
+                                                         std::vector<std::string>* warnings = nullptr,
+                                                         std::uint8_t climate = 0);
 
 /// The smallest map (width, height) that holds the islands, ships, land units and markers, at
 /// least 1 x 1: how far resize_world() can cut.

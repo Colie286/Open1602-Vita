@@ -373,7 +373,6 @@ TEST_CASE("editor panel: the map size page grows and cuts the map, not below wha
     m.height = 350;
     m.used_width = 112;
     m.used_height = 330;
-    CHECK(!click(panel, m, "Edit islands").has_value());
     CHECK(!click(panel, m, "Change map size").has_value());
     REQUIRE(panel.page() == EditorPanel::Page::WorldSize);
     (void)panel.draw(m, kNoFonts);
@@ -410,7 +409,7 @@ TEST_CASE("editor panel: the map size page grows and cuts the map, not below wha
         CHECK(w.rect.y + w.rect.h <= 760);
     }
     CHECK(!click(panel, m, "Cancel").has_value());
-    CHECK(panel.page() == EditorPanel::Page::Islands);
+    CHECK(panel.page() == EditorPanel::Page::Document);
 }
 
 TEST_CASE("editor panel: an island's crops are ticked, it is saved, and saved islands are loaded") {
@@ -428,7 +427,7 @@ TEST_CASE("editor panel: an island's crops are ticked, it is saved, and saved is
     REQUIRE(r.has_value());
     CHECK(r->kind == EditorRequest::Kind::SaveIsland);
     CHECK(r->index == 1);
-    CHECK(!click(panel, m, "Fertility").has_value());
+    CHECK(!click(panel, m, "Crops").has_value());
     REQUIRE(panel.page() == EditorPanel::Page::Fertility);
     (void)panel.draw(m, kNoFonts);
     CHECK(says(panel, "Tobacco (half)"));  // a crop of the north

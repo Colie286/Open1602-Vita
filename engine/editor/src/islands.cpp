@@ -305,7 +305,8 @@ core::Result<core::Bytes> save_island(const sim::World& world, std::size_t index
 }
 
 core::Result<sim::WorldIsland> load_island(std::span<const std::uint8_t> bytes, const assets::BuildingTable& buildings,
-                                           const assets::GameDirectory* game, std::vector<std::string>* warnings) {
+                                           const assets::GameDirectory* game, std::vector<std::string>* warnings,
+                                           std::uint8_t climate) {
     const auto placed = [](sim::WorldIsland island) {
         clear_game_state(island.header);
         island.x = 0;
@@ -331,6 +332,7 @@ core::Result<sim::WorldIsland> load_island(std::span<const std::uint8_t> bytes, 
         return made.error();
     }
     made->header.stored_complete = true;
+    made->header.climate = static_cast<std::uint8_t>(climate & 1U);
     sim::WorldIsland island{made->header, sim::IslandMap::from_island(*made, buildings, warnings, nullptr), 0, 0};
     island.header.width = static_cast<std::uint16_t>(island.map.width());
     island.header.height = static_cast<std::uint16_t>(island.map.height());

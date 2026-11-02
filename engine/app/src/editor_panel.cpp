@@ -262,7 +262,7 @@ void EditorPanel::layout_document(const EditorModel& model) {
     y += kLine + 4;
     // The buttons share what is left above two lines of the notice: as high as the game's in a
     // large window, lower in a small one, so that the last stays in the panel.
-    constexpr std::int32_t kButtons = 10;
+    constexpr std::int32_t kButtons = 11;
     constexpr std::int32_t kNoticeRoom = 2 * 20 + 6;
     const std::int32_t bottom = m_top + m_height - 4;
     const std::int32_t pitch = std::clamp((bottom - kNoticeRoom - y) / kButtons, 22, kButtonH + kGap);
@@ -278,6 +278,7 @@ void EditorPanel::layout_document(const EditorModel& model) {
     full(kUndo, "editor.undo", model.can_undo);
     full(kRedo, "editor.redo", model.can_redo);
     full(kIslandPage, "editor.islands.edit");
+    full(kWorldSizePage, "editor.world_size.edit");
     full(kView, "editor.view");
     full(kCheck, "editor.check");
     full(kClose, "editor.close");
@@ -446,7 +447,7 @@ void EditorPanel::layout_fertility(const EditorModel& model) {
         f.check(kFirstCrop + static_cast<Id>(i), Rect{kX, y, kW, kButtonH}, std::move(text), own);
         y += kButtonH + kGap;
     }
-    constexpr std::int32_t kFertilityNote = 3 * 20;
+    constexpr std::int32_t kFertilityNote = 4 * 20;
     f.paragraph(Rect{kX, y, kW, kFertilityNote}, ui::tr("editor.fertility.note"), Tone::Dim, 20);
     y += kFertilityNote + 4;
     f.button(kSelectionPage, Rect{kX, y, kW, kButtonH}, ui::tr("editor.fertility.back"));
@@ -482,8 +483,6 @@ void EditorPanel::layout_islands(const EditorModel& model) {
         f.button(kStopPlacing, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
         y += kButtonH + kGap;
     }
-    f.button(kWorldSizePage, Rect{kX, y, kW, kButtonH}, ui::tr("editor.world_size.edit"), !model.placing);
-    y += kButtonH + kGap;
     f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
 }
 
@@ -512,12 +511,13 @@ void EditorPanel::layout_world_size(const EditorModel& model) {
     side("editor.world_size.height", kHeightLess, kHeightMore, m_size_height, model.used_height);
     f.button(kFitSize, Rect{kX, y, kW, kButtonH}, ui::tr("editor.world_size.fit"));
     y += kButtonH + kGap;
-    constexpr std::int32_t kSizeNote = 3 * 20;
+    constexpr std::int32_t kSizeNote = 4 * 20;
     f.paragraph(Rect{kX, y, kW, kSizeNote}, ui::tr("editor.world_size.note"), Tone::Dim, 20);
     y += kSizeNote + 4;
     const bool changed = m_size_width != model.width || m_size_height != model.height;
-    f.button(kApplySize, Rect{kX, y, half, kButtonH}, ui::tr("editor.world_size.apply"), changed);
-    f.button(kIslandPage, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
+    f.button(kApplySize, Rect{kX, y, kW, kButtonH}, ui::tr("editor.world_size.apply"), changed);
+    y += kButtonH + kGap;
+    f.button(kCancel, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
 }
 
 void EditorPanel::layout_view(const EditorModel& model) {
@@ -761,7 +761,9 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
         const std::size_t index = m_first + static_cast<std::size_t>(*id - kFirstRow);
         if (index < model.files.size()) {
             m_page = Page::Islands;
-            return EditorRequest{EditorRequest::Kind::LoadIsland, index};
+            EditorRequest r{EditorRequest::Kind::LoadIsland, index};
+            r.island = m_island;  // its climate, for an island file of the original
+            return r;
         }
     }
     if (*id >= kFirstRow && m_page == Page::Open) {
