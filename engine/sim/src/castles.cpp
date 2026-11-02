@@ -105,7 +105,7 @@ bool Military::castle(const CastleOrder& o) {
             // Op 0x10: no gold, no inhabitants; weapons if the castle holds them.
             // Only the soldiers a castle trains (the unit families), not ships, towers or natives.
             const assets::FigureType* type = m_figures->get(o.figure);
-            if (type == nullptr || type->combat.max_health == 0 || !assets::FigureTable::unit_variant(o.figure)) {
+            if (type == nullptr || type->combat.max_health == 0 || !m_figures->unit_of(o.figure)) {
                 return false;
             }
             if (m_rules->max_army != 0 && army_size(owner) >= m_rules->max_army) {
@@ -116,7 +116,7 @@ bool Military::castle(const CastleOrder& o) {
                 return false;
             }
             CastleSlot slot;
-            const auto variant = assets::FigureTable::unit_variant(o.figure);
+            const auto variant = m_figures->unit_of(o.figure);
             slot.figure = static_cast<std::uint16_t>(variant ? variant->family : o.figure);
             slot.training = true;
             slot.health = type->combat.max_health;
@@ -469,7 +469,14 @@ bool Military::board(Soldier& s, Ship& ship) {
         }
         const std::uint32_t max = std::max<std::uint32_t>(1, type->combat.max_health);
         const std::uint32_t health = s.health != 0 ? s.health : max;
-        c.ware = unit_ware(s.figure);
+        if (assets::FigureTable::unit_variant(s.figure)) {
+            c.ware = unit_ware(s.figure);
+        } else {
+            // A unit of a package: the hold shows the original's unit of its kind.
+            const auto kind = static_cast<std::size_t>(std::clamp(type->kind, 1, 4) - 1);
+            c.ware = unit_ware(figure::kUnitFamilies[kind]);
+            c.unit = s.figure;
+        }
         c.amount = std::max<std::uint32_t>(1, health * kFullHold / max);
         c.price = 0;
         m_events.push_back(MilitaryEvent{MilitaryEvent::Kind::Boarded, Target::soldier(s.id),
@@ -515,7 +522,7 @@ bool Military::unload(const UnloadOrder& o) {
         if (!is_soldier_ware(c.ware) || (o.hold != 0xFF && h != o.hold)) {
             continue;
         }
-        const std::uint16_t figure = unit_of_ware(c.ware);
+        const auto figure = static_cast<std::uint16_t>(hold_unit(c));
         const assets::FigureType* type = m_figures->get(figure);
         if (type == nullptr) {
             continue;

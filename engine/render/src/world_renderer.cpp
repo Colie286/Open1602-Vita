@@ -891,21 +891,31 @@ bool land_figure_sprites(const FigureInstance& figure, const sim::World& world, 
     // Units drawn per player colour: the variant of the owner's banner, or its tinted template.
     const assets::FigureType* body_type = type;
     std::optional<std::uint32_t> tinted_body;
-    if (const auto variant = assets::FigureTable::unit_variant(figure.figure)) {
+    if (const auto variant = layers.figures->unit_of(figure.figure)) {
         const sim::Player* owner = world.player(figure.owner);
         const Banner* banner =
             owner != nullptr && layers.banners != nullptr ? layers.banners->get(owner->banner) : nullptr;
-        if (banner != nullptr && banner->unit_variant && *banner->unit_variant < variant->count) {
+        const std::uint32_t image =
+            assets::figure_sprite(*type, figure.anim, figure.frame, figure.direction, view_in.rotation);
+        if (banner != nullptr && layers.template_tint != nullptr && sheet == assets::FigureSheet::Stadtfld &&
+            layers.template_tint->sprite(owner->banner, image)) {
+            // A package's tint template: in the colour of every banner, also of those with a drawn variant.
+            tinted_body = layers.template_tint->sprite(owner->banner, image);
+        } else if (banner != nullptr && banner->unit_variant && *banner->unit_variant < variant->count) {
             // A variant drawn from another sheet than the figure (one colour given a package's image) is not used.
             if (const assets::FigureType* v = layers.figures->get(variant->family + *banner->unit_variant);
                 v != nullptr && assets::draws_package_image(*v) == assets::draws_package_image(*type)) {
                 body_type = v;
             }
-        } else if (banner != nullptr && layers.unit_tint != nullptr && sheet == assets::FigureSheet::Soldat) {
-            // The tinted templates are of SOLDAT.BSH: a unit drawn with a package's image keeps its colours.
-            tinted_body = layers.unit_tint->sprite(
-                owner->banner,
-                assets::figure_sprite(*type, figure.anim, figure.frame, figure.direction, view_in.rotation));
+        } else if (banner != nullptr) {
+            // Templates made from the four drawn colours: of SOLDAT.BSH, or of a package's image with a
+            // block per colour (one image for all colours keeps its colours).
+            const UnitTint* tint = sheet == assets::FigureSheet::Soldat     ? layers.unit_tint
+                                   : sheet == assets::FigureSheet::Stadtfld ? layers.package_unit_tint
+                                                                            : nullptr;
+            if (tint != nullptr) {
+                tinted_body = tint->sprite(owner->banner, image);
+            }
         }
     }
     const WorldView view = fit_view(view_in, world);

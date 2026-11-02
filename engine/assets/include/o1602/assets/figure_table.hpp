@@ -191,6 +191,25 @@ public:
     /// package's own, own_figures.hpp): from the top down, so that a modded figuren.cod keeps the
     /// numbers after the original's. The number, or an error when every one is taken.
     core::Result<std::uint32_t> add(const FigureType& like);
+    /// Adds a unit family of a package: one copy per player colour (`colours`, red, blue, yellow and
+    /// white) under the highest kUnitVariants consecutive free numbers below kMaxFigures, and lets
+    /// castles train it (unit_families). The number of its red figure, or an error when there is no
+    /// room.
+    core::Result<std::uint32_t> add_unit_family(std::span<const FigureType> colours);
+
+    /// The red figures of the unit families castles train: the original's four
+    /// (kUnitFamilies), then those of the packages in the order they were added.
+    [[nodiscard]] std::span<const std::uint32_t> unit_families() const noexcept { return m_unit_families; }
+    /// Colour variant of a unit figure of this table's families, the packages' included; nothing for
+    /// figures drawn the same for everyone.
+    [[nodiscard]] std::optional<UnitVariant> unit_of(std::uint32_t figure) const noexcept {
+        for (const std::uint32_t family : m_unit_families) {
+            if (figure >= family && figure < family + kUnitVariants) {
+                return UnitVariant{family, static_cast<std::uint8_t>(figure - family), kUnitVariants};
+            }
+        }
+        return std::nullopt;
+    }
 
     [[nodiscard]] const FigureType* get(std::uint32_t number) const noexcept {
         return number < m_types.size() && m_types[number].defined ? &m_types[number] : nullptr;
@@ -210,8 +229,9 @@ public:
         std::uint8_t colour) const noexcept {
         return flag_for_colour(colour);
     }
-    /// Colour variant of a unit figure, nothing for figures drawn the same for everyone (e.g. the
-    /// natives' spearmen SPEER1).
+    /// Colour variant of a unit figure of the original's families, nothing for figures drawn the same
+    /// for everyone (e.g. the natives' spearmen SPEER1). The original's savegames know no others; a
+    /// game asks unit_of, which knows the packages' families too.
     [[nodiscard]] static std::optional<UnitVariant> unit_variant(std::uint32_t figure) noexcept {
         for (const std::uint32_t family : kUnitFamilies) {
             if (figure >= family && figure < family + kUnitVariants) {
@@ -227,6 +247,7 @@ private:
     std::uint32_t m_tower_upkeep = 0;
     std::array<std::uint32_t, 8> m_unit_cost{};
     std::vector<std::vector<FormationSlot>> m_formations;
+    std::vector<std::uint32_t> m_unit_families = std::vector<std::uint32_t>(kUnitFamilies.begin(), kUnitFamilies.end());
 };
 
 }  // namespace o1602::assets

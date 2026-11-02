@@ -1,3 +1,10 @@
 # A figure of this package: example:pepper_picker, a copy of the original's carrier (own-figures.md).
 [pepper_picker]
 like = "anno1602:carrier"
+
+# A unit of this package: castles train it beside the musketeer, whose looks and values it copies
+# (own-figures.md#soldiers). A second click on the castle's musketeer button picks it.
+[harbour_guard]
+like = "anno1602:musketeer"
+name.en = "Harbour guard"
+name.de = "Hafenwache"

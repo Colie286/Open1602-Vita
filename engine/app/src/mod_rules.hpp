@@ -35,6 +35,8 @@ struct ModRules {
     std::vector<assets::OwnBuilding> own;
     /// The figures the packages added, with the numbers `figures` gave them.
     std::vector<assets::OwnFigure> own_figures;
+    /// The unit families among them, which castles train (own-figures.md#soldiers).
+    std::vector<assets::OwnUnit> own_units;
     /// The original's goods and those the packages added (goods.toml).
     assets::Goods goods;
     /// The classes of inhabitants as the packages change and add them (classes.toml); empty when

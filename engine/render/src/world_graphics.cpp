@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "o1602/assets/figure_looks.hpp"
 #include "o1602/render/dither.hpp"
 #include "o1602/render/flag_tint.hpp"
 #include "o1602/render/package_sprites.hpp"
@@ -180,6 +181,89 @@ core::Result<WorldGraphics> load_world_graphics(const assets::GameDirectory& gam
             pointers.push_back(sources.back().get());
         }
     }
+    // Package units on the terrain sheet: drawn as tint templates for every banner, or with a
+    // block per colour, whose template is made like the original's for banners without a variant.
+    const SpriteSource& terrain_source = *pointers.front();
+    const auto in_terrain = [&](std::uint64_t first, std::uint64_t n) { return first + n <= terrain_source.count(); };
+    std::vector<UnitImageGroup> template_groups;
+    for (const auto& [first, n] : options.template_sprites) {
+        if (n == 0 || !in_terrain(first, n)) {
+            continue;  // checked by the packages' reader; a bad range is left out
+        }
+        const bool known = std::any_of(template_groups.begin(), template_groups.end(),
+                                       [&](const UnitImageGroup& g) { return g.first == first; });
+        if (!known) {
+            UnitImageGroup g;
+            g.first = first;
+            g.stride = n;
+            g.variants = 1;
+            template_groups.push_back(g);
+        }
+    }
+    const auto is_template = [&](std::uint32_t sprite) {
+        return std::any_of(template_groups.begin(), template_groups.end(),
+                           [&](const UnitImageGroup& g) { return sprite >= g.first && sprite < g.first + g.stride; });
+    };
+    std::size_t template_source = pointers.size();
+    if (banners != nullptr && !template_groups.empty()) {
+        std::vector<assets::Rgba> colours;
+        for (const Banner& b : banners->banners()) {
+            colours.push_back(b.colour);
+        }
+        sources.push_back(std::make_unique<TintedTemplateSource>(terrain_source, template_groups, colours));
+        pointers.push_back(sources.back().get());
+        std::uint32_t offset = 0;
+        for (UnitImageGroup& g : template_groups) {  // same layout as in the source
+            g.offset = offset;
+            offset += g.stride;
+        }
+    }
+    std::vector<UnitImageGroup> package_groups;
+    std::size_t package_source = pointers.size();
+    if (banners != nullptr && figures != nullptr) {
+        for (const std::uint32_t family : figures->unit_families()) {
+            if (std::find(assets::FigureTable::kUnitFamilies.begin(), assets::FigureTable::kUnitFamilies.end(),
+                          family) != assets::FigureTable::kUnitFamilies.end()) {
+                continue;
+            }
+            const assets::FigureType* first = figures->get(family);
+            const assets::FigureType* second = figures->get(family + 1);
+            if (first == nullptr || second == nullptr || !assets::draws_package_image(*first) ||
+                !assets::draws_package_image(*second) || second->gfx <= first->gfx || is_template(first->gfx)) {
+                continue;  // one image for all colours: it stays as drawn
+            }
+            constexpr std::int32_t kFigtypKavalerie = 2;
+            UnitImageGroup g;
+            g.first = first->gfx;
+            g.stride = second->gfx - first->gfx;
+            g.variants = assets::FigureTable::kUnitVariants;
+            g.base = assets::FigureTable::kUnitVariants - 1;
+            g.mounted = first->kind == kFigtypKavalerie;
+            g.family = family;
+            if (in_terrain(g.first, std::uint64_t{g.stride} * g.variants)) {
+                package_groups.push_back(g);
+            }
+        }
+        std::vector<UnitTintColour> colours;
+        for (const Banner& b : banners->banners()) {
+            if (!package_groups.empty() && !b.unit_variant && b.flag == FlagStyle::Tinted) {
+                colours.push_back(UnitTintColour{b.colour, b.unit_mount});
+            }
+        }
+        if (!colours.empty()) {
+            std::vector<assets::Rgba> variant_colours(
+                BannerTable::kDefaultColours.begin(),
+                BannerTable::kDefaultColours.begin() + assets::FigureTable::kUnitVariants);
+            sources.push_back(
+                std::make_unique<TintedUnitSource>(terrain_source, package_groups, variant_colours, colours));
+            pointers.push_back(sources.back().get());
+            std::uint32_t offset = 0;
+            for (UnitImageGroup& g : package_groups) {
+                g.offset = offset;
+                offset += g.stride;
+            }
+        }
+    }
     // Dithered shadows and smoke last (classic graphics): two blocks per sheet.
     std::vector<std::pair<std::size_t, std::size_t>> dithered;  // loaded sheet, source
     for (std::size_t i = 0; i < loaded.size() && options.dither; ++i) {
@@ -193,7 +277,7 @@ core::Result<WorldGraphics> load_world_graphics(const assets::GameDirectory& gam
     if (!atlas) {
         return atlas.error();
     }
-    WorldGraphics g{std::move(atlas).value(), {}, {}, {}, {}, {}};
+    WorldGraphics g{std::move(atlas).value(), {}, {}, {}, {}, {}, {}, {}};
     for (std::size_t i = 0; i < loaded.size(); ++i) {
         const auto k = static_cast<std::size_t>(loaded[i].id);
         g.base[k] = g.atlas.sheet_base(i);
@@ -215,6 +299,31 @@ core::Result<WorldGraphics> load_world_graphics(const assets::GameDirectory& gam
         for (const auto& slot : unit_slot) {
             g.unit_tint.banner_base.push_back(slot ? std::optional<std::uint32_t>(base + *slot * g.unit_tint.block_size)
                                                    : std::nullopt);
+        }
+    }
+    if (package_source < pointers.size()) {
+        const std::uint32_t base = g.atlas.sheet_base(package_source);
+        g.package_unit_tint.groups = package_groups;
+        for (const UnitImageGroup& group : package_groups) {
+            g.package_unit_tint.block_size += group.stride;
+        }
+        std::uint32_t slot = 0;
+        for (const Banner& b : banners->banners()) {
+            if (!b.unit_variant && b.flag == FlagStyle::Tinted) {
+                g.package_unit_tint.banner_base.emplace_back(base + slot++ * g.package_unit_tint.block_size);
+            } else {
+                g.package_unit_tint.banner_base.emplace_back(std::nullopt);
+            }
+        }
+    }
+    if (template_source < pointers.size() && !template_groups.empty()) {
+        const std::uint32_t base = g.atlas.sheet_base(template_source);
+        g.template_tint.groups = template_groups;
+        for (const UnitImageGroup& group : template_groups) {
+            g.template_tint.block_size += group.stride;
+        }
+        for (std::size_t b = 0; b < banners->banners().size(); ++b) {
+            g.template_tint.banner_base.emplace_back(base + static_cast<std::uint32_t>(b) * g.template_tint.block_size);
         }
     }
     for (const auto& [sheet, source] : dithered) {

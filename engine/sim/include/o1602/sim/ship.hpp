@@ -22,7 +22,16 @@ struct CargoSlot {
     std::uint8_t ware = 0;     ///< 0 = empty
     std::uint32_t amount = 0;  ///< 1/32 t
     std::uint16_t price = 0;   ///< average price paid per ton (what bought goods cost)
+    /// A unit of a package's own in the hold (docs/modding/own-figures.md#soldiers): its red figure,
+    /// 0 for none. `ware` is then the soldier ware of the original's unit of its kind, which the
+    /// holds' icons and counts go by.
+    std::uint32_t unit = 0;
 };
+
+/// The red figure of the unit in a hold of soldiers (is_soldier_ware): a package's or the original's.
+[[nodiscard]] inline std::uint32_t hold_unit(const CargoSlot& c) noexcept {
+    return c.unit != 0 ? c.unit : assets::unit_of_ware(c.ware);
+}
 
 /// One ware a route stop loads or unloads.
 struct RouteEntry {

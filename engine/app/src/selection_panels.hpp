@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -21,6 +22,7 @@
 #include "o1602/assets/building_table.hpp"
 #include "o1602/assets/figure_table.hpp"
 #include "o1602/assets/game_directory.hpp"
+#include "o1602/assets/own_figures.hpp"
 #include "o1602/assets/text_table.hpp"
 #include "o1602/render/banner.hpp"
 #include "o1602/sim/simulation.hpp"
@@ -62,6 +64,8 @@ struct PanelContext {
     bool ctrl = false;
     /// Shift is held (a click on the cannons in a ship's hold mounts as many as fit).
     bool shift = false;
+    /// The unit families of the packages, which a castle trains beside the original's.
+    std::span<const assets::OwnUnit> own_units{};
     /// Real time in milliseconds, for what blinks (the diplomacy window's open offers).
     std::uint64_t now_ms = 0;
     [[nodiscard]] const sim::World& world() const noexcept { return simulation.world(); }

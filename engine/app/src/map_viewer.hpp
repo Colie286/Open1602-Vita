@@ -519,6 +519,7 @@ private:
     std::vector<assets::OwnBuilding> m_own_buildings;
     /// The figures the packages added, with the numbers m_original_figures gave them.
     std::vector<assets::OwnFigure> m_own_figures;
+    std::vector<assets::OwnUnit> m_own_units;  ///< the unit families among them, for the castles' windows
     /// The goods a new game trades: the original's and the packages' (docs/modding/goods.md).
     assets::Goods m_goods;
     /// The classes of inhabitants of a new game as the packages change and add them, empty when

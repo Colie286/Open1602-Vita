@@ -411,6 +411,10 @@ struct WorldLayers {
     std::array<std::optional<std::uint32_t>, assets::kFigureSheetCount> sheet_base{};
     /// Tinted units for banners without drawn variants (WorldGraphics::unit_tint).
     const UnitTint* unit_tint = nullptr;
+    /// The same for package units with a block per colour (WorldGraphics::package_unit_tint).
+    const UnitTint* package_unit_tint = nullptr;
+    /// Package units drawn as tint templates, for every banner (WorldGraphics::template_tint).
+    const UnitTint* template_tint = nullptr;
     /// Volcano fire, lava, hits, wrecks and the scenery. Needs `figures` and the atlas bases of
     /// their sheets (EFFEKTE.BSH, SCHATTEN.BSH, ...).
     const std::vector<EffectFigure>* effects = nullptr;

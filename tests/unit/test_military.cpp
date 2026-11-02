@@ -20,6 +20,7 @@
 #include "o1602/sim/construction.hpp"
 #include "o1602/sim/logistics.hpp"
 #include "o1602/sim/military.hpp"
+#include "o1602/sim/save_game.hpp"
 #include "o1602/sim/ships.hpp"
 #include "o1602/sim/world.hpp"
 
@@ -573,6 +574,51 @@ TEST_CASE("military: soldiers go on board a ship and land elsewhere") {
     CHECK(f.world.soldiers()[0].health == 640);
     CHECK(f.world.soldiers()[0].figure == kSword);
     CHECK(boat->cargo[0].ware == 0);
+}
+
+TEST_CASE("military: a package's unit trains in a castle's place, goes on board and lands as itself") {
+    Field f;
+    // A unit family of a package beside the swordsman (own_figures.toml), with more health.
+    assets::FigureType pike = *f.figures.get(kSword);
+    pike.combat.max_health = 40;
+    const std::vector<assets::FigureType> colours(4, pike);
+    const auto family = f.figures.add_unit_family(colours);
+    REQUIRE(family.ok());
+    f.start();
+    sim::Ship ship = sim::make_ship("Boat", 8, 15, 21, 0);
+    ship.cargo.resize(2);
+    f.world.add_ship(ship);
+    const std::uint32_t ship_id = f.world.ships().back().id;
+    sim::Soldier& pikeman = f.add(static_cast<std::uint16_t>(*family), 0, 2 * 14, 2 * 15);
+    pikeman.health = 20;  // half its health
+    const std::uint32_t id = pikeman.id;
+    REQUIRE(f.military->order(sim::SoldierOrder{0, {id}, sim::Target::other_ship(ship_id)}));
+    f.run(10'000);
+    CHECK(f.world.soldier(id) == nullptr);
+    const sim::Ship* boat = f.world.ship(ship_id);
+    REQUIRE(boat != nullptr);
+    // The hold shows the swordsman, the original's unit of its kind, and names the package's.
+    CHECK(boat->cargo[0].ware == 25);
+    CHECK(boat->cargo[0].unit == *family);
+    CHECK(boat->cargo[0].amount == 800);
+    CHECK(sim::hold_unit(boat->cargo[0]) == *family);
+    CHECK(f.military->army_size(0) == 1);
+
+    // A savegame keeps it (FLEE version 6).
+    const auto bytes = sim::write_game(f.world, f.buildings);
+    REQUIRE(bytes.ok());
+    auto read = sim::read_game(*bytes, f.buildings, nullptr, &f.figures);
+    REQUIRE(read.ok());
+    const sim::Ship* kept = read->ship(ship_id);
+    REQUIRE(kept != nullptr);
+    CHECK(kept->cargo[0].unit == *family);
+
+    REQUIRE(f.military->unload(sim::UnloadOrder{0, ship_id}));
+    REQUIRE(f.world.soldiers().size() == 1);
+    CHECK(f.world.soldiers()[0].figure == *family);
+    CHECK(f.world.soldiers()[0].health == 20);
+    CHECK(boat->cargo[0].ware == 0);
+    CHECK(boat->cargo[0].unit == 0);
 }
 
 TEST_CASE("military: a ship from the original's files takes as many soldiers as its type has holds") {

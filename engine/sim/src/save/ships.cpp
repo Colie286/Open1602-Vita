@@ -32,10 +32,18 @@ void io_ship(A& a, S& s, std::uint16_t version) {
     a.u8_masked(s.direction, 7U);
     a.u32(s.health);
     a.u8(s.cannons);
-    a.list(s.cargo, 7, [&](auto& c) {
+    a.list(s.cargo, version >= kPackageUnits ? 11 : 7, [&](auto& c) {
         a.u8(c.ware);
         a.u32(c.amount);
         a.u16(c.price);
+        if (version >= kPackageUnits) {
+            a.u32(c.unit);
+            if constexpr (A::kReading) {
+                if (c.unit != 0 && (!assets::is_soldier_ware(c.ware) || c.unit >= assets::kMaxFigures)) {
+                    a.fail();
+                }
+            }
+        }
     });
     const std::size_t stops = version >= kLongRoutes ? TradeRoute::kStops : TradeRoute::kOriginalStops;
     const std::size_t entries = version >= kRouteWares ? RouteStop::kEntries : RouteStop::kOriginalEntries;
@@ -190,6 +198,12 @@ std::vector<Ship> read_ships(Reader& in) {
 }
 
 std::uint16_t fleet_version(const World& w) {
+    // Version 6 has all of version 5 and the units of packages in the holds.
+    if (std::ranges::any_of(w.ships(), [](const Ship& s) {
+            return std::ranges::any_of(s.cargo, [](const CargoSlot& c) { return c.unit != 0; });
+        })) {
+        return kPackageUnits;
+    }
     // Version 5 has all of version 4 and the pirates' mark on a surrendered ship.
     if (std::ranges::any_of(w.ships(), [](const Ship& s) { return s.held && s.plundered; })) {
         return kPlunderedFlag;

@@ -10,6 +10,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "o1602/assets/figure_table.hpp"
@@ -44,6 +45,9 @@ struct GraphicsOptions {
     /// The images of the content packages (assets/package_graphics.hpp): their sprites join the
     /// terrain's at their sprite numbers. An image that cannot be read stays empty, with a warning.
     std::vector<assets::PackageImage> package_images{};
+    /// Sprites of the terrain sheet (with the packages' images) drawn as tint templates, as first
+    /// sprite and count: the units of packages with `tint = true` (WorldGraphics::template_tint).
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> template_sprites{};
 };
 
 struct WorldGraphics {
@@ -57,6 +61,10 @@ struct WorldGraphics {
     std::vector<std::optional<std::uint32_t>> banner_flags;
     /// Units in banner colours without drawn variants (needs the soldier sheet and the figures).
     UnitTint unit_tint;
+    /// The same for package units whose image has a block per colour (terrain sheet).
+    UnitTint package_unit_tint;
+    /// Package units drawn as tint templates (GraphicsOptions::template_sprites), for every banner.
+    UnitTint template_tint;
     /// Shadows (SCHATTEN.BSH) and smoke (EFFEKTE.BSH) as the original draws them, for the classic
     /// graphics (WorldLayers::dither); empty unless GraphicsOptions::dither.
     Dither dither;

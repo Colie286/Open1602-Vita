@@ -338,3 +338,115 @@ TEST_CASE("units: a soldier drawn with a package's image keeps it in every colou
         CHECK(f.parts[f.count - 1].sprite == atlas->sheet_base(0) + assets::kFirstPackageSprite + 3);
     }
 }
+
+TEST_CASE("units: a package's tint template takes on the colour of every banner") {
+    // One 2 x 1 image: pure grey 128 (cloth) and a grey one step off in blue (fixed).
+    class Sheet final : public render::SpriteSource {
+    public:
+        [[nodiscard]] std::uint32_t count() const override { return 3; }
+        void size(std::uint32_t, std::uint32_t& width, std::uint32_t& height) const override {
+            width = 2;
+            height = 1;
+        }
+        bool pixels(std::uint32_t, std::vector<std::uint8_t>& rgba) const override {
+            rgba = {128, 128, 128, 255, 120, 120, 121, 255};
+            return true;
+        }
+    };
+    const Sheet sheet;
+    render::UnitImageGroup group;
+    group.first = 2;
+    group.stride = 1;
+    group.variants = 1;
+    const auto banners = render::BannerTable::original();
+    std::vector<assets::Rgba> colours;
+    for (std::size_t b = 0; b < render::BannerTable::kDefaultColours.size(); ++b) {
+        colours.push_back(render::BannerTable::kDefaultColours[b]);
+    }
+    REQUIRE(colours.size() >= 12);  // up to 12 players
+    const render::TintedTemplateSource source(sheet, {group}, colours);
+    REQUIRE(source.count() == colours.size());
+    for (std::uint32_t i = 0; i < source.count(); ++i) {
+        std::uint32_t w = 0;
+        std::uint32_t h = 0;
+        source.size(i, w, h);
+        CHECK(w == 2);
+        std::vector<std::uint8_t> rgba;
+        REQUIRE(source.pixels(i, rgba));
+        CHECK(rgba[0] == colours[i].r);  // grey 128: exactly the banner's colour
+        CHECK(rgba[1] == colours[i].g);
+        CHECK(rgba[2] == colours[i].b);
+        CHECK(rgba[4] == 120);  // not pure grey: as drawn
+        CHECK(rgba[6] == 121);
+    }
+    std::vector<std::uint8_t> none;
+    CHECK(!source.pixels(source.count(), none));
+}
+
+TEST_CASE("units: a soldier drawn with a tint template wears the colour of every banner") {
+    const assets::CodPredefinedSymbol types[] = {{"FIGUR", 1}};
+    const auto doc = assets::cod::parse(
+        "Objekt: FIGUR\n"
+        "  Nummer: 1\n  Gfx: 0\n  Rotate: 1\n  Posoffs: 0, 3\n"
+        "  Nummer: 2\n  Gfx: 10\n  Rotate: 1\n  Posoffs: 0, 3\n"
+        "  Nummer: 3\n  Gfx: 20\n  Rotate: 1\n  Posoffs: 0, 3\n"
+        "  Nummer: 4\n  Gfx: 30\n  Rotate: 1\n  Posoffs: 0, 3\n"
+        "EndObj\n",
+        types);
+    auto original = assets::FigureTable::from_cod(doc);
+    REQUIRE(original.ok());
+    assets::FigureTable figures = *original;
+    const std::vector<assets::FigureLook> looks = {
+        {1, 40000, true}, {2, 40000, true}, {3, 40000, true}, {4, 40000, true}};
+    assets::apply_figure_looks(figures, *original, looks);
+
+    const auto terrain = test::make_sheet({{4, 2}});
+    const auto package = test::make_sheet(std::vector<std::pair<std::uint32_t, std::uint32_t>>(8, {5, 7}));
+    const auto tinted = test::make_sheet(std::vector<std::pair<std::uint32_t, std::uint32_t>>(8 * 16, {5, 7}));
+    const auto palette = test::make_palette();
+    const render::SheetSource terrain_source(terrain, palette);
+    const render::SheetSource package_source(package, palette);
+    const render::SheetSource tinted_source(tinted, palette);  // stands for the tinted blocks
+    render::PlacedSources terrain_with_package;
+    terrain_with_package.place(0, terrain_source);
+    terrain_with_package.place(assets::kFirstPackageSprite, package_source);
+    const render::SpriteSource* sources[] = {&terrain_with_package, &tinted_source};
+    auto atlas = render::SpriteAtlas::build(sources, 256);
+    REQUIRE(atlas.ok());
+
+    auto banners = render::BannerTable::original();
+    const sim::BannerId green = banners.add_colour("test:green", render::BannerTable::kDefaultColours[4]);
+    render::UnitTint templates;
+    templates.groups.push_back(render::UnitImageGroup{assets::kFirstPackageSprite, 8, 1, 0, 0, false, 0});
+    templates.block_size = 8;
+    for (std::size_t b = 0; b < banners.banners().size(); ++b) {
+        templates.banner_base.emplace_back(atlas->sheet_base(1) + static_cast<std::uint32_t>(b) * 8U);
+    }
+    sim::World world;
+    world.set_players(
+        {sim::Player{sim::PlayerRole::Human, 2, 0, ""}, sim::Player{sim::PlayerRole::Computer, green, 0, ""}});
+    render::WorldLayers layers;
+    layers.figures = &figures;
+    layers.atlas = &*atlas;
+    layers.banners = &banners;
+    layers.template_tint = &templates;
+    layers.sheet_base[static_cast<std::size_t>(assets::FigureSheet::Stadtfld)] = atlas->sheet_base(0);
+
+    render::FigureInstance soldier;
+    soldier.x = 10.0;
+    soldier.y = 20.0;
+    soldier.figure = 1;
+    soldier.direction = 3;
+    render::FigureSprites f;
+    // Banner 2 has a drawn variant, the green one none: both wear the template in their colour.
+    soldier.owner = 0;
+    REQUIRE(render::land_figure_sprites(soldier, world, render::WorldView{}, layers, f));
+    CHECK(f.parts[f.count - 1].sprite == atlas->sheet_base(1) + 2 * 8 + 3);
+    soldier.owner = 1;
+    REQUIRE(render::land_figure_sprites(soldier, world, render::WorldView{}, layers, f));
+    CHECK(f.parts[f.count - 1].sprite == atlas->sheet_base(1) + green * 8U + 3);
+    // Without an owner: as drawn.
+    soldier.owner = sim::kNoPlayer;
+    REQUIRE(render::land_figure_sprites(soldier, world, render::WorldView{}, layers, f));
+    CHECK(f.parts[f.count - 1].sprite == atlas->sheet_base(0) + assets::kFirstPackageSprite + 3);
+}

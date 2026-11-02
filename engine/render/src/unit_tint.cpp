@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "o1602/render/flag_tint.hpp"
 
@@ -420,6 +421,48 @@ bool TintedUnitSource::make_template(const UnitImageGroup& g, std::uint32_t k, c
     std::uint32_t w = 0;
     std::uint32_t h = 0;
     unit_template(views, m_variant_colours, options, rgba, w, h);
+    return true;
+}
+
+TintedTemplateSource::TintedTemplateSource(const SpriteSource& sheet, std::vector<UnitImageGroup> groups,
+                                           std::vector<assets::Rgba> colours)
+    : m_sheet(sheet), m_groups(std::move(groups)), m_colours(std::move(colours)) {
+    for (UnitImageGroup& g : m_groups) {
+        g.offset = m_block;
+        m_block += g.stride;
+    }
+}
+
+std::uint32_t TintedTemplateSource::count() const {
+    return m_block * static_cast<std::uint32_t>(m_colours.size());
+}
+
+std::optional<std::uint32_t> TintedTemplateSource::image(std::uint32_t i) const noexcept {
+    if (m_block == 0 || i >= count()) {
+        return std::nullopt;
+    }
+    const std::uint32_t in_block = i % m_block;
+    for (const UnitImageGroup& g : m_groups) {
+        if (in_block >= g.offset && in_block < g.offset + g.stride) {
+            return g.first + (in_block - g.offset);
+        }
+    }
+    return std::nullopt;
+}
+
+void TintedTemplateSource::size(std::uint32_t i, std::uint32_t& width, std::uint32_t& height) const {
+    width = height = 0;
+    if (const auto k = image(i)) {
+        m_sheet.size(*k, width, height);
+    }
+}
+
+bool TintedTemplateSource::pixels(std::uint32_t i, std::vector<std::uint8_t>& rgba) const {
+    const auto k = image(i);
+    if (!k || !m_sheet.pixels(*k, rgba)) {
+        return false;
+    }
+    tint_rgba(rgba, m_colours[i / m_block]);
     return true;
 }
 

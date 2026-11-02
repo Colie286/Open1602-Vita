@@ -46,9 +46,24 @@ coat of arms or lettering in fixed colours.
 A mod can also supply its own finished, pre-coloured images for individual banners (`FlagStyle::Sprites`)
 if a motif should not be tintable – this is how the pirates keep their skull.
 
-The same rules are meant to apply to custom units in player colour (soldiers, cavalry, cannoneers): cloth
-in pure grey, everything else deviating by at least one value. For the original units
-Open1602 already generates the template itself.
+## Graphics of packages in player colour
+
+Every graphic of a package that shows a player's colour follows the same rule as the flag: it is a
+**template**, drawn once, whose pure grey pixels take on the colour of the owner's banner with the
+shading of the table above, and whose other pixels stay as drawn. One template is enough for any
+number of players, up to 12, and for colours chosen freely in the flag menu.
+
+| Graphic | How | State |
+|---|---|---|
+| flags | `FlagTemplate` of a banner table, see above | done |
+| soldiers of a package | `tint = true` in `own_figures.toml` ([own-figures.md](own-figures.md#soldiers)) | done |
+| ships of a package | the same field for ships of a package's own | open, with them |
+| coats of arms and message icons of a package | a template among the icons | open |
+
+For the original's units Open1602 makes the template itself from the four colours drawn
+(`render/unit_tint.hpp`), and does the same for a soldier of a package whose image holds its
+sprites four times, red, blue, yellow and white: banners after the fourth wear a template made from
+them. A soldier whose image holds them once without `tint` looks the same for every player.
 
 ## Interface art in player colour
 

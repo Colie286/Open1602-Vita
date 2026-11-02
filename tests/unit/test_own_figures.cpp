@@ -121,7 +121,7 @@ TEST_CASE("own figures: a table that is wrong is passed over with a warning") {
                                    "[nothing]\n"
                                    "image = \"monks:small\"\n"
                                    "[unit]\n"
-                                   "like = \"anno1602:swordsman\"\n"
+                                   "like = \"anno1602:cavalry\"\n"
                                    "[tiny]\n"
                                    "like = \"anno1602:carrier\"\n"
                                    "image = \"monks:small\"\n"
@@ -138,6 +138,93 @@ TEST_CASE("own figures: a table that is wrong is passed over with a warning") {
     REQUIRE(own.size() == 1);
     CHECK(own[0].id == "monks:ok");
     CHECK(warnings.size() == 6);
+}
+
+TEST_CASE("own figures: a figure like a unit is a unit family of four colours") {
+    auto figures = make_figures();
+    std::vector<assets::OwnFigure> own;
+    std::vector<assets::OwnUnit> units;
+    std::vector<std::string> warnings;
+    // Swordsmen draw one sprite each: 4 for one per colour, 1 for the same in every colour.
+    const std::vector<assets::PackageImage> images = {image("guards:coloured", 40000, 4),
+                                                      image("guards:one", 41000, 1)};
+    assets::apply_own_figures_file(figures, own, "guards",
+                                   "[pikeman]\n"
+                                   "like = \"anno1602:swordsman\"\n"
+                                   "image = \"guards:coloured\"\n"
+                                   "icon = \"guards:pike\"\n"
+                                   "name.en = \"Pikeman\"\n"
+                                   "name.de = \"Pikenier\"\n"
+                                   "[halberdier]\n"
+                                   "like = \"guards:pikeman\"\n"
+                                   "image = \"guards:one\"\n"
+                                   "[monk]\n"
+                                   "like = \"anno1602:carrier\"\n"
+                                   "icon = \"guards:monk\"\n",
+                                   warnings, images, {}, &units);
+    REQUIRE(own.size() == 3);
+    CHECK(warnings.size() == 1);  // the monk's icon: a unit's field only
+    REQUIRE(units.size() == 2);
+    // Four numbers in a row from the top, red first; the next family below them.
+    CHECK(units[0].id == "guards:pikeman");
+    CHECK(units[0].family == assets::kMaxFigures - 4);
+    CHECK(own[0].number == units[0].family);
+    CHECK(units[0].like == 1U);
+    CHECK(units[0].icon == "guards:pike");
+    CHECK(units[0].name("de") == "Pikenier");
+    CHECK(units[1].family == assets::kMaxFigures - 8);
+    CHECK(units[1].like == 1U);  // beside the swordsman, as the unit it copies
+    CHECK(own[2].number == assets::kMaxFigures - 9);
+    for (std::uint32_t k = 0; k < 4; ++k) {
+        const assets::FigureType* f = figures.get(units[0].family + k);
+        REQUIRE(f != nullptr);
+        CHECK(f->kind == 1);
+        CHECK(f->gfx == 40000 + k);  // one sprite per colour
+        CHECK(figures.get(units[1].family + k)->gfx == 41000);
+        const auto variant = figures.unit_of(units[0].family + k);
+        REQUIRE(variant.has_value());
+        CHECK(variant->family == units[0].family);
+        CHECK(variant->index == k);
+    }
+    CHECK(!assets::FigureTable::unit_variant(units[0].family));  // not one of the original's
+    CHECK(figures.unit_families().size() == 6);
+    CHECK(assets::find_own_unit(units, units[1].family) == &units[1]);
+    CHECK(assets::find_own_unit(units, 1) == nullptr);
+}
+
+TEST_CASE("own figures: a unit with tint = true draws one template in every colour") {
+    auto figures = make_figures();
+    std::vector<assets::OwnFigure> own;
+    std::vector<assets::OwnUnit> units;
+    std::vector<std::string> warnings;
+    const std::vector<assets::PackageImage> images = {image("guards:grey", 40000, 4)};
+    assets::apply_own_figures_file(figures, own, "guards",
+                                   "[pikeman]\n"
+                                   "like = \"anno1602:swordsman\"\n"
+                                   "image = \"guards:grey\"\n"
+                                   "tint = true\n"
+                                   "[halberdier]\n"
+                                   "like = \"guards:pikeman\"\n"
+                                   "[archer]\n"
+                                   "like = \"anno1602:swordsman\"\n"
+                                   "tint = true\n"
+                                   "[monk]\n"
+                                   "like = \"anno1602:carrier\"\n"
+                                   "tint = true\n",
+                                   warnings, images, {}, &units);
+    // The archer's tint needs an image, the monk is no unit.
+    CHECK(warnings.size() == 2);
+    REQUIRE(units.size() == 3);
+    CHECK(units[0].tint);
+    CHECK(units[1].tint);  // draws the pikeman's template
+    CHECK(!units[2].tint);
+    for (std::uint32_t k = 0; k < 4; ++k) {
+        CHECK(figures.get(units[0].family + k)->gfx == 40000);  // one image, not one per colour
+    }
+    const auto sprites = assets::tint_template_sprites(units, figures);
+    REQUIRE(sprites.size() == 1);
+    CHECK(sprites[0].first == 40000);
+    CHECK(sprites[0].second == 1);
 }
 
 TEST_CASE("own figures: a package's building names its workers, figures.toml their values") {

@@ -1394,6 +1394,11 @@ public:
         if (const assets::Gadget* g = l.find(40007)) {
             m_weapon_icon = g->gfx;
         }
+        for (std::int32_t u = 0; u < 4; ++u) {
+            if (const assets::Gadget* g = l.find(40021 + u)) {
+                m_unit_gfx[static_cast<std::size_t>(u)] = g->gfx;
+            }
+        }
     }
 
     void refresh(const Selection& s, const PanelContext& c) override {
@@ -1425,8 +1430,12 @@ public:
             }
             const sim::CastleSlot& slot = castle->slots[static_cast<std::size_t>(k)];
             const assets::FigureType* f = c.figures.get(slot.figure);
-            // The soldier icons are the wares of the units (wSOLDAT1 ...), in their colours.
-            m_panel.set_graphic(40031 + k, m_gfx_ware + sim::unit_ware(slot.figure), 0);
+            // The soldier icons are the wares of the units (wSOLDAT1 ...), in their colours; a
+            // package's unit shows its icon, or the original's unit it stands beside.
+            const assets::OwnUnit* own = assets::find_own_unit(c.own_units, slot.figure);
+            const auto icon = own != nullptr && !own->icon.empty() ? ui::package_icon_sprite(own->icon) : std::nullopt;
+            m_panel.set_graphic(
+                40031 + k, icon ? *icon : m_gfx_ware + sim::unit_ware(own != nullptr ? own->like : slot.figure), 0);
             m_panel.set_disabled(40031 + k, slot.training);
             m_panel.set_text(40071 + k, std::to_string(std::min<std::uint32_t>(slot.progress, 320) * 10 / 320));
             const std::uint32_t max = f != nullptr ? std::max<std::uint32_t>(f->combat.max_health, 1) : 1;
@@ -1435,6 +1444,16 @@ public:
         }
         for (std::int32_t u = 0; u < 4; ++u) {
             m_panel.set_selected(40021 + u, u == m_unit);
+            // The button of the chosen unit shows a package's unit by its icon.
+            const assets::OwnUnit* own = u == m_unit ? assets::find_own_unit(c.own_units, m_family) : nullptr;
+            const auto icon = own != nullptr && !own->icon.empty() ? ui::package_icon_sprite(own->icon) : std::nullopt;
+            bool& shown = m_unit_icon[static_cast<std::size_t>(u)];
+            if (icon) {
+                m_panel.set_graphic(40021 + u, *icon, 0);
+            } else if (shown) {
+                m_panel.set_graphic(40021 + u, m_unit_gfx[static_cast<std::size_t>(u)], 0);
+            }
+            shown = icon.has_value();
         }
         const assets::FigureType* unit = c.figures.get(unit_figure(colour));
         if (unit != nullptr) {
@@ -1471,7 +1490,26 @@ public:
             return;
         }
         if (e.id >= 40021 && e.id <= 40024) {
-            m_unit = e.id - 40021;
+            // Open1602: a click on the chosen unit again picks the next unit of a package that
+            // stands beside it, and after the last the original's again.
+            const std::int32_t u = e.id - 40021;
+            const std::uint32_t original = sim::figure::unit_figure(static_cast<std::size_t>(u), 0);
+            std::uint32_t next = original;
+            if (u == m_unit) {
+                bool after = m_family == original;
+                for (const assets::OwnUnit& own : c.own_units) {
+                    if (own.like != original) {
+                        continue;
+                    }
+                    if (after) {
+                        next = own.family;
+                        break;
+                    }
+                    after = own.family == m_family;
+                }
+            }
+            m_unit = u;
+            m_family = next;
             return;
         }
         sim::CastleOrder o;
@@ -1535,6 +1573,10 @@ public:
                 break;
         }
         if (id >= 40021 && id <= 40024) {
+            if (const assets::OwnUnit* own =
+                    id - 40021 == m_unit ? assets::find_own_unit(c.own_units, m_family) : nullptr) {
+                return own->name(ui::current_language()) + "\n" + help_line(c, 82);
+            }
             return line(82);
         }
         const sim::CostBuilding* castle = cost_building_at(s, c, sim::CostBuilding::Kind::Castle);
@@ -1576,15 +1618,23 @@ public:
     }
 
 private:
-    /// SOLDAT1, KAVALERIE1, MUSKETIER1, KANONIER1 (the chosen family) of a colour.
+    /// SOLDAT1, KAVALERIE1, MUSKETIER1, KANONIER1 or a package's unit beside it (the chosen family)
+    /// of a colour.
     [[nodiscard]] std::uint16_t unit_figure(std::int32_t colour) const noexcept {
-        return sim::figure::unit_figure(static_cast<std::size_t>(m_unit), colour);
+        const std::uint16_t original = sim::figure::unit_figure(static_cast<std::size_t>(m_unit), colour);
+        if (m_family == 0 || original == 0) {
+            return original;
+        }
+        return static_cast<std::uint16_t>(m_family + static_cast<std::uint32_t>(colour));
     }
     std::int32_t m_gfx_ware = 192;
     std::int32_t m_gfx_empty = 192;
     std::int32_t m_weapon_icon = 432;
     std::int32_t m_slot = 0;
     std::int32_t m_unit = 0;
+    std::uint32_t m_family = 0;                ///< red figure of the chosen unit, 0: the original's of m_unit
+    std::array<std::int32_t, 4> m_unit_gfx{};  ///< the unit buttons' own pictures
+    std::array<bool, 4> m_unit_icon{};         ///< a button shows a package's icon instead
     bool m_picking = false;
     bool m_all = false;  ///< the pick sends every trained unit (Shift on the send-out arrow)
 };

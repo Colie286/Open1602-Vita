@@ -96,7 +96,13 @@ ModRules load_mod_rules(std::span<const assets::ModPackage> packages, assets::Bu
         if (const auto bytes = core::read_file(package.folder / assets::kOwnFiguresFile)) {
             const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
             assets::apply_own_figures_file(figures, rules.own_figures, package.id, text, problems, rules.images,
-                                           rules.sounds);
+                                           rules.sounds, &rules.own_units);
+        }
+    }
+    for (const assets::OwnUnit& unit : rules.own_units) {
+        if (!unit.icon.empty() && assets::find_package_icon(icons, unit.icon) == nullptr) {
+            problems.push_back(unit.id + ": its icon " + unit.icon +
+                               " is no icon of a package (icons.toml); the castle shows the unit it copies");
         }
     }
     for (const assets::ModPackage& package : packages) {

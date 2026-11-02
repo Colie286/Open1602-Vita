@@ -123,6 +123,7 @@ whose version 2 carries trade routes with eight stops and version 3 stops with e
 three (one per hold of the ship, Open1602's page of a stop), the same record per ware.
 `FLEE` version 4: version 3 with the island number of each discovered-by entry as u16.
 `FLEE` version 5: version 4 with a boolean per ship after the white flag: the pirates have already plundered this surrender and leave the ship alone while the flag stays up (Open1602's own; the writer takes it only when a ship under the white flag has it).
+`FLEE` version 6: version 5 with a u32 per hold after its price: the red figure of the soldier of a package the hold carries, 0 for none (`CargoSlot::unit`, [own-figures.md](../modding/own-figures.md#soldiers); Open1602's own, the writer takes it only when a hold carries one). A unit there with a ware that is no soldier, or a number of 1024 or more, loads nothing.
 `ISLE` version 3: version 2 with the island number and the x and y of each deposit as u16.
 `PSTA` version 3: version 2 with a boolean per player after the switches: the player closed his city gates to foreign soldiers (Open1602's own; the writer takes it only when a player did).
 `PSTA` version 4: version 3 with a u64 per player after the gates: who played it last (`Player::owner`, a verifier of the player ID of that person's installation, 0 for nobody; Open1602's own, the writer takes it only when a player has one).

@@ -457,7 +457,7 @@ std::vector<std::uint32_t> military_upkeep(const World& world, const assets::Fig
     for (const Ship& ship : world.ships()) {
         for (const CargoSlot& c : ship.cargo) {
             if (is_soldier_ware(c.ware) && ship.owner < upkeep.size()) {
-                if (const assets::FigureType* type = figures.get(unit_of_ware(c.ware))) {
+                if (const assets::FigureType* type = figures.get(hold_unit(c))) {
                     upkeep[ship.owner] += figures.unit_upkeep(type->kind);
                 }
             }

@@ -7,8 +7,9 @@ the package: a monk who carries the goods of a monastery, a donkey for a mill.
 
 **Status:** Done are the file `own_figures.toml`, the figure's own picture, its values
 ([values.md](values.md)), the buildings of a package that name it as their carriers or workers
-([own-buildings.md](own-buildings.md)) and its number in savegames. Still open: soldiers and ships
-of a package's own, which castles and shipyards would have to offer.
+([own-buildings.md](own-buildings.md)), its number in savegames and soldiers of a package's own,
+which castles train ([below](#soldiers)). Still open: ships of a package's own for the shipyards,
+and computers that train a package's soldiers.
 
 ## The file
 
@@ -30,7 +31,7 @@ shadow = false
 
 | Field | Limits | Meaning |
 |---|---|---|
-| `like` | one figure: of the original, `anno1602:<name or number>` ([names](values.md#names)), or of a package, `<package>:<name>` | every value, animation and sound of that figure, as the copy's starting point. A unit's name stands for its four colours and is no single figure: name one of them by its number |
+| `like` | one figure: of the original, `anno1602:<name or number>` ([names](values.md#names)), or of a package, `<package>:<name>` | every value, animation and sound of that figure, as the copy's starting point. A unit's name (`anno1602:musketeer`, or a soldier of a package) makes a [soldier](#soldiers) of four colours; one colour of a unit, named by its number, is an ordinary figure |
 | `image` | an image of a package, `<package>:<name>` ([graphics.md](graphics.md)) | the sprites the figure draws, in the order the original's sheet has them from the figure's `Gfx` ([graphics.md](graphics.md#figures-and-ships)); without it the picture of the figure it copies |
 | `shadow` | `true` or `false` | whether it keeps the shadow of the figure it copies; `true` if not given |
 | `sound` | a sound of a package, `<package>:<name>` ([sounds.md](sounds.md#sounds-of-buildings-and-figures)) | the sound of each of its animations, at the end of the cycle |
@@ -60,6 +61,43 @@ like = "anno1602:bakery"
 figure = "monks:monk"
 ```
 
+## Soldiers
+
+A figure whose `like` names a unit, `anno1602:swordsman`, `anno1602:cavalry`,
+`anno1602:musketeer`, `anno1602:cannoneer` or a soldier of a package, is a soldier of the package:
+four figures, one for each of the original's player colours (red, blue, yellow, white), copied from
+the four of the unit. Castles train it beside the original's unit of its kind: a click on the
+castle's button of that unit picks it, the next click the next soldier of a package beside it, and
+after the last the original's again. Its values come from `figures.toml` as every figure's.
+
+```toml
+# mods/guards/own_figures.toml
+[pikeman]
+like = "anno1602:swordsman"
+image = "guards:pikeman"    # once for every colour, or four times: red, blue, yellow, white
+tint = true                 # the image is a template: pure grey takes on the player's colour
+icon = "guards:pike"        # icons.toml: the castle's button and places
+name.en = "Pikeman"
+name.de = "Pikenier"
+```
+
+| Field | Limits | Meaning |
+|---|---|---|
+| `image` | an image of a package | the sprites the soldier draws, as for every figure; when the image holds them four times, the colours red, blue, yellow and white one after the other, each colour draws its own, otherwise all four draw the same |
+| `icon` | an icon of a package, `<package>:<name>` ([graphics.md](graphics.md)) | the castle's button of the unit while the soldier is picked, and its places in training; without it the icon of the original's unit it copies |
+| `name.<language>` | a text | its name, in the help of the castle's button |
+| `tint` | `true` or `false` (default) | the image is a template in player colour: once for every colour, its pure grey pixels take on the colour of the owner's banner, for every banner ([flags.md](flags.md#graphics-of-packages-in-player-colour)); needs `image`. A soldier that copies it without an image of its own is drawn so too |
+
+Without `tint`, an image that holds the sprites four times is drawn as is for the first four
+banners and gives the template for the others, as the original's units do; an image that holds
+them once looks the same for every player.
+
+`icon`, `name` and `tint` are fields of a soldier only; another figure passes them over with a warning.
+A soldier takes four figure numbers in a row, from the top down as every figure of a package. On
+board a ship a soldier of a package fills a hold as the original's units do; the hold shows the
+original's unit of its kind (`Kind`) and keeps which soldier it holds (version 6 of `FLEE`,
+[o1602-save.md](../formats/o1602-save.md)). Computers train only the original's units so far.
+
 ## Numbers and savegames
 
 The engine gives every figure of a package a number of the figure table, the highest free one
@@ -75,6 +113,9 @@ none of them, and a game with them cannot be saved for the original.
 
 ## In the code
 
-`engine/assets/include/o1602/assets/own_figures.hpp`: `OwnFigure` (string id and number),
-`apply_own_figures_file`, `figure_number`; `FigureTable::add` gives a copy its number.
+`engine/assets/include/o1602/assets/own_figures.hpp`: `OwnFigure` (string id and number), `OwnUnit`
+(a soldier: its red figure, the original's unit beside which it stands, icon and names),
+`apply_own_figures_file`, `figure_number`; `FigureTable::add` gives a copy its number,
+`FigureTable::add_unit_family` a soldier its four, and `FigureTable::unit_families` and `unit_of`
+know them. `sim::CargoSlot::unit` names a soldier of a package in a hold.
 `sim::World::own_figures()` carries them through a game and its savegame.

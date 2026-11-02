@@ -313,6 +313,9 @@ inline constexpr std::uint16_t kWideDiscovered = 4;
 /// FLEE version 5: every ship also says whether the pirates have dealt with its surrender
 /// (Ship::plundered). The writer takes it only when a ship under the white flag has it.
 inline constexpr std::uint16_t kPlunderedFlag = 5;
+/// FLEE version 6: every hold also names the unit of a package it carries (CargoSlot::unit, 0 for
+/// none). The writer takes it only when a hold carries one.
+inline constexpr std::uint16_t kPackageUnits = 6;
 
 /// FACT version 2: every faction also says whether scripts steer it (Faction::scripted). The writer
 /// takes it only when one is; the section is required then.
@@ -413,9 +416,9 @@ void write_ships(Writer& out, const World& w);
 [[nodiscard]] std::vector<Ship> read_ships(Reader& in);
 void write_fleet(Writer& out, const World& w, std::uint16_t version);
 [[nodiscard]] Decoded::FleetPart read_fleet(Reader& in, std::uint16_t version);
-/// The version of FLEE: kPlunderedFlag if a ship under the white flag has been plundered,
-/// kWideDiscovered if an island number needs 16 bits, kRouteWares if a stop has a ware beyond the
-/// original's three, kLongRoutes if a route has a stop beyond the original's four, 1 otherwise.
+/// The version of FLEE: kPackageUnits if a hold carries a unit of a package, kPlunderedFlag if a ship under the white
+/// flag has been plundered, kWideDiscovered if an island number needs 16 bits, kRouteWares if a stop has a ware beyond
+/// the original's three, kLongRoutes if a route has a stop beyond the original's four, 1 otherwise.
 [[nodiscard]] std::uint16_t fleet_version(const World& w);
 
 // army.cpp: SOLD (files older than ARMY, read only), ARMY.

@@ -27,7 +27,7 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 
 | Item | What is missing | Size |
 |---|---|---|
-| 2 | soldiers and ships of a package's own that castles and shipyards make (today a package's figures are carriers and workers) | large: military, shipyard, AI and savegame |
+| 2 | ships of a package's own that shipyards build (soldiers of a package's own are done), and computers that train a package's soldiers | large: shipyard, AI and savegame |
 | 4 | videos in a modern format (today only Smacker and Bink 2) | medium: a decoder in `third_party` (e.g. a royalty-free format such as AV1 or VP9 in WebM) |
 | 5 | the original's 32 rows of needs (`kNeeds`), its 55 fixed building slots of a city, which building of the original produces what (`producer_slot`), the first colony's crop by the computer's slot (`first_crop`) and the four unit families and ship types the computers build, all still compiled in | large: the AI's core tables |
 | 9 | climates of a package's own, with their ground, forest and crops (today north and south) | large: climate tables, the generator, fertility and the start dialog |
@@ -39,6 +39,9 @@ Things found while testing on 2026-11-01 that are not wrong but worth doing. Don
 building table), and islands wider or higher than 255 tiles get native villages, within their first
 255 tiles (the village's records hold tile coordinates in bytes).
 
+- Coats of arms and message icons of a package in player colour: an icon of `icons.toml` as a
+  template whose pure grey takes on the banner's colour, as flags and soldiers of a package do
+  ([flags.md](flags.md#graphics-of-packages-in-player-colour); asked for on 2026-11-02).
 - The table of package files above and the table of fixed limits at the end of ADR 0007 must be
   kept up to date with each new file and each limit removed.
 
@@ -145,7 +148,10 @@ Figures of a package's own done on 2026-11-01 ([own-figures.md](own-figures.md))
 declares figures that copy one of the original (`like`), with an image of a package (`image`) and
 the highest free figure numbers from 1023 down; `figures.toml` changes their values, a building of a
 package names them as its carriers or workers (`figure`), and a game keeps them (section `OWNF`).
-Still open: soldiers and ships of a package's own for castles and shipyards.
+Soldiers of a package's own done on 2026-11-02 ([own-figures.md](own-figures.md#soldiers)): a figure
+whose `like` names a unit is a unit of four colours; castles train it beside the unit it copies, a
+ship's hold carries it, and a game keeps it (`FLEE` version 6). Still open: ships of a package's own
+for the shipyards, and computers that train a package's soldiers.
 
 ### 3. Free goods list, resident classes and unlock levels (section 2; MD-2, MD-3, MD-8)
 
