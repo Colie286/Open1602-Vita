@@ -25,10 +25,11 @@ namespace panel_detail {
 
 inline constexpr std::uint8_t kFirstTradeWare = sim::ware::kFirstTrade;
 inline constexpr std::uint8_t kLastTradeWare = sim::ware::kLastTrade;
-/// An empty hold or stock slot shows the ware "Leer" (GFXWARE + 0 = GFXWARELEER + 4: sand). The
-/// four pictures from GFXWARELEER are frames (green, yellow, black, wide yellow): the yellow one
-/// marks the chosen ware and is no picture of its own.
-inline constexpr std::int32_t kEmptyHold = 4;
+/// An empty hold or stock slot shows the water texture (GFXWARE + 1 = GFXWARELEER + 5), as in the
+/// History Edition; the ware "Leer" itself (GFXWARE + 0) is sand. The four pictures from GFXWARELEER
+/// are frames (green, yellow, black, wide yellow): the yellow one marks the chosen ware and is no
+/// picture of its own.
+inline constexpr std::int32_t kEmptyHold = 5;
 
 /// A help line (LEISTE section of Text.cod).
 inline std::string help_line(const PanelContext& c, std::size_t line) {
@@ -108,6 +109,17 @@ inline const sim::City* city_at(const Selection& s, const PanelContext& c) {
     const sim::IslandMap& map = c.world().islands()[s.island].map;
     return map.contains(s.x, s.y) ? c.world().city(s.island, map.top(s.x, s.y).city) : nullptr;
 }
+
+/// Whether a city is a native village.
+inline bool natives_city(const sim::City& city, const PanelContext& c) {
+    const sim::Player* p = c.world().player(city.owner);
+    return p != nullptr && c.world().behaviour(*p) == sim::FactionBehaviour::Natives;
+}
+
+/// The name plate of a city in a window (every gadget of `panel` drawn with GFXOVERHEAD + 0, the
+/// house): the hut (GFXOVERHEAD + 4) for a native village, the house for any other city, as in the
+/// original.
+void set_city_plate(ui::Panel& panel, const sim::City& city, const PanelContext& c);
 
 /// LAGER: the stock of a city, also the ware picker of the Kontor lists and the route editor.
 class StockList {

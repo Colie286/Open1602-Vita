@@ -2434,6 +2434,7 @@ Hud::Resources MapViewer::resources() const {
     if (owner != nullptr && (owner->role == sim::PlayerRole::Human || owner->role == sim::PlayerRole::Computer)) {
         r.shield = owner->banner;
     }
+    r.natives = owner != nullptr && m_state->world.behaviour(*owner) == sim::FactionBehaviour::Natives;
     return r;
 }
 

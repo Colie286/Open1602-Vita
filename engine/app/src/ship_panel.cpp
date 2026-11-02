@@ -1202,10 +1202,13 @@ private:
         const auto cap = static_cast<std::int32_t>(std::max<std::uint32_t>(city->capacity, 1));
         for (std::int32_t k = 0; k < 4; ++k) {
             const std::uint8_t w = kontor_ware(k);
-            m_transfer.set_visible(45011 + k, w != 0);
+            // A slot the goods group leaves free shows the empty slot (water), without a bar or a button.
+            m_transfer.set_visible(45011 + k, true);
             m_transfer.set_visible(45031 + k, w != 0);
             m_transfer.set_visible(45131 + k, w != 0);
             if (w == 0) {
+                m_transfer.set_graphic(45011 + k, m_gfx_empty, 0);
+                m_transfer.set_disabled(45011 + k, false);
                 continue;
             }
             m_transfer.set_graphic(45011 + k, ui::ware_sprite(m_gfx_ware, c.world().goods(), w), 0);
@@ -1303,6 +1306,7 @@ private:
             return;
         }
         const bool natives = is_natives(*city, c);
+        set_city_plate(m_trade, *city, c);
         m_trade.set_text(33122, ship_name(ship));
         m_trade.set_text(33124, city_name(*city));
         const assets::BuildingType* kontor = sim::kontor_of(c.world(), c.buildings, *city);

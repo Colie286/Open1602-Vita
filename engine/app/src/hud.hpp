@@ -125,6 +125,7 @@ public:
         std::optional<std::array<std::int64_t, 3>> goods_cost;
         std::optional<std::int64_t> inhabitants;  ///< the city under the mouse (a discovered island)
         std::int32_t shield = -1;                 ///< banner of a human or computer owner, -1 the plain shield
+        bool natives = false;                     ///< the city is a native village (the native figure)
     };
     void set_resources(Resources r) { m_resources = std::move(r); }
     /// The local player's points for the info panel, and whether its "Bewertung" may be pressed.
