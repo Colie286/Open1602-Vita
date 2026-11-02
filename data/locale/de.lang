@@ -765,9 +765,11 @@ display.plant_fields = Felder automatisch bepflanzen
 display.graphics = Grafik
 display.graphics_classic = wie im Original
 display.graphics_modern = modern
+display.autosave = Automatisch speichern
+display.minutes = {1} Min.
 display.on = an
 display.off = aus
-display.hint = Jede Größe: am Fensterrand ziehen. Vollbild: F11 oder Alt+Eingabe. Zoom: Mausrad, doppelt oder halb so groß mit Strg+Plus und Strg+Minus.
+display.hint = Jede Größe: am Fensterrand ziehen. Vollbild: F11 oder Alt+Eingabe. Zoom: Mausrad, doppelt oder halb so groß mit Strg+Plus und Strg+Minus. Automatisch gespeichert wird nach Spielzeit, als „lastgame“.
 display.close = Schließen
 
 stats.open = Warenbilanz

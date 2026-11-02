@@ -798,9 +798,11 @@ display.plant_fields = Plant fields automatically
 display.graphics = Graphics
 display.graphics_classic = as in the original
 display.graphics_modern = modern
+display.autosave = Autosave
+display.minutes = {1} min
 display.on = on
 display.off = off
-display.hint = Any size: drag the window's edge. Full screen: F11 or Alt+Enter. Zoom: the mouse wheel, twice or half the size with Ctrl+Plus and Ctrl+Minus.
+display.hint = Any size: drag the window's edge. Full screen: F11 or Alt+Enter. Zoom: the mouse wheel, twice or half the size with Ctrl+Plus and Ctrl+Minus. Autosave counts game time and keeps the game as “lastgame”.
 display.close = Close
 
 # The window "Goods balance" (goods_window.cpp, docs/architecture/0012-goods-statistics.md) and the

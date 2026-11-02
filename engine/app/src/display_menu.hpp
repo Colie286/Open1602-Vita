@@ -40,9 +40,10 @@ public:
         GoodsTrend,
         RivalWars,
         PlantFields,
-        Graphics
+        Graphics,
+        Autosave
     };
-    static constexpr std::size_t kItems = 13;
+    static constexpr std::size_t kItems = 14;
     /// The window's size in design units (it is centred over the map).
     static constexpr std::int32_t kWidth = 560;
     static constexpr std::int32_t kHeight = 720;

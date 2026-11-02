@@ -6,6 +6,7 @@
 
 #include "../test_framework.hpp"
 #include "app_settings.hpp"
+#include "autosave.hpp"
 #include "display_menu.hpp"
 #include "display_settings.hpp"
 
@@ -29,6 +30,7 @@ TEST_CASE("display settings: written to settings.cfg and read back") {
     s.display.rival_wars = false;
     s.display.plant_fields = true;
     s.display.classic_graphics = true;
+    s.display.autosave_minutes = 30;
     const std::string text = app::write_settings(s);
     CHECK(text.find("display.window = 1600x900\n") != std::string::npos);
     CHECK(text.find("display.graphics = classic\n") != std::string::npos);
@@ -49,6 +51,7 @@ TEST_CASE("display settings: written to settings.cfg and read back") {
     CHECK(none.display.rival_wars);
     CHECK(!none.display.plant_fields);      // the original plants no fields by itself
     CHECK(!none.display.classic_graphics);  // Open1602's look
+    CHECK(none.display.autosave_minutes == app::kAutosaveDefault);
 }
 
 TEST_CASE("display settings: damaged lines keep what was there") {
@@ -235,4 +238,72 @@ TEST_CASE("display menu: the slider of edge scrolling's speed follows the mouse"
     CHECK(menu.mouse(left + 100, y, true, model) == app::DisplayMenu::Result::None);
     CHECK(menu.mouse(left + 100, y, false, model) == app::DisplayMenu::Result::None);
     CHECK(model.settings.edge_speed == app::kEdgeSpeedMin);
+}
+
+TEST_CASE("display settings: the autosave intervals offered") {
+    ui::set_language(ui::kFallbackLanguage);
+    app::DisplaySettings d;
+    CHECK(app::read_display_line(d, "autosave", "off"));
+    CHECK(d.autosave_minutes == 0);
+    CHECK(app::read_display_line(d, "autosave", "60"));
+    CHECK(d.autosave_minutes == 60);
+    CHECK(app::read_display_line(d, "autosave", "12"));  // the nearest offered
+    CHECK(d.autosave_minutes == 10);
+    CHECK(app::read_display_line(d, "autosave", "500"));  // kept within limits
+    CHECK(d.autosave_minutes == 60);
+    CHECK(!app::read_display_line(d, "autosave", "often"));
+    CHECK(d.autosave_minutes == 60);
+    d.autosave_minutes = 0;
+    CHECK(app::write_display(d).find("display.autosave = off\n") != std::string::npos);
+    // The slider: each step on its own place, the ends at the ends.
+    for (const std::int32_t m : app::kAutosaveMinutes) {
+        CHECK(app::autosave_at(app::autosave_position(m)) == m);
+    }
+    CHECK(app::autosave_at(0.0) == 0);
+    CHECK(app::autosave_at(1.0) == 60);
+    CHECK(app::autosave_at(-1.0) == 0);
+    CHECK(app::autosave_position(0) == 0.0);
+    CHECK(app::autosave_position(60) == 1.0);
+    CHECK(app::next_autosave(0, true) == 5);
+    CHECK(app::next_autosave(30, true) == 60);
+    CHECK(app::next_autosave(60, true) == 60);
+    CHECK(app::next_autosave(5, false) == 0);
+    CHECK(app::next_autosave(0, false) == 0);
+    // The window's row.
+    app::DisplayModel model;
+    using Item = app::DisplayMenu::Item;
+    CHECK(app::DisplayMenu::value_text(model, Item::Autosave) == "10 min");
+    CHECK(app::DisplayMenu::choose_next(model, Item::Autosave));
+    CHECK(model.settings.autosave_minutes == 15);
+    model.settings.autosave_minutes = 5;
+    CHECK(app::DisplayMenu::choose_previous(model, Item::Autosave));
+    CHECK(app::DisplayMenu::value_text(model, Item::Autosave) == "off");
+    CHECK(!app::DisplayMenu::choose_previous(model, Item::Autosave));  // already off
+}
+
+TEST_CASE("autosave: every so many minutes of game time") {
+    constexpr std::uint64_t kMinute = 60'000;
+    app::AutosaveTimer t;
+    t.restart(0);
+    CHECK(!t.due(0, 5));
+    CHECK(!t.due(5 * kMinute - 1, 5));
+    CHECK(t.due(5 * kMinute, 5));
+    CHECK(!t.due(5 * kMinute + 100, 5));  // once per interval
+    CHECK(!t.due(10 * kMinute - 1, 5));
+    CHECK(t.due(10 * kMinute + 50, 5));
+    // Off: never.
+    CHECK(!t.due(100 * kMinute, 0));
+    CHECK(!t.due(200 * kMinute, 0));
+    // Switched on again: it counts from then, not from the last save.
+    CHECK(!t.due(200 * kMinute, 10));
+    CHECK(!t.due(209 * kMinute, 10));
+    CHECK(t.due(210 * kMinute, 10));
+    // A loaded game counts from its own time.
+    t.restart(3 * kMinute);
+    CHECK(!t.due(12 * kMinute, 10));
+    CHECK(t.due(13 * kMinute, 10));
+    // A game whose time went back (another came without restart): counts from there.
+    CHECK(!t.due(1 * kMinute, 10));
+    CHECK(!t.due(10 * kMinute, 10));
+    CHECK(t.due(11 * kMinute, 10));
 }
