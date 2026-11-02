@@ -11,6 +11,7 @@
 #include "o1602/sim/island_templates.hpp"
 #include "o1602/sim/save_game.hpp"
 #include "o1602/sim/validate.hpp"
+#include "o1602/sim/world_generator.hpp"
 
 namespace o1602::editor {
 
@@ -90,6 +91,156 @@ core::Result<std::unique_ptr<Operation>> set_fertility(const sim::World& world, 
     return std::unique_ptr<Operation>(std::make_unique<FertilityEdit>(index, before, fertility));
 }
 
+std::size_t PlanEdit::memory() const noexcept {
+    const auto size = [](const std::optional<sim::PlannedIslands>& p) {
+        return p ? p->plan.islands.size() * sizeof(assets::ScenarioPlan::Island) : std::size_t{0};
+    };
+    return sizeof(*this) + size(m_before) + size(m_after);
+}
+
+bool placeholder_open(const sim::World& world, std::size_t index) noexcept {
+    const auto& planned = world.planned_islands();
+    if (!planned || index >= planned->plan.islands.size()) {
+        return false;
+    }
+    const std::uint16_t number = planned->plan.islands[index].number;
+    return std::none_of(world.islands().begin(), world.islands().end(),
+                        [&](const sim::WorldIsland& i) { return i.header.number == number; });
+}
+
+std::pair<std::uint32_t, std::uint32_t> placeholder_size(const assets::ScenarioPlan::Island& island) noexcept {
+    const std::size_t size = std::min<std::size_t>(island.size, sim::templates::kSizeClasses - 1);
+    return {sim::templates::kClassWidth[size], sim::templates::kClassHeight[size]};
+}
+
+namespace {
+
+bool sea_free(const sim::World& world, std::int64_t x, std::int64_t y, std::uint32_t w, std::uint32_t h,
+              std::optional<std::size_t> except);
+bool on_placeholder(const sim::World& world, std::int64_t x, std::int64_t y, std::uint32_t w, std::uint32_t h,
+                    std::optional<std::size_t> except);
+
+bool overlaps(std::int64_t ax, std::int64_t ay, std::int64_t aw, std::int64_t ah, std::int64_t bx, std::int64_t by,
+              std::int64_t bw, std::int64_t bh) {
+    return ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah;
+}
+
+/// The world with its plan as `planned`, if the plan holds together in it.
+core::Result<std::unique_ptr<Operation>> plan_edit(const sim::World& world, sim::PlannedIslands planned) {
+    if (auto problems = sim::check_planned_islands(planned, world.width(), world.height()); !problems.empty()) {
+        return make_error(ErrorCode::InvalidFormat, "world plan: " + problems.front());
+    }
+    return std::unique_ptr<Operation>(std::make_unique<PlanEdit>(world.planned_islands(), std::move(planned)));
+}
+
+}  // namespace
+
+std::optional<std::size_t> placeholder_at(const sim::World& world, std::uint32_t x, std::uint32_t y) noexcept {
+    const auto& planned = world.planned_islands();
+    if (!planned) {
+        return std::nullopt;
+    }
+    for (std::size_t i = 0; i < planned->plan.islands.size(); ++i) {
+        const auto& e = planned->plan.islands[i];
+        const auto [w, h] = placeholder_size(e);
+        if (placeholder_open(world, i) && overlaps(x, y, 1, 1, e.x, e.y, w, h)) {
+            return i;
+        }
+    }
+    return std::nullopt;
+}
+
+bool free_for_placeholder(const sim::World& world, std::int64_t x, std::int64_t y, std::uint32_t w, std::uint32_t h,
+                          std::optional<std::size_t> except) {
+    return sea_free(world, x, y, w, h, std::nullopt) && !on_placeholder(world, x, y, w, h, except);
+}
+
+namespace {
+
+/// Whether the rectangle overlaps an open placeholder other than `except`.
+bool on_placeholder(const sim::World& world, std::int64_t x, std::int64_t y, std::uint32_t w, std::uint32_t h,
+                    std::optional<std::size_t> except) {
+    const auto& planned = world.planned_islands();
+    if (!planned) {
+        return false;
+    }
+    for (std::size_t i = 0; i < planned->plan.islands.size(); ++i) {
+        const auto& e = planned->plan.islands[i];
+        const auto [pw, ph] = placeholder_size(e);
+        if ((!except || *except != i) && placeholder_open(world, i) && overlaps(x, y, w, h, e.x, e.y, pw, ph)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
+core::Result<std::unique_ptr<Operation>> add_placeholder(const sim::World& world, std::uint8_t climate,
+                                                         std::uint8_t size, std::uint32_t x, std::uint32_t y) {
+    const auto& planned = world.planned_islands();
+    if (!planned) {
+        return make_error(ErrorCode::InvalidFormat, "the world has no plan of islands made at the start");
+    }
+    if (planned->plan.islands.size() >= sim::PlannedIslands::kMaxIslands) {
+        return make_error(ErrorCode::LimitExceeded, "the plan holds no more islands");
+    }
+    // The smallest number neither an island nor a placeholder has (the plan keeps one byte).
+    std::uint16_t number = 0;
+    const auto taken = [&](std::uint16_t n) {
+        return std::any_of(world.islands().begin(), world.islands().end(),
+                           [&](const sim::WorldIsland& i) { return i.header.number == n; }) ||
+               std::any_of(planned->plan.islands.begin(), planned->plan.islands.end(),
+                           [&](const assets::ScenarioPlan::Island& e) { return e.number == n; });
+    };
+    while (number < 256 && taken(number)) {
+        ++number;
+    }
+    if (number >= 256) {
+        return make_error(ErrorCode::LimitExceeded, "no island number is free");
+    }
+    assets::ScenarioPlan::Island island;
+    island.climate = std::min<std::uint8_t>(climate, assets::ScenarioPlan::kClimateByPosition);
+    island.size = std::min<std::uint8_t>(size, sim::templates::kSizeClasses - 1);
+    island.number = static_cast<std::uint8_t>(number);
+    island.x = x;
+    island.y = y;
+    const auto [w, h] = placeholder_size(island);
+    if (!free_for_placeholder(world, x, y, w, h)) {
+        return make_error(ErrorCode::InvalidFormat, "the place is not free");
+    }
+    sim::PlannedIslands after = *planned;
+    after.plan.islands.push_back(island);
+    return plan_edit(world, std::move(after));
+}
+
+core::Result<std::unique_ptr<Operation>> change_placeholder(const sim::World& world, std::size_t index,
+                                                            const assets::ScenarioPlan::Island& changed) {
+    if (!placeholder_open(world, index)) {
+        return make_error(ErrorCode::NotFound, "no placeholder " + std::to_string(index + 1));
+    }
+    const auto& planned = *world.planned_islands();
+    if (planned.plan.islands[index] == changed) {
+        return make_error(ErrorCode::InvalidFormat, "the placeholder is so already");
+    }
+    const auto [w, h] = placeholder_size(changed);
+    if (!free_for_placeholder(world, changed.x, changed.y, w, h, index)) {
+        return make_error(ErrorCode::InvalidFormat, "the place is not free");
+    }
+    sim::PlannedIslands after = planned;
+    after.plan.islands[index] = changed;
+    return plan_edit(world, std::move(after));
+}
+
+core::Result<std::unique_ptr<Operation>> remove_placeholder(const sim::World& world, std::size_t index) {
+    if (!placeholder_open(world, index)) {
+        return make_error(ErrorCode::NotFound, "no placeholder " + std::to_string(index + 1));
+    }
+    sim::PlannedIslands after = *world.planned_islands();
+    after.plan.islands.erase(after.plan.islands.begin() + static_cast<std::ptrdiff_t>(index));
+    return plan_edit(world, std::move(after));
+}
+
 std::size_t world_memory(const sim::World& world) noexcept {
     std::size_t n = sizeof(sim::World) + std::size_t{world.width()} * world.height() * sizeof(sim::World::Cell);
     for (const sim::WorldIsland& island : world.islands()) {
@@ -165,8 +316,11 @@ core::Result<sim::WorldIsland> make_island(const NewIsland& request, std::uint16
     return island;
 }
 
-bool free_place(const sim::World& world, std::int64_t x, std::int64_t y, std::uint32_t w, std::uint32_t h,
-                std::optional<std::size_t> except) {
+namespace {
+
+/// In the map and on open sea, or on the island `except`.
+bool sea_free(const sim::World& world, std::int64_t x, std::int64_t y, std::uint32_t w, std::uint32_t h,
+              std::optional<std::size_t> except) {
     if (x < 0 || y < 0 || x + w > world.width() || y + h > world.height() || w == 0 || h == 0) {
         return false;
     }
@@ -180,6 +334,12 @@ bool free_place(const sim::World& world, std::int64_t x, std::int64_t y, std::ui
         }
     }
     return true;
+}
+}  // namespace
+
+bool free_place(const sim::World& world, std::int64_t x, std::int64_t y, std::uint32_t w, std::uint32_t h,
+                std::optional<std::size_t> except) {
+    return sea_free(world, x, y, w, h, except) && !on_placeholder(world, x, y, w, h, std::nullopt);
 }
 
 bool ship_in_way(const sim::World& world, std::int64_t x, std::int64_t y, std::uint32_t w, std::uint32_t h,
@@ -277,6 +437,14 @@ std::pair<std::uint32_t, std::uint32_t> used_size(const sim::World& world) noexc
     }
     for (const sim::ScenarioMarker& marker : world.markers()) {
         take(marker.x, marker.y, marker.width, marker.height);
+    }
+    if (const auto& planned = world.planned_islands()) {
+        for (std::size_t i = 0; i < planned->plan.islands.size(); ++i) {
+            if (placeholder_open(world, i)) {
+                const auto [pw, ph] = placeholder_size(planned->plan.islands[i]);
+                take(planned->plan.islands[i].x, planned->plan.islands[i].y, pw, ph);
+            }
+        }
     }
     return {static_cast<std::uint32_t>(std::min<std::uint64_t>(w, sim::World::kMaxSide)),
             static_cast<std::uint32_t>(std::min<std::uint64_t>(h, sim::World::kMaxSide))};

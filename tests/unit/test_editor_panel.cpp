@@ -463,3 +463,47 @@ TEST_CASE("editor panel: an island's crops are ticked, it is saved, and saved is
     CHECK(r->index == 1);
     CHECK(panel.page() == EditorPanel::Page::Islands);
 }
+
+TEST_CASE("editor panel: placeholders are set with a plan, and a selected one moves, changes, goes") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(200, 560);
+    EditorModel m = document();
+    CHECK(!click(panel, m, "Edit islands").has_value());
+    CHECK(!click(panel, m, "Original template").has_value());
+    CHECK(!click(panel, m, "Own shape").has_value());
+    CHECK(!panel.new_island().placeholder);  // no plan: back to the templates
+    m.has_plan = true;
+    CHECK(!click(panel, m, "Original template").has_value());
+    CHECK(!click(panel, m, "Own shape").has_value());
+    CHECK(panel.new_island().placeholder);
+    (void)panel.draw(m, kNoFonts);
+    auto r = click(panel, m, "Place");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::PlaceIsland);
+    CHECK(r->island.placeholder);
+
+    m.selection = "Placeholder 3";
+    m.placeholder = 2;
+    m.placeholder_climate = 1;
+    m.placeholder_size = 4;
+    CHECK(panel.show_selection());
+    r = click(panel, m, "Move");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::MovePlaceholder);
+    CHECK(r->index == 2);
+    r = click(panel, m, "South");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::ChangePlaceholder);
+    CHECK(r->island.climate == 2);
+    CHECK(r->island.size == 4);
+    r = click(panel, m, "Huge (100 \xD7 90)");
+    REQUIRE(r.has_value());
+    CHECK(r->island.size == 0);
+    r = click(panel, m, "Delete");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::RemovePlaceholder);
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        CHECK(w.rect.y + w.rect.h <= 760);
+    }
+}
