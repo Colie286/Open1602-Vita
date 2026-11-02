@@ -223,7 +223,7 @@ TEST_CASE("display menu: the slider of edge scrolling's speed follows the mouse"
     (void)menu.draw(model, {});
     // The slider's row; it runs from the value column's left edge.
     const std::int32_t y = 64 + static_cast<std::int32_t>(Item::EdgeSpeed) * 36 + 15;
-    const std::int32_t left = app::DisplayMenu::kWidth - 24 - 232;
+    const std::int32_t left = app::DisplayMenu::kWidth - 24 - 266;
     CHECK(menu.mouse(left + 2, y, true, model) == app::DisplayMenu::Result::None);
     CHECK(menu.mouse(left + 400, y, true, model) == app::DisplayMenu::Result::None);  // dragged past the end
     CHECK(model.settings.edge_speed == 100);                                          // only on letting go
@@ -306,4 +306,24 @@ TEST_CASE("autosave: every so many minutes of game time") {
     CHECK(!t.due(1 * kMinute, 10));
     CHECK(!t.due(10 * kMinute, 10));
     CHECK(t.due(11 * kMinute, 10));
+}
+
+TEST_CASE("display menu: the autosave slider stops on the intervals offered") {
+    ui::set_language(ui::kFallbackLanguage);
+    using Item = app::DisplayMenu::Item;
+    app::DisplayMenu menu;
+    menu.set_scale(1.0);
+    app::DisplayModel model;
+    model.window = {1280, 800};
+    model.sizes = app::window_sizes_for(0, 0);
+    (void)menu.draw(model, {});
+    const std::int32_t y = 64 + static_cast<std::int32_t>(Item::Autosave) * 36 + 15;
+    const std::int32_t left = app::DisplayMenu::kWidth - 24 - 266;
+    CHECK(menu.mouse(left, y, true, model) == app::DisplayMenu::Result::None);
+    CHECK(menu.mouse(left, y, false, model) == app::DisplayMenu::Result::Changed);
+    CHECK(model.settings.autosave_minutes == 0);
+    CHECK(menu.mouse(left + 2, y, true, model) == app::DisplayMenu::Result::None);
+    CHECK(menu.mouse(left + 400, y, true, model) == app::DisplayMenu::Result::None);  // dragged past the end
+    CHECK(menu.mouse(left + 400, y, false, model) == app::DisplayMenu::Result::Changed);
+    CHECK(model.settings.autosave_minutes == 60);
 }

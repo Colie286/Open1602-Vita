@@ -21,9 +21,9 @@ constexpr Id kClose = 20;
 
 constexpr std::int32_t kRowY = 64;
 constexpr std::int32_t kRowH = 36;
-constexpr std::int32_t kPercentW = 72;  ///< the value beside a slider
-constexpr std::int32_t kLabelW = 260;
-constexpr std::int32_t kValueW = 232;
+constexpr std::int32_t kPercentW = 96;  ///< the value beside a slider
+constexpr std::int32_t kLabelW = 310;
+constexpr std::int32_t kValueW = 266;
 
 constexpr std::array<std::string_view, DisplayMenu::kItems> kLabels = {
     "display.mode",       "display.size",         "display.ui_scale",   "display.zoom",       "display.zoom_drawing",

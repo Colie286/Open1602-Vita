@@ -5,9 +5,11 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <future>
 #include <memory>
 #include <optional>
 #include <span>
@@ -162,14 +164,26 @@ private:
     /// data folder, never over an older one.
     [[nodiscard]] static std::filesystem::path next_screenshot_path();
     /// Saves the game: Open1602's own savegame, or a .GAM the original loads if the path ends in
-    /// .gam. Never into the game's installation.
+    /// .gam. Never into the game's installation. An autosave still being written is finished
+    /// first, so it never lands over a newer file.
     core::Status save_game(const std::filesystem::path& path);
+    /// Where a savegame for `path` goes (absolute), unless that lies in the game's installation
+    /// or cannot be checked; the groups of this computer's player go into the world.
+    core::Result<std::filesystem::path> prepare_save(const std::filesystem::path& path);
     /// Saves the game into a slot of the savegame list and names it there (slots.cfg, the panel,
     /// the menu).
     core::Status save_slot(std::size_t slot, std::string name);
+    /// Names a slot whose file was just written: slots.cfg, the panel and the menu.
+    void remember_slot(std::size_t slot, std::string name, std::uint8_t humans);
+    /// Human players in the game now (the savegame list shows them).
+    [[nodiscard]] std::uint8_t human_players() const;
     /// Keeps the game as lastgame when DisplaySettings::autosave_minutes of game time have passed
-    /// (only while a game is played, not in the menus or while a multiplayer game stands).
+    /// (only while a game is played, not in the menus or while a multiplayer game stands). The game
+    /// is captured in the frame; packing and writing the file run on a thread of their own.
     void autosave_if_due();
+    /// Waits for the autosave being written (if any) and names its slot; `wait` false: only if it
+    /// is done already.
+    void finish_autosave(bool wait = true);
     /// The settings and savegame names of the user's data folder into the panel (at the start).
     void load_options();
     /// Chooses the language of Open1602's own texts: --language, else settings.cfg, else the
@@ -499,6 +513,15 @@ private:
     std::uint64_t m_title_real_ms = 0;              ///< real and game time of the last title (the speed reached)
     std::uint64_t m_title_game_ms = 0;
     AutosaveTimer m_autosave;
+    /// An autosave on its way to the disk (packing and writing on another thread).
+    struct AutosaveJob {
+        std::future<core::Status> written;
+        std::uint8_t humans = 0;
+        std::int32_t minutes = 0;
+        std::uint64_t capture_us = 0;  ///< the part in the frame
+        std::chrono::steady_clock::time_point started;
+    };
+    std::optional<AutosaveJob> m_autosave_job;
     bool m_debug_title = core::environment_variable("O1602_DEBUG_TITLE").has_value();
     ViewerOptions m_options;
     std::unique_ptr<GameState> m_state;  ///< the running game (after m_buildings, m_figures, m_options)
