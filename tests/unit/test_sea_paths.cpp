@@ -660,3 +660,194 @@ TEST_CASE("sea paths: cells outside the world are blocked, also for legs to the 
     const Grid grid = make_grid(sea, plan);
     CHECK(trace(grid, plan.start_x, plan.start_y, course.path).valid);
 }
+
+namespace {
+
+/// Sails leg after leg from the plan's start towards its goal; the ship plans again at the end of
+/// each leg, as the fleet does.
+struct Voyage {
+    bool arrived = false;
+    std::size_t legs = 0;
+    std::size_t tiles = 0;
+};
+
+Voyage sail(const sim::SeaMap& sea, sim::SeaPlan plan, std::size_t max_legs) {
+    sim::SeaPlanner planner;
+    Voyage v;
+    while (v.legs < max_legs) {
+        const sim::SeaCourse course = planner.plan(sea, plan);
+        ++v.legs;
+        if (course.path.empty()) {
+            return v;  // no way: the ship would give up or shift its window
+        }
+        for (const std::uint8_t code : course.path) {
+            v.tiles += code & 0x0FU;
+        }
+        if (course.reached_goal) {
+            v.arrived = true;
+            return v;
+        }
+        plan.start_x = course.end_x;
+        plan.start_y = course.end_y;
+    }
+    return v;
+}
+
+}  // namespace
+
+TEST_CASE("sea paths: water regions of a block are the parts a ship can sail between inside it") {
+    const auto buildings = make_buildings();
+    sim::World world{70, 30};
+    // A wall of land across the first row of blocks with a gap at x = 20; the second island is a
+    // pond of one tile in the middle of land, touching other water only diagonally.
+    add_island(world, buildings, 0, 10, 40, 3, {{20, 0}, {20, 1}, {20, 2}});
+    add_island(world, buildings, 48, 4, 3, 3, {{1, 1}});
+    sim::SeaMap sea;
+    sea.rebuild(world, buildings);
+    CHECK(sea.blocks_x() == 5);  // 70 tiles: four blocks and one of 6 tiles
+    CHECK(sea.blocks_y() == 2);
+    CHECK(sea.region(5, 5) != sim::SeaMap::kNoRegion);
+    CHECK(sea.region(5, 11) == sim::SeaMap::kNoRegion);  // land
+    CHECK(sea.region(-1, 0) == sim::SeaMap::kNoRegion);  // outside
+    CHECK(sea.region(70, 29) == sim::SeaMap::kNoRegion);
+    CHECK(sea.region(5, 5) != sea.region(5, 14));         // first block: the wall splits it
+    CHECK(sea.region(20, 5) == sea.region(20, 14));       // second block: joined by the gap
+    CHECK(sea.region(49, 5) != sea.region(47, 5));        // the pond is a region of its own
+    CHECK(sea.region(69, 29) != sim::SeaMap::kNoRegion);  // the narrow last block has regions too
+    CHECK(sea.region_block(sea.region(69, 29)) == 9U);
+    const std::uint32_t regions = sea.regions();
+
+    // Closing the gap splits the block; opening it again joins it; numbers stay as a rebuild gives.
+    REQUIRE(world.island(0).map.place(*buildings.by_id(kGround), 20, 1, 0, 0).ok());
+    sea.update_island(world, buildings, 0, 20, 1, 20, 1);
+    CHECK(sea.region(20, 5) != sea.region(20, 14));
+    CHECK(sea.regions() == regions + 1);
+    sim::SeaMap fresh;
+    fresh.rebuild(world, buildings);
+    for (std::int32_t y = 0; y < 30; ++y) {
+        for (std::int32_t x = 0; x < 70; ++x) {
+            CHECK(sea.region(x, y) == fresh.region(x, y));
+        }
+    }
+    REQUIRE(world.island(0).map.place(*buildings.by_id(kWater), 20, 1, 0, 0).ok());
+    sea.update_island(world, buildings, 0);
+    CHECK(sea.region(20, 5) == sea.region(20, 14));
+    CHECK(sea.regions() == regions);
+}
+
+TEST_CASE("sea paths: a guided ship sails round an island wider than its window, not into its bay") {
+    const auto buildings = make_buildings();
+    sim::World world{420, 300};
+    // An island of 220 x 220 tiles between ship and goal with a bay of 160 x 60 tiles opening
+    // towards the ship, right on the straight line to the goal.
+    std::vector<std::pair<std::int32_t, std::int32_t>> bay;
+    for (std::int32_t y = 80; y < 140; ++y) {
+        for (std::int32_t x = 0; x < 160; ++x) {
+            bay.emplace_back(x, y);
+        }
+    }
+    add_island(world, buildings, 120, 40, 220, 220, bay);
+    sim::SeaMap sea;
+    sea.rebuild(world, buildings);
+    sim::SeaPlan plan;
+    plan.start_x = 40;
+    plan.start_y = 150;
+    plan.radius = 80;
+    plan.aim_x = 380;
+    plan.aim_y = 150;
+    plan.goal = [](std::int32_t x, std::int32_t y) { return x == 380 && y == 150; };
+
+    // Heading for the window's edge closest to the goal, the ship ends up in the bay.
+    const Voyage unguided = sail(sea, plan, 30);
+    CHECK(!unguided.arrived);
+
+    plan.guided = true;
+    const Voyage guided = sail(sea, plan, 30);
+    CHECK(guided.arrived);
+    CHECK(guided.legs <= 8);
+    // Round a corner of the island: about 260 tiles there and as many back, never into the bay.
+    CHECK(guided.tiles < 560);
+
+    // From the far side as well, the same way round.
+    plan.start_x = 380;
+    plan.start_y = 150;
+    plan.aim_x = 40;
+    plan.aim_y = 150;
+    plan.goal = [](std::int32_t x, std::int32_t y) { return x == 40 && y == 150; };
+    const Voyage back = sail(sea, plan, 30);
+    CHECK(back.arrived);
+    CHECK(back.tiles < 560);
+}
+
+TEST_CASE("sea paths: a guided ship finds the end of a long thin peninsula, across blocks it splits") {
+    const auto buildings = make_buildings();
+    sim::World world{400, 300};
+    // A wall of land one tile wide at x = 203, in the middle of blocks, from the north edge to
+    // y = 280: the target lies 100 tiles east of the ship as the crow flies.
+    add_island(world, buildings, 203, 0, 1, 281);
+    sim::SeaMap sea;
+    sea.rebuild(world, buildings);
+    CHECK(sea.region(202, 150) != sea.region(204, 150));
+    sim::SeaPlan plan;
+    plan.start_x = 150;
+    plan.start_y = 150;
+    plan.radius = 80;
+    plan.aim_x = 250;
+    plan.aim_y = 150;
+    plan.goal = [](std::int32_t x, std::int32_t y) { return x == 250 && y == 150; };
+    CHECK(!sail(sea, plan, 30).arrived);
+    plan.guided = true;
+    const Voyage v = sail(sea, plan, 30);
+    CHECK(v.arrived);
+    CHECK(v.tiles < 400);  // round the southern end: about 2 x 135 tiles plus the way across
+
+    // A goal no water leads to: no route, and a guided plan is the same as an unguided one.
+    add_island(world, buildings, 300, 100, 30, 30, {{15, 15}});
+    sea.rebuild(world, buildings);
+    plan.start_x = 250;
+    plan.start_y = 200;
+    plan.aim_x = 315;
+    plan.aim_y = 115;
+    plan.goal = [](std::int32_t x, std::int32_t y) { return x == 315 && y == 115; };
+    sim::SeaPlanner planner;
+    const sim::SeaCourse guided = planner.plan(sea, plan);
+    plan.guided = false;
+    const sim::SeaCourse unguided = planner.plan(sea, plan);
+    CHECK(guided.path == unguided.path);
+    CHECK(!guided.reached_goal);
+}
+
+TEST_CASE("sea paths: guided courses are the same on a reused and on a fresh planner") {
+    const auto buildings = make_buildings();
+    sim::World world{300, 300};
+    Lcg rng{7};
+    for (std::uint32_t i = 0; i < 6; ++i) {  // one in each cell of 100 x 150 tiles
+        add_island(world, buildings, (i % 3) * 100 + 10 + rng.next(20), (i / 3) * 150 + 10 + rng.next(40),
+                   10 + rng.next(60), 10 + rng.next(80));
+    }
+    sim::SeaMap sea;
+    sea.rebuild(world, buildings);
+    sim::SeaPlanner reused;
+    for (int i = 0; i < 40; ++i) {
+        sim::SeaPlan plan;
+        plan.start_x = static_cast<std::int32_t>(rng.next(300));
+        plan.start_y = static_cast<std::int32_t>(rng.next(300));
+        plan.radius = 40;
+        plan.aim_x = static_cast<std::int32_t>(rng.next(300));
+        plan.aim_y = static_cast<std::int32_t>(rng.next(300));
+        plan.guided = true;
+        const std::int32_t gx = plan.aim_x;
+        const std::int32_t gy = plan.aim_y;
+        plan.goal = [gx, gy](std::int32_t x, std::int32_t y) { return x == gx && y == gy; };
+        sim::SeaPlanner fresh;
+        const sim::SeaCourse a = reused.plan(sea, plan);
+        const sim::SeaCourse b = fresh.plan(sea, plan);
+        CHECK(a.path == b.path);
+        CHECK(a.reached_goal == b.reached_goal);
+        CHECK(a.end_x == b.end_x);
+        CHECK(a.end_y == b.end_y);
+        if (!a.path.empty()) {
+            CHECK(trace(make_grid(sea, plan), plan.start_x, plan.start_y, a.path).valid);
+        }
+    }
+}

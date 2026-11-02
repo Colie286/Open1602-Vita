@@ -2,6 +2,7 @@
 #include "o1602/sim/sea_paths.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
 #include <optional>
 
@@ -42,7 +43,17 @@ void SeaMap::rebuild(const World& world, const assets::BuildingTable& buildings)
         }
     }
     for (std::size_t i = 0; i < world.islands().size(); ++i) {
-        update_island(world, buildings, static_cast<std::uint16_t>(i));
+        set_island_cells(world, buildings, static_cast<std::uint16_t>(i), 0, 0,
+                         std::numeric_limits<std::int32_t>::max(), std::numeric_limits<std::int32_t>::max());
+    }
+    m_blocks_x = (m_width + kBlock - 1) / kBlock;
+    m_blocks_y = (m_height + kBlock - 1) / kBlock;
+    m_region.assign(m_cells.size(), 0);
+    m_region_count.assign(std::size_t{m_blocks_x} * m_blocks_y, 0);
+    m_region_first.assign(m_region_count.size(), 0);
+    m_region_block.clear();
+    if (m_blocks_x != 0 && m_blocks_y != 0) {
+        label_blocks(0, 0, m_blocks_x - 1, m_blocks_y - 1);
     }
 }
 
@@ -56,6 +67,23 @@ void SeaMap::update_island(const World& world, const assets::BuildingTable& buil
     if (index >= world.islands().size()) {
         return;
     }
+    set_island_cells(world, buildings, index, x0, y0, x1, y1);
+    // The blocks the changed tiles lie in get new regions.
+    const WorldIsland& island = world.islands()[index];
+    const std::int64_t wx0 = std::int64_t{island.x} + std::max(x0, 0);
+    const std::int64_t wy0 = std::int64_t{island.y} + std::max(y0, 0);
+    const std::int64_t wx1 = std::int64_t{island.x} + std::min<std::int64_t>(x1, std::int64_t{island.map.width()} - 1);
+    const std::int64_t wy1 = std::int64_t{island.y} + std::min<std::int64_t>(y1, std::int64_t{island.map.height()} - 1);
+    if (wx1 < wx0 || wy1 < wy0 || wx0 >= m_width || wy0 >= m_height) {
+        return;
+    }
+    const auto bx1 = static_cast<std::uint32_t>(std::min<std::int64_t>(wx1, m_width - 1) / kBlock);
+    const auto by1 = static_cast<std::uint32_t>(std::min<std::int64_t>(wy1, m_height - 1) / kBlock);
+    label_blocks(static_cast<std::uint32_t>(wx0 / kBlock), static_cast<std::uint32_t>(wy0 / kBlock), bx1, by1);
+}
+
+void SeaMap::set_island_cells(const World& world, const assets::BuildingTable& buildings, std::uint16_t index,
+                              std::int32_t x0, std::int32_t y0, std::int32_t x1, std::int32_t y1) {
     const WorldIsland& island = world.islands()[index];
     const IslandMap& map = island.map;
     const auto from_x = static_cast<std::uint32_t>(std::max(x0, 0));
@@ -73,6 +101,74 @@ void SeaMap::update_island(const World& world, const assets::BuildingTable& buil
             const assets::BuildingType* b = c.empty() ? nullptr : buildings.by_sprite(c.sprite);
             m_cells[std::size_t{wy} * m_width + wx] = b != nullptr && sailable_building(*b) ? 1 : 0;
         }
+    }
+}
+
+void SeaMap::label_blocks(std::uint32_t bx0, std::uint32_t by0, std::uint32_t bx1, std::uint32_t by1) {
+    bool renumber = false;
+    for (std::uint32_t by = by0; by <= by1; ++by) {
+        for (std::uint32_t bx = bx0; bx <= bx1; ++bx) {
+            const std::uint32_t ox = bx * kBlock;
+            const std::uint32_t oy = by * kBlock;
+            const std::uint32_t w = std::min<std::uint32_t>(kBlock, m_width - ox);
+            const std::uint32_t h = std::min<std::uint32_t>(kBlock, m_height - oy);
+            for (std::uint32_t y = 0; y < h; ++y) {
+                std::fill_n(m_region.begin() + static_cast<std::ptrdiff_t>(std::size_t{oy + y} * m_width + ox), w,
+                            std::uint8_t{0});
+            }
+            // Four-connected flood fill in scan order: a ship never cuts a corner, so two water
+            // tiles touching only diagonally are not joined by that step alone.
+            std::uint8_t count = 0;
+            for (std::uint32_t y = 0; y < h; ++y) {
+                for (std::uint32_t x = 0; x < w; ++x) {
+                    const std::size_t at = std::size_t{oy + y} * m_width + ox + x;
+                    if (m_cells[at] == 0 || m_region[at] != 0) {
+                        continue;
+                    }
+                    ++count;
+                    m_region[at] = count;
+                    m_label_stack.clear();
+                    m_label_stack.push_back(static_cast<std::uint16_t>(y * kBlock + x));
+                    while (!m_label_stack.empty()) {
+                        const std::uint32_t p = m_label_stack.back();
+                        m_label_stack.pop_back();
+                        const std::uint32_t px = p % kBlock;
+                        const std::uint32_t py = p / kBlock;
+                        const auto visit = [&](std::uint32_t nx, std::uint32_t ny) {
+                            const std::size_t n = std::size_t{oy + ny} * m_width + ox + nx;
+                            if (m_cells[n] != 0 && m_region[n] == 0) {
+                                m_region[n] = count;
+                                m_label_stack.push_back(static_cast<std::uint16_t>(ny * kBlock + nx));
+                            }
+                        };
+                        if (px > 0) {
+                            visit(px - 1, py);
+                        }
+                        if (px + 1 < w) {
+                            visit(px + 1, py);
+                        }
+                        if (py > 0) {
+                            visit(px, py - 1);
+                        }
+                        if (py + 1 < h) {
+                            visit(px, py + 1);
+                        }
+                    }
+                }
+            }
+            std::uint8_t& stored = m_region_count[std::size_t{by} * m_blocks_x + bx];
+            renumber = renumber || stored != count;
+            stored = count;
+        }
+    }
+    if (!renumber && !m_region_block.empty()) {
+        return;
+    }
+    // Regions are numbered block by block; only a changed count moves the numbers.
+    m_region_block.clear();
+    for (std::uint32_t b = 0; b < m_region_count.size(); ++b) {
+        m_region_first[b] = static_cast<std::uint32_t>(m_region_block.size());
+        m_region_block.insert(m_region_block.end(), m_region_count[b], b);
     }
 }
 
@@ -216,6 +312,34 @@ SeaCourse SeaPlanner::plan(const SeaMap& sea, const SeaPlan& r) {
         }
     }
     std::optional<std::size_t> end = goal ? goal : edge;
+    if (!goal && r.guided && plan_route(sea, r)) {
+        // The leg ends on the visited cell furthest along the route, the cheapest one of those.
+        std::uint32_t best_step = 1;  // the start's own region is no progress
+        std::uint32_t best_cost = kInfinite;
+        std::optional<std::size_t> best;
+        for (std::int32_t y = y0; y < y0 + size; ++y) {
+            for (std::int32_t x = x0; x < x0 + size; ++x) {
+                const std::size_t c = at(x, y);
+                if ((m_state[c] & kVisited) == 0) {
+                    continue;
+                }
+                const std::uint32_t region = sea.region(x, y);
+                if (region == SeaMap::kNoRegion) {
+                    continue;  // the ship's own tile can lie on land (piers)
+                }
+                const std::uint32_t step = m_route_step[region];
+                if (step > best_step || (step == best_step && step > 1 && m_cost[c] < best_cost)) {
+                    best_step = step;
+                    best_cost = m_cost[c];
+                    best = c;
+                }
+            }
+        }
+        clear_route();
+        if (best) {
+            end = best;
+        }
+    }
     if (!end) {
         return course;
     }
@@ -257,6 +381,162 @@ SeaCourse SeaPlanner::plan(const SeaMap& sea, const SeaPlan& r) {
     course.end_x = x;
     course.end_y = y;
     return course;
+}
+
+bool SeaPlanner::plan_route(const SeaMap& sea, const SeaPlan& r) {
+    const std::uint32_t start = sea.region(r.start_x, r.start_y);
+    const std::uint32_t total = sea.regions();
+    if (start == SeaMap::kNoRegion || sea.blocks_x() == 0 || sea.blocks_y() == 0) {
+        return false;
+    }
+    if (m_route_cost.size() != total) {
+        m_route_cost.assign(total, 0);
+        m_route_from.assign(total, 0);
+        m_route_stamp.assign(total, 0);
+        m_route_goal.assign(total, 0);
+        m_route_step.assign(total, 0);
+        m_route_search = 0;
+    }
+    if (++m_route_search == 0) {
+        std::fill(m_route_stamp.begin(), m_route_stamp.end(), 0U);
+        std::fill(m_route_goal.begin(), m_route_goal.end(), 0U);
+        m_route_search = 1;
+    }
+    const std::uint32_t search = m_route_search;
+    constexpr std::int32_t kB = SeaMap::kBlock;
+    const auto bxs = static_cast<std::int32_t>(sea.blocks_x());
+    const auto bys = static_cast<std::int32_t>(sea.blocks_y());
+    const auto block_of = [](std::int32_t v) { return v >= 0 ? v / kB : -((-v + kB - 1) / kB); };
+    const std::int32_t aim_bx = block_of(r.aim_x);
+    const std::int32_t aim_by = block_of(r.aim_y);
+
+    // Goals: the regions of the blocks around the aim point holding a goal tile; if none does,
+    // all regions there (the target may need a closer look once it is in the window).
+    bool any_goal = false;
+    for (int pass = 0; pass < 2 && !any_goal; ++pass) {
+        for (std::int32_t by = std::max(aim_by - 1, 0); by <= std::min(aim_by + 1, bys - 1); ++by) {
+            for (std::int32_t bx = std::max(aim_bx - 1, 0); bx <= std::min(aim_bx + 1, bxs - 1); ++bx) {
+                for (std::int32_t y = by * kB; y < (by + 1) * kB; ++y) {
+                    for (std::int32_t x = bx * kB; x < (bx + 1) * kB; ++x) {
+                        const std::uint32_t region = sea.region(x, y);
+                        if (region == SeaMap::kNoRegion || m_route_goal[region] == search) {
+                            continue;
+                        }
+                        if (pass == 1 || (r.goal && r.goal(x, y))) {
+                            m_route_goal[region] = search;
+                            any_goal = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (!any_goal) {
+        return false;
+    }
+
+    // A* over the regions; a step to a neighbouring block costs as much as 16 tiles of open sea
+    // that way, the estimate is the same distance to the aim's block. Ties in insertion order.
+    const auto estimate = [&](std::uint32_t block) {
+        const std::int32_t dx = std::abs(static_cast<std::int32_t>(block % sea.blocks_x()) - aim_bx);
+        const std::int32_t dy = std::abs(static_cast<std::int32_t>(block / sea.blocks_x()) - aim_by);
+        const auto lo = static_cast<std::uint32_t>(std::min(dx, dy));
+        const auto hi = static_cast<std::uint32_t>(std::max(dx, dy));
+        return static_cast<std::uint32_t>(kB) * (kStraight * (hi - lo) + kDiagonal * lo);
+    };
+    const auto later = [](const Node& a, const Node& b) { return a.cost != b.cost ? a.cost > b.cost : a.seq > b.seq; };
+    m_route_heap.clear();
+    std::uint32_t seq = 0;
+    const auto reach = [&](std::uint32_t region, std::uint32_t from, std::uint32_t cost) {
+        if (m_route_stamp[region] == search && m_route_cost[region] <= cost) {
+            return;
+        }
+        m_route_stamp[region] = search;
+        m_route_cost[region] = cost;
+        m_route_from[region] = from;
+        m_route_heap.push_back(Node{cost + estimate(sea.region_block(region)), seq++, region});
+        std::push_heap(m_route_heap.begin(), m_route_heap.end(), later);
+    };
+    reach(start, start, 0);
+    std::optional<std::uint32_t> found;
+    while (!m_route_heap.empty()) {
+        std::pop_heap(m_route_heap.begin(), m_route_heap.end(), later);
+        const Node n = m_route_heap.back();
+        m_route_heap.pop_back();
+        const std::uint32_t region = n.cell;
+        const std::uint32_t g = m_route_cost[region];
+        if (n.cost != g + estimate(sea.region_block(region))) {
+            continue;  // a cheaper way was found after this entry
+        }
+        if (m_route_goal[region] == search) {
+            found = region;
+            break;
+        }
+        const std::uint32_t block = sea.region_block(region);
+        const auto bx = static_cast<std::int32_t>(block % sea.blocks_x());
+        const auto by = static_cast<std::int32_t>(block / sea.blocks_x());
+        const std::int32_t ox = bx * kB;
+        const std::int32_t oy = by * kB;
+        const std::int32_t ex = std::min(ox + kB, static_cast<std::int32_t>(sea.width())) - 1;  // last tile
+        const std::int32_t ey = std::min(oy + kB, static_cast<std::int32_t>(sea.height())) - 1;
+        const std::uint32_t straight = g + static_cast<std::uint32_t>(kB) * kStraight;
+        const std::uint32_t diagonal = g + static_cast<std::uint32_t>(kB) * kDiagonal;
+        // Across the four sides: a tile of this region next to water of the neighbouring block.
+        const auto across = [&](std::int32_t x, std::int32_t y, std::int32_t nx, std::int32_t ny) {
+            if (sea.region(x, y) == region) {
+                const std::uint32_t next = sea.region(nx, ny);
+                if (next != SeaMap::kNoRegion) {
+                    reach(next, region, straight);
+                }
+            }
+        };
+        for (std::int32_t x = ox; x <= ex; ++x) {
+            across(x, oy, x, oy - 1);
+            across(x, ey, x, ey + 1);
+        }
+        for (std::int32_t y = oy; y <= ey; ++y) {
+            across(ox, y, ox - 1, y);
+            across(ex, y, ex + 1, y);
+        }
+        // Over the four corners, without cutting one.
+        const std::int32_t cx[2] = {ox, ex};
+        const std::int32_t cy[2] = {oy, ey};
+        for (int i = 0; i < 4; ++i) {
+            const std::int32_t x = cx[i & 1];
+            const std::int32_t y = cy[i >> 1];
+            const std::int32_t dx = (i & 1) != 0 ? 1 : -1;
+            const std::int32_t dy = (i >> 1) != 0 ? 1 : -1;
+            if (sea.region(x, y) != region || !sea.sailable(x + dx, y) || !sea.sailable(x, y + dy)) {
+                continue;
+            }
+            const std::uint32_t next = sea.region(x + dx, y + dy);
+            if (next != SeaMap::kNoRegion) {
+                reach(next, region, diagonal);
+            }
+        }
+    }
+    if (!found) {
+        return false;
+    }
+    m_route.clear();
+    for (std::uint32_t region = *found;; region = m_route_from[region]) {
+        m_route.push_back(region);
+        if (region == start) {
+            break;
+        }
+    }
+    std::reverse(m_route.begin(), m_route.end());
+    for (std::size_t i = 0; i < m_route.size(); ++i) {
+        m_route_step[m_route[i]] = static_cast<std::uint32_t>(i + 1);
+    }
+    return true;
+}
+
+void SeaPlanner::clear_route() {
+    for (const std::uint32_t region : m_route) {
+        m_route_step[region] = 0;
+    }
+    m_route.clear();
 }
 
 }  // namespace o1602::sim

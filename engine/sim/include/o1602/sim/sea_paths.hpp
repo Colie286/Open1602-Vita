@@ -12,6 +12,13 @@
 // Open1602 runs an exact Dijkstra on the same integer costs (64 straight, 91 diagonal, no cut
 // corners) with a fixed neighbour order, so the result is the same on every computer (ADR 0004).
 // Cells outside the world are blocked; the original leaves them open (S-070).
+//
+// On large worlds a window is not enough: an island can be wider than the window, and the edge
+// cell closest to the target as the crow flies often lies deep in a bay, where the next leg turns
+// back. Open1602 therefore keeps a coarse map of the sea: the world is cut into blocks of
+// 16 x 16 tiles, and the water of each block into its connected regions. When no goal lies in
+// the window, a route over these regions to the target is planned, and the leg ends where the
+// window gets furthest along that route.
 #pragma once
 
 #include <cstdint>
@@ -42,10 +49,47 @@ public:
     [[nodiscard]] std::uint32_t width() const noexcept { return m_width; }
     [[nodiscard]] std::uint32_t height() const noexcept { return m_height; }
 
+    // ---- Coarse map: water regions of 16 x 16 tile blocks ----
+
+    /// Side of a block in tiles.
+    static constexpr std::int32_t kBlock = 16;
+    /// No region (land, or outside the world).
+    static constexpr std::uint32_t kNoRegion = 0xFFFFFFFFU;
+
+    [[nodiscard]] std::uint32_t blocks_x() const noexcept { return m_blocks_x; }
+    [[nodiscard]] std::uint32_t blocks_y() const noexcept { return m_blocks_y; }
+    /// Number of water regions of all blocks.
+    [[nodiscard]] std::uint32_t regions() const noexcept { return static_cast<std::uint32_t>(m_region_block.size()); }
+    /// The block a region lies in.
+    [[nodiscard]] std::uint32_t region_block(std::uint32_t region) const noexcept { return m_region_block[region]; }
+    /// The region of a sailable tile, kNoRegion for land and the outside. Two tiles of one block
+    /// share a region exactly when a ship can sail from one to the other inside the block.
+    [[nodiscard]] std::uint32_t region(std::int32_t x, std::int32_t y) const noexcept {
+        if (!sailable(x, y)) {
+            return kNoRegion;
+        }
+        const auto ux = static_cast<std::uint32_t>(x);
+        const auto uy = static_cast<std::uint32_t>(y);
+        const std::uint32_t block = (uy / kBlock) * m_blocks_x + ux / kBlock;
+        return m_region_first[block] + m_region[std::size_t{uy} * m_width + ux] - 1U;
+    }
+
 private:
+    void set_island_cells(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
+                          std::int32_t x0, std::int32_t y0, std::int32_t x1, std::int32_t y1);
+    /// Labels the regions of the blocks bx0..bx1, by0..by1 (inclusive) and renumbers all regions.
+    void label_blocks(std::uint32_t bx0, std::uint32_t by0, std::uint32_t bx1, std::uint32_t by1);
+
     std::uint32_t m_width = 0;
     std::uint32_t m_height = 0;
     std::vector<std::uint8_t> m_cells;  ///< 1 = sailable
+    std::uint32_t m_blocks_x = 0;
+    std::uint32_t m_blocks_y = 0;
+    std::vector<std::uint8_t> m_region;         ///< per tile: 0 land, else region number in its block from 1
+    std::vector<std::uint8_t> m_region_count;   ///< per block: regions in it
+    std::vector<std::uint32_t> m_region_first;  ///< per block: index of its first region
+    std::vector<std::uint32_t> m_region_block;  ///< per region: its block
+    std::vector<std::uint16_t> m_label_stack;   ///< scratch of label_blocks()
 };
 
 /// Whether a building tile is water ships sail on (HAUS Kind MEER).
@@ -103,6 +147,10 @@ struct SeaPlan {
         std::int32_t y1 = 0;
     };
     std::vector<Danger> danger;
+    /// When no goal lies in the reach of the window: follow a route over the coarse map of the
+    /// sea to the aim point (and the goal tiles near it) instead of heading for the edge cell
+    /// closest to the aim as the crow flies, which on large islands often lies in a bay.
+    bool guided = false;
 };
 
 /// What the planner found.
@@ -132,6 +180,21 @@ private:
         std::uint32_t cell;
     };
     std::vector<Node> m_heap;
+
+    /// Plans a route over the regions of the coarse map from the start to the regions near the
+    /// aim; on success `m_route_step` holds 1, 2, ... for the regions along it.
+    bool plan_route(const SeaMap& sea, const SeaPlan& request);
+    /// Removes the marks of the last route.
+    void clear_route();
+
+    std::vector<std::uint32_t> m_route_cost;   ///< per region: cost so far, valid when stamped
+    std::vector<std::uint32_t> m_route_from;   ///< per region: region it was reached from
+    std::vector<std::uint32_t> m_route_stamp;  ///< per region: search it was reached in
+    std::vector<std::uint32_t> m_route_goal;   ///< per region: search it is a goal in
+    std::vector<std::uint32_t> m_route_step;   ///< per region: place on the last route (1 = start), 0 = off it
+    std::vector<std::uint32_t> m_route;        ///< regions of the last route, start first
+    std::uint32_t m_route_search = 0;
+    std::vector<Node> m_route_heap;
 };
 
 }  // namespace o1602::sim

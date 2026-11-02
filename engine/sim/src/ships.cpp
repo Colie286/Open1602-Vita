@@ -825,6 +825,7 @@ Fleet::Planned Fleet::plan(Ship& ship, std::int32_t radius) {
     r.radius = radius;
     r.aim_x = aim->first;
     r.aim_y = aim->second;
+    r.guided = true;  // around islands wider than the window
     if (m.failures != 0) {
         // After a failure the window moves off-centre (0x00455A20).
         const std::uint32_t k = m_world->random(RandomStream::Ships).next() & 3U;
