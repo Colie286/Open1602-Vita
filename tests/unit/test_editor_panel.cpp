@@ -75,7 +75,7 @@ TEST_CASE("editor panel: the document's page tells what the map is and offers th
     panel.set_room(200, 560);
     EditorModel m = document();
     auto items = panel.draw(m, kNoFonts);
-    CHECK(shows(items, "New map, not saved"));
+    CHECK(shows(items, "Untitled map"));
     CHECK(shows(items, "500 \xD7 350"));
     CHECK(shows(items, "18"));
     // Nothing to undo yet: the buttons cannot be pressed.
@@ -196,7 +196,7 @@ TEST_CASE("editor panel: a name is typed to save under, and a taken one replaces
     m.own_names = {"inseln"};
     auto items = panel.draw(m, kNoFonts);
     CHECK(shows(items, "Replace"));
-    CHECK(says(panel, "saving replaces it"));
+    CHECK(says(panel, "saving replaces that scenario"));
     (void)panel.key(8);
     (void)panel.key(8);
     (void)panel.key(8);

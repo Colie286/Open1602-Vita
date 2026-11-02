@@ -1159,6 +1159,8 @@ void MapViewer::update(std::uint32_t delta_ms) {
     }
     if (m_editor) {
         // The editor's world is shown, never run (ADR 0013): no tick, no figures moving, no autosave.
+        // The animations of the pictures (water, flags) go on, at 1x.
+        m_clock.advance(delta_ms, 1);
         m_tick_fraction = 1.0;
         m_ship_trail.set_fraction(m_tick_fraction);
         return;

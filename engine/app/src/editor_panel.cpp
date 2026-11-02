@@ -43,6 +43,7 @@ constexpr std::int32_t kButtonH = 30;
 constexpr std::int32_t kGap = 6;
 constexpr std::int32_t kLine = 24;
 constexpr std::int32_t kRowH = 24;
+constexpr std::int32_t kNote = 100;  ///< a note of up to five lines
 
 constexpr std::array<const char*, 4> kIslandTexts = {"editor.new.islands.none", "editor.new.islands.few",
                                                      "editor.new.islands.normal", "editor.new.islands.many"};
@@ -147,8 +148,8 @@ void EditorPanel::layout_document(const EditorModel& model) {
     if (model.modified) {
         file += " *";
     }
-    f.label(Rect{kX, y, kW, kLine}, file);
-    y += kLine + 4;
+    f.paragraph(Rect{kX, y, kW, 2 * kLine}, file, Tone::Normal, 20);
+    y += 2 * kLine;
     f.entry(Rect{kX, y, kW, kLine}, ui::tr("editor.map_size"),
             ui::tr("editor.size", {count(model.width), count(model.height)}), Tone::Dim);
     y += kLine;
@@ -169,10 +170,8 @@ void EditorPanel::layout_document(const EditorModel& model) {
     full(kOpen, "editor.open");
     full(kSave, "editor.save");
     full(kSaveAs, "editor.save_as");
-    const std::int32_t half = (kW - kGap) / 2;
-    f.button(kUndo, Rect{kX, y, half, kButtonH}, ui::tr("editor.undo"), model.can_undo);
-    f.button(kRedo, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.redo"), model.can_redo);
-    y += kButtonH + kGap;
+    full(kUndo, "editor.undo", model.can_undo);
+    full(kRedo, "editor.redo", model.can_redo);
     full(kClose, "editor.close");
     if (!model.notice.empty()) {
         const std::int32_t bottom = m_top + m_height - 6;
@@ -205,9 +204,9 @@ void EditorPanel::layout_new() {
     y += kLine + 2;
     f.button(kReroll, Rect{kX, y, kW, kButtonH}, ui::tr("editor.new.reroll"), islands);
     y += kButtonH + kGap;
-    f.paragraph(Rect{kX, y, kW, 66}, ui::tr(islands ? "editor.new.note_islands" : "editor.new.note_sea"), Tone::Dim,
+    f.paragraph(Rect{kX, y, kW, kNote}, ui::tr(islands ? "editor.new.note_islands" : "editor.new.note_sea"), Tone::Dim,
                 20);
-    y += 70;
+    y += kNote + 4;
     const std::int32_t half = (kW - kGap) / 2;
     f.button(kCreate, Rect{kX, y, half, kButtonH}, ui::tr("editor.new.create"));
     f.button(kCancel, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
@@ -259,9 +258,9 @@ void EditorPanel::layout_save(const EditorModel& model) {
     y += 38;
     const std::string name = clean_name(m_text);
     const bool taken = !name.empty() && name_taken(model, name);
-    f.paragraph(Rect{kX, y, kW, 66}, ui::tr(taken ? "editor.save.taken" : "editor.save.where"),
+    f.paragraph(Rect{kX, y, kW, kNote}, ui::tr(taken ? "editor.save.taken" : "editor.save.where"),
                 taken ? Tone::Warning : Tone::Dim, 20);
-    y += 70;
+    y += kNote + 4;
     const std::int32_t half = (kW - kGap) / 2;
     f.button(kStore, Rect{kX, y, half, kButtonH}, ui::tr(taken ? "editor.save.replace" : "editor.save"), !name.empty());
     f.button(kCancel, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));

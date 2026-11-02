@@ -89,6 +89,11 @@ core::Status MapViewer::enter_editor(sim::World world, std::filesystem::path fil
     m_editor.reset();
     m_editor_pending.reset();
     adopt_state(std::move(next), file);
+    // What the editor saves is a scenario: one with a description from the start, so that saving
+    // a map that had none (a new one, a savegame) is not a step of its own to undo.
+    if (!m_state->world.scenario_info()) {
+        m_state->world.set_scenario_info(sim::ScenarioInfo{});
+    }
     m_editor.emplace(EditorSession{editor::Document::edit(m_state->world),
                                    own_file(file) ? file : std::filesystem::path(),
                                    file.empty() ? std::string() : shown_name(file),
@@ -324,16 +329,16 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
             break;
         }
         case Kind::Undo: {
-            const std::string what(m_editor->document.history().next_undo());
+            const std::string what = ui::tr("editor.step." + std::string(m_editor->document.history().next_undo()));
             if (m_editor->document.undo()) {
-                editor_notice(ui::tr("editor.undone", {what}), false, "undo " + what);
+                editor_notice(ui::tr("editor.undone", {what}), false, "undo");
             }
             break;
         }
         case Kind::Redo: {
-            const std::string what(m_editor->document.history().next_redo());
+            const std::string what = ui::tr("editor.step." + std::string(m_editor->document.history().next_redo()));
             if (m_editor->document.redo()) {
-                editor_notice(ui::tr("editor.redone", {what}), false, "redo " + what);
+                editor_notice(ui::tr("editor.redone", {what}), false, "redo");
             }
             break;
         }

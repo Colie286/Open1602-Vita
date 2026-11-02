@@ -11,7 +11,8 @@ open1602 --editor my-map.o1602             an Open1602 scenario or savegame
 
 The editor shows the map as the game does: it scrolls, turns and zooms with the game's keys and
 mouse, and the minimap, compass, rotation and zoom buttons work as in the game. The world never runs
-while it is edited: nothing moves, nothing is built, no time passes.
+while it is edited: no figure or ship moves, nothing is built, no time passes. Only the pictures go
+on as they do (water, flags). The game's mode buttons above the panel are greyed.
 
 ## The side panel
 

@@ -840,9 +840,9 @@ bool Hud::covers(std::int32_t x, std::int32_t y) const noexcept {
 
 void Hud::set_editing(bool on) {
     m_editing = on;
-    // The modes' buttons go while the editor runs (the duplicate of the military one stays hidden).
+    // The modes' buttons are greyed while the editor runs (clicks on them are ignored there).
     for (const std::int32_t mode : {kModeBuild, kModeMilitary, kModeInfo, kModeOptions}) {
-        m_ctrl.set_visible(mode, !on);
+        m_ctrl.set_disabled(mode, on);
     }
     if (m_editor) {
         m_editor->show_document();
