@@ -312,3 +312,70 @@ TEST_CASE("goods window: eight classes of inhabitants, each a row with its tax a
     }
     CHECK(last_row < GoodsWindow::kHeight - 200);  // the chart keeps its room below the table
 }
+
+TEST_CASE("goods window: the tab \"Routes\" lists the player's ships on trade routes, ordered and to go to") {
+    sim::World world = make_world();
+    const auto ship = [&](std::uint32_t id, const char* name, sim::PlayerId owner, std::uint16_t island,
+                          std::uint8_t index, bool problem) {
+        sim::Ship s;
+        s.id = id;
+        s.name = name;
+        s.owner = owner;
+        s.x = static_cast<std::uint16_t>(10 * id);
+        s.y = 5;
+        s.route.active = true;
+        s.route.stops[0].target = sim::Target::city_of(island, index);
+        s.route.stops[0].entries[0] = sim::RouteEntry{kWood, false, 10 * kTon};
+        s.route.stops[1].target = sim::Target::city_of(0, 0);
+        s.route.stops[1].entries[0] = sim::RouteEntry{kFood, true, 10 * kTon};
+        s.route.current = 1;
+        s.route.problem = problem;
+        world.add_ship(std::move(s));
+    };
+    ship(1, "Zephyr", 0, 1, 0, false);
+    ship(2, "Albatross", 0, 1, 0, true);
+    ship(3, "Theirs", 1, 0, 1, false);  // the ally's: never shown
+    sim::Ship idle;
+    idle.id = 4;
+    idle.name = "Idle";
+    world.add_ship(std::move(idle));  // no route
+
+    GoodsWindow w(app::GoodsStyle{}, names(25), 192);
+    w.open();
+    (void)w.draw(world, assets::BuildingTable{}, kFigures, 0, kNoFonts);
+    click(w, kTab + static_cast<ui::Form::Id>(GoodsWindow::Tab::Routes));
+    auto items = w.draw(world, assets::BuildingTable{}, kFigures, 0, kNoFonts);
+    CHECK(draws_text(items, "Westport - Eastport"));
+    CHECK(draws_text(items, "Eastport"));  // sailing to
+    CHECK(!draws_text(items, "Theirs"));
+    CHECK(!draws_text(items, "Idle"));
+    REQUIRE(w.route_ships().size() == 2);
+    CHECK(w.route_ships()[0].id == 2);  // by name: Albatross first
+
+    constexpr ui::Form::Id kRouteSort = 60;
+    click(w, kRouteSort + static_cast<ui::Form::Id>(GoodsWindow::RouteOrder::Problems));
+    CHECK(w.route_order() == GoodsWindow::RouteOrder::Problems);
+    (void)w.draw(world, assets::BuildingTable{}, kFigures, 0, kNoFonts);
+    CHECK(w.route_ships()[0].id == 2);  // the one with trouble first
+
+    // A click on a row hands the ship over.
+    constexpr ui::Form::Id kRouteRow = 2000;
+    for (const ui::Form::Widget& x : w.form().widgets()) {
+        if (x.id == kRouteRow + 1) {
+            const std::int32_t cx = x.rect.x + x.rect.w / 2;
+            const std::int32_t cy = x.rect.y + x.rect.h / 2;
+            (void)w.mouse(cx, cy, true);
+            CHECK(w.mouse(cx, cy, false) == GoodsWindow::Result::Ship);
+        }
+    }
+    const auto target = w.take_ship();
+    REQUIRE(target.has_value());
+    CHECK(target->id == 1);
+    CHECK(target->x == 10.0);
+    CHECK(!w.take_ship().has_value());
+
+    // One island chosen: only the routes calling there (both call at island 0).
+    click(w, kIsland);
+    (void)w.draw(world, assets::BuildingTable{}, kFigures, 0, kNoFonts);
+    CHECK(w.route_ships().size() == 2);
+}

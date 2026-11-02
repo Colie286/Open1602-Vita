@@ -2156,7 +2156,8 @@ void MapViewer::draw_unit_arms() {
 }
 
 void MapViewer::draw_corner_info() {
-    if (m_hud == nullptr || (!m_show_fps && !m_show_coordinates)) {
+    const bool cheat_line = m_input != nullptr && m_input->cheats().open();
+    if (m_hud == nullptr || (!m_show_fps && !m_show_coordinates && !cheat_line)) {
         return;
     }
     std::vector<std::string> lines;
@@ -2190,6 +2191,18 @@ void MapViewer::draw_corner_info() {
         d.text = std::move(line);
         items.push_back(std::move(d));
         y += ui::to_pixels(14, scale);
+    }
+    if (cheat_line) {
+        // The cheats' number line at the bottom left of the map, as in the original, with its cursor.
+        ui::DrawItem d;
+        d.kind = ui::DrawItem::Kind::Text;
+        d.block = 1;
+        d.colour = 0;
+        d.align = ui::Align::Left;
+        d.x = v.x + ui::to_pixels(8, scale);
+        d.y = v.y + v.h - ui::to_pixels(20, scale);
+        d.text = m_input->cheats().line() + "_";
+        items.push_back(std::move(d));
     }
     m_hud->draw_over_map(items);
 }
@@ -3659,6 +3672,8 @@ void endless_world(sim::NewGameOptions& o, const sim::WorldStart& base, const En
     o.world.seed = seed;
     o.layout = sim::layout_for_seed(o.world.seed);
     o.world.guarantee_resources = setup.rules.guarantee_resources;
+    o.world.climate_crops = setup.rules.climate_crops;
+    o.world.big_ore_veins = setup.rules.big_ore_veins;
     if (setup.own_world) {
         sim::WorldSettings custom = setup.world_settings();
         custom.players = static_cast<std::uint8_t>(std::min<std::size_t>(custom.players, sim::kMaxPlayers));

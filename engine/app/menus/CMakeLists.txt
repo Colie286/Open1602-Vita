@@ -14,6 +14,7 @@ add_library(o1602_menus
     ../src/build_tool.cpp
     ../src/catchment_view.cpp
     ../src/chat_window.cpp
+    ../src/cheat_console.cpp
     ../src/command_line.cpp
     ../src/command_sink.cpp
     ../src/diplomacy_panel.cpp

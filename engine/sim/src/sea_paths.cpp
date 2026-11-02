@@ -94,7 +94,8 @@ void SeaMap::set_island_cells(const World& world, const assets::BuildingTable& b
         for (std::uint32_t lx = from_x; lx < to_x; ++lx) {
             const std::uint32_t wx = island.x + lx;
             const std::uint32_t wy = island.y + ly;
-            if (wx >= m_width || wy >= m_height) {
+            // A tile another island owns where the rectangles overlap is that island's.
+            if (wx >= m_width || wy >= m_height || world.cell(wx, wy).island != index) {
                 continue;
             }
             const MapCell& c = map.top(lx, ly);

@@ -28,7 +28,7 @@ bool valid_name(std::string_view name, std::size_t max_length) noexcept {
 World::World(std::uint32_t width, std::uint32_t height)
     : m_width(width), m_height(height), m_cells(std::size_t{width} * height) {}
 
-core::Status World::add_island(WorldIsland island) {
+core::Status World::add_island(WorldIsland island, const assets::BuildingTable* buildings) {
     const std::uint32_t w = island.map.width();
     const std::uint32_t h = island.map.height();
     // In 64 bits: a position near 2^32 from a file must not wrap around into the map.
@@ -44,19 +44,40 @@ core::Status World::add_island(WorldIsland island) {
     if (m_islands.size() >= kMaxIslands) {  // named limit instead of the original's 255 (L-003)
         return make_error(ErrorCode::LimitExceeded, "more than " + std::to_string(kMaxIslands) + " islands");
     }
+    // As in the original, the rectangles of two islands may overlap where at least one of them has
+    // sea: such a tile belongs to the island with land there, else to the one added first.
+    const auto sea = [buildings](const IslandMap& map, std::uint32_t x, std::uint32_t y) {
+        if (buildings == nullptr) {
+            return false;
+        }
+        const MapCell& c = map.top(x, y);
+        const assets::BuildingType* b = c.empty() ? nullptr : buildings->by_sprite(c.sprite);
+        return b != nullptr && b->kind == assets::kind::kSea;
+    };
+    std::vector<bool> taken(std::size_t{w} * h, false);  // tiles the new island takes over
     for (std::uint32_t ly = 0; ly < h; ++ly) {
         for (std::uint32_t lx = 0; lx < w; ++lx) {
-            if (m_cells[std::size_t{island.y + ly} * m_width + island.x + lx].island != kSea) {
+            const Cell& c = m_cells[std::size_t{island.y + ly} * m_width + island.x + lx];
+            if (c.island == kSea) {
+                taken[std::size_t{ly} * w + lx] = true;
+                continue;
+            }
+            const bool new_sea = sea(island.map, lx, ly);
+            const bool old_sea = sea(m_islands[c.island].map, c.local_x, c.local_y);
+            if (!new_sea && !old_sea) {
                 return make_error(ErrorCode::InvalidFormat,
                                   "island " + std::to_string(island.header.number) + " overlaps another island");
             }
+            taken[std::size_t{ly} * w + lx] = !new_sea;
         }
     }
     const auto index = static_cast<std::uint16_t>(m_islands.size());
     for (std::uint32_t ly = 0; ly < h; ++ly) {
         for (std::uint32_t lx = 0; lx < w; ++lx) {
-            m_cells[std::size_t{island.y + ly} * m_width + island.x + lx] =
-                Cell{index, static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(ly)};
+            if (taken[std::size_t{ly} * w + lx]) {
+                m_cells[std::size_t{island.y + ly} * m_width + island.x + lx] =
+                    Cell{index, static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(ly)};
+            }
         }
     }
     m_islands.push_back(std::move(island));
@@ -671,7 +692,7 @@ void add_islands(World& world, const std::vector<assets::Island>& islands, const
         }
         WorldIsland wi{island.header, IslandMap::from_island(island, buildings, warnings, base), island.header.pos_x,
                        island.header.pos_y};
-        if (auto status = world.add_island(std::move(wi)); !status) {
+        if (auto status = world.add_island(std::move(wi), &buildings); !status) {
             warn(status.error().message);
         }
     }

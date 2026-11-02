@@ -379,9 +379,9 @@ Hud::Hud(SDL_Renderer* renderer, const assets::GameDirectory& game, const assets
         // Names in a banner's colour stay readable on the menus' dark ground (4.5:1, as for text).
         const assets::Rgba ground = palette[ui::FormStyle{}.ground];
         for (const render::Banner& b : banners.banners()) {
-            const assets::Rgba text = ui::legible_on(b.colour, ground, 4.5);
+            // In exactly that colour: the palette has no light shade of some banners (no violet).
             menu_banners.push_back(MenuBanner{ui::nearest_colour(palette, b.colour.r, b.colour.g, b.colour.b), b.id,
-                                              ui::nearest_colour(palette, text.r, text.g, text.b)});
+                                              ui::rgb_ink(ui::legible_on(b.colour, ground, 4.5))});
             banner_colours.push_back(menu_banners.back().colour);
         }
         const std::uint8_t grey = ui::nearest_colour(palette, 128, 128, 128);
@@ -1418,8 +1418,21 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
     }
     if (m_goods_open && !m_menu_active && !m_question && !m_help) {
         const ui::Rect r = goods_rect();
-        if (m_goods->mouse(x - r.x, y - r.y, down, button) == GoodsWindow::Result::Close) {
-            m_goods_open = false;
+        switch (m_goods->mouse(x - r.x, y - r.y, down, button)) {
+            case GoodsWindow::Result::Close:
+                m_goods_open = false;
+                break;
+            case GoodsWindow::Result::Ship:
+                // A ship of the tab "Routes": the window closes and the ship is selected and looked at.
+                if (const auto ship = m_goods->take_ship()) {
+                    m_goods_open = false;
+                    Action a{Action::Kind::SelectShip, ship->x, ship->y};
+                    a.ship = ship->id;
+                    return a;
+                }
+                break;
+            case GoodsWindow::Result::None:
+                break;
         }
         return std::nullopt;
     }
@@ -1789,25 +1802,29 @@ void Hud::shrink_minimap(std::int32_t w, std::int32_t h) {
     m_minimap_h = h;
     const auto pixels = static_cast<std::size_t>(w) * static_cast<std::size_t>(h);
     m_minimap_small.assign(pixels * 4, 0);
-    // As the original: a tile lands on pixel (x * step) >> 8 with the step in 8.8
-    // fixed point, cut off; a pixel shows land when more of its island tiles are land than water
-    // (the open sea does not count), in the colour of its last land tile. A world smaller than the
-    // parchment spreads each tile over the pixels up to the next one's.
-    const std::uint64_t step_x = (std::uint64_t{static_cast<std::uint32_t>(w)} << 8U) / m_world_w;
-    const std::uint64_t step_y = (std::uint64_t{static_cast<std::uint32_t>(h)} << 8U) / m_world_h;
+    // As the original: a tile lands on pixel (x * step) >> shift with the step in fixed point, cut
+    // off; a pixel shows land when more of its island tiles are land than water (the open sea does
+    // not count), in the colour of its last land tile. A world smaller than the parchment spreads
+    // each tile over the pixels up to the next one's. The original's step has 8 bits of fraction;
+    // on a large world that cut-off step shrinks the land towards the top left, away from the
+    // ships, the view frame and the clicks, which use the exact scale (on 4000 tiles by up to 8 %), so
+    // Open1602 keeps 16 bits.
+    constexpr unsigned kShift = 16U;
+    const std::uint64_t step_x = (std::uint64_t{static_cast<std::uint32_t>(w)} << kShift) / m_world_w;
+    const std::uint64_t step_y = (std::uint64_t{static_cast<std::uint32_t>(h)} << kShift) / m_world_h;
     std::vector<std::int32_t> balance(pixels, 0);  // land tiles minus water tiles
     std::vector<std::size_t> colour(pixels, 0);    // the land tile that gives the colour
     for (std::uint32_t y = 0; y < m_world_h; ++y) {
-        const std::uint64_t y0 = (y * step_y) >> 8U;
-        const std::uint64_t y1 = std::max(y0 + 1, ((y + 1) * step_y) >> 8U);
+        const std::uint64_t y0 = (y * step_y) >> kShift;
+        const std::uint64_t y1 = std::max(y0 + 1, ((y + 1) * step_y) >> kShift);
         for (std::uint32_t x = 0; x < m_world_w; ++x) {
             const std::size_t i = (std::size_t{y} * m_world_w + x) * 4;
             const std::uint8_t alpha = m_minimap[i + 3];
             if (alpha == 0) {
                 continue;  // the open sea
             }
-            const std::uint64_t x0 = (x * step_x) >> 8U;
-            const std::uint64_t x1 = std::max(x0 + 1, ((x + 1) * step_x) >> 8U);
+            const std::uint64_t x0 = (x * step_x) >> kShift;
+            const std::uint64_t x1 = std::max(x0 + 1, ((x + 1) * step_x) >> kShift);
             for (std::uint64_t py = y0; py < y1 && py < static_cast<std::uint64_t>(h); ++py) {
                 for (std::uint64_t px = x0; px < x1 && px < static_cast<std::uint64_t>(w); ++px) {
                     const std::size_t o = static_cast<std::size_t>(py * static_cast<std::uint64_t>(w) + px);

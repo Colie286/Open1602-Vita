@@ -382,6 +382,8 @@ std::size_t setup_choices(SetupItem item) noexcept {
             return kUnits.size();
         case SetupItem::GameSpeed:
             return kSpeeds.size();
+        case SetupItem::Cheats:
+            return 3;
         case SetupItem::Droughts:
             return kDroughtNames.size();
         case SetupItem::Volcanoes:
@@ -435,6 +437,9 @@ std::size_t setup_choices(SetupItem item) noexcept {
         case SetupItem::BreadChain:
         case SetupItem::TradeCarts:
         case SetupItem::FertileFields:
+        case SetupItem::Hunting:
+        case SetupItem::ClimateCrops:
+        case SetupItem::BigOreVeins:
         case SetupItem::ShipPurchases:
         case SetupItem::Map:
         case SetupItem::Starts:
@@ -513,8 +518,14 @@ std::size_t setup_choice(const EndlessSetup& setup, SetupItem item) noexcept {
             return r.revised_bread ? 1 : 0;
         case SetupItem::TradeCarts:
             return r.more_carts ? 1 : 0;
+        case SetupItem::Hunting:
+            return r.wider_hunting ? 1 : 0;
         case SetupItem::FertileFields:
             return r.fertile_fields ? 1 : 0;
+        case SetupItem::ClimateCrops:
+            return r.climate_crops ? 1 : 0;
+        case SetupItem::BigOreVeins:
+            return r.big_ore_veins ? 1 : 0;
         case SetupItem::ShipPurchases:
             return r.computers_buy_ships ? 1 : 0;
         case SetupItem::Ships:
@@ -523,6 +534,8 @@ std::size_t setup_choice(const EndlessSetup& setup, SetupItem item) noexcept {
             return nearest(kUnits, r.max_army);
         case SetupItem::GameSpeed:
             return nearest(kSpeeds, r.max_game_speed);
+        case SetupItem::Cheats:
+            return std::min<std::size_t>(static_cast<std::size_t>(r.cheats), 2);
         case SetupItem::Droughts:
             return std::min<std::size_t>(static_cast<std::size_t>(r.droughts), kDroughtNames.size() - 1);
         case SetupItem::Volcanoes:
@@ -668,8 +681,17 @@ void choose(EndlessSetup& setup, SetupItem item, std::size_t choice) {
         case SetupItem::TradeCarts:
             r.more_carts = choice == 1;
             break;
+        case SetupItem::Hunting:
+            r.wider_hunting = choice == 1;
+            break;
         case SetupItem::FertileFields:
             r.fertile_fields = choice == 1;
+            break;
+        case SetupItem::ClimateCrops:
+            r.climate_crops = choice == 1;
+            break;
+        case SetupItem::BigOreVeins:
+            r.big_ore_veins = choice == 1;
             break;
         case SetupItem::ShipPurchases:
             r.computers_buy_ships = choice == 1;
@@ -682,6 +704,9 @@ void choose(EndlessSetup& setup, SetupItem item, std::size_t choice) {
             break;
         case SetupItem::GameSpeed:
             r.max_game_speed = kSpeeds[choice];
+            break;
+        case SetupItem::Cheats:
+            r.cheats = static_cast<sim::Cheats>(std::min<std::size_t>(choice, 2));
             break;
         case SetupItem::Droughts:
             r.droughts = static_cast<sim::Droughts>(choice);
@@ -1002,11 +1027,13 @@ bool setup_item_offered(SetupScope scope, SetupItem item) noexcept {
         case SetupItem::OreVeins:
         case SetupItem::BreadChain:
         case SetupItem::TradeCarts:
+        case SetupItem::Hunting:
         case SetupItem::FertileFields:
         case SetupItem::ShipPurchases:
         case SetupItem::Ships:
         case SetupItem::Units:
         case SetupItem::GameSpeed:
+        case SetupItem::Cheats:
         case SetupItem::Droughts:
         case SetupItem::Volcanoes:
         case SetupItem::ComputerPlayers:
@@ -1078,6 +1105,7 @@ std::string setup_label(SetupItem item) {
         "setup.ore_veins",
         "setup.bread",
         "setup.trade_carts",
+        "setup.hunting",
         "setup.ships",
         "setup.units",
         "setup.speed",
@@ -1100,6 +1128,7 @@ std::string setup_label(SetupItem item) {
         "setup.pirates",
         "setup.pirate_nests",
         "setup.reveal",
+        "setup.cheats",
         "setup.island_preset",
         "setup.island_shapes",
         "setup.coast",
@@ -1111,6 +1140,8 @@ std::string setup_label(SetupItem item) {
         "setup.island_gap",
         "setup.forest",
         "setup.ore_mountains",
+        "setup.climate_crops",
+        "setup.big_ore_veins",
         "setup.win.inhabitants",
         "setup.win.class",
         "setup.win.class_inhabitants",
@@ -1171,8 +1202,14 @@ std::string setup_value(SetupItem item, std::size_t choice) {
             return ui::tr(choice == 1 ? "setup.bread.revised" : "setup.bread.original");
         case SetupItem::TradeCarts:
             return ui::tr(choice == 1 ? "setup.trade_carts.more" : "setup.trade_carts.one");
+        case SetupItem::Hunting:
+            return ui::tr(choice == 1 ? "setup.hunting.wider" : "setup.hunting.original");
         case SetupItem::FertileFields:
             return ui::tr(choice == 1 ? "setup.fertile_fields.all" : "setup.fertile_fields.original");
+        case SetupItem::ClimateCrops:
+            return ui::tr(choice == 1 ? "setup.climate_crops.all" : "setup.climate_crops.original");
+        case SetupItem::BigOreVeins:
+            return ui::tr(choice == 1 ? "setup.big_ore_veins.all" : "setup.big_ore_veins.original");
         case SetupItem::ShipPurchases:
             return ui::tr(choice == 1 ? "setup.on" : "setup.off");
         case SetupItem::Ships:
@@ -1181,6 +1218,11 @@ std::string setup_value(SetupItem item, std::size_t choice) {
             return number_text(kUnits[choice]);
         case SetupItem::GameSpeed:
             return ui::tr("setup.speed.value", {std::to_string(kSpeeds[choice])});
+        case SetupItem::Cheats: {
+            static constexpr std::array<std::string_view, 3> kKeys = {"setup.cheats.code", "setup.cheats.start",
+                                                                      "setup.off"};
+            return ui::tr(kKeys[std::min<std::size_t>(choice, 2)]);
+        }
         case SetupItem::Droughts: {
             static constexpr std::array<std::string_view, 5> kKeys = {"setup.droughts.game", "setup.off",
                                                                       "setup.droughts.rare", "setup.droughts.normal",
@@ -1479,6 +1521,22 @@ bool read_setup_line(EndlessSetup& setup, std::string_view key, std::string_view
         if (value == "all" || value == "original") {
             r.fertile_fields = value == "all";
         }
+    } else if (key == "cheats") {
+        if (value == "code" || value == "start" || value == "off") {
+            r.cheats = value == "code" ? sim::Cheats::Code : value == "start" ? sim::Cheats::Start : sim::Cheats::Off;
+        }
+    } else if (key == "hunting") {
+        if (value == "wider" || value == "original") {
+            r.wider_hunting = value == "wider";
+        }
+    } else if (key == "climate_crops") {
+        if (value == "all" || value == "original") {
+            r.climate_crops = value == "all";
+        }
+    } else if (key == "big_ore_veins") {
+        if (value == "all" || value == "original") {
+            r.big_ore_veins = value == "all";
+        }
     } else if (key == "ship_purchases") {
         if (value == "on" || value == "off") {
             r.computers_buy_ships = value == "on";
@@ -1601,7 +1659,11 @@ std::string write_setup(const EndlessSetup& setup, std::string_view prefix) {
     line("ore_veins", kOreVeinNames[std::min<std::size_t>(static_cast<std::size_t>(r.ore_veins), 2)]);
     line("bread", r.revised_bread ? "revised" : "original");
     line("trade_carts", r.more_carts ? "more" : "one");
+    line("hunting", r.wider_hunting ? "wider" : "original");
+    line("cheats", r.cheats == sim::Cheats::Code ? "code" : r.cheats == sim::Cheats::Start ? "start" : "off");
     line("fertile_fields", r.fertile_fields ? "all" : "original");
+    line("climate_crops", r.climate_crops ? "all" : "original");
+    line("big_ore_veins", r.big_ore_veins ? "all" : "original");
     line("ships", std::to_string(r.max_ships_per_player));
     line("units", std::to_string(r.max_army));
     line("game_speed", std::to_string(r.max_game_speed));

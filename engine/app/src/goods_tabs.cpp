@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The tabs of the window "Warenbilanz" besides the goods: the production buildings, the
-// inhabitants, the trade at the Kontor and the finances (docs/architecture/0012-goods-statistics.md).
+// inhabitants, the trade at the Kontor, the trade routes and the finances (docs/architecture/0012-goods-statistics.md).
 #include <algorithm>
 #include <cstdlib>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 #include "goods_window.hpp"
 #include "goods_window_parts.hpp"
+#include "names.hpp"
 #include "production_utilisation.hpp"
 
 #include "o1602/sim/consumption.hpp"
@@ -23,8 +25,9 @@ namespace {
 using namespace goods_parts;
 using sim::CityFigure;
 
-constexpr std::array<std::string_view, GoodsWindow::kTabs> kTabLabels = {
-    "stats.tab.goods", "stats.tab.producers", "stats.tab.population", "stats.tab.trade", "stats.tab.finances"};
+constexpr std::array<std::string_view, GoodsWindow::kTabs> kTabLabels = {"stats.tab.goods",      "stats.tab.producers",
+                                                                         "stats.tab.population", "stats.tab.trade",
+                                                                         "stats.tab.routes",     "stats.tab.finances"};
 
 /// Where a good stands in the table of goods (its group, then its place), for sorting.
 std::size_t ware_order(std::uint8_t ware) {
@@ -580,6 +583,136 @@ void GoodsWindow::layout_trade(const sim::World& world, sim::PlayerId player, Pa
     below.fill(Rect{kMargin, kFooterY - 4, kWidth - 2 * kMargin, 1}, s.shade);
     above.paragraph(Rect{kMargin + 2, kFooterY, kWidth - 2 * kMargin, 34},
                     ui::tr("stats.trade.hint", {std::to_string(window)}), st.dim, kFontSmall, 17);
+}
+
+void GoodsWindow::layout_routes(const sim::World& world, sim::PlayerId player, Painter& below, Painter& above) {
+    const GoodsStyle& s = m_style;
+    const ui::FormStyle& st = s.form;
+
+    // The player's ships on a trade route (not the patrols); with an island chosen, those that call
+    // at a city there.
+    struct Line {
+        const sim::Ship* ship = nullptr;
+        std::string name;
+        std::vector<std::string> stops;   ///< the cities called at, in the route's order
+        std::size_t next = 0;             ///< index into stops: where the ship sails to
+        std::vector<std::uint8_t> wares;  ///< loaded or unloaded somewhere, first seen first
+        bool problem = false;
+    };
+    std::vector<Line> lines;
+    for (const sim::Ship& ship : world.ships()) {
+        const sim::TradeRoute& route = ship.route;
+        if (ship.owner != player || ship.sinking || !route.active || !route.has_stops() || route.patrol()) {
+            continue;
+        }
+        Line l;
+        l.ship = &ship;
+        l.name = ship_name(ship);
+        bool on_island = !m_island;
+        for (std::size_t i = 0; i < route.stops.size(); ++i) {
+            const sim::RouteStop& stop = route.stops[i];
+            if (stop.target.kind != sim::Target::Kind::City) {
+                continue;
+            }
+            const sim::City* city = world.city(stop.target.island, stop.target.city);
+            on_island = on_island || stop.target.island == *m_island;
+            if (i <= route.current) {
+                l.next = l.stops.size();
+            }
+            l.stops.push_back(city != nullptr ? city_name(*city) : std::string("?"));
+            for (const sim::RouteEntry& e : stop.entries) {
+                if (e.ware != 0 && std::ranges::find(l.wares, e.ware) == l.wares.end()) {
+                    l.wares.push_back(e.ware);
+                }
+            }
+        }
+        if (!on_island || l.stops.empty()) {
+            continue;
+        }
+        l.problem = route.problem || route.problem_rounds != 0;
+        lines.push_back(std::move(l));
+    }
+    const auto next_name = [](const Line& l) { return l.next < l.stops.size() ? l.stops[l.next] : std::string(); };
+    switch (m_route_order) {
+        case RouteOrder::Ship:
+            std::ranges::stable_sort(lines, [](const Line& a, const Line& b) { return a.name < b.name; });
+            break;
+        case RouteOrder::From:
+            std::ranges::stable_sort(lines, [](const Line& a, const Line& b) { return a.stops < b.stops; });
+            break;
+        case RouteOrder::Next:
+            std::ranges::stable_sort(lines, [&](const Line& a, const Line& b) { return next_name(a) < next_name(b); });
+            break;
+        case RouteOrder::Problems:
+            std::ranges::stable_sort(lines, [](const Line& a, const Line& b) { return a.problem > b.problem; });
+            break;
+    }
+    m_row_count = lines.size();
+    m_visible_rows = kRows;
+    m_scroll = std::min(m_scroll, m_row_count > kRows ? m_row_count - kRows : 0);
+    m_route_ships.clear();
+    for (const Line& l : lines) {
+        m_route_ships.push_back(ShipTarget{l.ship->id, static_cast<double>(l.ship->x), static_cast<double>(l.ship->y)});
+    }
+
+    // Ship, the route's cities, the next of them, the goods; a heading clicked orders by it (the
+    // goods by trouble first: a transfer the route could not make).
+    constexpr std::int32_t kShipX = kMargin + 2;
+    constexpr std::int32_t kRouteX = 196;
+    constexpr std::int32_t kNextX = 452;
+    constexpr std::int32_t kWaresX = 566;
+    constexpr std::int32_t kIcon = 22;
+    constexpr std::int32_t kEnd = kScrollX - 8;
+    const std::array<std::tuple<RouteOrder, std::int32_t, std::int32_t, std::string_view>, 4> heads = {{
+        {RouteOrder::Ship, kShipX, kRouteX - kShipX, "stats.routes.ship"},
+        {RouteOrder::From, kRouteX, kNextX - kRouteX, "stats.routes.stops"},
+        {RouteOrder::Next, kNextX, kWaresX - kNextX, "stats.routes.next"},
+        {RouteOrder::Problems, kWaresX, kEnd - kWaresX, "stats.routes.goods"},
+    }};
+    for (const auto& [order, x, w, key] : heads) {
+        const Rect r{x - 2, kHeaderY - 2, w - 4, 22};
+        m_form.row(kRouteSort + static_cast<Id>(order), r, m_route_order == order);
+        above.text(Rect{x, kHeaderY, w - 8, 20}, ui::tr(key), Align::Left, m_route_order == order ? st.text : st.dim,
+                   kFontSmall);
+    }
+    below.fill(Rect{kMargin, kTableY - 4, kWidth - 2 * kMargin, 1}, s.shade);
+    if (lines.empty()) {
+        above.text(Rect{kMargin, kTableY + 20, kWidth - 2 * kMargin, 30}, ui::tr("stats.routes.empty"), Align::Centre,
+                   st.dim);
+    }
+    std::size_t troubled = 0;
+    for (const Line& l : lines) {
+        troubled += l.problem ? 1 : 0;
+    }
+    for (std::size_t i = 0; i < kRows && m_scroll + i < lines.size(); ++i) {
+        const Line& l = lines[m_scroll + i];
+        const std::int32_t y = kTableY + static_cast<std::int32_t>(i) * kRowH;
+        const Rect row{kMargin, y + 1, kScrollX - 6 - kMargin, kRowH - 2};
+        if ((m_scroll + i) % 2 == 1) {
+            below.fill(row, s.band, true);
+        }
+        m_form.row(kRouteRow + static_cast<Id>(m_scroll + i), row, false);
+        above.text(Rect{kShipX, y, kRouteX - kShipX - 8, kRowH}, l.name, Align::Left,
+                   l.problem ? ui::kTextInkRed : st.text, kFontMedium);
+        std::string stops;
+        for (const std::string& name : l.stops) {
+            stops += (stops.empty() ? "" : " - ") + name;
+        }
+        above.text(Rect{kRouteX, y, kNextX - kRouteX - 8, kRowH}, stops, Align::Left, st.text, kFontMedium);
+        above.text(Rect{kNextX, y, kWaresX - kNextX - 8, kRowH}, next_name(l), Align::Left, st.text, kFontMedium);
+        const auto fits = static_cast<std::size_t>((kEnd - kWaresX) / (kIcon + 2));
+        for (std::size_t k = 0; k < l.wares.size() && k < fits; ++k) {
+            const std::int32_t x = kWaresX + static_cast<std::int32_t>(k) * (kIcon + 2);
+            below.fill(Rect{x, y + 4, kIcon, kRowH - 8}, s.dark);
+            above.sprite(Rect{x + 1, y + 5, kIcon - 2, kRowH - 10}, ware_icon(world, l.wares[k]));
+        }
+    }
+    layout_scroll_bar(below);
+    below.fill(Rect{kMargin, kFooterY - 4, kWidth - 2 * kMargin, 1}, s.shade);
+    above.paragraph(Rect{kMargin + 2, kFooterY, kWidth - 2 * kMargin, 34},
+                    ui::tr(lines.size() == 1 ? "stats.routes.hint.one" : "stats.routes.hint",
+                           {std::to_string(lines.size()), std::to_string(troubled)}),
+                    st.dim, kFontSmall, 17);
 }
 
 void GoodsWindow::layout_finances(const sim::World& world, const assets::BuildingTable& buildings,

@@ -86,7 +86,7 @@ before a good the people need runs out.
    city's island. The trend is a setting of the window "Anzeige" (`display.goods_trend` in
    settings.cfg, on at first), since it adds to the original's picture.
 
-8. **The other tabs.** Beside "Waren" the window has four tabs, all for the scope chosen above:
+8. **The other tabs.** Beside "Waren" the window has five tabs, all for the scope chosen above:
    - "Betriebe": every kind of production building with its number, its utilisation as the
      building window shows it (`app/production_utilisation.hpp`, as in the original),
      how many work, wait for raw material or are switched off, and their running costs. A click
@@ -97,6 +97,11 @@ before a good the people need runs out.
    - "Handel": per good the tons bought and sold at the Kontor in the time chosen, the gold and the
      average price per ton, and below it the trade with the free trader and with other players'
      ships. A click opens the page of the good.
+   - "Routen": the player's ships on a trade route (not the patrols; with an island chosen, those
+     calling at a city there): the ship, the cities of its route, the one it sails to and the goods
+     it loads or unloads. A ship whose transfer was refused shows in red. A click on a heading
+     orders the list (by ship, route, destination, or trouble first); a click on a row closes the
+     window and selects the ship and looks at it.
    - "Finanzen": tax income, running costs, sales, purchases and the balance now (as the city
      window computes them) and on average over the time chosen, and their chart; the military
      costs only for all islands together, since soldiers and ships belong to no island.

@@ -75,6 +75,9 @@ void io_player_state(A& a, P& p, std::uint16_t version) {
     if (version >= kPlayerOwners) {
         a.u64(p.owner);
     }
+    if (version >= kPlayerCheats) {
+        a.u8(p.cheats);
+    }
 }
 
 template <class A, class S>
@@ -284,6 +287,9 @@ Decoded::FactionPart read_factions(Reader& in, std::uint16_t version) {
 std::uint16_t player_state_version(const World& w) {
     const bool any = std::any_of(w.players().begin(), w.players().end(),
                                  [](const Player& p) { return p.scenario != ScenarioSwitches{}; });
+    if (std::any_of(w.players().begin(), w.players().end(), [](const Player& p) { return p.cheats != 0; })) {
+        return kPlayerCheats;
+    }
     if (std::any_of(w.players().begin(), w.players().end(), [](const Player& p) { return p.owner != 0; })) {
         return kPlayerOwners;
     }
@@ -296,6 +302,9 @@ std::uint16_t player_state_version(const World& w) {
 namespace {
 
 std::size_t player_state_size(std::uint16_t version) {
+    if (version >= kPlayerCheats) {
+        return 43;
+    }
     if (version >= kPlayerOwners) {
         return 42;
     }

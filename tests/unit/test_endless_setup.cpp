@@ -918,7 +918,8 @@ TEST_CASE("game setup: a savegame's values take the room their labels leave, in 
         for (auto i = 0; i < static_cast<int>(SetupItem::Count); ++i) {
             const auto item = static_cast<SetupItem>(i);
             if (!app::setup_item_offered(app::SetupScope::Savegame, item) || app::victory_item(item) ||
-                app::bug_item(item)) {
+                app::bug_item(item) || item == SetupItem::Cheats ||
+                item == SetupItem::Hunting) {  // the cheats and the hunter's hut: on the page of the bugs
                 continue;
             }
             // Without fonts every byte is 9 units: wider than a button's room for the longest values.

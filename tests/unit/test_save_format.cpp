@@ -775,7 +775,7 @@ std::uint16_t section_version(const core::Bytes& bytes, std::string_view tag) {
 constexpr Golden kSaveNarrow[] = {
     {"META", 1, 0, 37, 0x5A2EBCE3},
     {"MAPW", 2, 1, 1620, 0x46422F5B},
-    {"RULE", 1, 1, 70, 0xA24AF38C},
+    {"RULE", 1, 1, 76, 0x93C4C68F},
     {"WRLD", 1, 1, 419, 0xC3B8D9A4},
     {"WRL2", 1, 1, 4, 0x5ADE7D82},
     {"ISLE", 1, 1, 274, 0x6FCE0641},
@@ -809,7 +809,7 @@ constexpr Golden kSaveNarrow[] = {
 constexpr Golden kSaveWide[] = {
     {"META", 1, 0, 38, 0xB89CD646},
     {"MAPW", 2, 1, 5724, 0x3F3E2223},
-    {"RULE", 1, 1, 70, 0x94CCBD7E},
+    {"RULE", 1, 1, 76, 0xC489E870},
     {"WRLD", 1, 1, 419, 0x3DED0795},
     {"WRL2", 1, 1, 4, 0x637B2D3C},
     {"ISLE", 3, 1, 484, 0x77AE4E1B},
@@ -841,7 +841,7 @@ constexpr Golden kSaveWide[] = {
 };
 
 constexpr Golden kChunkNarrow[] = {
-    {"RULE", 1, 1, 70, 0xA24AF38C},
+    {"RULE", 1, 1, 76, 0x93C4C68F},
     {"WRLD", 1, 1, 419, 0xC3B8D9A4},
     {"ISLE", 1, 1, 274, 0x6FCE0641},
     {"TILE", 1, 1, 8164, 0x769F7EC8},
@@ -873,7 +873,7 @@ constexpr Golden kChunkNarrow[] = {
 };
 
 constexpr Golden kChunkWide[] = {
-    {"RULE", 1, 1, 70, 0x94CCBD7E},
+    {"RULE", 1, 1, 76, 0xC489E870},
     {"WRLD", 1, 1, 419, 0x3DED0795},
     {"ISLE", 3, 1, 484, 0x77AE4E1B},
     {"TILE", 1, 1, 34684, 0x3991F216},

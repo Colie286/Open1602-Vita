@@ -41,6 +41,10 @@ struct WorldStart {
     /// iron and gold that the plan asks for but did not get is placed on an island that can
     /// take it. Off: the world as the original makes it.
     bool guarantee_resources = false;
+    /// Rules::climate_crops: every island of a new endless game grows its climate's crops fully.
+    bool climate_crops = false;
+    /// Rules::big_ore_veins: every iron vein of a new endless game is a big one.
+    bool big_ore_veins = false;
 };
 
 /// The draws of the generator: `below(n)` is a number in 0..n-1.

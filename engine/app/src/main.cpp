@@ -38,7 +38,7 @@
 
 using namespace o1602;
 
-static_assert(app::kModCtrl == SDL_KMOD_LCTRL && app::kModShift == SDL_KMOD_LSHIFT);
+static_assert(app::kModCtrl == SDL_KMOD_LCTRL && app::kModShift == SDL_KMOD_LSHIFT && app::kModAlt == SDL_KMOD_LALT);
 
 namespace {
 
@@ -218,6 +218,8 @@ int run_program(int argc, char** argv) {
     std::random_device device;
     options.world.seed = command.seed.value_or((std::uint64_t{device()} << 32) | device());
     options.world.guarantee_resources = options.rules.guarantee_resources;
+    options.world.climate_crops = options.rules.climate_crops;
+    options.world.big_ore_veins = options.rules.big_ore_veins;
     if (command.new_game) {
         sim::NewGameOptions& new_game_options = *command.new_game;
         new_game_options.layout = command.layout.value_or(sim::layout_for_seed(options.world.seed));

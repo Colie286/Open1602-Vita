@@ -280,6 +280,9 @@ inline constexpr std::uint16_t kClosedGates = 3;
 /// Version 4 of PSTA: each player also has the person who played it last (Player::owner). The
 /// writer takes it only when a player has one.
 inline constexpr std::uint16_t kPlayerOwners = 4;
+/// Version 5 of PSTA: each player also has the cheats it unlocked (Player::cheats). The writer
+/// takes it only when a player has unlocked them.
+inline constexpr std::uint16_t kPlayerCheats = 5;
 /// FLEE version 2: every ship's route with TradeRoute::kStops stops, not the original's four.
 inline constexpr std::uint16_t kLongRoutes = 2;
 /// FLEE version 3: every stop with RouteStop::kEntries wares, not the original's three.

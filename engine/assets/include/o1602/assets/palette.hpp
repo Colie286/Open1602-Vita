@@ -28,6 +28,8 @@ public:
 
     [[nodiscard]] const Rgba& operator[](std::uint8_t index) const noexcept { return m_colours[index]; }
     [[nodiscard]] const std::array<Rgba, kSize>& colours() const noexcept { return m_colours; }
+    /// Changes one colour (a copy for drawing something in a colour of its own).
+    void set(std::uint8_t index, const Rgba& colour) noexcept { m_colours[index] = colour; }
 
 private:
     std::array<Rgba, kSize> m_colours{};

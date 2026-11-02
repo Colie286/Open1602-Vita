@@ -557,7 +557,7 @@ TEST_CASE("world generator: seeded draws repeat for the same seed and stay below
     CHECK(a.draws() == 200);
 }
 
-TEST_CASE("world generator: plans_islands only for a plan of islands and no islands of its own") {
+TEST_CASE("world generator: plans_islands only for a plan with islands the file does not store") {
     CHECK(sim::plans_islands(scenario(standard_plan())));
 
     // No SZENE, or one without islands.
@@ -566,16 +566,75 @@ TEST_CASE("world generator: plans_islands only for a plan of islands and no isla
     CHECK(!sim::plans_islands(*assets::ChunkFile::from_bytes(bytes)));
     CHECK(!sim::plans_islands(scenario(assets::ScenarioPlan{})));
 
-    // A scenario with islands of its own keeps them, whatever plan it carries.
+    // A scenario that stores some islands itself still has the others made.
     bytes.clear();
     o1602::test::put_chunk(bytes, "SZENE", encode_plan(standard_plan()));
     o1602::test::put_chunk(bytes, "INSEL5", std::vector<std::uint8_t>(116, 0));
+    CHECK(sim::plans_islands(*assets::ChunkFile::from_bytes(bytes)));
+    // One that stores every planned island (a savegame that kept its plan) has nothing to make.
+    bytes.clear();
+    o1602::test::put_chunk(bytes, "SZENE", encode_plan(standard_plan()));
+    for (const auto& e : standard_plan().islands) {
+        std::vector<std::uint8_t> header(116, 0);
+        header[0] = e.number;
+        o1602::test::put_chunk(bytes, "INSEL5", header);
+    }
     CHECK(!sim::plans_islands(*assets::ChunkFile::from_bytes(bytes)));
 
     // A file without a plan cannot be generated.
     bytes.clear();
     o1602::test::put_chunk(bytes, "O1602TEST", {1});
     CHECK(!sim::generate_islands(*assets::ChunkFile::from_bytes(bytes), full_game().game, buildings(), {}).ok());
+}
+
+TEST_CASE("world generator: a scenario's stored islands are kept and the planned ones made beside them") {
+    // As "Eine einsame Siedlung": the home island stored in the file, the others in its plan.
+    const auto& fake = full_game();
+    const auto plan = standard_plan();
+    auto full = sim::generate_islands(scenario(plan), fake.game, buildings(), sim::WorldStart{});
+    REQUIRE(full.ok());
+    // The file stores island 5 as the generator made it; the plan still lists all of them.
+    std::vector<std::uint8_t> bytes;
+    o1602::test::put_chunk(bytes, "SZENE", encode_plan(plan));
+    o1602::test::put_chunk(bytes, "RANDTAB", random_table());
+    bool in_island = false;
+    std::vector<std::uint8_t> stored_header;
+    for (const assets::Chunk& c : full->file.chunks()) {
+        const auto payload = full->file.payload(c);
+        if (c.name == "INSEL5") {
+            in_island = !payload.empty() && payload[0] == 5;
+            if (in_island) {
+                stored_header.assign(payload.begin(), payload.end());
+            }
+        }
+        if (in_island && (c.name == "INSEL5" || c.name == "INSELHAUS")) {
+            o1602::test::put_chunk(bytes, c.name.c_str(), std::vector<std::uint8_t>(payload.begin(), payload.end()));
+        }
+    }
+    REQUIRE(!stored_header.empty());
+    o1602::test::put_chunk(bytes, "O1602TEST", {1, 6, 0, 2});
+    const auto file = assets::ChunkFile::from_bytes(bytes);
+    REQUIRE(file.ok());
+    REQUIRE(sim::plans_islands(*file));
+
+    auto w = sim::generate_islands(*file, fake.game, buildings(), sim::WorldStart{});
+    REQUIRE(w.ok());
+    CHECK(w->islands.size() == plan.islands.size() - 1);
+    CHECK(std::none_of(w->islands.begin(), w->islands.end(), [](const auto& g) { return g.number == 5; }));
+    // Every island in the file, in the order of the numbers, the stored one unchanged.
+    auto islands = assets::load_islands(w->file);
+    REQUIRE(islands.ok());
+    REQUIRE(islands->size() == plan.islands.size());
+    for (std::size_t i = 0; i < islands->size(); ++i) {
+        CHECK((*islands)[i].header.number == i);
+    }
+    CHECK(!(*islands)[5].layers.empty());
+    const auto out = std::find_if(w->file.chunks().begin(), w->file.chunks().end(), [&](const assets::Chunk& c) {
+        return c.name == "INSEL5" && w->file.payload(c)[0] == 5;
+    });
+    REQUIRE(out != w->file.chunks().end());
+    const auto payload = w->file.payload(*out);
+    CHECK(std::equal(payload.begin(), payload.end(), stored_header.begin(), stored_header.end()));
 }
 
 TEST_CASE("world generator: every planned island gets an unused template of its climate and size") {

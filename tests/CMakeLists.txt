@@ -30,6 +30,7 @@ add_executable(o1602_tests
     unit/test_raw_producers.cpp
     unit/test_consumption.cpp
     unit/test_goods_statistics.cpp
+    unit/test_cheat_console.cpp
     unit/test_goods_window.cpp
     unit/test_random.cpp
     unit/test_houses.cpp

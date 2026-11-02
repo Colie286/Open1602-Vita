@@ -46,6 +46,15 @@ enum class Volcanoes : std::uint8_t {
     On,    ///< always, whatever the game says
 };
 
+/// The cheats (CheatOrder): as in the original, a code typed in the number line unlocks them, and
+/// in a game of more than one person only the code that also lifts that block. Open1602 can have
+/// them on from the start or off for good.
+enum class Cheats : std::uint8_t {
+    Code,   ///< unlocked with the code, as in the original
+    Start,  ///< on from the start for every player, also in a multiplayer game
+    Off,    ///< never, not even with the code
+};
+
 /// Whether pirates come. The original has a game setting for it, which the
 /// endless games of the two easy levels set: there they never come.
 enum class Pirates : std::uint8_t {
@@ -304,6 +313,11 @@ struct Rules {
     /// player and island. Off with the original's settings.
     bool more_carts = true;
 
+    /// Open1602: the hunter's hut reaches 12 tiles instead of the original's 8
+    /// (data/balance/wider_hunting.toml), so that it finds enough deer. On by default; the
+    /// original's settings keep the original's reach.
+    bool wider_hunting = true;
+
     /// Which towns are discovered from the start (players, natives, pirates) or only by ship.
     Reveal reveal = Reveal::Original;
 
@@ -314,6 +328,18 @@ struct Rules {
     /// does not grow it still does not, and droughts still wither. Off by default and with the
     /// original's settings.
     bool fertile_fields = false;
+
+    /// Open1602: every island of a new endless game grows the three crops of its climate fully
+    /// (tobacco, sugar cane and wine in the north, spices, cotton and cocoa in the south), where the
+    /// original gives some of them only half. The other climate's crops still do not grow. Off by
+    /// default and with the original's settings.
+    bool climate_crops = false;
+    /// Open1602: every iron vein of a new endless game is a big one. Off by default and with the
+    /// original's settings.
+    bool big_ore_veins = false;
+
+    /// The cheats: unlocked with the code by default, as in the original.
+    Cheats cheats = Cheats::Code;
 
     /// Bugs of the original brought back; none by default, also in savegames of the original.
     OriginalBugs bugs{};
@@ -345,8 +371,11 @@ struct Rules {
         r.revised_bread = false;
         r.computers_buy_ships = false;
         r.more_carts = false;
+        r.wider_hunting = false;
         r.reveal = Reveal::Original;
         r.fertile_fields = false;
+        r.climate_crops = false;
+        r.big_ore_veins = false;
         r.bugs = OriginalBugs::all();
         return r;
     }

@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "build_tool.hpp"
+#include "cheat_console.hpp"
 #include "command_sink.hpp"
 #include "game_sound.hpp"
 #include "game_state.hpp"
@@ -184,6 +185,8 @@ public:
     [[nodiscard]] double mouse_y() const noexcept { return m_mouse_y; }
     [[nodiscard]] ui::UnitSelection& units() noexcept { return m_units; }
     [[nodiscard]] const ui::UnitSelection& units() const noexcept { return m_units; }
+    /// The number line of the cheats (drawn by the viewer while open).
+    [[nodiscard]] const CheatConsole& cheats() const noexcept { return m_cheats; }
 
     /// A pick the next click on the map answers: an attack (A) or a patrol (P).
     enum class Pick : std::uint8_t { None, Attack, Patrol };
@@ -240,6 +243,8 @@ private:
     /// The unit under a screen point: the one whose visible pixel is there, unless a map tile is
     /// drawn over it; zoomed out, else a small one near it, the local player's first.
     [[nodiscard]] std::optional<ui::UnitRef> unit_at(double sx, double sy) const;
+    /// A key for the cheats' number line or a cheat (cheat_console.hpp); whether it took it.
+    bool cheat_key(int pressed, int scancode, std::uint16_t mod);
     /// Left button released on the map (no tool): a click or the end of a rectangle.
     void map_left_up(double x, double y, std::uint16_t mod, int clicks);
     /// An order of the selection to the screen point (right button; the left one with the
@@ -274,6 +279,7 @@ private:
 
     ui::KeyBindings m_keys;
     ui::UnitSelection m_units;  ///< the selected ships or land units
+    CheatConsole m_cheats;
     Pick m_pick = Pick::None;
     LeftPress m_press;  ///< the left button pressed on the map
     MapDrag m_drag;     ///< the map dragged with the right or middle button

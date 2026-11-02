@@ -65,6 +65,7 @@ enum class SetupItem : std::uint8_t {
     OreVeins,
     BreadChain,
     TradeCarts,  ///< Rules::more_carts
+    Hunting,     ///< Rules::wider_hunting
     // Limits
     Ships,
     Units,
@@ -91,6 +92,7 @@ enum class SetupItem : std::uint8_t {
     Pirates,
     PirateNests,
     Reveal,
+    Cheats,  ///< Rules::cheats
     // Islands (a page of their own with a preview of the world, endless games only;
     // sim::WorldSettings::shapes and ::landscape)
     IslandPreset,  ///< sets the items below at once: the original's islands or a kind of world
@@ -104,6 +106,8 @@ enum class SetupItem : std::uint8_t {
     IslandGap,
     Forest,
     OreMountains,
+    ClimateCrops,  ///< Rules::climate_crops
+    BigOreVeins,   ///< Rules::big_ore_veins
     // Victory conditions (a page of their own, endless games only; sim::VictoryConditions)
     WinInhabitants,
     WinClass,

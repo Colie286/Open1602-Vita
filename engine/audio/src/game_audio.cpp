@@ -262,6 +262,9 @@ std::uint16_t Voices::message(std::uint16_t message, bool visible) {
 }
 
 std::uint16_t Voices::message(const MessagePlayback& m, bool visible) {
+    if (message_muted(m_settings, m.kind)) {
+        return m.flags;  // not even the message sound
+    }
     // Video first: off screen, or always, or at a quarter of the times. The
     // random numbers are the interface's own, not the game's (S-112).
     const bool videos_on = m_settings.video[0] && (m.kind >= m_settings.video.size() || m_settings.video[m.kind]);

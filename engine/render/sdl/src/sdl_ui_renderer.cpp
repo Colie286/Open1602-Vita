@@ -382,7 +382,10 @@ SdlUiRenderer::Texture SdlUiRenderer::text(const std::string& s, std::int32_t sl
     // the ink.
     const std::int32_t key = slot + static_cast<std::int32_t>(ui::kFontSlots) * static_cast<std::int32_t>(size);
     colour = std::clamp(colour, 0, static_cast<std::int32_t>(ui::kTextColours) - 1);
-    ink = std::clamp(ink, -1, 255);
+    const bool rgb = ui::is_rgb_ink(ink);
+    if (!rgb) {
+        ink = std::clamp(ink, -1, 255);
+    }
     const std::int32_t shade = colour + static_cast<std::int32_t>(ui::kTextColours) * (ink + 1);
     if (const Texture* cached = m_texts.find(s, key, shade)) {
         return *cached;
@@ -394,12 +397,24 @@ SdlUiRenderer::Texture SdlUiRenderer::text(const std::string& s, std::int32_t sl
         canvas.height = f->height() + f->above();  // the accents above the cell (D-012)
         canvas.indices.assign(std::size_t{canvas.width} * canvas.height, 0);
         canvas.opaque.assign(canvas.indices.size(), 0);
-        const ui::Recolour recolour =
-            ink < 0 ? m_colours[static_cast<std::size_t>(colour)]
-                    : ui::text_recolour(m_palette, static_cast<std::size_t>(colour), static_cast<std::uint8_t>(ink));
-        f->draw(canvas, s, 0, static_cast<std::int32_t>(canvas.height), recolour);
-        t = make(canvas.to_rgba(m_palette), static_cast<std::int32_t>(canvas.width),
-                 static_cast<std::int32_t>(canvas.height));
+        ui::Recolour recolour = ink < 0 || rgb ? m_colours[static_cast<std::size_t>(colour)]
+                                               : ui::text_recolour(m_palette, static_cast<std::size_t>(colour),
+                                                                   static_cast<std::uint8_t>(ink));
+        if (rgb) {
+            // The letters in a colour of their own: drawn in a spare index of a copy of the palette
+            // that holds that colour (any index but the shadow's and the transparent 0).
+            const std::uint8_t spare = recolour[ui::kGlyphShadow] == 254 ? 253 : 254;
+            recolour[ui::kGlyphBody] = spare;
+            f->draw(canvas, s, 0, static_cast<std::int32_t>(canvas.height), recolour);
+            assets::Palette own = m_palette;
+            own.set(spare, ui::ink_rgb(ink));
+            t = make(canvas.to_rgba(own), static_cast<std::int32_t>(canvas.width),
+                     static_cast<std::int32_t>(canvas.height));
+        } else {
+            f->draw(canvas, s, 0, static_cast<std::int32_t>(canvas.height), recolour);
+            t = make(canvas.to_rgba(m_palette), static_cast<std::int32_t>(canvas.width),
+                     static_cast<std::int32_t>(canvas.height));
+        }
         if (t.texture != nullptr && f->design_scale() > ui::art_scale(size)) {
             // A larger font standing in for a missing one is shrunk: blended, so that no stroke
             // of a glyph drops out.

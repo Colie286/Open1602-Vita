@@ -10,8 +10,8 @@ namespace o1602::ui {
 
 namespace {
 
-constexpr std::uint8_t kBody = 1;
-constexpr std::uint8_t kShadow = 7;
+constexpr std::uint8_t kBody = kGlyphBody;
+constexpr std::uint8_t kShadow = kGlyphShadow;
 constexpr std::uint32_t kOverhang = 2;     // glyphs set pixels up to two columns right of their width
 constexpr std::uint32_t kNoWrap = 10'000;  // from this width on nothing is wrapped
 

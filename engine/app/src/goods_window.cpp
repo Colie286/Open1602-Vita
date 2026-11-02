@@ -175,6 +175,9 @@ std::vector<ui::DrawItem> GoodsWindow::draw(const sim::World& world, const asset
             case Tab::Trade:
                 layout_trade(world, player, below, above);
                 break;
+            case Tab::Routes:
+                layout_routes(world, player, below, above);
+                break;
             case Tab::Finances:
                 layout_finances(world, buildings, figures, player, below, above);
                 break;
@@ -666,6 +669,12 @@ GoodsWindow::Result GoodsWindow::mouse(std::int32_t x, std::int32_t y, bool down
                 m_scroll = 0;
             } else if (*id >= kRow && *id < kRow + 256) {
                 m_detail = static_cast<std::uint8_t>(*id - kRow);
+            } else if (*id >= kRouteRow && static_cast<std::size_t>(*id - kRouteRow) < m_route_ships.size()) {
+                m_ship = m_route_ships[static_cast<std::size_t>(*id - kRouteRow)];
+                return Result::Ship;
+            } else if (*id >= kRouteSort && *id <= kRouteSort + static_cast<Id>(RouteOrder::Problems)) {
+                m_route_order = static_cast<RouteOrder>(*id - kRouteSort);
+                m_scroll = 0;
             } else if (*id >= kProducerRow && static_cast<std::size_t>(*id - kProducerRow) < m_row_wares.size()) {
                 m_detail = m_row_wares[static_cast<std::size_t>(*id - kProducerRow)];
             }

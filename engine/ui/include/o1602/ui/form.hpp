@@ -80,7 +80,7 @@ public:
     void label(Rect r, std::string text, Align align = Align::Left, Tone tone = Tone::Normal);
     /// A line of a chat, left aligned and cut to the box as one text: the speaker's name in palette
     /// colour `ink` (their banner's colour), what follows it (": Hallo") in the tone.
-    void speech(Rect r, std::string speaker, std::uint8_t ink, std::string text, Tone tone = Tone::Normal);
+    void speech(Rect r, std::string speaker, std::int32_t ink, std::string text, Tone tone = Tone::Normal);
     /// A label on the left and its value on the right of one box, as a list of settings shown
     /// only: the value gets the room it needs, the label what is left.
     void entry(Rect r, std::string label, std::string value, Tone label_tone = Tone::Normal,
@@ -166,7 +166,8 @@ public:
         Align align = Align::Left;
         Tone tone = Tone::Normal;
         Tone value_tone = Tone::Normal;  ///< entry
-        std::uint8_t colour = 0;         ///< swatch: its colour; speech: the name's
+        std::uint8_t colour = 0;         ///< swatch: its colour
+        std::int32_t ink = -1;           ///< speech: the name's (a palette colour or ui::rgb_ink)
         std::int32_t line = 0;           ///< paragraph: line height
         double position = 0.0;           ///< slider: where the knob is; progress: how far (0..1)
         bool enabled = true;

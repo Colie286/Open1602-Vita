@@ -375,6 +375,9 @@ void MapInput::handle_key(int key, int scancode, std::uint16_t mod) {
         }
         return;
     }
+    if (cheat_key(key, scancode, mod)) {
+        return;
+    }
     if (m_hud && m_hud->display_open() && key == SDLK_ESCAPE) {
         m_hud->close_display();
         return;
@@ -386,6 +389,76 @@ void MapInput::handle_key(int key, int scancode, std::uint16_t mod) {
     if (const auto b = m_keys.find_pressed(key_context(), press)) {
         run_action(*b);
     }
+}
+
+bool MapInput::cheat_key(int pressed, int scancode, std::uint16_t mod) {
+    using Key = CheatConsole::Key;
+    // The key without the modifiers in the keyboard's layout: Shift+M is "m" here, as the
+    // original's letters are.
+    const auto key = static_cast<int>(SDL_GetKeyFromScancode(static_cast<SDL_Scancode>(scancode), SDL_KMOD_NONE, true));
+    const bool shift = (mod & SDL_KMOD_SHIFT) != 0;
+    const bool ctrl = (mod & SDL_KMOD_CTRL) != 0;
+    const bool alt = (mod & SDL_KMOD_ALT) != 0;
+    const bool plain = !shift && !ctrl && !alt;
+    std::optional<Key> k;
+    char digit = 0;
+    if (key == SDLK_W && shift && ctrl && alt) {
+        k = Key::Open;
+    } else if (key >= static_cast<int>(SDLK_0) && key <= static_cast<int>(SDLK_9) && !ctrl && !alt) {
+        k = Key::Digit;
+        digit = static_cast<char>('0' + (key - static_cast<int>(SDLK_0)));
+    } else if (pressed >= static_cast<int>(SDLK_KP_1) && pressed <= static_cast<int>(SDLK_KP_9)) {
+        k = Key::Digit;
+        digit = static_cast<char>('1' + (pressed - static_cast<int>(SDLK_KP_1)));
+    } else if (pressed == SDLK_KP_0) {
+        k = Key::Digit;
+        digit = '0';
+    } else if (pressed == SDLK_BACKSPACE) {
+        k = Key::Backspace;
+    } else if (pressed == SDLK_RETURN || pressed == SDLK_KP_ENTER) {
+        k = Key::Enter;
+    } else if (pressed == SDLK_ESCAPE) {
+        k = Key::Escape;
+    } else if (key == SDLK_A && plain) {
+        k = Key::A;
+    } else if (key == SDLK_V && plain) {
+        k = Key::V;
+    } else if (shift && !ctrl && !alt) {
+        if (key == SDLK_M) {
+            k = Key::ShiftM;
+        } else if (key == SDLK_Z) {
+            k = Key::ShiftZ;
+        } else if (key == SDLK_T) {
+            k = Key::ShiftT;
+        } else if (key == SDLK_H) {
+            k = Key::ShiftH;
+        } else if (key == SDLK_K) {
+            k = Key::ShiftK;
+        }
+    }
+    if (!k) {
+        if (!m_cheats.open()) {
+            return false;
+        }
+        k = Key::Other;  // the open line takes every key
+    }
+    // The selected ship, else the city under the mouse.
+    CheatConsole::Target target;
+    for (const ui::UnitRef& r : m_units.units()) {
+        if (r.kind == ui::UnitRef::Kind::Ship) {
+            target.ship = r.id;
+            break;
+        }
+    }
+    if (const auto tile = tile_at_mouse()) {
+        target.x = tile->x;
+        target.y = tile->y;
+    }
+    const CheatConsole::Result r = m_cheats.key(*k, digit, simulation().cheats_allowed(local()), local(), target);
+    if (r.order) {
+        submit({*r.order}, false, false);
+    }
+    return r.taken;
 }
 
 void MapInput::scroll_with_keys(std::uint32_t delta_ms) {

@@ -116,11 +116,36 @@ struct GateOrder {
     bool closed = false;
 };
 
+/// The cheats of the original (its number line, Ctrl+Shift+Alt+W): the code that unlocks them, then
+/// gold and goods for a ship or a city, a cannon for a ship and a volcano's eruption. As commands
+/// they reach every computer of a game alike. They go to the ship given, else to the city of the
+/// tile (x, y) of the world, whoever owns it (also an opponent's, as in the original).
+struct CheatOrder {
+    enum class Op : std::uint8_t {
+        Code,     ///< `code`: 2061 switches the cheats on or off, 512 on also with other people
+        Gold,     ///< 500 gold for the owner of the ship or the city
+        Goods,    ///< 5 t of `ware` into the ship's hold or the city
+        Cannon,   ///< one cannon more for the ship, up to what its type carries
+        Volcano,  ///< the crater on the island of (x, y) nearest to it erupts
+    };
+    static constexpr std::uint32_t kCode = 2061;
+    static constexpr std::uint32_t kAlwaysCode = 512;
+    static constexpr std::int32_t kGold = 500;
+    static constexpr std::uint32_t kGoods = 5 * 32;  ///< 5 t
+    PlayerId player = kNoPlayer;
+    Op op = Op::Code;
+    std::uint32_t code = 0;
+    std::uint8_t ware = 0;
+    std::optional<std::uint32_t> ship;  ///< the ship selected
+    std::uint32_t x = 0;                ///< world tile under the mouse
+    std::uint32_t y = 0;
+};
+
 /// A player's action (ADR 0004): applied at the start of a tick, the same on every computer.
 using Command = std::variant<BuildOrder, DemolishOrder, ShipOrder, CargoTransfer, RouteEdit, TradeSetting,
                              ShipyardOrder, ExploreOrder, DiplomacyOrder, SoldierOrder, SoldierCommand, CastleOrder,
                              UnloadOrder, ProductionSwitch, CityOrder, ShipCommand, GameSpeedOrder, PlayerRename,
-                             PlayerControl, GateOrder, CartRequest, BlueprintOrder, MoveOrder>;
+                             PlayerControl, GateOrder, CartRequest, BlueprintOrder, MoveOrder, CheatOrder>;
 
 /// What became of a command.
 struct CommandResult {
@@ -266,6 +291,8 @@ public:
     [[nodiscard]] const Logistics& logistics() const noexcept { return m_logistics; }
     /// Ships, the free trader and shipyards.
     [[nodiscard]] const Fleet& fleet() const noexcept { return m_fleet; }
+    /// Whether `player` may cheat now (Rules::cheats, the code it typed, the people in the game).
+    [[nodiscard]] bool cheats_allowed(PlayerId player) const;
     /// Soldiers, towers and the hostile lists.
     [[nodiscard]] const Military& military() const noexcept { return m_military; }
     [[nodiscard]] const Combat& combat() const noexcept { return m_combat; }
@@ -338,6 +365,7 @@ private:
     bool rename_player(const PlayerRename& order);
     bool control_player(const PlayerControl& order);
     bool gate_order(const GateOrder& order);
+    bool cheat(const CheatOrder& order);
     core::Status restore_state(const std::vector<std::uint8_t>& state);
     core::Status restore_legacy_state(core::ByteReader& reader, std::uint16_t version);
     void handle(const std::vector<ConstructionEvent>& events, std::size_t first);

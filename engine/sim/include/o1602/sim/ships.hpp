@@ -337,6 +337,10 @@ class Combat;
 
 class Fleet {
 public:
+    /// Cheats (CheatOrder): goods into the holds of the ship with `id` as far as they hold them
+    /// (what went in, 1/32 t), a cannon more up to its type's (whether one came).
+    std::uint32_t cheat_cargo(std::uint32_t id, std::uint8_t ware, std::uint32_t amount);
+    bool cheat_cannon(std::uint32_t id);
     /// Course searches of all ships in one tick (TB-1). A search costs up to a few ms; ships over
     /// the budget wait for the next tick, in the order of the ship list, so every peer does the same.
     static constexpr std::uint32_t kPlansPerTick = 8;
@@ -394,6 +398,9 @@ public:
 
     /// Names for new ships (Text.cod [SHIPS]), handed out in turn.
     void set_ship_names(std::vector<std::string> names) { m_ship_names = std::move(names); }
+    /// Gives the players' ships without a name the next names of the list, in the order of the
+    /// ships (the start ships of the players five on, which are copies of a level's ship).
+    void name_unnamed_ships();
     [[nodiscard]] const std::vector<std::string>& ship_names() const noexcept { return m_ship_names; }
     /// A pack donkey brought material to a shipyard (the logistics call this).
     void yard_delivery(std::uint16_t island, std::uint16_t x, std::uint16_t y, std::uint8_t ware, std::uint32_t amount);

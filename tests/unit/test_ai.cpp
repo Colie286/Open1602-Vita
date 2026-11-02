@@ -478,7 +478,8 @@ TEST_CASE("ai: a computer's first minutes give the same state on every platform"
     // Names left empty without Text.cod (MD-10); SIMU in parts (DS-3); tiles by blocks (TB-26); a ship
     // whose goods do not fit at home is free again; the computers' state version 4 (a search's target);
     // the revised bread chain by default; the computers' state version 5 (the slots counted).
-    constexpr std::uint64_t kExpected = 0x15af58bafb00d370ULL;
+    // The wider hunter's hut by default.
+    constexpr std::uint64_t kExpected = 0x280cf538d2399e89ULL;
     if (hash != kExpected) {
         std::printf("  state hash after 90 s: 0x%016llx\n", static_cast<unsigned long long>(hash));
     }
@@ -718,6 +719,23 @@ TEST_CASE("ai: the names for new cities and ships travel with the saved game") {
     CHECK(sa.state_hash() == sb.state_hash());
     CHECK(a.cities_of(kComputer) == 1);
     CHECK(a.world.cities().front().name == "Neustadt");
+}
+
+TEST_CASE("ai: the players' ships without a name get names of their own from the list") {
+    // The start ships of the players five on are copies of a level's ship and come without a name.
+    Game a;
+    a.add_ship(kComputer, 80, 60).name.clear();
+    a.add_ship(kHuman, 82, 60).name.clear();
+    sim::Ship trader = sim::make_ship("", 84, 60, kShipFigure, kTrader, 2);
+    a.world.add_ship(trader);
+    sim::Simulation sa(a.world, a.buildings, a.figures);
+    sa.offer_names({"Neustadt"}, {"Seeadler", "Gull", "Albatros"});
+    const auto& ships = a.world.ships();
+    CHECK(ships[0].name == "Ship");  // a named ship keeps its name
+    REQUIRE(!ships[1].name.empty());
+    REQUIRE(!ships[2].name.empty());
+    CHECK(ships[1].name != ships[2].name);
+    CHECK(ships[3].name.empty());  // only the players' ships
 }
 
 TEST_CASE("ai: the state of the computers goes to bytes and back whole") {

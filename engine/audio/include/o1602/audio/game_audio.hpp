@@ -40,7 +40,7 @@ inline constexpr SampleId kWavShipMove = 87;       ///< + 0..4
 /// Open1602 (D-001): SAMPLES/Backer.wav, which the original never loads, for the bakery that names
 /// the undefined WAV_BAECKER (assets::fixes::kBakerySound).
 inline constexpr SampleId kWavBakery = 92;
-inline constexpr SampleId kWavTest = 58;  ///< "Test" of the effects' volume (plantage.wav)
+inline constexpr SampleId kWavTest = 57;  ///< "Test" of the effects' volume: the hunting lodge's horn (jagdhtte.wav)
 
 /// File of a sound relative to the game directory ("SAMPLES/kanone5.wav"), nothing for the
 /// numbers the original leaves silent (GameInit).
@@ -69,6 +69,13 @@ struct AudioSettings {
     std::array<bool, kMessageKinds> video{true, true, true, true, true, true, true, true, true};
     std::vector<std::string> disabled_songs;  ///< by track title (the original keeps indices)
 };
+
+/// Whether a message of `kind` is switched off completely: Open1602's own kinds (kSpeechRoutes on)
+/// mute the whole message, its sound and its icon, where the original's kinds only swap the voice
+/// for the message sound.
+[[nodiscard]] constexpr bool message_muted(const AudioSettings& settings, std::uint8_t kind) noexcept {
+    return kind >= kSpeechRoutes && kind < settings.speech.size() && !settings.speech[kind];
+}
 
 /// The audio lines of the original's Game.dat (read only; Open1602 never writes it): Musik,
 /// Samples, Random, Volume (the third value is the mission progress), Song, Speach, Video.

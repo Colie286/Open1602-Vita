@@ -86,6 +86,10 @@ constexpr Group kBugGroups[] = {
     {"setup.group.construction", SetupItem::BugGoldsheep, SetupItem::BugInfertileFields, kLeft},
     {"setup.group.ships", SetupItem::BugRemoteTrade, SetupItem::BugSmallYardWarships, kRight},
     {"setup.group.opponents", SetupItem::BugNativeLand, SetupItem::BugNativeLand, kRight},
+    // Not a bug, but a trick of the original: its cheats (with the code, from the start, or never).
+    {"setup.group.cheats", SetupItem::Cheats, SetupItem::Cheats, kRight},
+    // Not a bug either: the hunter's hut reaches further in Open1602, the original's reach is a choice.
+    {"setup.group.economy", SetupItem::Hunting, SetupItem::Hunting, kLeft},
 };
 
 // The islands: what kind of world, the land and its sizes, and what is on the islands; the
@@ -93,7 +97,7 @@ constexpr Group kBugGroups[] = {
 constexpr Group kIslandGroups[] = {
     {"setup.group.island_shapes", SetupItem::IslandPreset, SetupItem::Outline, kLeft},
     {"setup.group.island_sizes", SetupItem::LandShare, SetupItem::IslandGap, kLeft},
-    {"setup.group.island_nature", SetupItem::Forest, SetupItem::OreMountains, kLeft},
+    {"setup.group.island_nature", SetupItem::Forest, SetupItem::BigOreVeins, kLeft},
 };
 
 // The preview: its frame in the right column, the picture inside it at most this large.

@@ -126,6 +126,7 @@ three (one per hold of the ship, Open1602's page of a stop), the same record per
 `ISLE` version 3: version 2 with the island number and the x and y of each deposit as u16.
 `PSTA` version 3: version 2 with a boolean per player after the switches: the player closed his city gates to foreign soldiers (Open1602's own; the writer takes it only when a player did).
 `PSTA` version 4: version 3 with a u64 per player after the gates: who played it last (`Player::owner`, a verifier of the player ID of that person's installation, 0 for nobody; Open1602's own, the writer takes it only when a player has one).
+`PSTA` version 5: version 4 with a u8 per player after the owner: the cheats it unlocked with a code (`Player::cheats`: 0 none, 1 the code 2061, 2 the code 512, which also works with more than one person; the writer takes it only when a player has unlocked them).
 `MAPW` (own savegame only) version 2: see [o1602-save.md](o1602-save.md).
 
 The writer takes version 3 of `ISLE`, version 2 of `EPOC` and version 4 of `FLEE` only when an

@@ -337,6 +337,7 @@ TEST_CASE("world plan: players five on are computers behind the factions, each w
         REQUIRE(ship != world.ships().end());
         CHECK(ship->x == plan.starts[n].x);
         CHECK(ship->y == plan.starts[n].y);
+        CHECK(ship->name.empty());  // named by the game, not after the copied ship
     }
     CHECK(world.diplomacy().size() == 9);
 

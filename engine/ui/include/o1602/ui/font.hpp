@@ -21,6 +21,9 @@ namespace o1602::ui {
 
 /// Palette index for every palette index: what a glyph pixel becomes.
 using Recolour = std::array<std::uint8_t, 256>;
+/// The indices of the font's letters and of their shadow, which a Recolour maps.
+inline constexpr std::uint8_t kGlyphBody = 1;
+inline constexpr std::uint8_t kGlyphShadow = 7;
 
 /// The ten text colours of the original and Open1602's inks for its parchment windows
 /// (10 and up): body and shadow as RGB, matched to the nearest palette colour.
@@ -50,6 +53,19 @@ inline constexpr std::int32_t kTextBrightRed = 15;
 /// enough to reach it (a dark blue becomes a lighter one of the same hue).
 [[nodiscard]] assets::Rgba legible_on(const assets::Rgba& colour, const assets::Rgba& ground,
                                       double min_contrast) noexcept;
+/// An ink for text in a colour of its own rather than a palette colour (the renderer draws the
+/// letters in exactly this colour, the shadow as the text colour's): the palette has no light
+/// shade of some banners' hues (no violet at all), so a lightened banner colour cannot be one of it.
+[[nodiscard]] constexpr std::int32_t rgb_ink(const assets::Rgba& c) noexcept {
+    return 0x1000000 | (std::int32_t{c.r} << 16) | (std::int32_t{c.g} << 8) | std::int32_t{c.b};
+}
+[[nodiscard]] constexpr bool is_rgb_ink(std::int32_t ink) noexcept {
+    return (ink & 0x1000000) != 0 && ink > 0;
+}
+[[nodiscard]] constexpr assets::Rgba ink_rgb(std::int32_t ink) noexcept {
+    return assets::Rgba{static_cast<std::uint8_t>(ink >> 16), static_cast<std::uint8_t>(ink >> 8),
+                        static_cast<std::uint8_t>(ink), 255};
+}
 /// The recolouring of text colour `index` (out of range: 0) for a palette.
 [[nodiscard]] Recolour text_recolour(const assets::Palette& palette, std::size_t index);
 /// The same with the letters in palette colour `body` (a player's banner colour), the shadow kept.

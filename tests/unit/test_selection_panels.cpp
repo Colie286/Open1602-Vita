@@ -461,6 +461,7 @@ TEST_CASE("selection panels: the city list shows the own cities, not those witho
             c.warehouse_x = 3;
             c.warehouse_y = 1;
         }
+        c.inhabitants = {std::string_view(name) == "Alpha" ? 50U : 10U, 5U};
         t.world.add_city(c);
     };
     city(0, kLocal, "Zeta", true);
@@ -496,6 +497,22 @@ TEST_CASE("selection panels: the city list shows the own cities, not those witho
     REQUIRE(request.has_value());
     CHECK(request->x == 4 + 6);
     CHECK(request->y == 4 + 4);
+    // Own first: both are the player's, so the table's order, Zeta first.
+    const auto first_row_x = [&]() {
+        p->refresh(list, c);
+        p->clicked(ui::PanelEvent{ui::PanelEvent::Kind::Clicked, 63031}, list, c, out);
+        const auto q = p->take_request();
+        REQUIRE(q.has_value());
+        return q->x;
+    };
+    p->clicked(ui::PanelEvent{ui::PanelEvent::Kind::Clicked, 63002}, list, c, out);
+    CHECK(first_row_x() == 4 + 3);
+    // Largest first: Alpha with 55 inhabitants before Zeta with 15.
+    p->clicked(ui::PanelEvent{ui::PanelEvent::Kind::Clicked, 63002}, list, c, out);
+    CHECK(first_row_x() == 4 + 6);
+    // And back to the table's order.
+    p->clicked(ui::PanelEvent{ui::PanelEvent::Kind::Clicked, 63002}, list, c, out);
+    CHECK(first_row_x() == 4 + 3);
 }
 
 namespace {

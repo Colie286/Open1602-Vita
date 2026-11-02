@@ -166,10 +166,10 @@ void Form::label(Rect r, std::string text, Align align, Tone tone) {
     m_widgets.push_back(std::move(w));
 }
 
-void Form::speech(Rect r, std::string speaker, std::uint8_t ink, std::string text, Tone tone) {
+void Form::speech(Rect r, std::string speaker, std::int32_t ink, std::string text, Tone tone) {
     Widget w = make(Widget::Kind::Speech, -1, r, std::move(speaker));
     w.value = std::move(text);
-    w.colour = ink;
+    w.ink = ink;
     w.tone = tone;
     m_widgets.push_back(std::move(w));
 }
@@ -401,7 +401,7 @@ std::vector<DrawItem> Form::draw(const std::array<const Font*, kFontSlots>& font
                 DrawItem rest = line;
                 rest.text = line.text.substr(split);
                 line.text.resize(split);
-                line.ink = w.colour;
+                line.ink = w.ink;
                 rest.x = line.x + static_cast<std::int32_t>(std::lround(text_width(font, line.text) * s));
                 if (!rest.text.empty()) {
                     out.push_back(std::move(rest));

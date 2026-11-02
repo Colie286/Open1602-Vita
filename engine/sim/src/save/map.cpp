@@ -387,7 +387,7 @@ core::Result<World> read_map(Reader& in, const assets::BuildingTable& buildings,
     const bool compact = version >= kCompactMap;
     const std::uint32_t islands = in.in().count(compact ? 49 : 54);
     // In version 2 a few bytes can describe a large island: the islands together may not cover
-    // more than the world before any of them is allocated (add_island refuses overlaps after).
+    // more than the world before any of them is allocated (add_island refuses overlapping land after).
     std::uint64_t area = 0;
     for (std::uint32_t i = 0; i < islands && in.ok(); ++i) {
         assets::IslandHeader header;
@@ -425,7 +425,7 @@ core::Result<World> read_map(Reader& in, const assets::BuildingTable& buildings,
             break;
         }
         WorldIsland island{std::move(header), std::move(map), x, y};
-        if (auto status = world.add_island(std::move(island)); !status) {
+        if (auto status = world.add_island(std::move(island), &buildings); !status) {
             return status.error();
         }
     }

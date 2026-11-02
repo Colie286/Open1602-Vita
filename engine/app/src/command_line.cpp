@@ -51,12 +51,16 @@ bool parse_input(std::string_view text, std::vector<ViewerOptions::ScriptedInput
         } else if (verb == "key") {
             in.kind = Input::Kind::Key;
             std::string_view key = args;
-            for (const auto& [suffix, mod] : {Suffix{"+ctrl", kModCtrl}, Suffix{"+shift", kModShift}}) {
+            // Any of them in any order ("119+ctrl+shift+alt"): the name ends at the first.
+            std::size_t name_end = key.size();
+            for (const auto& [suffix, mod] :
+                 {Suffix{"+ctrl", kModCtrl}, Suffix{"+shift", kModShift}, Suffix{"+alt", kModAlt}}) {
                 if (const std::size_t p = key.find(suffix); p != std::string_view::npos) {
                     in.mod = static_cast<std::uint16_t>(in.mod | mod);
-                    key = key.substr(0, p);
+                    name_end = std::min(name_end, p);
                 }
             }
+            key = key.substr(0, name_end);
             if (!parse_number(key, in.key)) {
                 return false;
             }
@@ -76,12 +80,16 @@ bool parse_input(std::string_view text, std::vector<ViewerOptions::ScriptedInput
             in.key = n;
         } else {
             // "down+shift": the modifiers held while the button goes down or up.
-            for (const auto& [suffix, mod] : {Suffix{"+ctrl", kModCtrl}, Suffix{"+shift", kModShift}}) {
+            // Any of them in any order ("119+ctrl+shift+alt"): the name ends at the first.
+            std::size_t name_end = verb.size();
+            for (const auto& [suffix, mod] :
+                 {Suffix{"+ctrl", kModCtrl}, Suffix{"+shift", kModShift}, Suffix{"+alt", kModAlt}}) {
                 if (const std::size_t p = verb.find(suffix); p != std::string_view::npos) {
                     in.mod = static_cast<std::uint16_t>(in.mod | mod);
-                    verb = verb.substr(0, p);
+                    name_end = std::min(name_end, p);
                 }
             }
+            verb = verb.substr(0, name_end);
             in.right = verb == "rdown" || verb == "rup";
             in.kind = verb == "down" || verb == "rdown" ? Input::Kind::Down
                       : verb == "up" || verb == "rup"   ? Input::Kind::Up

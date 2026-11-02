@@ -503,6 +503,19 @@ void Fleet::trader_tick(std::uint32_t dt_ms) {
     }
 }
 
+void Fleet::name_unnamed_ships() {
+    if (m_ship_names.empty()) {
+        return;
+    }
+    for (Ship& ship : m_world->ships()) {
+        const Player* owner = m_world->player(ship.owner);
+        if (ship.name.empty() && !ship.cart() && owner != nullptr &&
+            (owner->role == PlayerRole::Human || owner->role == PlayerRole::Computer)) {
+            ship.name = next_ship_name();
+        }
+    }
+}
+
 std::string Fleet::next_ship_name() {
     if (m_ship_names.empty()) {
         return {};  // the game shows a name in its language (MD-10)

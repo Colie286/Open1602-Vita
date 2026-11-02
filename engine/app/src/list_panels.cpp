@@ -3,8 +3,8 @@
 // The ship list and the city list (SHIPLIST.GAD, STADTLST.GAD): opened from the player status or with L and
 // Shift+L, 13 rows a page; a click on a name goes there (a ship is also selected). Open1602 (FB-6):
 // the mouse wheel scrolls row by row, a click on the heading orders the list (ships by name, idle
-// first or damaged first; cities by name), the city list also shows the pirates' nests the player
-// has discovered, and the list is gathered a few times a second rather than every frame.
+// first or damaged first; cities by name, own first or largest first), the city list also shows the pirates' nests the
+// player has discovered, and the list is gathered a few times a second rather than every frame.
 #include <algorithm>
 #include <array>
 #include <optional>
@@ -25,7 +25,17 @@ constexpr std::size_t kRows = 13;
 constexpr std::uint64_t kCollectMs = 500;  ///< game time between two gatherings of an open list
 
 /// The orders of a list: the original's (the ship or city table), then Open1602's.
-enum class Order : std::uint8_t { Table, Name, Idle, Damaged };
+enum class Order : std::uint8_t { Table, Name, Idle, Damaged, Own, Largest };
+
+/// The order after `order` for a click on the heading: ships by name, idle, damaged; cities by
+/// name, own first, largest first; then back to the table's.
+Order next_order(Order order, bool ships) noexcept {
+    static constexpr std::array<Order, 4> kShips = {Order::Table, Order::Name, Order::Idle, Order::Damaged};
+    static constexpr std::array<Order, 4> kCities = {Order::Table, Order::Name, Order::Own, Order::Largest};
+    const auto& cycle = ships ? kShips : kCities;
+    const auto at = std::find(cycle.begin(), cycle.end(), order);
+    return at == cycle.end() || at + 1 == cycle.end() ? Order::Table : *(at + 1);
+}
 
 class ListPanel final : public SelectionPanel {
 public:
@@ -95,9 +105,7 @@ public:
         } else if (e.id == m_base + kPageUp) {
             m_first -= std::min(m_first, kRows);
         } else if (e.id == m_base + kHeading) {
-            // The next order; cities have no idle or damaged ones.
-            const Order last = m_ships ? Order::Damaged : Order::Name;
-            m_order = m_order == last ? Order::Table : static_cast<Order>(static_cast<std::uint8_t>(m_order) + 1);
+            m_order = next_order(m_order, m_ships);
             m_first = 0;
             m_stale = true;
         } else if (e.id >= m_base + kName && e.id < m_base + kName + static_cast<std::int32_t>(kRows)) {
@@ -179,6 +187,10 @@ private:
                 return ui::tr("list.order.idle");
             case Order::Damaged:
                 return ui::tr("list.order.damaged");
+            case Order::Own:
+                return ui::tr("list.order.own");
+            case Order::Largest:
+                return ui::tr("list.order.largest");
             case Order::Table:
                 break;
         }
@@ -190,6 +202,8 @@ private:
         std::int32_t icon = 0;               ///< ships: 0 trade route, 1 anchored, 2 under way
         double health = 1.0;                 ///< ships: 0..1
         std::optional<sim::PlayerId> owner;  ///< cities: whose coat of arms
+        std::uint32_t inhabitants = 0;       ///< cities
+        bool own = false;                    ///< cities: the local player's
         std::uint32_t ship = 0;
         double x = 0.0;  ///< world tile to go to
         double y = 0.0;
@@ -245,6 +259,10 @@ private:
             Row r;
             r.name = city_name(city);
             r.owner = city.owner;
+            r.own = city.owner == c.local;
+            for (const std::uint32_t n : city.inhabitants) {
+                r.inhabitants += n;
+            }
             r.x = island.x + (city.warehouse_x ? *city.warehouse_x : island.map.width() / 2.0);
             r.y = island.y + (city.warehouse_y ? *city.warehouse_y : island.map.height() / 2.0);
             m_rows.push_back(std::move(r));
@@ -272,6 +290,17 @@ private:
             case Order::Damaged:
                 std::stable_sort(m_rows.begin(), m_rows.end(),
                                  [](const Row& a, const Row& b) { return a.health < b.health; });
+                break;
+            case Order::Own:
+                // The player's own cities first, then the others by owner.
+                std::stable_sort(m_rows.begin(), m_rows.end(), [](const Row& a, const Row& b) {
+                    return std::make_pair(!a.own, a.owner.value_or(sim::kNoPlayer)) <
+                           std::make_pair(!b.own, b.owner.value_or(sim::kNoPlayer));
+                });
+                break;
+            case Order::Largest:
+                std::stable_sort(m_rows.begin(), m_rows.end(),
+                                 [](const Row& a, const Row& b) { return a.inhabitants > b.inhabitants; });
                 break;
         }
     }

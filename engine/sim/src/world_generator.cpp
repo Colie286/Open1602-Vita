@@ -24,6 +24,37 @@ namespace o1602::sim {
 
 namespace {
 
+bool is_island_header(std::string_view name) {
+    return name == "INSEL3" || name == "INSEL4" || name == "INSEL5";
+}
+
+bool is_island_tiles(std::string_view name) {
+    return name == "INSELHAUS" || name == assets::kLargeIslandChunk || name == assets::kLargeTilesChunk;
+}
+
+/// An island a scenario stores itself: its header and the chunks of its tiles that follow it.
+struct StoredIsland {
+    std::uint8_t number = 0;
+    std::vector<const assets::Chunk*> chunks;
+};
+
+std::vector<StoredIsland> stored_islands(const assets::ChunkFile& file) {
+    std::vector<StoredIsland> out;
+    for (const assets::Chunk& c : file.chunks()) {
+        if (is_island_header(c.name)) {
+            const auto payload = file.payload(c);
+            out.push_back(StoredIsland{payload.empty() ? std::uint8_t{0} : payload[0], {&c}});
+        } else if (is_island_tiles(c.name) && !out.empty()) {
+            out.back().chunks.push_back(&c);
+        }
+    }
+    return out;
+}
+
+bool is_stored(const std::vector<StoredIsland>& stored, std::uint8_t number) {
+    return std::any_of(stored.begin(), stored.end(), [&](const StoredIsland& i) { return i.number == number; });
+}
+
 using assets::ScenarioPlan;
 
 // Nominal size of a size class: only the height matters, for the climate of islands placed by
@@ -1619,6 +1650,12 @@ std::vector<std::uint8_t> Generator::village_records(const Slot& slot, const Sta
 }
 
 core::Result<GeneratedWorld> Generator::run(const assets::ChunkFile& scenario, bool guarantee_wanted) {
+    // A scenario may store some islands itself (often the player's home island) and plan the
+    // others: as in the original, the planned ones are made in addition to the stored ones.
+    std::vector<StoredIsland> stored = stored_islands(scenario);
+    std::stable_sort(stored.begin(), stored.end(),
+                     [](const StoredIsland& a, const StoredIsland& b) { return a.number < b.number; });
+    std::erase_if(m_plan.islands, [&](const ScenarioPlan::Island& e) { return is_stored(stored, e.number); });
     m_max_crops = m_plan.max_crops != 0 ? m_plan.max_crops : 2;
     choose_templates();
     choose_natives();
@@ -1658,10 +1695,20 @@ core::Result<GeneratedWorld> Generator::run(const assets::ChunkFile& scenario, b
     // The scenario with these islands: per island INSEL5, the village's tiles, an empty HIRSCH2
     // (the island tick finds the deer spots) and the village's records; then the rest of the
     // scenario without the plan.
-    assets::ChunkWriter out;
+    // The islands go into the file in the order of their numbers, the stored ones among them.
+    struct Group {
+        std::uint8_t number = 0;
+        std::vector<std::pair<std::string, std::vector<std::uint8_t>>> chunks;
+    };
+    std::vector<Group> groups;
     GeneratedWorld result;
     std::uint32_t craters_total = 0;
     for (const Slot* s : m_by_number) {
+        Group& group = groups.emplace_back();
+        group.number = s->plan.number;
+        const auto add = [&group](std::string_view name, std::vector<std::uint8_t> payload) {
+            group.chunks.emplace_back(std::string(name), std::move(payload));
+        };
         std::vector<Crater> craters = sim::find_craters(*s->map, m_buildings);
         if (craters.size() > 2) {
             craters.resize(2);
@@ -1685,26 +1732,26 @@ core::Result<GeneratedWorld> Generator::run(const assets::ChunkFile& scenario, b
                 owners[cities[o + 1]] = cities[o + 2];
             }
         }
-        out.add("INSEL5", header(*s, craters, owners));
+        add("INSEL5", header(*s, craters, owners));
         // An island wider or higher than 255 tiles (of its own shape only) in Open1602's chunks.
         // More deposits than the record holds, or places beyond 8 bits: in Open1602's chunk too.
         const bool large = s->map->width() > 255 || s->map->height() > 255;
         if (large || s->deposits.large()) {
-            out.add(std::string(assets::kLargeIslandChunk), large_island(*s));
+            add(std::string(assets::kLargeIslandChunk), large_island(*s));
         }
         if (large) {
-            out.add(std::string(assets::kLargeTilesChunk), assets::large_tile_bytes(s->base.layers.front()));
+            add(std::string(assets::kLargeTilesChunk), assets::large_tile_bytes(s->base.layers.front()));
         } else {
             std::vector<std::uint8_t> tiles =
                 s->own_shape ? tile_bytes(s->base.layers.front()) : std::vector<std::uint8_t>{};
             const std::vector<std::uint8_t> village = village_tiles(*s, natives);
             tiles.insert(tiles.end(), village.begin(), village.end());
-            out.add("INSELHAUS", tiles);
+            add("INSELHAUS", tiles);
         }
-        out.add("HIRSCH2", {});
+        add("HIRSCH2", {});
         for (const StateChunk& c : kStateChunks) {
             if (auto records = village_records(*s, c, natives); !records.empty()) {
-                out.add(c.name, records);
+                add(c.name, records);
             }
         }
         GeneratedIsland info;
@@ -1728,9 +1775,25 @@ core::Result<GeneratedWorld> Generator::run(const assets::ChunkFile& scenario, b
         }
         result.islands.push_back(std::move(info));
     }
+    assets::ChunkWriter out;
+    std::size_t next = 0;
+    const auto add_stored_before = [&](std::uint32_t number) {
+        for (; next < stored.size() && stored[next].number < number; ++next) {
+            for (const assets::Chunk* c : stored[next].chunks) {
+                out.add(c->name, scenario.payload(*c));
+            }
+        }
+    };
+    for (const Group& g : groups) {
+        add_stored_before(g.number);
+        for (const auto& [name, payload] : g.chunks) {
+            out.add(name, payload);
+        }
+    }
+    add_stored_before(std::numeric_limits<std::uint32_t>::max());
     for (const assets::Chunk& c : scenario.chunks()) {
-        if (c.name == "SZENE" || c.name == "RANDTAB" || c.name.rfind("SZENE_", 0) == 0 || c.name == "INSEL5" ||
-            c.name == "INSELHAUS" || c.name == assets::kLargeIslandChunk || c.name == assets::kLargeTilesChunk) {
+        if (c.name == "SZENE" || c.name == "RANDTAB" || c.name.rfind("SZENE_", 0) == 0 || is_island_header(c.name) ||
+            is_island_tiles(c.name)) {
             continue;
         }
         out.add(c.name, scenario.payload(c));
@@ -1763,11 +1826,14 @@ std::uint32_t PlanRandom::below(std::uint32_t n) noexcept {
 }
 
 bool plans_islands(const assets::ChunkFile& file) {
-    if (file.find("INSEL5") != nullptr || file.find("INSEL4") != nullptr || file.find("INSEL3") != nullptr) {
+    const auto plan = assets::load_scenario_plan(file);
+    if (!plan || !plan->has_value()) {
         return false;
     }
-    const auto plan = assets::load_scenario_plan(file);
-    return plan && plan->has_value() && !(*plan)->islands.empty();
+    // Islands the file stores itself are not made again (a savegame that kept its plan).
+    const std::vector<StoredIsland> stored = stored_islands(file);
+    return std::any_of((*plan)->islands.begin(), (*plan)->islands.end(),
+                       [&](const ScenarioPlan::Island& e) { return !is_stored(stored, e.number); });
 }
 
 core::Result<GeneratedWorld> generate_islands(const assets::ChunkFile& scenario, const WorldPlan& plan,

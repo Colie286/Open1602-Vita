@@ -1449,12 +1449,15 @@ void Logistics::call_hunter(Handle deer_handle) {
         }
         const std::int32_t dx = std::abs(deer->tile.x - p.x);
         const std::int32_t dy = std::abs(deer->tile.y - p.y);
-        if (dx > kHuntReach || dy > kHuntReach || dx * dx + dy * dy >= 2 * kHuntReach * kHuntReach) {
-            continue;
-        }
         const auto b = building_of(i);
         if (!b || b->type->prod_kind != static_cast<std::int32_t>(ProductionKind::Jagdhaus) || b->city != city ||
             jobs(i) != 0) {
+            continue;
+        }
+        // A lodge with a wider circle than the original's (Rules::wider_hunting, a package's
+        // balance) answers as far as its circle reaches.
+        const std::int32_t reach = std::max<std::int32_t>(kHuntReach, b->type->radius);
+        if (dx > reach || dy > reach || dx * dx + dy * dy >= 2 * reach * reach) {
             continue;
         }
         candidates.push_back(Candidate{i, dx * dx + dy * dy});

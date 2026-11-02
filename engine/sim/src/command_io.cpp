@@ -296,6 +296,19 @@ void io(A& a, T& t)
 
 template <class A, class T>
 void io(A& a, T& t)
+    requires std::is_same_v<std::remove_const_t<T>, CheatOrder>
+{
+    a(t.player);
+    a.enumeration(t.op, CheatOrder::Op::Volcano);
+    a(t.code);
+    a(t.ware);
+    a(t.ship);
+    a(t.x);
+    a(t.y);
+}
+
+template <class A, class T>
+void io(A& a, T& t)
     requires std::is_same_v<std::remove_const_t<T>, CartRequest>
 {
     a(t.player);

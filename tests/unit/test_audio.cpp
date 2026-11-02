@@ -294,6 +294,11 @@ TEST_CASE("audio: voice messages wait in four slots and speak one at a time") {
     voices.set_settings(s);
     voices.message(0x5D, false);
     CHECK(voices.waiting() == 0);
+    // Switched off, it is muted whole (no message sound, no icon); the original's kinds are not.
+    CHECK(audio::message_muted(s, audio::kSpeechRoutes));
+    CHECK(!audio::message_muted(s, 1));
+    s.speech[audio::kSpeechRoutes] = true;
+    CHECK(!audio::message_muted(s, audio::kSpeechRoutes));
 }
 
 TEST_CASE("audio: messages with a video play it instead of their voice") {

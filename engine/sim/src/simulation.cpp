@@ -165,6 +165,7 @@ void Simulation::offer_names(std::vector<std::string> cities, std::vector<std::s
     if (m_city_names.empty() && m_fleet.ship_names().empty()) {
         m_city_names = std::move(cities);
         m_fleet.set_ship_names(std::move(ships));
+        m_fleet.name_unnamed_ships();
     }
 }
 
@@ -617,6 +618,8 @@ CommandResult Simulation::execute(const Command& command) {
             result.paid = moved.paid;
             result.refund = moved.refund;
         }
+    } else if (const auto* cheat_order = std::get_if<CheatOrder>(&command)) {
+        result.accepted = cheat(*cheat_order);
     }
     handle(m_construction_events.events(), first);
     return result;
@@ -769,6 +772,118 @@ bool Simulation::gate_order(const GateOrder& order) {
     }
     p->gates_closed = order.closed;
     return true;
+}
+
+bool Simulation::cheats_allowed(PlayerId player) const {
+    const Player* p = m_world->player(player);
+    if (p == nullptr || !p->active() || p->role != PlayerRole::Human) {
+        return false;
+    }
+    switch (m_rules.cheats) {
+        case Cheats::Off:
+            return false;
+        case Cheats::Start:
+            return true;
+        case Cheats::Code:
+            break;
+    }
+    // As in the original: with more than one person in the game only the code 512.
+    return p->cheats == Player::kCheatsAlways ||
+           (p->cheats == Player::kCheatsOn && human_players(*m_world).size() <= 1);
+}
+
+bool Simulation::cheat(const CheatOrder& order) {
+    Player* p = m_world->player(order.player);
+    if (p == nullptr || !p->active() || p->role != PlayerRole::Human || m_rules.cheats == Cheats::Off) {
+        return false;
+    }
+    if (order.op == CheatOrder::Op::Code) {
+        // 2061 switches them on and off, 512 on also with other people (the original's codes).
+        if (order.code == CheatOrder::kCode) {
+            p->cheats = p->cheats == Player::kCheatsOff ? Player::kCheatsOn : Player::kCheatsOff;
+            return true;
+        }
+        if (order.code == CheatOrder::kAlwaysCode) {
+            p->cheats = Player::kCheatsAlways;
+            return true;
+        }
+        return false;
+    }
+    if (!cheats_allowed(order.player)) {
+        return false;
+    }
+    // The ship selected, else the city of the tile under the mouse, whoever's it is.
+    Ship* ship = order.ship ? m_world->ship(*order.ship) : nullptr;
+    if (order.ship && (ship == nullptr || ship->sinking || ship->cart())) {
+        return false;
+    }
+    City* city = nullptr;
+    if (ship == nullptr && order.x < m_world->width() && order.y < m_world->height()) {
+        const World::Cell& cell = m_world->cell(order.x, order.y);
+        if (cell.island != World::kSea) {
+            const MapCell& tile = m_world->islands()[cell.island].map.top(cell.local_x, cell.local_y);
+            city = m_world->city(cell.island, tile.city);
+        }
+    }
+    switch (order.op) {
+        case CheatOrder::Op::Code:
+            break;
+        case CheatOrder::Op::Gold: {
+            Player* owner = m_world->player(ship != nullptr ? ship->owner : city != nullptr ? city->owner : kNoPlayer);
+            if (owner == nullptr) {
+                return false;
+            }
+            owner->money = static_cast<std::int32_t>(std::min<std::int64_t>(
+                std::int64_t{owner->money} + CheatOrder::kGold, std::numeric_limits<std::int32_t>::max()));
+            return true;
+        }
+        case CheatOrder::Op::Goods:
+            if (!m_world->goods().is_trade(order.ware)) {
+                return false;
+            }
+            if (ship != nullptr) {
+                return m_fleet.cheat_cargo(ship->id, order.ware, CheatOrder::kGoods) != 0;
+            }
+            if (city == nullptr) {
+                return false;
+            }
+            {
+                city->ensure_ware(order.ware);
+                std::uint32_t& stock = city->goods[order.ware];
+                // As far as the warehouses hold it.
+                const std::uint32_t room = city->capacity > stock ? city->capacity - stock : 0U;
+                const std::uint32_t put = std::min(room, CheatOrder::kGoods);
+                stock += put;
+                return put != 0;
+            }
+        case CheatOrder::Op::Cannon:
+            return ship != nullptr && m_fleet.cheat_cannon(ship->id);
+        case CheatOrder::Op::Volcano: {
+            if (order.x >= m_world->width() || order.y >= m_world->height()) {
+                return false;
+            }
+            const World::Cell& cell = m_world->cell(order.x, order.y);
+            if (cell.island == World::kSea || m_world->islands()[cell.island].craters.empty()) {
+                return false;
+            }
+            // The crater nearest to the mouse.
+            const WorldIsland& island = m_world->islands()[cell.island];
+            const Crater* best = nullptr;
+            std::int64_t best_d = 0;
+            for (const Crater& c : island.craters) {
+                const std::int64_t dx = std::int64_t{c.x} - cell.local_x;
+                const std::int64_t dy = std::int64_t{c.y} - cell.local_y;
+                const std::int64_t d = dx * dx + dy * dy;
+                if (best == nullptr || d < best_d) {
+                    best = &c;
+                    best_d = d;
+                }
+            }
+            const auto seed = static_cast<std::uint16_t>(m_world->random(RandomStream::Islands).below(0x8000));
+            return erupt(*m_world, CraterRef{cell.island, best->x, best->y}, seed, true, m_volcano_events.sink());
+        }
+    }
+    return false;
 }
 
 namespace {

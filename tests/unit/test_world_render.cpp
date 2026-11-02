@@ -145,6 +145,37 @@ TEST_CASE("world: islands occupy their cells, overlap and out of bounds are reje
     CHECK(world.islands().size() == 2);
 }
 
+TEST_CASE("world: island rectangles may overlap where one of the islands has sea") {
+    const auto table = make_table();
+    // Islands of 4x4 tiles: land in the middle 2x2, sea on the rim (sprite 10 = open sea).
+    const auto rimmed = [](std::uint32_t x, std::uint32_t y) {
+        sim::WorldIsland island = make_island(x, y, 4, 4);
+        for (std::uint32_t ly = 0; ly < 4; ++ly) {
+            for (std::uint32_t lx = 0; lx < 4; ++lx) {
+                const bool rim = lx == 0 || ly == 0 || lx == 3 || ly == 3;
+                island.map.set_sprite(lx, ly, rim ? 10 : 100);
+            }
+        }
+        return island;
+    };
+    sim::World world;
+    REQUIRE(world.add_island(rimmed(10, 10), &table).ok());
+    // Rim on rim: the tile stays with the first island.
+    REQUIRE(world.add_island(rimmed(13, 10), &table).ok());
+    CHECK(world.cell(13, 11).island == 0);
+    CHECK(world.cell(14, 11).island == 1);
+    // A rim over land of the first: the land keeps its island.
+    sim::WorldIsland over = rimmed(12, 13);
+    REQUIRE(world.add_island(std::move(over), &table).ok());
+    CHECK(world.cell(12, 12).island == 0);  // first island's land (13,13 overlaps only rim)
+    CHECK(world.cell(13, 14).island == 2);  // the third island's land over the first's rim
+    CHECK(world.cell(13, 14).local_x == 1);
+    // Land on land is still refused, and without the table any overlap is.
+    CHECK(!world.add_island(rimmed(11, 11), &table).ok());
+    CHECK(!world.add_island(rimmed(16, 10)).ok());
+    CHECK(world.islands().size() == 3);
+}
+
 TEST_CASE("animation clock: steps once AnimTime is reached, at most one frame per update") {
     const auto table = make_table();
     const auto& sea = *table.open_sea();

@@ -488,6 +488,9 @@ std::vector<BuildingValue> rule_building_values(const Rules& rules) {
     if (rules.revised_bread) {
         add("revised_bread");
     }
+    if (rules.wider_hunting) {
+        add("wider_hunting");
+    }
     return balance.buildings;
 }
 

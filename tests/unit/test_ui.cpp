@@ -613,6 +613,17 @@ TEST_CASE("ui: a banner's colour made legible as text on a dark ground") {
     CHECK(b.r < 200);  // not washed out to white
 }
 
+TEST_CASE("ui: an ink in a colour of its own carries its colour, a palette ink does not") {
+    const assets::Rgba violet{168, 105, 210, 255};
+    const std::int32_t ink = ui::rgb_ink(violet);
+    CHECK(ui::is_rgb_ink(ink));
+    const assets::Rgba back = ui::ink_rgb(ink);
+    CHECK((back.r == 168 && back.g == 105 && back.b == 210));
+    CHECK(!ui::is_rgb_ink(-1));
+    CHECK(!ui::is_rgb_ink(255));
+    CHECK(ui::is_rgb_ink(ui::rgb_ink(assets::Rgba{0, 0, 0, 255})));
+}
+
 TEST_CASE("ui: a form's chat line: the speaker's name in its ink, the rest behind it, cut as one") {
     ui::Form form;
     form.set_scale(2.0);

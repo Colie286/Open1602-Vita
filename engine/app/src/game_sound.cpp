@@ -250,6 +250,9 @@ void GameSound::click() {
 std::uint16_t GameSound::message(MessageId message, std::optional<std::pair<double, double>> tile,
                                  std::optional<sim::PlayerId> about, std::string_view text, bool voice) {
     const MessageDefinition* m = m_messages->get(message);
+    if (m != nullptr && audio::message_muted(m_settings, m->playback.kind)) {
+        return 0;  // switched off on the options page: no sound and no icon
+    }
     if (m_output == nullptr || !voice || m == nullptr) {
         const std::uint16_t flags = m != nullptr ? m->playback.flags : 0;
         if (m_listener) {

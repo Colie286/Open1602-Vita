@@ -473,8 +473,10 @@ public:
     /// Mutable island for the simulation (fields growing, deposits running out).
     [[nodiscard]] WorldIsland& island(std::size_t index) { return m_islands[index]; }
 
-    /// Adds an island at its header position. Fails if it leaves the world or overlaps another one.
-    core::Status add_island(WorldIsland island);
+    /// Adds an island at its header position. Fails if it leaves the world or overlaps another one;
+    /// with `buildings` the rectangles may overlap where one of the two islands has sea (a tile
+    /// there belongs to the island with land, else to the one added first).
+    core::Status add_island(WorldIsland island, const assets::BuildingTable* buildings = nullptr);
 
     [[nodiscard]] const std::vector<Player>& players() const noexcept { return m_players; }
     [[nodiscard]] const std::vector<Ship>& ships() const noexcept { return m_ships; }

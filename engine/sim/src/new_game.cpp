@@ -13,6 +13,7 @@
 #include "o1602/assets/scenario.hpp"
 #include "o1602/core/file.hpp"
 #include "o1602/core/text.hpp"
+#include "o1602/sim/game_data.hpp"
 #include "o1602/sim/savegame_extension.hpp"
 
 namespace o1602::sim {
@@ -228,6 +229,37 @@ core::Result<assets::ChunkFile> new_game_scenario(const assets::ChunkFile& endle
     return assets::ChunkFile::from_bytes(out.take());
 }
 
+namespace {
+
+/// Rules::climate_crops and Rules::big_ore_veins on the islands of a new endless game.
+void enrich_islands(World& world, const WorldStart& start) {
+    const auto bit = [](std::uint8_t crop) { return 1U << (crop - ware::kCornField); };
+    const std::uint32_t north = bit(ware::kTobaccoField) | bit(ware::kSugarField) | bit(ware::kWineField);
+    const std::uint32_t south = bit(ware::kSpiceField) | bit(ware::kCottonField) | bit(ware::kCocoaField);
+    constexpr std::uint16_t kBigIron = 0x1E00;  // 240 t, as the world plan gives a big vein
+    for (std::size_t i = 0; i < world.islands().size(); ++i) {
+        assets::IslandHeader& header = world.island(static_cast<std::uint16_t>(i)).header;
+        if (start.climate_crops) {
+            // The crops a climate grows at least half (see island_fertility) now grow fully.
+            if (header.climate == climate::kNorth) {
+                header.fertility |= north;
+            } else if (header.climate == climate::kSouth) {
+                header.fertility |= south;
+            }
+        }
+        if (start.big_ore_veins) {
+            for (assets::IslandHeader::Deposit& d : header.deposits) {
+                if (d.ware == ware::kOre && d.kind != 0) {
+                    d.kind = 0;
+                    d.amount = std::max(d.amount, kBigIron);
+                }
+            }
+        }
+    }
+}
+
+}  // namespace
+
 core::Result<World> start_new_game(const assets::GameDirectory& game, const assets::BuildingTable& buildings,
                                    const assets::TextTable& text, const NewGameOptions& options,
                                    std::vector<std::string>* warnings) {
@@ -247,7 +279,11 @@ core::Result<World> start_new_game(const assets::GameDirectory& game, const asse
         return scenario.error();
     }
     if (!options.custom) {
-        return load_world(*scenario, buildings, game, warnings, options.world);
+        auto world = load_world(*scenario, buildings, game, warnings, options.world);
+        if (world) {
+            enrich_islands(*world, options.world);
+        }
+        return world;
     }
     // An own world: plan it, put the players' ships at their starts, make the islands.
     WorldSettings settings = *options.custom;
@@ -275,6 +311,7 @@ core::Result<World> start_new_game(const assets::GameDirectory& game, const asse
     if (auto status = add_players(*world, *plan, settings.players); !status) {
         return status.error();
     }
+    enrich_islands(*world, start);
     return world;
 }
 
@@ -390,6 +427,7 @@ core::Status add_players(World& world, const WorldPlan& plan, std::uint8_t playe
         Ship s = ship;
         s.id = 0;
         s.owner = player_slot(n);
+        s.name.clear();  // not the copied ship's name: Simulation::offer_names gives it one of its own
         s.place(plan.starts[n].x, plan.starts[n].y);
         world.add_ship(std::move(s));
     }

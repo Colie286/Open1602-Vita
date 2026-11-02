@@ -159,6 +159,14 @@ TEST_CASE("command line: scripted input") {
     CHECK(held[1].kind == Kind::Up);
     CHECK(held[1].mod == app::kModShift);
     CHECK(held[2].mod == 0);
+    // Several modifiers, in any order (the cheats' Ctrl+Shift+Alt+W).
+    std::vector<app::ViewerOptions::ScriptedInput> chord;
+    REQUIRE(app::parse_input("key 119+ctrl+shift+alt@1;down+alt+ctrl 1,2@2", chord));
+    REQUIRE(chord.size() == 2);
+    CHECK(chord[0].key == 119);
+    CHECK(chord[0].mod == (app::kModCtrl | app::kModShift | app::kModAlt));
+    CHECK(chord[1].kind == Kind::Down);
+    CHECK(chord[1].mod == (app::kModCtrl | app::kModAlt));
     std::vector<app::ViewerOptions::ScriptedInput> bad;
     CHECK(!app::parse_input("jump 1,2@3", bad));
     CHECK(!app::parse_input("jump+shift 1,2@3", bad));

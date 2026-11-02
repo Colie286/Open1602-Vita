@@ -132,6 +132,12 @@ struct Player {
     /// The player closed the gates of his cities (GateOrder): foreign soldiers cannot pass them.
     /// The original's gates have no state; any soldier walks through their middle.
     bool gates_closed = false;
+    /// The cheats this player unlocked with a code (CheatOrder::Op::Code): kCheatsOff, kCheatsOn,
+    /// or kCheatsAlways (also in a game of more than one person).
+    std::uint8_t cheats = 0;
+    static constexpr std::uint8_t kCheatsOff = 0;
+    static constexpr std::uint8_t kCheatsOn = 1;
+    static constexpr std::uint8_t kCheatsAlways = 2;
     /// The person who played this slot last: a verifier of the player ID of their installation
     /// (net::player_verifier), so that they get the slot back when they join again or load the
     /// game alone. 0: nobody known (a computer player, or a game from before).

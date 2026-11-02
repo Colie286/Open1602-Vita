@@ -19,6 +19,7 @@ namespace o1602::app {
 /// checks that they are SDL's).
 inline constexpr std::uint16_t kModCtrl = 0x0040;
 inline constexpr std::uint16_t kModShift = 0x0001;
+inline constexpr std::uint16_t kModAlt = 0x0100;  ///< SDL_KMOD_LALT
 
 struct CommandLine {
     /// The options as given, with the multiplayer game and `menu` set. What needs the installation
@@ -39,7 +40,7 @@ struct CommandLine {
 };
 
 /// "move X,Y@F;down X,Y@F;up X,Y@F;key K@F;text T@F;wheel X,Y,N@F" (K: SDL key code, "+ctrl" /
-/// "+shift" after it; T: text typed, as the platform's text input gives it). False if an item is
+/// "+shift" / "+alt" after it, also several; T: text typed, as the platform's text input gives it). False if an item is
 /// not of these forms.
 [[nodiscard]] bool parse_input(std::string_view text, std::vector<ViewerOptions::ScriptedInput>& out);
 

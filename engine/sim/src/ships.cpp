@@ -351,6 +351,26 @@ void Fleet::add_cargo(Ship& ship, std::uint8_t ware, std::uint32_t amount, std::
     }
 }
 
+std::uint32_t Fleet::cheat_cargo(std::uint32_t id, std::uint8_t ware, std::uint32_t amount) {
+    Ship* ship = m_world->ship(id);
+    if (ship == nullptr) {
+        return 0;
+    }
+    const std::uint32_t put = std::min(amount, space_for(*ship, ware));
+    add_cargo(*ship, ware, put, 0);
+    return put;
+}
+
+bool Fleet::cheat_cannon(std::uint32_t id) {
+    Ship* ship = m_world->ship(id);
+    const assets::FigureType* type = ship != nullptr ? type_of(*ship) : nullptr;
+    if (type == nullptr || ship->cannons >= type->ship.max_cannons) {
+        return false;
+    }
+    ++ship->cannons;
+    return true;
+}
+
 std::uint32_t Fleet::remove_cargo(Ship& ship, std::uint8_t ware, std::uint32_t amount, std::uint8_t hold) {
     std::uint32_t taken = 0;
     const std::size_t n = holds(ship);

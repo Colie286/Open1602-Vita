@@ -351,7 +351,8 @@ TEST_CASE("balance: the revised bread chain goes under the packages' values") {
     CHECK(sim::rule_building_values(sim::Rules::original()).empty());
     CHECK(!sim::Rules::original().revised_bread);
     CHECK(sim::Rules::open1602().revised_bread);
-    const sim::Rules rules = sim::Rules::open1602();
+    sim::Rules rules = sim::Rules::open1602();
+    rules.wider_hunting = false;  // only the bread chain here
     const std::vector<sim::BuildingValue> bread = sim::rule_building_values(rules);
     REQUIRE(bread.size() == 3);
     CHECK((bread[0] == sim::BuildingValue{20503, sim::BuildingField::Produce, 2}));  // bakery
@@ -365,6 +366,16 @@ TEST_CASE("balance: the revised bread chain goes under the packages' values") {
     REQUIRE(balance.buildings.size() == 3);
     CHECK((balance.buildings[1] == sim::BuildingValue{20503, sim::BuildingField::RunningCost, 10}));
     CHECK(sim::valid(balance));
+}
+
+TEST_CASE("balance: the hunter's hut reaches 12 tiles in Open1602, 8 with the original's settings") {
+    CHECK(sim::Rules::open1602().wider_hunting);
+    CHECK(!sim::Rules::original().wider_hunting);
+    sim::Rules rules = sim::Rules::original();
+    rules.wider_hunting = true;
+    const std::vector<sim::BuildingValue> hunting = sim::rule_building_values(rules);
+    REQUIRE(hunting.size() == 1);
+    CHECK((hunting[0] == sim::BuildingValue{22003, sim::BuildingField::Radius, 12}));
 }
 
 TEST_CASE("balance: a game keeps its building values and the rule in the savegame") {
