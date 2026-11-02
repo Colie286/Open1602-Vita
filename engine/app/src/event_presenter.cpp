@@ -114,13 +114,13 @@ std::optional<std::uint16_t> shortage_message(std::uint8_t ware) {
 
 }  // namespace
 
-bool slows_down(sim::EventSpeed setting, MessageId message) noexcept {
+bool slows_down(EventSpeed setting, MessageId message) noexcept {
     switch (setting) {
-        case sim::EventSpeed::Normal:
+        case EventSpeed::Normal:
             return true;
-        case sim::EventSpeed::Attacks:
+        case EventSpeed::Attacks:
             return std::find(kDisasterMessages.begin(), kDisasterMessages.end(), message) == kDisasterMessages.end();
-        case sim::EventSpeed::Keep:
+        case EventSpeed::Keep:
             break;
     }
     return false;

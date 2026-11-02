@@ -52,14 +52,14 @@ const app::Announcement* announcement(const app::Notice& n) {
 TEST_CASE("event presenter: disasters slow the game down only as the game's settings say") {
     // Plague, fire, drought and eruption; any other message (attacks) slows down unless kept.
     for (const app::MessageId disaster : {0x01U, 0x02U, 0x03U, 0x5EU}) {
-        CHECK(app::slows_down(sim::EventSpeed::Normal, disaster));
-        CHECK(!app::slows_down(sim::EventSpeed::Attacks, disaster));
-        CHECK(!app::slows_down(sim::EventSpeed::Keep, disaster));
+        CHECK(app::slows_down(app::EventSpeed::Normal, disaster));
+        CHECK(!app::slows_down(app::EventSpeed::Attacks, disaster));
+        CHECK(!app::slows_down(app::EventSpeed::Keep, disaster));
     }
     constexpr app::MessageId kOther = 0x10;
-    CHECK(app::slows_down(sim::EventSpeed::Normal, kOther));
-    CHECK(app::slows_down(sim::EventSpeed::Attacks, kOther));
-    CHECK(!app::slows_down(sim::EventSpeed::Keep, kOther));
+    CHECK(app::slows_down(app::EventSpeed::Normal, kOther));
+    CHECK(app::slows_down(app::EventSpeed::Attacks, kOther));
+    CHECK(!app::slows_down(app::EventSpeed::Keep, kOther));
 }
 
 TEST_CASE("event presenter: city, disaster, drought and diplomacy messages for the local player only") {

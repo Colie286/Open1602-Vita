@@ -34,6 +34,9 @@ bool read_number(std::string_view value, std::int32_t lo, std::int32_t hi, std::
     return true;
 }
 
+/// The values of "display.event_speed", in the order of EventSpeed.
+constexpr std::array<std::string_view, 3> kEventSpeedNames = {"normal", "attacks", "keep"};
+
 const char* on_off(bool on) {
     return on ? "on" : "off";
 }
@@ -222,6 +225,15 @@ bool read_display_line(DisplaySettings& s, std::string_view key, std::string_vie
     if (key == "rival_wars") {
         return read_flag(value, s.rival_wars);
     }
+    if (key == "event_speed") {
+        for (std::size_t i = 0; i < kEventSpeedNames.size(); ++i) {
+            if (value == kEventSpeedNames[i]) {
+                s.event_speed = static_cast<EventSpeed>(i);
+                return true;
+            }
+        }
+        return false;
+    }
     if (key == "plant_fields") {
         return read_flag(value, s.plant_fields);
     }
@@ -268,6 +280,8 @@ std::string write_display(const DisplaySettings& s) {
     out += std::string("display.goods_trend = ") + on_off(s.goods_trend) + "\n";
     out += "# Tell when two other players go to war or make peace\n";
     out += std::string("display.rival_wars = ") + on_off(s.rival_wars) + "\n";
+    out += "# Which messages set the game back to normal speed: normal (all, original), attacks, keep (none)\n";
+    out += "display.event_speed = " + std::string(kEventSpeedNames[static_cast<std::size_t>(s.event_speed)]) + "\n";
     out += "# A new farm plants its fields on the open ground around it at once\n";
     out += std::string("display.plant_fields = ") + on_off(s.plant_fields) + "\n";
     out += "# classic: shadows and smoke as the original draws them (every second pixel); modern: blended\n";

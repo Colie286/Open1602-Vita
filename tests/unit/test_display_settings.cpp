@@ -28,12 +28,14 @@ TEST_CASE("display settings: written to settings.cfg and read back") {
     s.display.grab_mouse = true;
     s.display.goods_trend = false;
     s.display.rival_wars = false;
+    s.display.event_speed = app::EventSpeed::Attacks;
     s.display.plant_fields = true;
     s.display.classic_graphics = true;
     s.display.autosave_minutes = 30;
     const std::string text = app::write_settings(s);
     CHECK(text.find("display.window = 1600x900\n") != std::string::npos);
     CHECK(text.find("display.graphics = classic\n") != std::string::npos);
+    CHECK(text.find("display.event_speed = attacks\n") != std::string::npos);
     const app::AppSettings back = app::parse_settings(text, app::AppSettings{});
     CHECK(back.display == s.display);
     // The defaults: a window, the interface as large as fits, the free zoom drawn smooth.
@@ -49,8 +51,9 @@ TEST_CASE("display settings: written to settings.cfg and read back") {
     CHECK(!none.display.grab_mouse);
     CHECK(none.display.goods_trend);
     CHECK(none.display.rival_wars);
-    CHECK(!none.display.plant_fields);      // the original plants no fields by itself
-    CHECK(!none.display.classic_graphics);  // Open1602's look
+    CHECK(none.display.event_speed == app::EventSpeed::Normal);  // back to 1x, as the original
+    CHECK(!none.display.plant_fields);                           // the original plants no fields by itself
+    CHECK(!none.display.classic_graphics);                       // Open1602's look
     CHECK(none.display.autosave_minutes == app::kAutosaveDefault);
 }
 
@@ -61,6 +64,8 @@ TEST_CASE("display settings: damaged lines keep what was there") {
     CHECK(!app::read_display_line(d, "fullscreen", "maybe"));
     CHECK(!app::read_display_line(d, "unknown", "on"));
     CHECK(!app::read_display_line(d, "graphics", "on"));
+    CHECK(!app::read_display_line(d, "event_speed", "fast"));
+    CHECK(d.event_speed == app::EventSpeed::Normal);
     CHECK(d == app::DisplaySettings{});
     CHECK(app::read_display_line(d, "window", "100x50"));  // kept within limits
     CHECK(d.window_width == 320);
@@ -155,6 +160,14 @@ TEST_CASE("display menu: each row chooses its next value") {
     CHECK(app::DisplayMenu::choose_next(model, Item::RivalWars));
     CHECK(!model.settings.rival_wars);
     CHECK(app::DisplayMenu::value_text(model, Item::RivalWars) == "off");
+    CHECK(app::DisplayMenu::value_text(model, Item::EventSpeed) == "Always (original)");
+    CHECK(app::DisplayMenu::choose_next(model, Item::EventSpeed));
+    CHECK(model.settings.event_speed == app::EventSpeed::Attacks);
+    CHECK(app::DisplayMenu::value_text(model, Item::EventSpeed) == "Attacks only");
+    CHECK(app::DisplayMenu::choose_previous(model, Item::EventSpeed));
+    CHECK(app::DisplayMenu::choose_previous(model, Item::EventSpeed));
+    CHECK(model.settings.event_speed == app::EventSpeed::Keep);
+    CHECK(app::DisplayMenu::value_text(model, Item::EventSpeed) == "Keep the speed");
     CHECK(app::DisplayMenu::value_text(model, Item::PlantFields) == "off");
     CHECK(app::DisplayMenu::choose_next(model, Item::PlantFields));
     CHECK(model.settings.plant_fields);

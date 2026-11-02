@@ -74,9 +74,8 @@ enum class SetupItem : std::uint8_t {
     // Disasters (a page of their own; disaster_item)
     Droughts,
     Volcanoes,
-    Plagues,     ///< Rules::plagues
-    Fires,       ///< Rules::fires
-    EventSpeed,  ///< Rules::event_speed
+    Plagues,  ///< Rules::plagues
+    Fires,    ///< Rules::fires
     // World
     Map,
     WorldSize,
@@ -146,7 +145,7 @@ enum class SetupItem : std::uint8_t {
 }
 /// Whether an item is on the page of the disasters.
 [[nodiscard]] constexpr bool disaster_item(SetupItem item) noexcept {
-    return item >= SetupItem::Droughts && item <= SetupItem::EventSpeed;
+    return item >= SetupItem::Droughts && item <= SetupItem::Fires;
 }
 /// The rules of the page of the disasters as in the original, the others as in `rules`.
 [[nodiscard]] sim::Rules original_disasters(sim::Rules rules) noexcept;

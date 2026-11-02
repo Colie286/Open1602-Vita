@@ -59,7 +59,7 @@ enum RuleKey : std::uint16_t {
     kPlagues = 51,        // Rules::plagues, when not the original's
     kFires = 52,          // Rules::fires, when not the original's
     kRareEruptions = 53,  // 1: Volcanoes::Rare, under its own key so older versions read the game's way
-    kEventSpeed = 54,     // Rules::event_speed, when not the original's
+    kEventSpeed = 54,     // no longer read: the speed at events became an option of each computer
     // The victory conditions (VictoryConditions).
     kWinInhabitants = 11,
     kWinResidentClass = 12,
@@ -229,8 +229,8 @@ void write_rules(Writer& out, const Rules& r) {
     if (r.wider_hunting) {
         values.emplace_back(kWiderHunting, 1U);
     }
-    // Rarer eruptions, outbreaks and the speed at events only when not the original's: the
-    // original's way keeps the bytes.
+    // Rarer eruptions and outbreaks only when not the original's: the original's way keeps the
+    // bytes.
     if (r.volcanoes == Volcanoes::Rare) {
         values.emplace_back(kRareEruptions, 1U);
     }
@@ -239,9 +239,6 @@ void write_rules(Writer& out, const Rules& r) {
     }
     if (r.fires != Outbreaks::Original) {
         values.emplace_back(kFires, static_cast<std::uint32_t>(r.fires));
-    }
-    if (r.event_speed != EventSpeed::Normal) {
-        values.emplace_back(kEventSpeed, static_cast<std::uint32_t>(r.event_speed));
     }
     // The towns shown from the start only when there are any: the original's way keeps the bytes.
     if (r.reveal == Reveal::All) {
@@ -400,9 +397,6 @@ Rules read_rules(Reader& in) {
                 break;
             case kFires:
                 r.fires = static_cast<Outbreaks>(std::min<std::uint32_t>(v, 2));
-                break;
-            case kEventSpeed:
-                r.event_speed = static_cast<EventSpeed>(std::min<std::uint32_t>(v, 2));
                 break;
             case kWinInhabitants:
                 r.victory.inhabitants = v;

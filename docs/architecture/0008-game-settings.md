@@ -34,7 +34,6 @@ if they change during a game, then only via a command
 | Droughts (`droughts`) | as the game (difficulty), off, rare, normal, frequent | as the game | as the game |
 | Volcanoes (`volcanoes`) | as the game (setting), off, on, rare (as the game, but twice the time between eruptions) | as the game | as the game |
 | Plague and fire outbreaks (`plagues`, `fires`) | as the original; rare (half as likely each time a town is checked); off (no plague or fire breaks out in a town by itself; fires from lava and spreading to neighbours go on) | as the original | as the original |
-| Normal speed on events (`event_speed`) | always (fires, plagues, droughts, eruptions and attacks set the game back to 1×, as the original); attacks only (disasters keep the speed); keep the speed. In a multiplayer game the host's computer sets the speed | always | always |
 | Pirates (`pirates`) | as the game (setting bit 0; the endless games of the two easy levels have none), off, on | as the game | as the game |
 | Pirate nests (`pirate_nests`) | one; one for every four human and computer players begun, each with the original's ships (2 to 4 by the highest level) and the interval between new ships divided by the nests; further nests go to strips of the map across its longer side that have none, new ships appear at the edge of the strip with the fewest pirates, and a pirate sails home to the nearest nest | one | one for every four players (up to four players the original) |
 | Free trader prices (`trader_prices`, S-077) | as usual (about half the base price), by the market (as the original intends) | as usual | as usual |
@@ -74,7 +73,7 @@ who want the game as they know it, but stay fixed by default, also in savegames 
 start dialog after name and banner (`engine/app/src/game_settings_menu.cpp`, since 2026-10-20): the
 settings in groups (economy, limits, nature, world, opponents; the disasters on a page of their own), as in later Anno titles, each a button that
 cycles its values, with presets for the original's rules and Open1602's defaults; the last choice is
-kept in `settings.cfg` (`endless.*`, `endless.world = auto` for the automatic size). The command line (`--refund`, `--droughts`, `--volcanoes`, `--plagues`, `--fires`, `--event-speed`, `--pirates`, `--pirate-nests`, `--reveal`, `--ore-veins`, `--bread`, `--computers`, `--ai`)
+kept in `settings.cfg` (`endless.*`, `endless.world = auto` for the automatic size). The command line (`--refund`, `--droughts`, `--volcanoes`, `--plagues`, `--fires`, `--pirates`, `--pirate-nests`, `--reveal`, `--ore-veins`, `--bread`, `--computers`, `--ai`)
 still sets them for games started from it.
 
 ### Original settings

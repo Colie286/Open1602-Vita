@@ -466,10 +466,10 @@ core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDir
                                                         std::optional<sim::PlayerId> about, std::string_view text) {
         if ((flags & audio::kMessageNormalSpeed) != 0 && self->m_state->simulation.speed() > 1 &&
             (!self->m_session || self->host_session() != nullptr) &&
-            slows_down(self->m_state->simulation.rules().event_speed, message)) {
-            // Fires, plagues and attacks: back to normal speed as in the original, unless the game's
-            // settings keep the speed, as a command like any other change of the speed; in a
-            // multiplayer game only on the host's computer.
+            slows_down(self->m_app_settings.display.event_speed, message)) {
+            // Fires, plagues and attacks: back to normal speed as in the original, unless the
+            // display settings keep the speed, as a command like any other change of the speed; in a
+            // multiplayer game only on the host's computer, by the host's settings.
             self->m_command_sink.submit(
                 sim::GameSpeedOrder{self->m_local_player, sim::GameSpeedOrder::Op::SetSpeed, 1});
         }

@@ -1216,23 +1216,24 @@ TEST_CASE("endless setup: kinds of island world of a package (landscapes.toml) c
     CHECK(app::setup_choices(SetupItem::IslandPreset) == before);
 }
 
-TEST_CASE("game setup: the page of the disasters, how often they come and what they do to the speed") {
+TEST_CASE("game setup: the page of the disasters and how often they come") {
     // Their lines in settings.cfg, and back.
     EndlessSetup s;
     s.rules.volcanoes = sim::Volcanoes::Rare;
     s.rules.plagues = sim::Outbreaks::Off;
     s.rules.fires = sim::Outbreaks::Rare;
-    s.rules.event_speed = sim::EventSpeed::Keep;
     const std::string lines = app::write_setup(s);
     CHECK(lines.find("endless.volcanoes = rare\n") != std::string::npos);
     CHECK(lines.find("endless.plagues = off\n") != std::string::npos);
     CHECK(lines.find("endless.fires = rare\n") != std::string::npos);
-    CHECK(lines.find("endless.event_speed = keep\n") != std::string::npos);
+    CHECK(lines.find("event_speed") == std::string::npos);  // an option of each computer now
     EndlessSetup back;
     app::read_setup(back, lines);
     CHECK(back == s);
     CHECK(app::read_setup_line(back, "plagues", "often"));  // unknown: kept
     CHECK(back.rules.plagues == sim::Outbreaks::Off);
+    CHECK(app::read_setup_line(back, "event_speed", "keep"));  // a line of before: dropped quietly
+    CHECK(back == s);
     CHECK(app::original_disasters(s.rules) == sim::Rules{});
     CHECK(EndlessSetup::original().rules == app::original_disasters(EndlessSetup::original().rules));
 
@@ -1253,12 +1254,11 @@ TEST_CASE("game setup: the page of the disasters, how often they come and what t
             CHECK(menu.setup().rules.plagues == sim::Outbreaks::Rare);
             (void)click(menu, ui::tr("setup.outbreaks.rare"));
             CHECK(menu.setup().rules.plagues == sim::Outbreaks::Off);
-            (void)click(menu, ui::tr("setup.event_speed.normal"));
-            CHECK(menu.setup().rules.event_speed == sim::EventSpeed::Attacks);
-            (void)click(menu, ui::tr("setup.event_speed.attacks"), ui::MouseButton::Right);
-            CHECK(menu.setup().rules.event_speed == sim::EventSpeed::Normal);
-            (void)click(menu, ui::tr("setup.event_speed.normal"), ui::MouseButton::Right);
-            CHECK(menu.setup().rules.event_speed == sim::EventSpeed::Keep);
+            (void)click(menu, ui::tr("setup.outbreaks.original"));  // now the fires
+            CHECK(menu.setup().rules.fires == sim::Outbreaks::Rare);
+            (void)click(menu, ui::tr("setup.outbreaks.rare"), ui::MouseButton::Right);
+            CHECK(menu.setup().rules.fires == sim::Outbreaks::Original);
+            (void)click(menu, ui::tr("setup.outbreaks.original"));
 
             // Every row ends above the hint.
             std::int32_t lowest = 0;
@@ -1270,8 +1270,7 @@ TEST_CASE("game setup: the page of the disasters, how often they come and what t
                 }
                 if (d.text.size() > 20 && hint.compare(0, 20, d.text, 0, 20) == 0) {
                     hint_y = std::min(hint_y, d.y);
-                } else if (d.text == app::setup_label(SetupItem::Fires) ||
-                           d.text == app::setup_label(SetupItem::EventSpeed)) {
+                } else if (d.text == app::setup_label(SetupItem::Fires)) {
                     lowest = std::max(lowest, d.y);
                 }
             }

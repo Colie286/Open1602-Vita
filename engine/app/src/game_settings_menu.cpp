@@ -93,10 +93,9 @@ constexpr Group kBugGroups[] = {
     {"setup.group.cheats", SetupItem::Cheats, SetupItem::Cheats, kRight},
 };
 
-// The disasters: how often they come on the left, what they do to the game's speed on the right.
+// The disasters and how often they come.
 constexpr Group kDisasterGroups[] = {
     {"setup.group.disasters", SetupItem::Droughts, SetupItem::Fires, kLeft},
-    {"setup.group.game_speed", SetupItem::EventSpeed, SetupItem::EventSpeed, kRight},
 };
 
 // The islands: what kind of world, the land and its sizes, and what is on the islands; the

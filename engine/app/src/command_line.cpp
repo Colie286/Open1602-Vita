@@ -299,18 +299,6 @@ core::Result<CommandLine> parse_command_line(int argc, const char* const* argv) 
             } else {
                 return bad(i);
             }
-        } else if (arg == "--event-speed" && has_value) {
-            // Game setting: which messages set the game back to normal speed.
-            const std::string_view mode = argv[++i];
-            if (mode == "normal") {
-                options.rules.event_speed = sim::EventSpeed::Normal;
-            } else if (mode == "attacks") {
-                options.rules.event_speed = sim::EventSpeed::Attacks;
-            } else if (mode == "keep") {
-                options.rules.event_speed = sim::EventSpeed::Keep;
-            } else {
-                return bad(i);
-            }
         } else if (arg == "--pirates" && has_value) {
             // Game setting: whether pirates come.
             const std::string_view mode = argv[++i];

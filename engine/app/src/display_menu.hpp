@@ -39,14 +39,15 @@ public:
         GrabMouse,
         GoodsTrend,
         RivalWars,
+        EventSpeed,
         PlantFields,
         Graphics,
         Autosave
     };
-    static constexpr std::size_t kItems = 14;
+    static constexpr std::size_t kItems = 15;
     /// The window's size in design units (it is centred over the map).
     static constexpr std::int32_t kWidth = 640;
-    static constexpr std::int32_t kHeight = 720;
+    static constexpr std::int32_t kHeight = 756;  // fifteen rows, the hint and the button within 768
 
     explicit DisplayMenu(ui::FormStyle style = {}) : m_form(style) {}
 

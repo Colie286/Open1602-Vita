@@ -77,16 +77,13 @@ TEST_CASE("command line: a run of N frames advances the game by the same time ev
     CHECK(app::fixed_frame_ms(parse({"--frames", "300", "--join", "example.org"})->options) == 0);
 }
 
-TEST_CASE("command line: how often disasters come and what they do to the speed") {
-    const auto c = parse({"--volcanoes", "rare", "--plagues", "off", "--fires", "rare", "--event-speed", "attacks"});
+TEST_CASE("command line: how often disasters come") {
+    const auto c = parse({"--volcanoes", "rare", "--plagues", "off", "--fires", "rare"});
     REQUIRE(static_cast<bool>(c));
     CHECK(c->options.rules.volcanoes == sim::Volcanoes::Rare);
     CHECK(c->options.rules.plagues == sim::Outbreaks::Off);
     CHECK(c->options.rules.fires == sim::Outbreaks::Rare);
-    CHECK(c->options.rules.event_speed == sim::EventSpeed::Attacks);
-    CHECK(parse({"--event-speed", "keep"})->options.rules.event_speed == sim::EventSpeed::Keep);
     CHECK(!parse({"--plagues", "often"}));
-    CHECK(!parse({"--event-speed", "fast"}));
 }
 
 TEST_CASE("command line: a new game with its own world, and the player's name") {

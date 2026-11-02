@@ -552,7 +552,7 @@ TEST_CASE("disasters: plagues and fires break out as in the original, half as of
     CHECK(outbreaks(kPioneerHouse, 0, 10, with(O::Original, O::Off)) == 0);
 }
 
-TEST_CASE("disasters: the outbreaks' and the events' settings stay with the savegame") {
+TEST_CASE("disasters: the outbreaks' settings stay with the savegame") {
     Town town;
     town.place(kCitizenHouse, 2, 4);
     town.finish({});
@@ -562,7 +562,6 @@ TEST_CASE("disasters: the outbreaks' and the events' settings stay with the save
             rules.plagues = o;
             rules.fires = o == sim::Outbreaks::Rare ? sim::Outbreaks::Off : sim::Outbreaks::Rare;
             rules.volcanoes = v;
-            rules.event_speed = o == sim::Outbreaks::Original ? sim::EventSpeed::Keep : sim::EventSpeed::Attacks;
             town.world.set_saved_rules(rules);
             const auto bytes = sim::write_game(town.world, town.buildings);
             REQUIRE(bytes.ok());

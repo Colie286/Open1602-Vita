@@ -55,14 +55,6 @@ enum class Outbreaks : std::uint8_t {
     Off,       ///< never
 };
 
-/// Which messages set the game back to normal speed. In the original those of disasters and
-/// attacks do.
-enum class EventSpeed : std::uint8_t {
-    Normal,   ///< every one of them (original)
-    Attacks,  ///< attacks only: disasters let the game run on at its speed
-    Keep,     ///< none: the game keeps its speed
-};
-
 /// The cheats (CheatOrder): as in the original, a code typed in the number line unlocks them, and
 /// in a game of more than one person only the code that also lifts that block. Open1602 can have
 /// them on from the start or off for good.
@@ -300,9 +292,6 @@ struct Rules {
     Outbreaks plagues = Outbreaks::Original;
     /// Fires breaking out in towns: as in the original, half as often, or never.
     Outbreaks fires = Outbreaks::Original;
-    /// Which messages set the game back to normal speed. The host's computer decides for a
-    /// multiplayer game, as it does for every change of the speed.
-    EventSpeed event_speed = EventSpeed::Normal;
     /// Pirates: as the game says, or switched on or off.
     Pirates pirates = Pirates::Game;
     /// Pirate nests: one, or as the faction scales them. Up to four players both are the original.
@@ -388,7 +377,6 @@ struct Rules {
         r.volcanoes = Volcanoes::Game;
         r.plagues = Outbreaks::Original;
         r.fires = Outbreaks::Original;
-        r.event_speed = EventSpeed::Normal;
         r.pirates = Pirates::Game;
         r.pirate_nests = PirateNests::One;
         r.trader_prices = TraderPrices::Original;

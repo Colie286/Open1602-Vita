@@ -26,9 +26,9 @@ constexpr std::int32_t kLabelW = 310;
 constexpr std::int32_t kValueW = 266;
 
 constexpr std::array<std::string_view, DisplayMenu::kItems> kLabels = {
-    "display.mode",       "display.size",         "display.ui_scale",   "display.zoom",       "display.zoom_drawing",
-    "display.vsync",      "display.edge_scroll",  "display.edge_speed", "display.grab_mouse", "display.goods_trend",
-    "display.rival_wars", "display.plant_fields", "display.graphics",   "display.autosave"};
+    "display.mode",       "display.size",        "display.ui_scale",     "display.zoom",       "display.zoom_drawing",
+    "display.vsync",      "display.edge_scroll", "display.edge_speed",   "display.grab_mouse", "display.goods_trend",
+    "display.rival_wars", "display.event_speed", "display.plant_fields", "display.graphics",   "display.autosave"};
 
 std::string on_off(bool on) {
     return ui::tr(on ? "display.on" : "display.off");
@@ -68,6 +68,11 @@ std::string DisplayMenu::value_text(const DisplayModel& model, Item item) {
             return on_off(s.goods_trend);
         case Item::RivalWars:
             return on_off(s.rival_wars);
+        case Item::EventSpeed: {
+            static constexpr std::array<std::string_view, 3> kKeys = {
+                "display.event_speed.normal", "display.event_speed.attacks", "display.event_speed.keep"};
+            return ui::tr(kKeys[std::min<std::size_t>(static_cast<std::size_t>(s.event_speed), kKeys.size() - 1)]);
+        }
         case Item::PlantFields:
             return on_off(s.plant_fields);
         case Item::Graphics:
@@ -135,6 +140,12 @@ bool DisplayMenu::choose(DisplayModel& model, Item item, bool forward) {
         case Item::RivalWars:
             s.rival_wars = !s.rival_wars;
             return true;
+        case Item::EventSpeed: {
+            constexpr std::uint8_t kValues = 3;
+            const auto now = static_cast<std::uint8_t>(s.event_speed);
+            s.event_speed = static_cast<EventSpeed>((now + (forward ? 1 : kValues - 1)) % kValues);
+            return true;
+        }
         case Item::PlantFields:
             s.plant_fields = !s.plant_fields;
             return true;
