@@ -28,9 +28,16 @@ makes; they are made when a game of it starts, as in the original.
 | Save | Saves the map as an Open1602 scenario (`.o1602`). A map that has no such file yet asks for a name first. |
 | Save as | Saves under a new name in the folder of own scenarios (`scenarios` in Open1602's user data folder), which the scenario list of the main menu shows. A name an own scenario has already replaces it. |
 | Undo, Redo | Takes the last change back, or does it again. |
+| Overlays | What the map shows over the world: the players' land in their colours, the numbers of the islands, the coordinates of the tile under the mouse. |
+| Check | The check list: what keeps the scenario from being saved (the world must hold together, its description and markers be right), and what the original cannot have (its map size, more islands, cities, ships, land units, towers or players with a start than it holds, larger islands, more ore deposits, content of a package, a script). The second group is a fault only for a scenario that is to keep to the original's limits. |
 | Leave the editor | Back to the main menu. |
 
 New map, Open and Leave the editor ask before changes that are not saved are lost.
+
+A left click on the map selects what is there: a ship, a land unit, a building, an island or the
+sea. The panel then shows its properties (an island its position, size, climate, ore deposits and
+cities; a building its island, position, city and owner; a ship its owner, position, cannons and
+cargo), and a cross on the map marks it. Back to the map or Escape returns to the map's page.
 
 ## Keys
 

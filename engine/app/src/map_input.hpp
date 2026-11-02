@@ -83,6 +83,8 @@ public:
         virtual void notify(std::string text, std::string_view log) = 0;
         /// A key of the editor (undo, redo, save) while it runs.
         virtual void editor_key(ui::KeyAction action) = 0;
+        /// A left click on the editor's map picked `pick`.
+        virtual void editor_pick(const EditorPick& pick) = 0;
         /// Where Home goes without a selection.
         [[nodiscard]] virtual render::TilePos home_tile() const = 0;
         /// The graphics of the zoom level shown; null while they are not there.
@@ -254,6 +256,8 @@ private:
     /// The unit under a screen point: the one whose visible pixel is there, unless a map tile is
     /// drawn over it; zoomed out, else a small one near it, the local player's first.
     [[nodiscard]] std::optional<ui::UnitRef> unit_at(double sx, double sy) const;
+    /// The editor's map clicked at the mouse: a unit, a building, an island or the sea.
+    void editor_pick_at_mouse();
     /// A key for the cheats' number line or a cheat (cheat_console.hpp); whether it took it.
     bool cheat_key(int pressed, int scancode, std::uint16_t mod);
     /// Left button released on the map (no tool): a click or the end of a rectangle.

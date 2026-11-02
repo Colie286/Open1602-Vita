@@ -138,6 +138,7 @@ private:
     void save_template() override;
     void notify(std::string text, std::string_view log) override;
     void editor_key(ui::KeyAction action) override;
+    void editor_pick(const EditorPick& pick) override;
 
     /// The window's events; the rest goes to the input.
     void handle_event(const SDL_Event& event);
@@ -308,6 +309,13 @@ private:
     void list_editor_files();
     /// The editor's note in its panel and the status line (and the log, in English).
     void editor_notice(std::string text, bool error, std::string_view log);
+    /// What the panel shows of the object picked on the map: its name and properties; nothing if
+    /// it is gone (undone, another map).
+    void editor_properties(EditorModel& model) const;
+    /// The check list of the document as it is now.
+    [[nodiscard]] std::vector<EditorCheckLine> editor_check() const;
+    /// Over the editor's map: the islands' numbers and the mark of what is picked.
+    void draw_editor_marks();
     /// An empty sea of `width` x `height` tiles with the mods' content, as behind the menu.
     [[nodiscard]] sim::World sea_world(std::uint32_t width, std::uint32_t height) const;
 
@@ -632,6 +640,8 @@ private:
         std::string source_name;     ///< the name of the file opened (Windows-1252), empty: a new map
         std::string notice;          ///< Windows-1252
         bool notice_error = false;
+        EditorPick pick{};                     ///< what the panel's page "Selection" shows
+        std::vector<EditorCheckLine> check{};  ///< the check list, made when its page opened
     };
     std::optional<EditorSession> m_editor;
     /// A request of the editor waiting for the answer to "discard the changes?".
@@ -642,6 +652,7 @@ private:
     EditorNewMap m_editor_new;  ///< the settings of the last new map
     bool m_running = true;
     bool m_show_owners = false;              ///< ownership overlay (key O)
+    bool m_show_island_numbers = false;      ///< the islands' numbers over the map (editor)
     bool m_show_fps = false;                 ///< the frame rate in the map's corner (Ctrl+F)
     bool m_show_coordinates = false;         ///< the tile under the mouse in the map's corner (Ctrl+K)
     bool m_show_unit_arms = false;           ///< coats of arms over the own land units (M)

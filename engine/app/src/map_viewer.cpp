@@ -1776,6 +1776,7 @@ void MapViewer::render() {
         preview.restore();
         draw_map(*graphics);
         draw_unit_arms();
+        draw_editor_marks();
         draw_stock_notes();
         draw_corner_info();
         m_input->draw_overlay();

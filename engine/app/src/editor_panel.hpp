@@ -3,8 +3,8 @@
 // The side panel of the editor (ADR 0013): below the head with the minimap, compass, rotation and
 // zoom, where the game shows its modes. Its pages: what the document is (file, size, islands,
 // players) with the buttons for the files and undo; a new map; the files to open; the name to
-// save under. The panel only edits what is typed and tells what was clicked; the viewer keeps the
-// document and fills the model every frame.
+// save under; what is selected on the map; what the map shows over it; the check list. The panel only edits what is
+// typed and tells what was clicked; the viewer keeps the document and fills the model every frame.
 #pragma once
 
 #include <array>
@@ -37,12 +37,47 @@ struct EditorNewMap {
     friend bool operator==(const EditorNewMap&, const EditorNewMap&) = default;
 };
 
+/// What a click on the editor's map picked.
+struct EditorPick {
+    enum class Kind : std::uint8_t { None, Sea, Island, Building, Ship, Soldier };
+    Kind kind = Kind::None;
+    std::uint16_t island = 0;  ///< Island, Building: index into World::islands()
+    /// Sea, Island: the world tile clicked; Building: its origin on the island.
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t id = 0;  ///< Ship, Soldier: its id
+    friend bool operator==(const EditorPick&, const EditorPick&) = default;
+};
+
 /// A file the editor can open, as the list shows it.
 struct EditorFile {
     std::string name;  ///< Windows-1252
     /// The heading of the group the file belongs to (Windows-1252): own scenarios, the original's.
     std::string group;
 };
+
+/// A property of what is selected on the map, as the panel shows it (Windows-1252).
+struct EditorProperty {
+    std::string label;
+    std::string value;
+};
+
+/// A line of the check list (Windows-1252).
+struct EditorCheckLine {
+    enum class Kind : std::uint8_t {
+        Heading,  ///< a group: what the world needs, what the original cannot have
+        Error,    ///< keeps the scenario from being saved
+        Warning,  ///< beyond the original's limits while the scenario is to keep to them
+        Note,     ///< beyond the original's limits, which the scenario need not keep to
+        Fine,     ///< nothing found in the group
+    };
+    std::string text;
+    Kind kind = Kind::Note;
+};
+
+/// What the map shows over the world in the editor (the page "View").
+enum class EditorOverlay : std::uint8_t { Owners, IslandNumbers, Coordinates };
+inline constexpr std::size_t kEditorOverlays = 3;
 
 /// What the panel shows; the viewer fills it every frame.
 struct EditorModel {
@@ -64,6 +99,13 @@ struct EditorModel {
     /// The names (Windows-1252, without ".o1602") of the own scenarios: a name typed that is
     /// among them replaces that file.
     std::vector<std::string> own_names;
+    /// What is selected on the map (the page "Selection"): its name and its properties.
+    std::string selection;
+    std::vector<EditorProperty> properties;
+    /// The overlays shown, by EditorOverlay.
+    std::array<bool, kEditorOverlays> overlays{};
+    /// The check list (the page "Check"), as made when the page opened.
+    std::vector<EditorCheckLine> check;
 };
 
 /// What a click or a key asked for.
@@ -78,6 +120,8 @@ struct EditorRequest {
         Close,  ///< out of the editor, back to the main menu
         /// The page "Open" opens: the model's list of files is due.
         ListFiles,
+        Overlay,  ///< the overlay `index` (EditorOverlay) on or off
+        Check,    ///< the page "Check" opens: the check list is due
     };
     Kind kind = Kind::Close;
     std::size_t index = 0;
@@ -94,7 +138,10 @@ public:
     /// The longest name a scenario can be saved under.
     static constexpr std::size_t kMaxName = 60;
 
-    enum class Page : std::uint8_t { Document, New, Open, SaveAs };
+    /// Lines of the check list on one page.
+    static constexpr std::size_t kCheckRows = 9;
+
+    enum class Page : std::uint8_t { Document, New, Open, SaveAs, Selection, View, Check };
 
     explicit EditorPanel(ui::FormStyle style = {}) : m_form(style) {}
 
@@ -113,6 +160,9 @@ public:
     void show_document() noexcept;
     /// The page "Save as" with `name` offered.
     void ask_name(std::string_view name);
+    /// The page of what was selected on the map (a click on the map); false on a page that a
+    /// click on the map must not leave (a new map, the files, a name being typed).
+    bool show_selection() noexcept;
     /// The page "New map" with `map` offered.
     void ask_new(const EditorNewMap& map);
     /// A name is being typed: the keys go here.
@@ -149,6 +199,9 @@ private:
     void layout_new();
     void layout_open(const EditorModel& model);
     void layout_save(const EditorModel& model);
+    void layout_selection(const EditorModel& model);
+    void layout_view(const EditorModel& model);
+    void layout_check(const EditorModel& model);
     std::optional<EditorRequest> commit_name();
 
     ui::Form m_form;
@@ -157,7 +210,7 @@ private:
     std::int32_t m_height = 400;
     std::string m_text;  ///< the name being typed
     EditorNewMap m_new;
-    std::size_t m_first = 0;  ///< the first file shown on the page "Open"
+    std::size_t m_first = 0;  ///< the first file shown on the page "Open", the first line on "Check"
 };
 
 }  // namespace o1602::app

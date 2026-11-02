@@ -1035,7 +1035,11 @@ void MapInput::handle_event(const SDL_Event& event) {
             if (event.button.button == SDL_BUTTON_RIGHT || event.button.button == SDL_BUTTON_MIDDLE) {
                 m_drag.press();
             } else if (m_editor) {
-                // The editor's map: no selection, tool or order of the game (ADR 0013).
+                // The editor's map: no selection, tool or order of the game (ADR 0013); the left
+                // button picks what the editor's panel shows.
+                if (event.button.button == SDL_BUTTON_LEFT) {
+                    editor_pick_at_mouse();
+                }
             } else if (event.button.button == SDL_BUTTON_LEFT && m_tool.active()) {
                 if (const auto spot = spot_at_mouse()) {
                     m_tool.press(*spot);
@@ -1619,6 +1623,33 @@ std::optional<ui::UnitRef> MapInput::unit_at(double sx, double sy) const {
         }
     }
     return best;
+}
+
+void MapInput::editor_pick_at_mouse() {
+    const sim::World& w = world();
+    EditorPick pick;
+    if (const auto unit = unit_at(m_mouse_x, m_mouse_y)) {
+        pick.kind = unit->kind == ui::UnitRef::Kind::Ship ? EditorPick::Kind::Ship : EditorPick::Kind::Soldier;
+        pick.id = unit->id;
+    } else if (const auto hit =
+                   building_tile_at(m_mouse_x, m_mouse_y, [&](std::uint16_t island, const sim::SubTile& t) {
+                       return t.building != nullptr && w.islands()[island].map.contains(t.origin_x, t.origin_y);
+                   })) {
+        const sim::SubTile t = w.islands()[hit->island].map.sub_tile(m_buildings, hit->local_x, hit->local_y);
+        pick.kind = EditorPick::Kind::Building;
+        pick.island = hit->island;
+        pick.x = static_cast<std::uint32_t>(t.origin_x);
+        pick.y = static_cast<std::uint32_t>(t.origin_y);
+    } else if (const auto tile = tile_at_mouse()) {
+        const sim::World::Cell& cell = w.cell(tile->x, tile->y);
+        pick.kind = cell.island == sim::World::kSea ? EditorPick::Kind::Sea : EditorPick::Kind::Island;
+        pick.island = cell.island == sim::World::kSea ? 0 : cell.island;
+        pick.x = tile->x;
+        pick.y = tile->y;
+    } else {
+        return;
+    }
+    m_host.editor_pick(pick);
 }
 
 void MapInput::map_left_up(double x, double y, std::uint16_t mod, int clicks) {

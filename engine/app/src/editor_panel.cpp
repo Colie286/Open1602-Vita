@@ -24,6 +24,8 @@ constexpr Id kSaveAs = 4;
 constexpr Id kUndo = 5;
 constexpr Id kRedo = 6;
 constexpr Id kClose = 7;
+constexpr Id kView = 8;
+constexpr Id kCheck = 9;
 // The other pages.
 constexpr Id kCancel = 10;
 constexpr Id kCreate = 11;
@@ -35,7 +37,9 @@ constexpr Id kField = 16;
 constexpr Id kStore = 17;
 constexpr Id kPrevious = 18;
 constexpr Id kNext = 19;
-constexpr Id kFirstRow = 100;  ///< + the row on the page
+constexpr Id kBack = 20;
+constexpr Id kFirstOverlay = 30;  ///< + EditorOverlay
+constexpr Id kFirstRow = 100;     ///< + the row on the page
 
 constexpr std::int32_t kX = 12;
 constexpr std::int32_t kW = EditorPanel::kWidth - 2 * kX;
@@ -44,6 +48,9 @@ constexpr std::int32_t kGap = 6;
 constexpr std::int32_t kLine = 24;
 constexpr std::int32_t kRowH = 24;
 constexpr std::int32_t kNote = 100;  ///< a note of up to five lines
+
+constexpr std::array<const char*, kEditorOverlays> kOverlayTexts = {"editor.view.owners", "editor.view.island_numbers",
+                                                                    "editor.view.coordinates"};
 
 constexpr std::array<const char*, 4> kIslandTexts = {"editor.new.islands.none", "editor.new.islands.few",
                                                      "editor.new.islands.normal", "editor.new.islands.many"};
@@ -105,6 +112,15 @@ void EditorPanel::ask_name(std::string_view name) {
     m_form.select_all();  // what is typed replaces the name offered
 }
 
+bool EditorPanel::show_selection() noexcept {
+    if (m_page == Page::New || m_page == Page::Open || m_page == Page::SaveAs) {
+        return false;
+    }
+    m_page = Page::Selection;
+    m_form.set_focus(std::nullopt);
+    return true;
+}
+
 void EditorPanel::ask_new(const EditorNewMap& map) {
     m_page = Page::New;
     m_new = map;
@@ -135,6 +151,15 @@ void EditorPanel::layout(const EditorModel& model) {
             break;
         case Page::SaveAs:
             layout_save(model);
+            break;
+        case Page::Selection:
+            layout_selection(model);
+            break;
+        case Page::View:
+            layout_view(model);
+            break;
+        case Page::Check:
+            layout_check(model);
             break;
     }
 }
@@ -172,6 +197,8 @@ void EditorPanel::layout_document(const EditorModel& model) {
     full(kSaveAs, "editor.save_as");
     full(kUndo, "editor.undo", model.can_undo);
     full(kRedo, "editor.redo", model.can_redo);
+    full(kView, "editor.view");
+    full(kCheck, "editor.check");
     full(kClose, "editor.close");
     if (!model.notice.empty()) {
         const std::int32_t bottom = m_top + m_height - 6;
@@ -266,6 +293,76 @@ void EditorPanel::layout_save(const EditorModel& model) {
     f.button(kCancel, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
 }
 
+void EditorPanel::layout_selection(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.selection.title"), Align::Left, Tone::Heading);
+    y += 30;
+    if (model.selection.empty()) {
+        f.paragraph(Rect{kX, y, kW, 3 * 20}, ui::tr("editor.selection.none"), Tone::Dim, 20);
+        y += 3 * 20 + 4;
+    } else {
+        f.paragraph(Rect{kX, y, kW, 2 * kLine}, model.selection, Tone::Normal, kLine);
+        y += 2 * kLine + 4;
+        const std::int32_t bottom = m_top + m_height - kButtonH - 2 * kGap;
+        for (const EditorProperty& p : model.properties) {
+            if (y + kLine > bottom) {
+                break;
+            }
+            f.entry(Rect{kX, y, kW, kLine}, p.label, p.value, Tone::Dim);
+            y += kLine;
+        }
+        y += kGap;
+    }
+    f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+}
+
+void EditorPanel::layout_view(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.view.title"), Align::Left, Tone::Heading);
+    y += 34;
+    for (std::size_t i = 0; i < kEditorOverlays; ++i) {
+        f.check(kFirstOverlay + static_cast<Id>(i), Rect{kX, y, kW, kButtonH}, ui::tr(kOverlayTexts[i]),
+                model.overlays[i]);
+        y += kButtonH + kGap;
+    }
+    y += kGap;
+    f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+}
+
+void EditorPanel::layout_check(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.check.title"), Align::Left, Tone::Heading);
+    y += 32;
+    const std::size_t n = model.check.size();
+    m_first = std::min(m_first, n > kCheckRows ? n - kCheckRows : 0);
+    constexpr std::int32_t kItem = 40;  // two lines of 20
+    for (std::size_t i = m_first; i < n && i < m_first + kCheckRows; ++i) {
+        const EditorCheckLine& line = model.check[i];
+        using Kind = EditorCheckLine::Kind;
+        if (line.kind == Kind::Heading) {
+            f.label(Rect{kX, y, kW, kLine}, line.text, Align::Left, Tone::Heading);
+            y += kLine;
+            continue;
+        }
+        const Tone tone = line.kind == Kind::Error || line.kind == Kind::Warning ? Tone::Warning
+                          : line.kind == Kind::Fine                              ? Tone::Normal
+                                                                                 : Tone::Dim;
+        f.paragraph(Rect{kX + 8, y, kW - 8, kItem}, line.text, tone, 20);
+        y += kItem;
+    }
+    y += 4;
+    if (n > kCheckRows) {
+        const std::int32_t half = (kW - kGap) / 2;
+        f.button(kPrevious, Rect{kX, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
+        f.button(kNext, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.next"), m_first + kCheckRows < n);
+        y += kButtonH + kGap;
+    }
+    f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+}
+
 std::vector<ui::DrawItem> EditorPanel::draw(const EditorModel& model,
                                             const std::array<const ui::Font*, ui::kFontSlots>& fonts) {
     layout(model);
@@ -310,6 +407,16 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
             return EditorRequest{EditorRequest::Kind::Redo};
         case kClose:
             return EditorRequest{EditorRequest::Kind::Close};
+        case kView:
+            m_page = Page::View;
+            return std::nullopt;
+        case kCheck:
+            m_page = Page::Check;
+            m_first = 0;
+            return EditorRequest{EditorRequest::Kind::Check};
+        case kBack:
+            show_document();
+            return std::nullopt;
         case kCancel:
             show_document();
             return std::nullopt;
@@ -335,14 +442,21 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
         }
         case kStore:
             return commit_name();
-        case kPrevious:
-            m_first = m_first > kRows ? m_first - kRows : 0;
+        case kPrevious: {
+            const std::size_t rows = m_page == Page::Check ? kCheckRows : kRows;
+            m_first = m_first > rows ? m_first - rows : 0;
             return std::nullopt;
+        }
         case kNext:
-            m_first += kRows;
+            m_first += m_page == Page::Check ? kCheckRows : kRows;
             return std::nullopt;
         default:
             break;
+    }
+    if (*id >= kFirstOverlay && *id < kFirstOverlay + static_cast<Id>(kEditorOverlays)) {
+        EditorRequest r{EditorRequest::Kind::Overlay};
+        r.index = static_cast<std::size_t>(*id - kFirstOverlay);
+        return r;
     }
     if (*id >= kFirstRow && m_page == Page::Open) {
         const std::size_t index = m_first + static_cast<std::size_t>(*id - kFirstRow);
