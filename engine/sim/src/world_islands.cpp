@@ -8,6 +8,7 @@
 
 #include "o1602/sim/sea_paths.hpp"
 #include "o1602/sim/world.hpp"
+#include "o1602/sim/world_generator.hpp"
 
 namespace o1602::sim {
 
@@ -464,6 +465,48 @@ core::Status World::remove_island(std::size_t index, const assets::BuildingTable
         }
     }
     return core::Ok{};
+}
+
+core::Status World::resize(std::uint32_t width, std::uint32_t height, const assets::BuildingTable* buildings) {
+    if (width == 0 || height == 0 || width > kMaxSide || height > kMaxSide) {
+        return make_error(ErrorCode::OutOfRange,
+                          "a map of " + std::to_string(width) + " x " + std::to_string(height) + " tiles");
+    }
+    if (!m_simulation_state.empty()) {
+        return make_error(ErrorCode::InvalidFormat, "the size of a running game's map stays");
+    }
+    const auto fits = [&](std::uint64_t x, std::uint64_t y, std::uint64_t w, std::uint64_t h) {
+        return x + w <= width && y + h <= height;
+    };
+    for (const WorldIsland& island : m_islands) {
+        if (!fits(island.x, island.y, island.map.width(), island.map.height())) {
+            return make_error(ErrorCode::OutOfRange, "an island would lie outside the map");
+        }
+    }
+    for (const Ship& ship : m_ships) {
+        if (!fits(ship.x, ship.y, 1, 1)) {
+            return make_error(ErrorCode::OutOfRange, "a ship would lie outside the map");
+        }
+    }
+    for (const Soldier& soldier : m_soldiers) {
+        if (soldier.pos_x < 0 || soldier.pos_y < 0 ||
+            !fits(static_cast<std::uint64_t>(soldier.pos_x) / 4096, static_cast<std::uint64_t>(soldier.pos_y) / 4096, 1,
+                  1)) {
+            return make_error(ErrorCode::OutOfRange, "a land unit would stand outside the map");
+        }
+    }
+    for (const ScenarioMarker& marker : m_markers) {
+        if (!fits(marker.x, marker.y, marker.width, marker.height)) {
+            return make_error(ErrorCode::OutOfRange, "the marker " + marker.name + " would lie outside the map");
+        }
+    }
+    if (m_planned_islands && !check_planned_islands(*m_planned_islands, width, height).empty()) {
+        return make_error(ErrorCode::OutOfRange, "an island of the world plan would lie outside the map");
+    }
+    m_width = width;
+    m_height = height;
+    m_cells.assign(std::size_t{width} * height, Cell{});
+    return place_islands(buildings);
 }
 
 std::optional<std::uint16_t> World::free_island_number() const {

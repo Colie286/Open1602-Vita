@@ -320,6 +320,9 @@ private:
     void draw_editor_marks();
     /// The requests of the editor's islands: a new one, moved, turned, copied, taken out.
     void editor_island_request(const EditorRequest& request);
+    void editor_save_island(std::size_t index);
+    void editor_load_island(const std::filesystem::path& file);
+    [[nodiscard]] static std::filesystem::path own_island_folder();
     /// `op` done as a step of the document; false (and a note why) if it could not be made.
     bool editor_perform(core::Result<std::unique_ptr<editor::Operation>> op);
     /// The islands changed: what the viewer keeps of them is made anew (flags, minimap), and what

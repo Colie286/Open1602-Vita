@@ -505,6 +505,10 @@ public:
     core::Status remove_island(std::size_t index, const assets::BuildingTable* buildings = nullptr);
     /// The smallest island number no island has, nothing if all are taken.
     [[nodiscard]] std::optional<std::uint16_t> free_island_number() const;
+    /// The map made `width` x `height` tiles large (at least 1, at most kMaxSide), growing or cut
+    /// at the right and the bottom: everything keeps its place. Fails if an island, a ship, a
+    /// land unit, a marker or an island of the world plan would lie outside.
+    core::Status resize(std::uint32_t width, std::uint32_t height, const assets::BuildingTable* buildings = nullptr);
 
     [[nodiscard]] const std::vector<Player>& players() const noexcept { return m_players; }
     [[nodiscard]] const std::vector<Ship>& ships() const noexcept { return m_ships; }

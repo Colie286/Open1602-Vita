@@ -318,3 +318,103 @@ TEST_CASE("editor islands: ships at an island's coast go with it, others keep it
     (*op)->revert(world);
     CHECK(world.ships()[0].x == 40);
 }
+
+TEST_CASE("editor islands: the map grows and is cut at the right and the bottom, undo gives the same bytes") {
+    const auto buildings = make_buildings();
+    editor::Document document(make_world(buildings));
+    const auto before = document.save(buildings);
+    REQUIRE(before.ok());
+    CHECK((editor::used_size(document.world()) == std::pair<std::uint32_t, std::uint32_t>{112, 70}));
+
+    auto grow = editor::resize_world(document.world(), 700, 500, buildings);
+    REQUIRE(grow.ok());
+    document.perform(std::move(grow).value());
+    CHECK(document.world().width() == 700);
+    CHECK(document.world().height() == 500);
+    CHECK(document.world().cell(105, 64).island == 1);
+    CHECK(document.world().cell(650, 450).island == sim::World::kSea);
+    CHECK(sim::validate(document.world()).ok());
+    CHECK(document.history().next_undo() == "world_size");
+
+    auto cut = editor::resize_world(document.world(), 112, 70, buildings);
+    REQUIRE(cut.ok());
+    document.perform(std::move(cut).value());
+    CHECK(document.world().width() == 112);
+    CHECK(document.world().cell(111, 69).island == 1);
+    CHECK(sim::validate(document.world()).ok());
+    auto saved = document.save(buildings);
+    REQUIRE(saved.ok());
+
+    CHECK(document.undo());
+    CHECK(document.undo());
+    auto after = document.save(buildings);
+    REQUIRE(after.ok());
+    CHECK(*after == *before);
+}
+
+TEST_CASE("editor islands: the map is not cut below what it holds") {
+    const auto buildings = make_buildings();
+    sim::World world = make_world(buildings);
+    CHECK(!editor::resize_world(world, 111, 70, buildings).ok());  // the second island
+    CHECK(!editor::resize_world(world, 112, 69, buildings).ok());
+    CHECK(!editor::resize_world(world, 500, 350, buildings).ok());  // the size it has
+    CHECK(!editor::resize_world(world, 0, 350, buildings).ok());
+    CHECK(!editor::resize_world(world, sim::World::kMaxSide + 1, 350, buildings).ok());
+    sim::Ship ship;
+    ship.id = 1;
+    ship.x = 300;
+    ship.y = 200;
+    ship.pos_x = 300 * 4096;
+    ship.pos_y = 200 * 4096;
+    world.ships().push_back(ship);
+    CHECK((editor::used_size(world) == std::pair<std::uint32_t, std::uint32_t>{301, 201}));
+    CHECK(!editor::resize_world(world, 300, 350, buildings).ok());
+    CHECK(editor::resize_world(world, 301, 201, buildings).ok());
+    world.set_simulation_state({1, 2, 3});
+    CHECK(!editor::resize_world(world, 400, 300, buildings).ok());
+}
+
+TEST_CASE("editor islands: the crops an island grows are one step") {
+    const auto buildings = make_buildings();
+    editor::Document document(make_world(buildings));
+    const std::uint32_t before = document.world().islands()[1].header.fertility;
+    auto op = editor::set_fertility(document.world(), 1, before | 1U << 1U);  // tobacco
+    REQUIRE(op.ok());
+    document.perform(std::move(op).value());
+    CHECK(document.world().islands()[1].header.fertility == (before | 1U << 1U));
+    CHECK(document.history().next_undo() == "island_fertility");
+    CHECK(!editor::set_fertility(document.world(), 1, before | 1U << 1U).ok());  // nothing changes
+    CHECK(!editor::set_fertility(document.world(), 5, 0).ok());
+    CHECK(document.undo());
+    CHECK(document.world().islands()[1].header.fertility == before);
+}
+
+TEST_CASE("editor islands: an island saved alone comes back with its tiles, without who knew it") {
+    const auto buildings = make_buildings();
+    sim::World world = make_world(buildings);
+    world.island(1).header.fertility = 0x7E;
+    world.island(1).header.discovered = 3;
+    auto bytes = editor::save_island(world, 1, buildings);
+    REQUIRE(bytes.ok());
+    auto island = editor::load_island(*bytes, buildings, nullptr);
+    REQUIRE(island.ok());
+    CHECK(island->map.width() == 12);
+    CHECK(island->map.height() == 10);
+    CHECK(island->x == 0);
+    CHECK(island->header.fertility == 0x7E);
+    CHECK(island->header.discovered == 0);
+    for (std::uint32_t y = 0; y < 10; ++y) {
+        for (std::uint32_t x = 0; x < 12; ++x) {
+            CHECK(same_tile(island->map.top(x, y), world.islands()[1].map.top(x, y)));
+        }
+    }
+    auto op = editor::add_island(world, std::move(island).value(), 200, 150, buildings);
+    REQUIRE(op.ok());
+    (*op)->apply(world);
+    CHECK(world.islands().size() == 3);
+    CHECK(world.islands()[2].header.number == 2);  // 1 is taken
+    CHECK(sim::validate(world).ok());
+    CHECK(!editor::load_island(std::vector<std::uint8_t>{1, 2, 3}, buildings, nullptr).ok());
+    world.set_simulation_state({1});
+    CHECK(!editor::save_island(world, 1, buildings).ok());
+}

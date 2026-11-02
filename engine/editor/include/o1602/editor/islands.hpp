@@ -6,16 +6,20 @@
 // was before for undo (WorldEdit) instead of single tiles.
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "o1602/assets/building_table.hpp"
 #include "o1602/assets/game_directory.hpp"
+#include "o1602/core/file.hpp"
 #include "o1602/core/result.hpp"
 #include "o1602/editor/operation.hpp"
 #include "o1602/sim/world.hpp"
@@ -38,6 +42,31 @@ private:
     std::string m_kind;
     std::size_t m_memory = 0;
 };
+
+/// The crops an island's fertility names (assets::IslandHeader::fertility, bit ware - 45):
+/// tobacco, spices, sugar cane, cotton, wine and cocoa.
+inline constexpr std::array<std::uint8_t, 6> kCropWares = {46, 47, 48, 49, 50, 51};
+
+/// An island's fertility (the crops it grows) changed: keeps it before and after.
+class FertilityEdit final : public Operation {
+public:
+    FertilityEdit(std::size_t island, std::uint32_t before, std::uint32_t after) noexcept
+        : m_island(island), m_before(before), m_after(after) {}
+    void apply(sim::World& world) override;
+    void revert(sim::World& world) override;
+    [[nodiscard]] std::size_t memory() const noexcept override { return sizeof(*this); }
+    [[nodiscard]] std::string_view kind() const noexcept override { return "island_fertility"; }
+
+private:
+    std::size_t m_island;
+    std::uint32_t m_before;
+    std::uint32_t m_after;
+};
+
+/// The island `index` fertile for exactly the wares of `fertility` (bit ware - 45); an error if
+/// there is no such island or nothing changes.
+[[nodiscard]] core::Result<std::unique_ptr<Operation>> set_fertility(const sim::World& world, std::size_t index,
+                                                                     std::uint32_t fertility);
 
 /// About how much memory a world holds: the map's cells and the islands' tiles.
 [[nodiscard]] std::size_t world_memory(const sim::World& world) noexcept;
@@ -88,5 +117,26 @@ struct NewIsland {
                                                                    const assets::BuildingTable& buildings);
 [[nodiscard]] core::Result<std::unique_ptr<Operation>> remove_island(const sim::World& world, std::size_t index,
                                                                      const assets::BuildingTable& buildings);
+/// The island `index` alone as a file: an Open1602 world as large as the island, which
+/// load_island() reads back. Only an island no city, building or unit of a game is on.
+[[nodiscard]] core::Result<core::Bytes> save_island(const sim::World& world, std::size_t index,
+                                                    const assets::BuildingTable& buildings);
+
+/// The island of an island file at (0, 0): one save_island() wrote (the first island of an
+/// Open1602 world), or one of the original's island files (.scp). Who knew it and a drought go.
+[[nodiscard]] core::Result<sim::WorldIsland> load_island(std::span<const std::uint8_t> bytes,
+                                                         const assets::BuildingTable& buildings,
+                                                         const assets::GameDirectory* game,
+                                                         std::vector<std::string>* warnings = nullptr);
+
+/// The smallest map (width, height) that holds the islands, ships, land units and markers, at
+/// least 1 x 1: how far resize_world() can cut.
+[[nodiscard]] std::pair<std::uint32_t, std::uint32_t> used_size(const sim::World& world) noexcept;
+
+/// The map made `width` x `height` tiles large, growing or cut at the right and the bottom
+/// (sim::World::resize()).
+[[nodiscard]] core::Result<std::unique_ptr<Operation>> resize_world(const sim::World& world, std::uint32_t width,
+                                                                    std::uint32_t height,
+                                                                    const assets::BuildingTable& buildings);
 
 }  // namespace o1602::editor

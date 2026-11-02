@@ -32,6 +32,8 @@ namespace o1602::app {
 namespace {
 
 constexpr std::string_view kScenarioEnding = ".o1602";
+/// The folder of own islands (the editor's "Save island"), in the data folder.
+constexpr std::string_view kOwnIslandsFolder = "islands";
 
 std::string lower(std::string text) {
     std::transform(text.begin(), text.end(), text.begin(),
@@ -360,8 +362,15 @@ EditorModel MapViewer::editor_model() const {
     if (m_editor->pick.kind == EditorPick::Kind::Island && m_editor->pick.island < world.islands().size()) {
         m.island = m_editor->pick.island;
         m.island_free = world.island_use(m_editor->pick.island) == sim::World::IslandUse::None;
+        m.island_fertility = world.islands()[m_editor->pick.island].header.fertility;
+        m.island_climate = world.islands()[m_editor->pick.island].header.climate;
     }
     m.placing = m_editor->placing.has_value();
+    if (m_hud && m_hud->editor_panel() && m_hud->editor_panel()->page() == EditorPanel::Page::WorldSize) {
+        const auto [w, h] = editor::used_size(world);
+        m.used_width = w;
+        m.used_height = h;
+    }
     if (m_hud && m_hud->editor_panel() && m_hud->editor_panel()->page() == EditorPanel::Page::SaveAs) {
         // Only while a name is typed: the folder is read every frame then.
         for (const std::filesystem::path& p : files_in(data_folder() / kOwnScenariosFolder, {kScenarioEnding})) {
@@ -463,6 +472,46 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         case Kind::StopPlacing:
             editor_island_request(request);
             break;
+        case Kind::SaveIsland:
+            editor_save_island(request.index);
+            break;
+        case Kind::ListIslandFiles:
+            m_editor_files.clear();
+            m_editor_file_rows.clear();
+            for (const std::filesystem::path& p : files_in(own_island_folder(), {kScenarioEnding, ".scp"})) {
+                m_editor_files.push_back(p);
+                m_editor_file_rows.push_back(EditorFile{shown_name(p), ui::tr("editor.islands.own_files")});
+            }
+            break;
+        case Kind::LoadIsland:
+            if (request.index < m_editor_files.size()) {
+                editor_load_island(m_editor_files[request.index]);
+            }
+            break;
+        case Kind::SetFertility: {
+            auto op = editor::set_fertility(m_editor->document.world(), request.index, request.fertility);
+            if (op) {
+                m_editor->document.perform(std::move(op).value());
+            }
+            break;
+        }
+        case Kind::ResizeWorld: {
+            const sim::World& world = m_editor->document.world();
+            if (!world.simulation_state().empty()) {
+                editor_notice(ui::tr("editor.islands.in_use.game"), true, "the map of a running game");
+                break;
+            }
+            auto op = editor::resize_world(world, request.width, request.height, m_buildings);
+            if (!op) {
+                editor_notice(ui::tr("editor.world_size.failed"), true, op.error().message);
+                break;
+            }
+            m_editor->document.perform(std::move(op).value());
+            editor_islands_changed();
+            editor_notice(ui::tr("editor.world_size.done", {number(request.width), number(request.height)}), false,
+                          "map size changed");
+            break;
+        }
     }
 }
 
@@ -569,6 +618,70 @@ void MapViewer::editor_island_request(const EditorRequest& request) {
     }
 }
 
+std::filesystem::path MapViewer::own_island_folder() {
+    const std::filesystem::path folder = data_folder() / kOwnIslandsFolder;
+    std::error_code ec;
+    std::filesystem::create_directories(folder, ec);
+    return folder;
+}
+
+void MapViewer::editor_save_island(std::size_t index) {
+    const sim::World& world = m_editor->document.world();
+    if (index >= world.islands().size()) {
+        return;
+    }
+    if (const sim::World::IslandUse use = world.island_use(index); use != sim::World::IslandUse::None) {
+        editor_notice(use_note(use), true, "the island is in use");
+        return;
+    }
+    auto bytes = editor::save_island(world, index, m_buildings);
+    if (!bytes) {
+        editor_notice(ui::tr("editor.save_failed", {ui::error_text(bytes.error(), "editor")}), true,
+                      bytes.error().message);
+        return;
+    }
+    // The first free name of "island 1", "island 2", ...
+    const std::filesystem::path folder = own_island_folder();
+    std::filesystem::path file;
+    for (std::size_t n = 1;; ++n) {
+        file = folder / (ui::tr("editor.islands.file_name", {number(n)}) + std::string(kScenarioEnding));
+        std::error_code ec;
+        if (!std::filesystem::exists(file, ec) || n > 9999) {
+            break;
+        }
+    }
+    if (auto written = core::write_file_atomic(file, *bytes); !written) {
+        editor_notice(ui::tr("editor.save_failed", {ui::error_text(written.error(), "editor")}), true,
+                      written.error().message);
+        return;
+    }
+    editor_notice(ui::tr("editor.islands.saved", {shown_name(file)}), false,
+                  "island saved " + core::path_to_utf8(file));
+}
+
+void MapViewer::editor_load_island(const std::filesystem::path& file) {
+    auto bytes = core::read_file(file);
+    std::vector<std::string> warnings;
+    auto island = bytes ? editor::load_island(*bytes, m_buildings, &m_game, &warnings)
+                        : core::Result<sim::WorldIsland>(bytes.error());
+    for (const std::string& w : warnings) {
+        std::fprintf(stderr, "warning: %s\n", w.c_str());
+    }
+    if (!island) {
+        editor_notice(ui::tr("editor.islands.failed", {ui::error_text(island.error(), "editor")}), true,
+                      island.error().message);
+        return;
+    }
+    EditorSession::Placing p;
+    p.kind = EditorSession::Placing::Kind::New;
+    p.width = island->map.width();
+    p.height = island->map.height();
+    p.island = std::move(island).value();
+    p.page = EditorPanel::Page::Islands;
+    m_editor->placing = std::move(p);
+    editor_notice(ui::tr("editor.islands.placing"), false, "placing an island from " + core::path_to_utf8(file));
+}
+
 bool MapViewer::editor_perform(core::Result<std::unique_ptr<editor::Operation>> op) {
     if (!op) {
         editor_notice(ui::tr("editor.islands.no_room"), true, op.error().message);
@@ -584,6 +697,7 @@ void MapViewer::editor_islands_changed() {
         return;
     }
     m_building_figures = render::collect_building_figures(m_state->world, m_buildings, m_figures);
+    m_camera.set_world_size(m_state->world.width(), m_state->world.height());
     if (m_hud) {
         m_hud->rebuild_minimap();
     }
