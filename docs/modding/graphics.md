@@ -133,6 +133,7 @@ image = "icons/pepper.png"
 | Field | Limits | Meaning |
 |---|---|---|
 | `image` | a path in the package, folders split by `/`; at most 256 x 256 pixels | the icon (required) |
+| `tint` | `true` or `false` (default) | the icon is a template in player colour, a coat of arms for instance: where it stands for a player, its pure grey pixels take on the colour of that player's banner ([flags.md](flags.md#graphics-of-packages-in-player-colour)). So far a message's icon (the player it is about) and a soldier's icon in a castle (the castle's owner); elsewhere it is drawn as it is |
 
 An icon is drawn as large as its PNG is, for the interface of screens 1024 pixels wide; the
 interface's smaller art (640 and 800 pixels) takes it smaller. Unlike the sprites of the islands it

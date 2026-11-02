@@ -279,6 +279,11 @@ public:
     /// Destroys the building of a city on tile (x, y) of island `island` to ruins, as a fire does,
     /// whoever owns it; false if none stands there (ground, forest and rocks outside cities stay).
     bool script_destroy(std::uint16_t island, std::int32_t x, std::int32_t y);
+    /// A land unit of `player` appears on world tile (x, y) of an island, with full health, as a
+    /// castle would release it: `family` is the red figure of a unit family (the original's or a
+    /// package's). Returns its id; nothing for no such player, no unit family, or a tile soldiers
+    /// cannot stand on.
+    std::optional<std::uint32_t> script_unit(PlayerId player, std::uint32_t family, std::int32_t x, std::int32_t y);
 
     /// Gives `player` the mission `mission`, or none, from now on. The player gets a slot of their
     /// own, so whoever shared the old mission keeps it; a computer's mission counts for it (goal

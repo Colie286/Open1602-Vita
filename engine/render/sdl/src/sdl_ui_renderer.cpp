@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "o1602/render/flag_tint.hpp"
 #include "o1602/render/package_sprites.hpp"
 #include "o1602/render/shape_tint.hpp"
 #include "o1602/render/variant_tint.hpp"
@@ -298,7 +299,10 @@ SdlUiRenderer::Texture SdlUiRenderer::sprite(std::int32_t block, std::int32_t gf
     }
     Texture t;
     if (icon != nullptr) {
-        t = package_icon(*icon, mode, colour);
+        // A template icon in the colour of the player it stands for (set_package_icon); others as drawn.
+        const std::optional<assets::Rgba> player =
+            icon->tint && tinting ? std::optional<assets::Rgba>(tint->colour) : std::nullopt;
+        t = package_icon(*icon, mode, colour, player);
     } else if (block >= 0 && block < static_cast<std::int32_t>(m_sheets.size()) &&
                m_sheets[static_cast<std::size_t>(block)] && gfx >= 0 &&
                static_cast<std::size_t>(gfx) < m_sheets[static_cast<std::size_t>(block)]->size()) {
@@ -335,13 +339,17 @@ SdlUiRenderer::Texture SdlUiRenderer::sprite(std::int32_t block, std::int32_t gf
     return t;
 }
 
-SdlUiRenderer::Texture SdlUiRenderer::package_icon(const assets::PackageIcon& icon, int mode, std::int32_t colour) {
+SdlUiRenderer::Texture SdlUiRenderer::package_icon(const assets::PackageIcon& icon, int mode, std::int32_t colour,
+                                                   std::optional<assets::Rgba> player) {
     IconPixels picture = package_icon_pixels(icon, art_scale());
     if (!picture.error.empty()) {
         std::fprintf(stderr, "mods: icon %s: %s\n", icon.id.c_str(), picture.error.c_str());
         return Texture{};
     }
     if (own_colours(mode)) {
+        if (player) {
+            tint_rgba(picture.rgba, *player);
+        }
         if (mode != kModeSprite) {
             clear_raster(picture.rgba, picture.width, picture.height, mode);
         }

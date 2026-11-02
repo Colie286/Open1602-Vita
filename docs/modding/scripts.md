@@ -87,7 +87,7 @@ The table `game` holds what the game offers a script:
 | `game.time()` | the game time in whole seconds |
 | `game.players()` | the players' numbers, a list starting with 0 |
 | `game.player(n)` | player `n` as a table: `id`, `name`, `role` (`"human"`, `"computer"`, `"neutral"`), `money`, `inhabitants`, `playing` (still in the game), `won`, `faction` (its id, `"anno1602:settlers"`, [factions.md](factions.md)); nil for no such player |
-| `game.message(id, values, player)` | posts a message of the package's `messages.toml` ([messages.md](messages.md)); `id` is its name there, or `"<package>:<name>"` for another package's; `values` fills its placeholders (a table of names, may be nil); `player` is the only player to see it (nil: everyone) |
+| `game.message(id, values, player, about)` | posts a message of the package's `messages.toml` ([messages.md](messages.md)); `id` is its name there, or `"<package>:<name>"` for another package's; `values` fills its placeholders (a table of names, may be nil); `player` is the only player to see it (nil: everyone); `about` (optional) is the player it is about: its icon is in that player's colour, otherwise in the colour of the one who sees it |
 
 ```lua
 -- mods/lighthouse/script.lua
@@ -130,6 +130,7 @@ ware number.
 | `game.demolish(player, island, x, y)` | demolishes the building of `player` on the tile as the player would; returns how many buildings went (0 or 1) |
 | `game.destroy(island, x, y)` | destroys the building of a city on the tile to ruins, as a fire does, whoever owns it; true if one stood there (ground, forest and rocks outside cities stay) |
 | `game.move_ship(ship, x, y)` | sends the ship (its id) to world tile `x`, `y`, as its owner would; `x` nil stops it; true if it sails, false for no such ship, the free trader's, or a tile off the map |
+| `game.add_unit(player, unit, x, y)` | a land unit of `player` appears on world tile `x`, `y` of an island with full health, as a castle releases one: `unit` names a unit family, `"anno1602:musketeer"` (`swordsman`, `cavalry`, `cannoneer`), a soldier of a package (`"<package>:<name>"`, or a name of the package's own) or the number of its red figure. Its id, or false for no unit family or a tile soldiers cannot stand on |
 | `game.move_unit(unit, x, y, fight)` | sends the land unit (its id) to world tile `x`, `y`, as its owner would; `x` nil stops it; `fight` true: it fights every enemy it meets on the way. True if it goes, false for no such unit, one without an owner or a tile off the map |
 | `game.attack_unit(unit, other)` | the unit attacks the land unit `other`, as its owner would: that is war with the other's owner. True if so, false for no such unit or itself |
 | `game.set_mission(player, goals)` | gives `player` these goals as their mission from now on, all of which must hold at the same time, as a scenario's: a table with the keys `game.mission` gives (a good named as above, at most two) and `text`, the description; nil or a table without goals: no mission. Whoever shared the old mission keeps it; a computer's mission counts for it as for a person. True if so, false for no such player or a neutral one |

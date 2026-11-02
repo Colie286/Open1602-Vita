@@ -61,6 +61,8 @@ struct ScriptMessage {
     std::string id;
     std::vector<std::pair<std::string, std::string>> args;
     sim::PlayerId player = sim::kNoPlayer;
+    /// The player the message is about: its icon is in their colour. kNoPlayer: the one who sees it.
+    sim::PlayerId about = sim::kNoPlayer;
 };
 
 /// A script that failed, or a line it printed.

@@ -16,12 +16,15 @@
 #include "o1602/assets/building_table.hpp"
 #include "o1602/assets/cod.hpp"
 #include "o1602/assets/figure_table.hpp"
+#include "o1602/assets/own_figures.hpp"
+#include "o1602/script/game_scripts.hpp"
 #include "o1602/sim/combat.hpp"
 #include "o1602/sim/construction.hpp"
 #include "o1602/sim/logistics.hpp"
 #include "o1602/sim/military.hpp"
 #include "o1602/sim/save_game.hpp"
 #include "o1602/sim/ships.hpp"
+#include "o1602/sim/simulation.hpp"
 #include "o1602/sim/world.hpp"
 
 using namespace o1602;
@@ -619,6 +622,47 @@ TEST_CASE("military: a package's unit trains in a castle's place, goes on board 
     CHECK(f.world.soldiers()[0].health == 20);
     CHECK(boat->cargo[0].ware == 0);
     CHECK(boat->cargo[0].unit == 0);
+}
+
+TEST_CASE("military: a script sets down units of the original and of a package") {
+    Field f;
+    assets::FigureType pike = *f.figures.get(kSword);
+    pike.combat.max_health = 40;
+    const auto family = f.figures.add_unit_family(std::vector<assets::FigureType>(4, pike));
+    REQUIRE(family.ok());
+    f.world.set_own_figures({assets::OwnFigure{"guards:pike", *family}});
+    sim::Simulation simulation(f.world, f.buildings, f.figures);
+    std::vector<script::PackageScript> sources;
+    sources.push_back(script::PackageScript{"guards",
+                                            "function on_start()\n"
+                                            "  print(game.add_unit(0, 'anno1602:swordsman', 14, 15) ~= false,\n"
+                                            "        game.add_unit(1, 'pike', 16, 15) ~= false,\n"
+                                            "        game.add_unit(1, " +
+                                                std::to_string(*family + 1) +
+                                                ", 16, 16),\n"  // a colour, not a family
+                                                "        game.add_unit(0, 'anno1602:carrier', 14, 16),\n"
+                                                "        game.add_unit(0, 'pike', 2, 2))\n"  // the sea
+                                                "  print(pcall(game.add_unit, 5, 'pike', 14, 15))\n"
+                                                "end\n",
+                                            {}});
+    auto scripts = std::make_unique<script::GameScripts>(std::move(sources), f.world);
+    simulation.set_scripts(scripts.get());
+    simulation.tick();
+    const auto notes = scripts->take_notes();
+    simulation.set_scripts(nullptr);
+    REQUIRE(notes.size() == 2);
+    CHECK(notes[0].text == "true\ttrue\tfalse\tfalse\tfalse");
+    CHECK(notes[1].text.find("no such player") != std::string::npos);
+    REQUIRE(f.world.soldiers().size() == 2);
+    const sim::Soldier& sword = f.world.soldiers()[0];
+    CHECK(sword.figure == kSword);
+    CHECK(sword.owner == 0);
+    CHECK(sword.island == 0);
+    CHECK(sword.health == f.figures.get(kSword)->combat.max_health);
+    const sim::Soldier& guard = f.world.soldiers()[1];
+    CHECK(guard.figure == *family);
+    CHECK(guard.owner == 1);
+    CHECK(guard.health == 40);
 }
 
 TEST_CASE("military: a ship from the original's files takes as many soldiers as its type has holds") {

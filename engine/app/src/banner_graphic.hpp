@@ -30,4 +30,16 @@ inline void set_banner_graphic(ui::Panel& panel, std::int32_t id, const render::
     panel.set_graphic(id, s.gfx, press_offset, tint);
 }
 
+/// A package's icon (`sprite`, from kFirstPackageIcon) on gadget `id`, standing for the player of
+/// `banner`: an icon drawn as a template (`tint = true` in icons.toml) takes on the banner's
+/// colour, any other is shown as drawn.
+inline void set_package_icon(ui::Panel& panel, std::int32_t id, std::int32_t sprite, const render::Banner* banner,
+                             std::int32_t press_offset = 0) {
+    std::optional<ui::ColourTint> tint;
+    if (banner != nullptr) {
+        tint = ui::ColourTint{banner->colour, 1, 1, 0, 0};
+    }
+    panel.set_graphic(id, sprite, press_offset, tint);
+}
+
 }  // namespace o1602::app

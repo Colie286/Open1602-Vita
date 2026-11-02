@@ -1432,6 +1432,29 @@ bool Simulation::script_destroy(std::uint16_t island, std::int32_t x, std::int32
     return destroyed;
 }
 
+std::optional<std::uint32_t> Simulation::script_unit(PlayerId player, std::uint32_t family, std::int32_t x,
+                                                     std::int32_t y) {
+    const Player* p = m_world->player(player);
+    const auto unit = m_figures != nullptr ? m_figures->unit_of(family) : std::nullopt;
+    const assets::FigureType* type = m_figures != nullptr ? m_figures->get(family) : nullptr;
+    if (p == nullptr || !unit || unit->family != family || type == nullptr || x < 0 || y < 0 ||
+        x >= static_cast<std::int32_t>(m_world->width()) || y >= static_cast<std::int32_t>(m_world->height())) {
+        return std::nullopt;
+    }
+    const LandMap& land = m_combat.land();
+    const std::uint16_t island = land.island_at(x, y);
+    const assets::BuildingType* ground = land.building(x, y);
+    if (island == World::kSea || (ground != nullptr && !soldiers_walk_on(*ground))) {
+        return std::nullopt;
+    }
+    Soldier s = make_soldier(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y),
+                             static_cast<std::uint16_t>(family), player, island);
+    s.health = type->combat.max_health;
+    s.anim = 1;
+    m_world->add_soldier(s);
+    return m_world->soldiers().back().id;
+}
+
 std::optional<std::int64_t> Simulation::script_goods(std::uint16_t island, std::uint8_t city, std::uint8_t ware,
                                                      std::int64_t amount) {
     City* c = m_world->city(island, city);

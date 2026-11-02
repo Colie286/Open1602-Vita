@@ -10,6 +10,7 @@
 #include <span>
 
 #include "o1602/assets/original_names.hpp"
+#include "o1602/assets/own_figures.hpp"
 #include "o1602/core/file.hpp"
 #include "o1602/core/hash.hpp"
 #include "o1602/core/text.hpp"
@@ -728,6 +729,35 @@ void GameScripts::add_api(Package& package) {
         order.attack_move = attack_move;
         return Value{m_simulation->execute(order).accepted};
     };
+    add("add_unit", [this, &package](std::span<const Value> args) -> core::Result<Value> {
+        if (m_simulation == nullptr) {
+            return script_error("game.add_unit: only while the game runs, not at the top level");
+        }
+        const auto player = player_argument(*m_world, args, 0);
+        std::optional<std::uint32_t> family;
+        if (const auto number = integer(args, 1)) {
+            if (*number >= 0 && *number <= 0xFFFF) {
+                family = static_cast<std::uint32_t>(*number);
+            }
+        } else if (const auto* id = args.size() > 1 ? std::get_if<std::string>(&args[1]) : nullptr) {
+            family = assets::unit_family_number(m_world->own_figures(),
+                                                id->find(':') == std::string::npos ? package.id + ":" + *id : *id);
+        }
+        const auto x = integer(args, 2);
+        const auto y = integer(args, 3);
+        if (!player) {
+            return script_error("game.add_unit: no such player");
+        }
+        if (!x || !y || std::abs(*x) > 0xFFFF || std::abs(*y) > 0xFFFF) {
+            return script_error("game.add_unit: x and y must be integers");
+        }
+        if (!family) {
+            return Value{false};
+        }
+        const auto id =
+            m_simulation->script_unit(*player, *family, static_cast<std::int32_t>(*x), static_cast<std::int32_t>(*y));
+        return id ? Value{std::int64_t{*id}} : Value{false};
+    });
     add("move_unit", [this, unit_order](std::span<const Value> args) -> core::Result<Value> {
         if (m_simulation == nullptr) {
             return script_error("game.move_unit: only while the game runs, not at the top level");
@@ -892,6 +922,13 @@ void GameScripts::add_api(Package& package) {
                 return core::make_error(core::ErrorCode::ScriptError, "game.message: no such player");
             }
             message.player = static_cast<sim::PlayerId>(*player);
+        }
+        if (args.size() > 3 && !std::holds_alternative<std::monostate>(args[3])) {
+            const auto about = integer(args, 3);
+            if (!about || *about < 0 || *about >= static_cast<std::int64_t>(m_world->players().size())) {
+                return core::make_error(core::ErrorCode::ScriptError, "game.message: no such player to be about");
+            }
+            message.about = static_cast<sim::PlayerId>(*about);
         }
         if (m_messages.size() >= kMaxPendingMessages) {
             m_messages.erase(m_messages.begin());

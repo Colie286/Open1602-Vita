@@ -445,7 +445,8 @@ private:
     /// Posts a message by its id ("mymod:lighthouse") with its placeholders filled, as the scripts
     /// do (game.message); false if there is no such message.
     bool announce(std::string_view id, const MessageArgs& args = {},
-                  std::optional<std::pair<double, double>> tile = std::nullopt);
+                  std::optional<std::pair<double, double>> tile = std::nullopt,
+                  std::optional<sim::PlayerId> about = std::nullopt);
     void zoom_by(double steps, double sx, double sy) override;
     void scale_by(int direction, double sx, double sy) override;
     /// Free zoom: goes on towards the magnification asked for (smoothly, a few frames).

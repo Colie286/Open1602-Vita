@@ -69,6 +69,9 @@ struct PackageIcon {
     std::filesystem::path file;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
+    /// The icon is a template in player colour (`tint = true`): where it stands for a player, its
+    /// pure grey pixels take on the colour of the player's banner (docs/modding/flags.md).
+    bool tint = false;
     /// Open1602's own icons are compiled into the program: the PNG's bytes instead of `file`.
     const unsigned char* data = nullptr;
     std::size_t size = 0;

@@ -6,6 +6,7 @@
 #include <cmath>
 #include <utility>
 
+#include "banner_graphic.hpp"
 #include "panel_common.hpp"
 #include "production_utilisation.hpp"
 
@@ -1434,8 +1435,12 @@ public:
             // package's unit shows its icon, or the original's unit it stands beside.
             const assets::OwnUnit* own = assets::find_own_unit(c.own_units, slot.figure);
             const auto icon = own != nullptr && !own->icon.empty() ? ui::package_icon_sprite(own->icon) : std::nullopt;
-            m_panel.set_graphic(
-                40031 + k, icon ? *icon : m_gfx_ware + sim::unit_ware(own != nullptr ? own->like : slot.figure), 0);
+            if (icon) {
+                set_package_icon(m_panel, 40031 + k, *icon, c.banner(city->owner));
+            } else {
+                m_panel.set_graphic(40031 + k, m_gfx_ware + sim::unit_ware(own != nullptr ? own->like : slot.figure),
+                                    0);
+            }
             m_panel.set_disabled(40031 + k, slot.training);
             m_panel.set_text(40071 + k, std::to_string(std::min<std::uint32_t>(slot.progress, 320) * 10 / 320));
             const std::uint32_t max = f != nullptr ? std::max<std::uint32_t>(f->combat.max_health, 1) : 1;
@@ -1449,7 +1454,7 @@ public:
             const auto icon = own != nullptr && !own->icon.empty() ? ui::package_icon_sprite(own->icon) : std::nullopt;
             bool& shown = m_unit_icon[static_cast<std::size_t>(u)];
             if (icon) {
-                m_panel.set_graphic(40021 + u, *icon, 0);
+                set_package_icon(m_panel, 40021 + u, *icon, c.banner(city->owner));
             } else if (shown) {
                 m_panel.set_graphic(40021 + u, m_unit_gfx[static_cast<std::size_t>(u)], 0);
             }

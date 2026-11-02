@@ -29,16 +29,7 @@ bool is_name(std::string_view name) noexcept {
 /// (a unit's name stands for its four colours) or "<package>:<name>" of a package's family.
 std::optional<std::uint32_t> unit_family(std::span<const OwnFigure> own, const FigureTable& table,
                                          std::string_view id) {
-    std::optional<std::uint32_t> red;
-    constexpr std::string_view kOriginal = "anno1602:";
-    if (const OwnFigure* added = find_own_figure(own, id)) {
-        red = added->number;
-    } else if (id.starts_with(kOriginal)) {
-        if (const OriginalName* named = find_original_name(original_figure_names(), id.substr(kOriginal.size()));
-            named != nullptr && named->count == FigureTable::kUnitVariants) {
-            red = named->first;
-        }
-    }
+    const std::optional<std::uint32_t> red = unit_family_number(own, id);
     const auto families = table.unit_families();
     if (!red || std::find(families.begin(), families.end(), *red) == families.end()) {
         return std::nullopt;
@@ -52,6 +43,20 @@ std::optional<std::uint32_t> unit_family(std::span<const OwnFigure> own, const F
 }
 
 }  // namespace
+
+std::optional<std::uint32_t> unit_family_number(std::span<const OwnFigure> own, std::string_view id) {
+    constexpr std::string_view kOriginal = "anno1602:";
+    if (const OwnFigure* added = find_own_figure(own, id)) {
+        return added->number;
+    }
+    if (id.starts_with(kOriginal)) {
+        if (const OriginalName* named = find_original_name(original_figure_names(), id.substr(kOriginal.size()));
+            named != nullptr && named->count == FigureTable::kUnitVariants) {
+            return named->first;
+        }
+    }
+    return std::nullopt;
+}
 
 std::string OwnUnit::name(std::string_view language) const {
     return name_in(names, language, id);
@@ -271,7 +276,8 @@ void apply_own_figures_file(FigureTable& table, std::vector<OwnFigure>& own, std
         if (family) {
             std::vector<FigureType> colours;
             for (std::uint32_t k = 0; k < FigureTable::kUnitVariants; ++k) {
-                auto f = dressed(*table.get(*family + k), k);
+                const FigureType* colour = table.get(*family + k);  // unit_family checked all four
+                auto f = colour != nullptr ? dressed(*colour, k) : std::nullopt;
                 if (!f) {
                     break;
                 }

@@ -1973,7 +1973,8 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
         const auto picture =
             def != nullptr && !def->picture.empty() ? ui::package_icon_sprite(def->picture) : std::nullopt;
         if (picture) {
-            m_leist.set_graphic(id, *picture, 0);  // a package's icon, as it is drawn
+            // A package's icon: as drawn, or a template in the colour of the player it is about.
+            set_package_icon(m_leist, id, *picture, banners.get(e.banner));
         } else if (type < 4) {
             set_banner_graphic(m_leist, id, message_icon_art(type), banners.get(e.banner), 6);
         } else {

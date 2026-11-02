@@ -39,9 +39,6 @@ Things found while testing on 2026-11-01 that are not wrong but worth doing. Don
 building table), and islands wider or higher than 255 tiles get native villages, within their first
 255 tiles (the village's records hold tile coordinates in bytes).
 
-- Coats of arms and message icons of a package in player colour: an icon of `icons.toml` as a
-  template whose pure grey takes on the banner's colour, as flags and soldiers of a package do
-  ([flags.md](flags.md#graphics-of-packages-in-player-colour); asked for on 2026-11-02).
 - The table of package files above and the table of fixed limits at the end of ADR 0007 must be
   kept up to date with each new file and each limit removed.
 

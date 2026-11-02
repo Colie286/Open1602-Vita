@@ -94,6 +94,23 @@ assets::BuildingTable make_buildings() {
 
 }  // namespace
 
+TEST_CASE("icons: an icon with tint = true is a template in player colour") {
+    need_zlib();
+    const auto folder = package_folder("o1602-test-icons-tint", {{"arms.png", {30, 28}}});
+    std::vector<assets::PackageIcon> icons;
+    std::vector<std::string> warnings;
+    assets::apply_icons_file(icons, "heraldry", folder,
+                             "[arms]\nimage = \"arms.png\"\ntint = true\n"
+                             "[plain]\nimage = \"arms.png\"\n"
+                             "[bad]\nimage = \"arms.png\"\ntint = 1\n",
+                             warnings);
+    REQUIRE(icons.size() == 2);
+    CHECK(icons[0].tint);
+    CHECK(!icons[1].tint);
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings[0] == "heraldry/icons.toml line 8: 'tint' is true or false");
+}
+
 TEST_CASE("icons: icons.toml numbers the icons of the packages") {
     need_zlib();
     const auto folder =

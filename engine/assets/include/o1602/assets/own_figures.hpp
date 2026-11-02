@@ -72,6 +72,11 @@ void apply_own_figures_file(FigureTable& table, std::vector<OwnFigure>& own, std
                             std::span<const PackageImage> images = {}, std::span<const PackageSound> sounds = {},
                             std::vector<OwnUnit>* units = nullptr);
 
+/// The red figure `id` names when it names a unit family: "anno1602:<name>" of one of the
+/// original's (a unit's name stands for its four colours) or "<package>:<name>" of `own`; whether
+/// that figure heads a family of a table is the caller's to check (FigureTable::unit_of).
+[[nodiscard]] std::optional<std::uint32_t> unit_family_number(std::span<const OwnFigure> own, std::string_view id);
+
 /// The sprites (first, count) of the terrain sheet that units of `units` draw as tint templates.
 [[nodiscard]] std::vector<std::pair<std::uint32_t, std::uint32_t>> tint_template_sprites(std::span<const OwnUnit> units,
                                                                                          const FigureTable& table);
