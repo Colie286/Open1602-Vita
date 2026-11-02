@@ -572,7 +572,7 @@ void MapViewer::editor_island_request(const EditorRequest& request) {
         std::tie(p.width, p.height) = editor::placeholder_size(p.placeholder);
         p.page = EditorPanel::Page::Islands;
         m_editor->placing = std::move(p);
-        editor_notice(ui::tr("editor.islands.placing"), false, "placing a placeholder");
+        editor_notice(ui::tr("editor.placeholder.placing"), false, "placing a placeholder");
         return;
     }
     if (request.kind == Kind::PlaceIsland) {
@@ -665,7 +665,7 @@ void MapViewer::editor_placeholder_request(const EditorRequest& request) {
             std::tie(p.width, p.height) = editor::placeholder_size(now);
             p.page = EditorPanel::Page::Selection;
             m_editor->placing = std::move(p);
-            editor_notice(ui::tr("editor.islands.placing"), false, "placing a placeholder");
+            editor_notice(ui::tr("editor.placeholder.placing"), false, "placing a placeholder");
             return;
         }
         case Kind::RemovePlaceholder:
@@ -682,6 +682,15 @@ void MapViewer::editor_placeholder_request(const EditorRequest& request) {
             changed.climate = request.island.climate;
             changed.size = request.island.size;
             auto op = editor::change_placeholder(world, request.index, changed);
+            // A size class without room is passed over, in the direction the button went.
+            const bool forward = (request.island.size + 5 - now.size) % 5 == 1;
+            for (int tries = 0; !op && request.island.size != now.size && tries < 3; ++tries) {
+                changed.size = static_cast<std::uint8_t>((changed.size + (forward ? 1 : 4)) % 5);
+                if (changed.size == now.size) {
+                    break;
+                }
+                op = editor::change_placeholder(world, request.index, changed);
+            }
             if (!op) {
                 editor_notice(ui::tr("editor.placeholder.no_room"), true, op.error().message);
                 return;

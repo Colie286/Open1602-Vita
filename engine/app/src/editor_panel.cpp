@@ -268,7 +268,7 @@ void EditorPanel::layout_document(const EditorModel& model) {
     // The buttons share what is left above two lines of the notice: as high as the game's in a
     // large window, lower in a small one, so that the last stays in the panel.
     constexpr std::int32_t kButtons = 11;
-    constexpr std::int32_t kNoticeRoom = 2 * 20 + 6;
+    constexpr std::int32_t kNoticeRoom = 2 * 20 + 6 + kButtons;  // and what rounding the pitch down loses
     const std::int32_t bottom = m_top + m_height - 4;
     const std::int32_t pitch = std::clamp((bottom - kNoticeRoom - y) / kButtons, 22, kButtonH + kGap);
     const std::int32_t gap = std::min(kGap, std::max(2, pitch / 8));
@@ -438,7 +438,7 @@ void EditorPanel::layout_placeholder_actions(const EditorModel& model, std::int3
     ui::Form& f = m_form;
     const std::int32_t half = (kW - kGap) / 2;
     if (model.placing) {
-        f.paragraph(Rect{kX, y, kW, 3 * 20}, ui::tr("editor.islands.placing"), Tone::Dim, 20);
+        f.paragraph(Rect{kX, y, kW, 3 * 20}, ui::tr("editor.placeholder.placing"), Tone::Dim, 20);
         y += 3 * 20 + 4;
         f.button(kStopPlacing, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
         y += kButtonH + kGap;
@@ -510,7 +510,10 @@ void EditorPanel::layout_islands(const EditorModel& model) {
     f.button(kLoadIsland, Rect{kX, y, kW, kButtonH}, ui::tr("editor.islands.load"), !model.placing);
     y += kButtonH + kGap;
     constexpr std::int32_t kIslandNote = 3 * 20;
-    f.paragraph(Rect{kX, y, kW, kIslandNote}, ui::tr(model.placing ? "editor.islands.placing" : "editor.islands.note"),
+    f.paragraph(Rect{kX, y, kW, kIslandNote},
+                ui::tr(!model.placing         ? "editor.islands.note"
+                       : m_island.placeholder ? "editor.placeholder.placing"
+                                              : "editor.islands.placing"),
                 Tone::Dim, 20);
     y += kIslandNote + 4;
     if (model.placing) {
