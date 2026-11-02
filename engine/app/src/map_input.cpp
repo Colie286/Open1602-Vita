@@ -1036,9 +1036,12 @@ void MapInput::handle_event(const SDL_Event& event) {
                 m_drag.press();
             } else if (m_editor) {
                 // The editor's map: no selection, tool or order of the game (ADR 0013); the left
-                // button picks what the editor's panel shows.
+                // button picks what the editor's panel shows, or puts down what is being placed.
                 if (event.button.button == SDL_BUTTON_LEFT) {
-                    editor_pick_at_mouse();
+                    const auto tile = tile_at_mouse();
+                    if (!tile || !m_host.editor_place(*tile)) {
+                        editor_pick_at_mouse();
+                    }
                 }
             } else if (event.button.button == SDL_BUTTON_LEFT && m_tool.active()) {
                 if (const auto spot = spot_at_mouse()) {
@@ -1069,9 +1072,12 @@ void MapInput::handle_event(const SDL_Event& event) {
                                    false, ui::MouseButton::Right);
             }
             if (event.button.button == SDL_BUTTON_RIGHT || event.button.button == SDL_BUTTON_MIDDLE) {
-                // A right click (not a drag): an order (ADR 0010), or back with the original's mouse.
-                if (m_drag.release() && event.button.button == SDL_BUTTON_RIGHT && !m_editor &&
-                    !(m_hud && (m_hud->modal() || m_hud->menu_active()))) {
+                // A right click (not a drag): an order (ADR 0010), or back with the original's mouse;
+                // in the editor it puts back what is being placed.
+                const bool click = m_drag.release() && event.button.button == SDL_BUTTON_RIGHT;
+                if (click && m_editor) {
+                    (void)m_host.editor_cancel_place();
+                } else if (click && !(m_hud && (m_hud->modal() || m_hud->menu_active()))) {
                     if (m_original_mouse) {
                         cancel_action();
                     } else if (m_tool.mode() == BuildTool::Mode::Copy && m_tool.layout()) {

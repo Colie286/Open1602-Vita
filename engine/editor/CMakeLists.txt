@@ -5,6 +5,7 @@
 add_library(o1602_editor
     src/document.cpp
     src/history.cpp
+    src/islands.cpp
     src/operations.cpp
     src/original_check.cpp
 )

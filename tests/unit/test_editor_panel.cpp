@@ -96,7 +96,7 @@ TEST_CASE("editor panel: the document's page tells what the map is and offers th
     CHECK(r->kind == EditorRequest::Kind::Close);
     // A world plan: the islands are made when a game starts.
     m.planned_islands = 18;
-    CHECK(shows(panel.draw(m, kNoFonts), "18, made at the start"));
+    CHECK(shows(panel.draw(m, kNoFonts), "18 planned"));
     // Everything lies in the panel's room.
     for (const ui::Form::Widget& w : panel.form().widgets()) {
         CHECK(w.rect.y >= 200);
@@ -283,4 +283,69 @@ TEST_CASE("editor panel: the overlays go on and off, the check list goes through
     }
     CHECK(!click(panel, m, "Back to the map").has_value());
     CHECK(panel.page() == EditorPanel::Page::Document);
+}
+
+TEST_CASE("editor panel: new islands are set up and placed, a selected island moves, turns, copies, goes") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(200, 560);
+    EditorModel m = document();
+    CHECK(!click(panel, m, "Edit islands").has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::Islands);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Original template"));
+    CHECK(says(panel, "Medium (50 \xD7 52)"));
+    CHECK(!click(panel, m, "Original template").has_value());
+    CHECK(panel.new_island().own_shape);
+    CHECK(!click(panel, m, "North").has_value());
+    CHECK(panel.new_island().climate == 1);
+    CHECK(!click(panel, m, "Medium (50 \xD7 52)").has_value());
+    CHECK(panel.new_island().size == 3);
+    CHECK(!click(panel, m, "Large (70 \xD7 60)", ui::MouseButton::Right).has_value());
+    CHECK(panel.new_island().size == 2);
+    const auto seed = panel.new_island().seed;
+    CHECK(!click(panel, m, "Another one").has_value());
+    CHECK(panel.new_island().seed != seed);
+    auto r = click(panel, m, "Place");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::PlaceIsland);
+    CHECK(r->island == panel.new_island());
+    // While it is placed: a note and a way back.
+    m.placing = true;
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "right click cancels"));
+    r = click(panel, m, "Cancel");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::StopPlacing);
+    m.placing = false;
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        CHECK(w.rect.y + w.rect.h <= 760);
+    }
+
+    // An island picked on the map: its buttons, those that need a free island only for one.
+    m.selection = "Island 3";
+    m.properties = {{"Size", "40 \xD7 30"}, {"Climate", "North"}};
+    m.island = 2;
+    m.island_free = false;
+    CHECK(panel.show_selection());
+    CHECK(!click(panel, m, "Turn").has_value());
+    CHECK(!click(panel, m, "Delete").has_value());
+    r = click(panel, m, "Move");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::MoveIsland);
+    CHECK(r->index == 2);
+    m.island_free = true;
+    r = click(panel, m, "Turn");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::RotateIsland);
+    r = click(panel, m, "Copy");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::CopyIsland);
+    r = click(panel, m, "Delete");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::RemoveIsland);
+    CHECK(r->index == 2);
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        CHECK(w.rect.y + w.rect.h <= 760);
+    }
 }

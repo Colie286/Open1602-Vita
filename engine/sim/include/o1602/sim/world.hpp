@@ -479,6 +479,33 @@ public:
     /// there belongs to the island with land, else to the one added first).
     core::Status add_island(WorldIsland island, const assets::BuildingTable* buildings = nullptr);
 
+    // Islands changed by the editor (ADR 0013). Each fails without a change; `buildings` decides,
+    // as for add_island(), which tiles of overlapping rectangles are sea.
+
+    /// What keeps an island from being turned, copied or taken out: a city on it, buildings or
+    /// fires of a game, units standing on it, or the state of a running game (whose figures name
+    /// islands and tiles). Wild animals, growing trees and fields, deposits and craters do not.
+    enum class IslandUse : std::uint8_t { None, Cities, Buildings, Units, RunningGame };
+    [[nodiscard]] IslandUse island_use(std::size_t index) const;
+    /// Moves island `index` so that its tile (0,0) lies at (x, y). Fails if it leaves the map,
+    /// overlaps another island, lands on a ship, units stand on it or a game is running.
+    core::Status move_island(std::size_t index, std::uint32_t x, std::uint32_t y,
+                             const assets::BuildingTable* buildings = nullptr);
+    /// Turns island `index` a quarter clockwise about its centre (as near as the tiles allow,
+    /// inside the map): every tile with its picture, deposits, craters, deer, animals and growing
+    /// tiles go with it. Only an island without use (island_use()).
+    core::Status rotate_island(std::size_t index, const assets::BuildingTable* buildings = nullptr);
+    /// A copy of island `index` with the number `number` at (x, y), added as the last island:
+    /// its tiles, deposits (nobody knows them), craters, deer, animals and growing tiles, but
+    /// nobody has discovered it. Only an island without use.
+    core::Status copy_island(std::size_t index, std::uint32_t x, std::uint32_t y, std::uint16_t number,
+                             const assets::BuildingTable* buildings = nullptr);
+    /// Takes island `index` out with its animals and growing tiles; the islands after it move
+    /// one place forward, and everything that names them follows. Only an island without use.
+    core::Status remove_island(std::size_t index, const assets::BuildingTable* buildings = nullptr);
+    /// The smallest island number no island has, nothing if all are taken.
+    [[nodiscard]] std::optional<std::uint16_t> free_island_number() const;
+
     [[nodiscard]] const std::vector<Player>& players() const noexcept { return m_players; }
     [[nodiscard]] const std::vector<Ship>& ships() const noexcept { return m_ships; }
     [[nodiscard]] std::vector<Ship>& ships() noexcept { return m_ships; }
@@ -831,6 +858,13 @@ private:
     /// (island << 8 | index) << 32 | slot of every city, sorted: the lookup of city() (TB-21).
     std::vector<std::uint64_t> m_city_keys;
     void index_cities();
+    /// Sets the cells of the map anew from the islands, in their order (add_island()'s rule for
+    /// overlapping rectangles); fails if two islands' land overlaps.
+    core::Status place_islands(const assets::BuildingTable* buildings);
+    /// Where island `index` would take the cells; an error if it leaves the map or its land
+    /// overlaps another island's.
+    core::Status claim_cells(const WorldIsland& island, const assets::BuildingTable* buildings,
+                             std::vector<bool>& taken) const;
     std::vector<Animal> m_animals;
     std::vector<Soldier> m_soldiers;
     std::uint32_t m_next_soldier_id = 1;

@@ -85,6 +85,11 @@ public:
         virtual void editor_key(ui::KeyAction action) = 0;
         /// A left click on the editor's map picked `pick`.
         virtual void editor_pick(const EditorPick& pick) = 0;
+        /// A left click on the editor's map at `tile` while an island is being placed puts it
+        /// there; false if nothing is being placed (the click picks).
+        virtual bool editor_place(const render::TilePos& tile) = 0;
+        /// A right click on the editor's map: what is being placed goes back; false if nothing was.
+        virtual bool editor_cancel_place() = 0;
         /// Where Home goes without a selection.
         [[nodiscard]] virtual render::TilePos home_tile() const = 0;
         /// The graphics of the zoom level shown; null while they are not there.
