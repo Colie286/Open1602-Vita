@@ -67,7 +67,7 @@ sim::World MapViewer::sea_world(std::uint32_t width, std::uint32_t height) const
     return world;
 }
 
-core::Status MapViewer::enter_editor(sim::World world, std::filesystem::path file) {
+core::Status MapViewer::enter_editor(sim::World world, const std::filesystem::path& file) {
     if (m_session) {
         return core::make_error(core::ErrorCode::Unsupported, "no editor while a multiplayer game runs");
     }

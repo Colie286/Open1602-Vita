@@ -287,7 +287,7 @@ private:
     // ---- The editor (editor_mode.cpp, ADR 0013) ----
     /// Shows `world` in the editor, as a new document of `file` (empty: a new map). The game that
     /// ran goes; out of memory leaves everything as it was.
-    core::Status enter_editor(sim::World world, std::filesystem::path file);
+    core::Status enter_editor(sim::World world, const std::filesystem::path& file);
     /// The editor with the file of the command line (--editor), or a new map.
     void start_editor();
     /// Opens `file` in the editor (a file of Open1602 or of the original).
