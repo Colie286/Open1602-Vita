@@ -98,7 +98,7 @@ constexpr std::int32_t kRowH = 32;
 
 std::uint32_t random_seed() {
     std::random_device device;
-    return device() % 100000;
+    return device() % kMultiplayerSeeds;
 }
 
 std::optional<std::uint32_t> number(std::string_view text) {
@@ -110,6 +110,22 @@ std::optional<std::uint32_t> number(std::string_view text) {
 // The lobby's setup: a first line with what is played, then the settings as settings.cfg has them.
 constexpr std::string_view kSetupScopeKey = "game = ";
 constexpr std::array<std::string_view, 4> kSetupScopes = {"endless", "multiplayer", "scenario", "savegame"};
+// A new endless game's world number and level, on lines of their own after the first.
+constexpr std::string_view kSetupSeedKey = "world_seed = ";
+constexpr std::string_view kSetupLevelKey = "level = ";
+
+/// The number on the line of the lobby's setup that starts with `key`.
+std::optional<std::uint32_t> lobby_value(std::string_view text, std::string_view key) {
+    while (!text.empty()) {
+        const std::size_t end = text.find('\n');
+        const std::string_view line = text.substr(0, end);
+        if (line.starts_with(key)) {
+            return number(line.substr(key.size()));
+        }
+        text = end == std::string_view::npos ? std::string_view{} : text.substr(end + 1);
+    }
+    return std::nullopt;
+}
 
 /// Open1602's defaults, the original's rules, or something else: in the words of the start dialog.
 std::string rules_summary(sim::Rules rules) {
@@ -139,16 +155,22 @@ SetupScope HostSetup::scope() const noexcept {
 
 EndlessSetup HostSetup::game_settings() const {
     EndlessSetup s = multiplayer_setup(settings, players);
+    s.world_seed = seed;  // the preview of the islands shows the world of this number
     if (!victory_offered(scope())) {
         s.rules.victory = {};
     }
     return s;
 }
 
-std::vector<std::uint8_t> lobby_setup(const EndlessSetup& settings, SetupScope scope) {
+std::vector<std::uint8_t> lobby_setup(const EndlessSetup& settings, SetupScope scope, std::uint8_t level) {
     std::string text(kSetupScopeKey);
     text += kSetupScopes[static_cast<std::size_t>(scope)];
     text += '\n';
+    if (scope == SetupScope::MultiplayerEndless) {
+        // The world's number and level, so that everyone's preview of the islands shows its world.
+        text += std::string(kSetupSeedKey) + std::to_string(settings.world_seed) + '\n';
+        text += std::string(kSetupLevelKey) + std::to_string(level) + '\n';
+    }
     text += write_setup(settings, "");
     return {text.begin(), text.end()};
 }
@@ -169,8 +191,17 @@ std::optional<std::pair<EndlessSetup, SetupScope>> read_lobby_setup(std::span<co
     EndlessSetup settings = EndlessSetup::defaults(scope);
     if (end != std::string_view::npos) {
         read_setup(settings, text.substr(end + 1), "");
+        if (const auto seed = lobby_value(text, kSetupSeedKey)) {
+            settings.world_seed = *seed;
+        }
     }
     return std::pair{settings, scope};
+}
+
+std::uint8_t read_lobby_level(std::span<const std::uint8_t> bytes) {
+    const std::string_view text(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    const auto level = lobby_value(text, kSetupLevelKey);
+    return level && *level < sim::NewGameOptions::kDifficulties ? static_cast<std::uint8_t>(*level) : 1;
 }
 
 bool may_block_seats(const net::Lobby& lobby) {
@@ -325,6 +356,9 @@ std::vector<MultiplayerEvent> MultiplayerMenu::mouse(const MultiplayerModel& mod
                 if (m_setup.players > sim::kOriginalPlayers) {
                     m_setup.settings.own_world = own_world;
                 }
+                // The world the preview showed: its number in the field.
+                m_setup.seed = static_cast<std::uint32_t>(m_settings.setup().world_seed);
+                m_seed_text = std::to_string(m_setup.seed);
             } else {
                 MultiplayerEvent e;
                 e.kind = MultiplayerEvent::Kind::Settings;
@@ -394,8 +428,11 @@ void MultiplayerMenu::layout(const MultiplayerModel& model) {
     }
 }
 
-void MultiplayerMenu::open_settings(const EndlessSetup& setup, SetupScope scope, GameSettingsMenu::Mode mode) {
+void MultiplayerMenu::open_settings(const EndlessSetup& setup, SetupScope scope, GameSettingsMenu::Mode mode,
+                                    std::uint8_t level, bool reroll) {
     m_settings.open(setup, scope, mode);
+    m_settings.set_level(level);
+    m_settings.allow_reroll(reroll);
     m_settings_from = m_screen;
     m_screen = Screen::Settings;
     m_form.set_focus(std::nullopt);  // the keys do not go to a field behind the dialog
@@ -1083,7 +1120,11 @@ void MultiplayerMenu::click(const MultiplayerModel& model, Id id, std::vector<Mu
             } else if (id == kDedicated) {
                 m_setup.dedicated = !m_setup.dedicated;
             } else if (id == kSettings && m_setup.kind != Kind::Savegame) {
-                open_settings(m_setup.game_settings(), m_setup.scope(), GameSettingsMenu::Mode::Apply);
+                // The world of the number typed so far; "Another world" types a new one.
+                HostSetup typed = m_setup;
+                typed.seed = number(m_seed_text).value_or(m_setup.seed);
+                open_settings(typed.game_settings(), m_setup.scope(), GameSettingsMenu::Mode::Apply, m_setup.level,
+                              true);
             } else if (id == kListUp) {
                 m_list_first -= std::min(m_list_first, kListRows);
             } else if (id == kListDown) {
@@ -1144,7 +1185,8 @@ void MultiplayerMenu::click(const MultiplayerModel& model, Id id, std::vector<Mu
                 if (const auto settings = read_lobby_setup(session->lobby().setup)) {
                     const bool change = model.hosting && !session->lobby().started;
                     open_settings(settings->first, settings->second,
-                                  change ? GameSettingsMenu::Mode::Apply : GameSettingsMenu::Mode::View);
+                                  change ? GameSettingsMenu::Mode::Apply : GameSettingsMenu::Mode::View,
+                                  read_lobby_level(session->lobby().setup), false);
                 }
             } else if (id == kWatch) {
                 event(MultiplayerEvent::Kind::TakeSeat)->seat = sim::kNoPlayer;

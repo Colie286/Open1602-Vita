@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
@@ -873,6 +874,109 @@ TEST_CASE("multiplayer menu: the host's settings travel in the lobby") {
     const std::string other = "map=Insel";
     CHECK(!app::read_lobby_setup(std::span(reinterpret_cast<const std::uint8_t*>(other.data()), other.size())));
     CHECK(!app::read_lobby_setup({}));
+}
+
+namespace {
+
+/// What the preview of a multiplayer game was asked for: the world's number and the level.
+struct PreviewAsked {
+    std::mutex mutex;
+    std::vector<std::pair<std::uint64_t, std::uint8_t>> worlds;
+};
+
+app::GameSettingsMenu::PreviewMaker recording_maker(const std::shared_ptr<PreviewAsked>& asked) {
+    return [asked](const app::EndlessSetup& setup, std::uint8_t level) -> core::Result<sim::WorldPreview> {
+        {
+            const std::lock_guard lock(asked->mutex);
+            asked->worlds.emplace_back(setup.world_seed, level);
+        }
+        sim::WorldPreview p;
+        p.width = 20;
+        p.height = 20;
+        p.tiles.assign(400, sim::WorldPreview::Tile::Sea);
+        return p;
+    };
+}
+
+std::pair<std::uint64_t, std::uint8_t> last_asked(const std::shared_ptr<PreviewAsked>& asked) {
+    const std::lock_guard lock(asked->mutex);
+    REQUIRE(!asked->worlds.empty());
+    return asked->worlds.back();
+}
+
+}  // namespace
+
+TEST_CASE("multiplayer menu: the preview of the islands shows the world of the host's number") {
+    MultiplayerMenu menu(ui::FormStyle{});
+    const auto asked = std::make_shared<PreviewAsked>();
+    menu.set_preview_maker(recording_maker(asked));
+    app::MultiplayerModel model;
+    model.name = "Bernd";
+    model.level_names = {"Easy", "Normal", "Hard", "Very hard"};
+    menu.open();
+    (void)click(menu, model, "Create game");
+    (void)click(menu, model, "Hard");
+    (void)click(menu, model, "Game settings ...");
+    REQUIRE(menu.screen() == MultiplayerMenu::Screen::Settings);
+    (void)click(menu, model, ui::tr("setup.island_page.open", {ui::tr("setup.island_preset.original")}));
+    REQUIRE(menu.settings_dialog().islands_page());
+    menu.settings_dialog().wait_preview();
+    REQUIRE(menu.settings_dialog().preview().has_value());
+    const auto [typed, level] = last_asked(asked);
+    CHECK(level == 2);
+    CHECK(typed < app::kMultiplayerSeeds);
+    CHECK(find_text(menu, model, ui::tr("setup.preview.seed", {std::to_string(typed)})).has_value());
+
+    // Another world: a number the host could have typed, which the game then gets.
+    std::uint64_t other = typed;
+    for (int i = 0; i < 8 && other == typed; ++i) {
+        (void)click(menu, model, ui::tr("setup.preview.reroll"));
+        other = menu.settings_dialog().setup().world_seed;
+    }
+    CHECK(other != typed);
+    CHECK(other < app::kMultiplayerSeeds);
+    menu.settings_dialog().wait_preview();
+    CHECK(last_asked(asked).first == other);
+    (void)click(menu, model, "Apply");
+    REQUIRE(menu.screen() == MultiplayerMenu::Screen::Create);
+    const auto events = click(menu, model, "Open lobby");
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].setup.seed == other);
+    CHECK(events[0].setup.level == 2);
+}
+
+TEST_CASE("multiplayer menu: in the lobby everyone's preview shows the host's world, which stays") {
+    app::EndlessSetup settings = app::EndlessSetup::defaults(app::SetupScope::MultiplayerEndless);
+    settings.world_seed = 4711;
+    const std::vector<std::uint8_t> bytes = app::lobby_setup(settings, app::SetupScope::MultiplayerEndless, 3);
+    const auto back = app::read_lobby_setup(bytes);
+    REQUIRE(back.has_value());
+    CHECK(back->first.world_seed == 4711);
+    CHECK(app::read_lobby_level(bytes) == 3);
+    CHECK(app::read_lobby_level({}) == 1);
+
+    net::LoopbackNetwork network;
+    net::Lobby lobby;
+    lobby.title = "Abend";
+    lobby.game = "Endless game";
+    lobby.seats.resize(4);
+    lobby.setup = bytes;
+    net::HostSession host(network.listen(), lobby, 0, "Anna", 1);
+    host.update(0);
+    MultiplayerMenu menu(ui::FormStyle{});
+    const auto asked = std::make_shared<PreviewAsked>();
+    menu.set_preview_maker(recording_maker(asked));
+    app::MultiplayerModel model;
+    model.name = "Bernd";
+    model.session = &host;
+    menu.show_lobby();
+    (void)click(menu, model, "Show game settings");
+    (void)click(menu, model, ui::tr("setup.island_page.open", {ui::tr("setup.island_preset.original")}));
+    REQUIRE(menu.settings_dialog().islands_page());
+    menu.settings_dialog().wait_preview();
+    CHECK((last_asked(asked) == std::pair<std::uint64_t, std::uint8_t>{4711, 3}));
+    (void)click(menu, model, ui::tr("setup.preview.reroll"));
+    CHECK(menu.settings_dialog().setup().world_seed == 4711);
 }
 
 TEST_CASE("multiplayer menu: the host chooses the settings of the game") {

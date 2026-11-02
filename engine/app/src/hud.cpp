@@ -308,6 +308,7 @@ Hud::Hud(SDL_Renderer* renderer, const assets::GameDirectory& game, const assets
             preview[i] = ui::nearest_colour(palette, kPreview[i][0], kPreview[i][1], kPreview[i][2]);
         }
         m_menu->set_preview_colours(preview);
+        m_multiplayer->set_preview_colours(preview);
         m_display = std::make_unique<DisplayMenu>(style);
         m_question_form.set_style(style);
         m_chat = std::make_unique<ChatWindow>(style);

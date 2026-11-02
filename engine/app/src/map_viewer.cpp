@@ -2757,9 +2757,12 @@ void MapViewer::load_options() {
         menu->set_name(m_app_settings.player_name);
         menu->set_endless_setup(m_app_settings.endless);
         menu->set_scenario_setup(m_app_settings.scenario);
-        menu->set_preview_maker(preview_maker());
+        menu->set_preview_maker(preview_maker(false));
         menu->set_package_scenarios(m_package_scenarios, m_package_campaigns);
         menu->set_tutorial_chapter(m_app_settings.tutorial_chapter);
+    }
+    if (MultiplayerMenu* multiplayer = m_hud->multiplayer()) {
+        multiplayer->set_preview_maker(preview_maker(true));
     }
 }
 
@@ -3447,10 +3450,10 @@ void endless_world(sim::NewGameOptions& o, const sim::WorldStart& base, const En
 
 }  // namespace
 
-GameSettingsMenu::PreviewMaker MapViewer::preview_maker() const {
+GameSettingsMenu::PreviewMaker MapViewer::preview_maker(bool multiplayer) const {
     // Copies: the preview is made on a thread of its own while the game's tables may change.
     return [game = m_game, buildings = std::make_shared<const assets::BuildingTable>(m_buildings),
-            base = m_options.world](const EndlessSetup& setup, std::uint8_t level) {
+            base = m_options.world, multiplayer](const EndlessSetup& setup, std::uint8_t level) {
         auto texts = assets::TextTable::load(game);
         if (!texts) {
             return core::Result<sim::WorldPreview>(texts.error());
@@ -3458,6 +3461,7 @@ GameSettingsMenu::PreviewMaker MapViewer::preview_maker() const {
         sim::NewGameOptions o;
         o.difficulty = std::min<std::uint8_t>(level, sim::NewGameOptions::kDifficulties - 1);
         endless_world(o, base, setup, setup.world_seed);
+        o.multiplayer = multiplayer;  // a multiplayer game's level (start_hosted_game)
         return sim::preview_world(game, *buildings, *texts, o);
     };
 }

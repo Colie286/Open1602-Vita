@@ -450,6 +450,103 @@ std::optional<LandMap> land_mask(Random& random, int width, int height, Roughnes
     return map;
 }
 
+/// A lake: where it lies, for the rivers.
+struct Lake {
+    int x = 0;  ///< its centre
+    int y = 0;
+};
+
+/// Lakes inland: water ringed by beach and surf as the sea's coast, far from the sea, so that
+/// they never join it. Each is a blob of 2 x 2 blocks; one that the coast's rules would not keep
+/// is left out.
+std::vector<Lake> carve_lakes(LandMap& map, Random& random, std::uint8_t count) {
+    std::vector<Lake> lakes;
+    const int w = map.width();
+    const int h = map.height();
+    if (count == 0) {
+        return lakes;
+    }
+    constexpr int kFar = 255;
+    constexpr std::uint32_t kTries = 40;  // places tried per lake
+    const auto at = [w](int x, int y) {
+        return static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x);
+    };
+    for (std::uint8_t n = 0; n < count; ++n) {
+        // How far each land tile is from water (sea and the lakes so far).
+        std::vector<std::uint8_t> dry(static_cast<std::size_t>(w) * static_cast<std::size_t>(h), 0);
+        std::vector<std::pair<int, int>> wave;
+        for (int y = 0; y < h; ++y) {
+            for (int x = 0; x < w; ++x) {
+                if (map.land(x, y)) {
+                    dry[at(x, y)] = kFar;
+                } else {
+                    wave.emplace_back(x, y);
+                }
+            }
+        }
+        for (int d = 1; d < kFar && !wave.empty(); ++d) {
+            std::vector<std::pair<int, int>> next;
+            for (const auto& [x, y] : wave) {
+                for (std::size_t k = 0; k < kDirX.size(); ++k) {
+                    const int nx = x + kDirX[k];
+                    const int ny = y + kDirY[k];
+                    if (map.inside(nx, ny) && dry[at(nx, ny)] > d) {
+                        dry[at(nx, ny)] = static_cast<std::uint8_t>(d);
+                        next.emplace_back(nx, ny);
+                    }
+                }
+            }
+            wave = std::move(next);
+        }
+        for (std::uint32_t t = 0; t < kTries; ++t) {
+            // Half sides of 3..7 tiles, in blocks; at least 10 tiles of land to other water.
+            const int rx = 3 + static_cast<int>(random.below(5));
+            const int ry = 3 + static_cast<int>(random.below(5));
+            const int cx = 2 * static_cast<int>(random.below(static_cast<std::uint32_t>(w / 2)));
+            const int cy = 2 * static_cast<int>(random.below(static_cast<std::uint32_t>(h / 2)));
+            if (!map.inside(cx, cy) || dry[at(cx, cy)] < std::max(rx, ry) + 10) {
+                continue;
+            }
+            LandMap before = map;
+            for (int by = -ry / 2 - 1; by <= ry / 2 + 1; ++by) {
+                for (int bx = -rx / 2 - 1; bx <= rx / 2 + 1; ++bx) {
+                    // The blocks within the ellipse, its rim frayed by chance.
+                    const int ex = 2 * bx + 1;
+                    const int ey = 2 * by + 1;
+                    const int inside = ex * ex * 1024 / (rx * rx) + ey * ey * 1024 / (ry * ry);
+                    if (inside > 1024 || (inside > 600 && random.below(3) == 0)) {
+                        continue;
+                    }
+                    for (int dy = 0; dy < 2; ++dy) {
+                        for (int dx = 0; dx < 2; ++dx) {
+                            map.set(cx + 2 * bx + dx, cy + 2 * by + dy, false);
+                        }
+                    }
+                }
+            }
+            bool fits = smooth(map);
+            std::size_t water = 0;
+            for (int y = 0; y < h && fits; ++y) {
+                for (int x = 0; x < w; ++x) {
+                    if (!coast_tile(map.land(x, y), map.neighbours(x, y))) {
+                        fits = false;
+                        break;
+                    }
+                    const bool near = std::abs(x - cx) <= rx + 2 && std::abs(y - cy) <= ry + 2;
+                    water += near && !map.land(x, y) ? 1U : 0U;
+                }
+            }
+            if (!fits || water < 12) {
+                map = std::move(before);
+                continue;
+            }
+            lakes.push_back(Lake{cx, cy});
+            break;
+        }
+    }
+    return lakes;
+}
+
 /// The fallback: a rectangle of land inside the margin.
 LandMap rectangle(int width, int height) {
     LandMap map(width, height);
@@ -559,7 +656,8 @@ assets::Island make_island(const ShapeRequest& request) {
     for (std::uint32_t attempt = 0; attempt < kAttempts && !mask; ++attempt) {
         mask = land_mask(random, width, height, request.roughness, request.form, request.land);
     }
-    const LandMap map = mask ? std::move(*mask) : rectangle(width, height);
+    LandMap map = mask ? std::move(*mask) : rectangle(width, height);
+    const std::vector<Lake> lakes = mask ? carve_lakes(map, random, request.lakes) : std::vector<Lake>{};
 
     assets::Island island;
     assets::IslandHeader& h = island.header;
@@ -644,8 +742,13 @@ assets::Island make_island(const ShapeRequest& request) {
                         lay(ids::kLightSea, x, y, 0, phase);
                     } else if (const auto r = edge(x, y, band)) {
                         lay(band == kMiddle ? ids::kLightEdge : ids::kDarkEdge, x, y, *r, phase);
+                    } else if (band == kMiddle) {
+                        lay(ids::kMiddleSea, x, y, turn, phase);
                     } else {
-                        lay(band == kMiddle ? ids::kMiddleSea : ids::kDarkSea, x, y, turn, phase);
+                        // The open sea as the world's around the island: never turned, so that its
+                        // waves run on across the island's edge (its phase is the world's,
+                        // set where the island is placed).
+                        lay(ids::kDarkSea, x, y, 0, phase);
                     }
                     break;
                 }
@@ -670,7 +773,8 @@ assets::Island make_island(const ShapeRequest& request) {
     // more, bends now and then (a bend right after the spring, else after a straight piece) and
     // never touches itself. The way is planned first, a few times over; only a way that reaches a
     // fitting beach is laid.
-    const auto river = [&](int x0, int y0, int size) {
+    // `prefer`: the way out (north 0, east 1, south 2, west 3) tried first, towards a lake; -1 none.
+    const auto river = [&](int x0, int y0, int size, int prefer) {
         constexpr std::array<int, 4> kDx = {0, 1, 0, -1};  // the way out: north, east, south, west
         constexpr std::array<int, 4> kDy = {-1, 0, 1, 0};
         constexpr int kMinLength = 3;
@@ -692,7 +796,7 @@ assets::Island make_island(const ShapeRequest& request) {
                 owner[i] = 0;
             }
             marked.clear();
-            const auto way = static_cast<int>(random.below(4));
+            const auto way = prefer >= 0 && attempt < kRiverAttempts / 2 ? prefer : static_cast<int>(random.below(4));
             const int along = 1 + static_cast<int>(random.below(static_cast<std::uint32_t>(std::max(1, size - 2))));
             const int sx = way == 1 ? x0 + size : way == 3 ? x0 - 1 : x0 + along;
             const int sy = way == 0 ? y0 - 1 : way == 2 ? y0 + size : y0 + along;
@@ -801,14 +905,40 @@ assets::Island make_island(const ShapeRequest& request) {
 
     // Ore mountains on inland, in rock ringed by slopes as in the templates (the mines stand on
     // the slopes), with a tile of room around the ring so that roads reach them.
+    // The way from a mountain at (x0, y0) to the nearest lake within `reach` tiles; -1 none.
+    const auto towards_lake = [&](int x0, int y0, int size, int reach) {
+        int best = -1;
+        int best_distance = reach + 1;
+        for (const Lake& l : lakes) {
+            const int dx = l.x - (x0 + size / 2);
+            const int dy = l.y - (y0 + size / 2);
+            const int distance = std::max(std::abs(dx), std::abs(dy));
+            if (distance < best_distance) {
+                best_distance = distance;
+                best = std::abs(dx) > std::abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
+            }
+        }
+        return best;
+    };
+    // `lake`: the mountains beside it (a river into it from each), else anywhere.
     const auto place_mountains = [&](std::uint8_t count, std::uint8_t size, std::span<const std::uint32_t> kinds,
-                                     bool rivers) {
+                                     bool rivers, const Lake* lake) {
         const std::uint32_t tries = 400 + 40 * std::uint32_t{count};  // many on a large island
         const int outer = size + 4;                                   // room, slope, mountain, slope, room
+        constexpr int kLakeNear = 9;                                  // from a lake's centre: past its shore
+        constexpr int kLakeFar = 22;
         std::uint8_t placed = 0;
         for (std::uint32_t t = 0; t < tries && placed < count && width > outer && height > outer; ++t) {
-            const int x0 = 2 + static_cast<int>(random.below(static_cast<std::uint32_t>(width - outer)));
-            const int y0 = 2 + static_cast<int>(random.below(static_cast<std::uint32_t>(height - outer)));
+            int x0 = 2 + static_cast<int>(random.below(static_cast<std::uint32_t>(width - outer)));
+            int y0 = 2 + static_cast<int>(random.below(static_cast<std::uint32_t>(height - outer)));
+            if (lake != nullptr) {
+                x0 = lake->x - kLakeFar + static_cast<int>(random.below(2 * kLakeFar + 1));
+                y0 = lake->y - kLakeFar + static_cast<int>(random.below(2 * kLakeFar + 1));
+                if (std::max(std::abs(x0 + size / 2 - lake->x), std::abs(y0 + size / 2 - lake->y)) < kLakeNear ||
+                    x0 < 2 || y0 < 2 || x0 + outer - 2 >= width || y0 + outer - 2 >= height) {
+                    continue;
+                }
+            }
             bool free = true;
             for (int y = y0 - 2; y <= y0 + size + 1 && free; ++y) {
                 for (int x = x0 - 2; x <= x0 + size + 1 && free; ++x) {
@@ -844,8 +974,11 @@ assets::Island make_island(const ShapeRequest& request) {
             }
             // A river from a spring on the ring out to the beach, as most templates have one;
             // none where no way meets a beach facing it.
-            if (rivers && random.below(3) != 0) {
-                river(x0, y0, size);
+            // Mountains beside a lake always try one into it; others run to a lake nearby first.
+            if (lake != nullptr) {
+                river(x0, y0, size, towards_lake(x0, y0, size, 2 * kLakeFar));
+            } else if (rivers && random.below(3) != 0) {
+                river(x0, y0, size, towards_lake(x0, y0, size, 40));
             }
             ++placed;
         }
@@ -854,10 +987,14 @@ assets::Island make_island(const ShapeRequest& request) {
     // a river.
     if (request.volcano) {
         const std::array<std::uint32_t, 1> volcano{ids::kVolcanoMountain};
-        place_mountains(1, ids::kBigMountainSize, volcano, false);
+        place_mountains(1, ids::kBigMountainSize, volcano, false, nullptr);
     }
-    place_mountains(request.big_mountains, ids::kBigMountainSize, ids::kBigMountain, true);
-    place_mountains(request.small_mountains, ids::kSmallMountainSize, ids::kSmallMountain, true);
+    // A small mountain beside each lake, its river running into the lake.
+    for (const Lake& l : lakes) {
+        place_mountains(1, ids::kSmallMountainSize, ids::kSmallMountain, true, &l);
+    }
+    place_mountains(request.big_mountains, ids::kBigMountainSize, ids::kBigMountain, true, nullptr);
+    place_mountains(request.small_mountains, ids::kSmallMountainSize, ids::kSmallMountain, true, nullptr);
 
     // Forest in patches (the north has more of it, as its templates), ground elsewhere.
     // Patches of about a template's (a fifth of a big template's side, at most 24 tiles across on

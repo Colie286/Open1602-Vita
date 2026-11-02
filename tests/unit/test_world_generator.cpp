@@ -483,9 +483,10 @@ void check_islands(const sim::GeneratedWorld& w, const assets::ScenarioPlan& pla
             }
         }
         CHECK((own_world || !(has_crop(g.fertility, kSugar) && has_crop(g.fertility, kWine))));
-        // At most two deposits, each on a mountain of its own; treasures on open ground of middle
-        // islands, in own worlds also of big ones.
-        CHECK(g.deposits.size() <= 2);
+        // At most two deposits (an island of its own size one for every 2000 tiles), each on
+        // a mountain of its own; treasures on open ground of middle islands, in own worlds also of
+        // big ones.
+        CHECK(g.deposits.size() <= std::max<std::size_t>(2, own_shape ? std::size_t{g.width} * g.height / 2000 : 2));
         std::set<Spot> used;
         const auto mountains = mountain_spots(g.size, g.template_number);
         for (const auto& d : g.deposits) {
@@ -1217,4 +1218,56 @@ TEST_CASE("world generator: more gold islands than free mountains are reported, 
     }
     CHECK(gold_islands > 0);
     CHECK(gold_islands <= w->islands.size());
+}
+
+TEST_CASE("world generator: large islands of their own size get veins by their size, all over them") {
+    const auto& fake = full_game();
+    const auto templates = sim::island_templates(fake.game, buildings());
+    REQUIRE(!templates.empty());
+    sim::WorldSettings settings;
+    settings.seed = 5;
+    settings.shapes = sim::WorldSettings::Shapes::Own;
+    settings.landscape.land = 25;
+    settings.landscape.min_side = 120;
+    settings.landscape.max_side = 160;  // within the scenario's 500 x 350
+    std::vector<std::string> warnings;
+    auto plan = sim::plan_world(settings, templates, &warnings);
+    REQUIRE(plan.ok());
+    sim::WorldStart start;
+    start.seed = 5;
+    auto w = sim::generate_islands(scenario(standard_plan()), *plan, fake.game, buildings(), start, &warnings);
+    REQUIRE(w.ok());
+    check_islands(*w, plan->plan, true);
+    std::size_t most = 0;
+    bool south = false;
+    for (const auto& g : w->islands) {
+        most = std::max(most, g.deposits.size());
+        if (g.deposits.size() >= 4) {
+            // Not only the first mountains from the north.
+            south = south || std::any_of(g.deposits.begin(), g.deposits.end(),
+                                         [&](const auto& d) { return d.y > g.height / 2; });
+        }
+    }
+    CHECK(most > 2);
+    CHECK(south);
+    // They load with all their deposits (Open1602's chunk holds those beyond the record's two),
+    // and the original's savegame cannot take them.
+    warnings.clear();
+    auto world = sim::load_world(w->file, buildings(), fake.game, &warnings, start);
+    CHECK(warnings.empty());
+    REQUIRE(world.ok());
+    REQUIRE(world->islands().size() == w->islands.size());
+    for (std::size_t i = 0; i < w->islands.size(); ++i) {
+        const auto& loaded = world->islands()[i].header.deposits;
+        const auto& made = w->islands[i].deposits;
+        REQUIRE(loaded.size() == made.size());
+        for (std::size_t k = 0; k < made.size(); ++k) {
+            CHECK(loaded[k].ware == made[k].ware);
+            CHECK(loaded[k].x == made[k].x);
+            CHECK(loaded[k].y == made[k].y);
+            CHECK(loaded[k].kind == made[k].kind);
+            CHECK(loaded[k].amount == made[k].amount);
+        }
+    }
+    CHECK(sim::validate(*world).ok());
 }

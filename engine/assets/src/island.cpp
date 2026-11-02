@@ -2,9 +2,12 @@
 #include "o1602/assets/island.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <iterator>
 #include <span>
+#include <utility>
+#include <vector>
 
 #include "o1602/core/byte_reader.hpp"
 
@@ -18,6 +21,7 @@ namespace {
 constexpr std::size_t kMinHeaderSize = 8;
 constexpr std::size_t kTileSize = 8;
 constexpr std::size_t kLargeTileSize = 10;
+constexpr std::size_t kHeaderDeposits = 2;  // the deposits an INSEL5 header holds
 
 /// Size class of an INSEL5 island by its width, as the original's loader sets it (0x00469900) before it
 /// builds the template path: the stored value is ignored. Wider islands keep it.
@@ -55,7 +59,7 @@ core::Result<IslandHeader> parse_header(const Chunk& chunk, std::span<const std:
         h.stored_complete = data[0x65] != 0;
         h.explored = data[0x1B];
         // Deposits: count at +0x1A (at most 2 in the original), entries at +0x1C.
-        const std::size_t deposits = std::min<std::size_t>(data[0x1A], 2);
+        const std::size_t deposits = std::min<std::size_t>(data[0x1A], kHeaderDeposits);
         for (std::size_t i = 0; i < deposits; ++i) {
             const std::size_t o = 0x1C + 8 * i;
             IslandHeader::Deposit d;
@@ -129,15 +133,38 @@ core::Status apply_large_island(IslandHeader& h, std::span<const std::uint8_t> d
     }
     h.width = *width;
     h.height = *height;
+    std::vector<std::pair<std::uint16_t, std::uint16_t>> places;
     for (std::size_t i = 0; i < *count; ++i) {
         const auto x = r.u16();
         const auto y = r.u16();
         if (!x || !y) {
             return make_error(ErrorCode::InvalidFormat, "O1602ISL chunk too small");
         }
+        places.emplace_back(*x, *y);
         if (i < h.deposits.size()) {
             h.deposits[i].x = *x;
             h.deposits[i].y = *y;
+        }
+    }
+    // The deposits beyond the header's two, 8 bytes each as the header has them.
+    for (std::size_t i = kHeaderDeposits; i < places.size(); ++i) {
+        std::array<std::uint8_t, 8> b{};
+        for (std::uint8_t& v : b) {
+            const auto byte = r.u8();
+            if (!byte) {
+                return make_error(ErrorCode::InvalidFormat, "O1602ISL chunk too small");
+            }
+            v = *byte;
+        }
+        IslandHeader::Deposit d;
+        d.ware = b[0];
+        d.x = places[i].first;
+        d.y = places[i].second;
+        d.mask = b[3];
+        d.kind = b[4];
+        d.amount = static_cast<std::uint16_t>(b[6] | (b[7] << 8));
+        if (d.ware != 0) {
+            h.deposits.push_back(d);
         }
     }
     return core::Ok{};

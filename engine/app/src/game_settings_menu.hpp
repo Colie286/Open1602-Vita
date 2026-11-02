@@ -62,7 +62,11 @@ public:
         m_mode = scope == SetupScope::Savegame ? Mode::View : mode;
         m_page = Page::Settings;
         m_error.clear();
+        m_reroll = true;
     }
+    /// Whether "Another world" may draw a new world number (after open(); a lobby's world keeps
+    /// the number the host chose for it).
+    void allow_reroll(bool allowed) noexcept { m_reroll = allowed; }
     /// What makes the preview of the page of the islands; without one the page has none.
     void set_preview_maker(PreviewMaker maker) { m_maker = std::move(maker); }
     void set_preview_colours(const PreviewColours& colours) noexcept { m_colours = colours; }
@@ -109,6 +113,9 @@ private:
     void picture(const sim::WorldPreview& p);
     /// A preset with what the dialog does not decide (the players of a multiplayer game) kept.
     [[nodiscard]] EndlessSetup keep_decided(EndlessSetup preset) const;
+    /// A new world number: any 64 bits, in a multiplayer game one the host can type (as its
+    /// "world number" field takes).
+    [[nodiscard]] std::uint64_t new_seed() const;
 
     ui::Form m_form;
     std::int32_t m_font = 0;                 ///< the form's font slot
@@ -122,6 +129,7 @@ private:
     PreviewMaker m_maker;
     PreviewColours m_colours{};
     std::uint8_t m_level = 0;
+    bool m_reroll = true;
     std::string m_preview_key;  ///< the setup of the preview made or being made
     std::future<core::Result<sim::WorldPreview>> m_pending;
     std::optional<sim::WorldPreview> m_preview;

@@ -264,11 +264,21 @@ void GameSettingsMenu::layout_preview(std::int32_t x, std::int32_t y) {
     f.label(Rect{x + 12, text_y, kPreviewW, 26}, status, Align::Left,
             m_preview_error.empty() ? Tone::Normal : Tone::Warning);
     const std::int32_t button_y = text_y + 34;
+    // A multiplayer game's world number as its "world number" field shows it.
     char seed[24];
-    std::snprintf(seed, sizeof(seed), "%llX", static_cast<unsigned long long>(m_setup.world_seed));
+    std::snprintf(seed, sizeof(seed), m_scope == SetupScope::MultiplayerEndless ? "%llu" : "%llX",
+                  static_cast<unsigned long long>(m_setup.world_seed));
     f.label(Rect{x + 12, button_y, kPreviewW - 200, 44}, ui::tr("setup.preview.seed", {seed}), Align::Left, Tone::Dim);
     f.button(kReroll, Rect{x + kGroupW - 12 - 190, button_y, 190, 44}, ui::tr("setup.preview.reroll"),
-             m_mode != Mode::View);
+             m_mode != Mode::View && m_reroll);
+}
+
+std::uint64_t GameSettingsMenu::new_seed() const {
+    std::random_device device;
+    if (m_scope == SetupScope::MultiplayerEndless) {
+        return device() % kMultiplayerSeeds;
+    }
+    return (std::uint64_t{device()} << 32U) | device();
 }
 
 bool GameSettingsMenu::back() noexcept {
@@ -311,14 +321,13 @@ GameSettingsMenu::Result GameSettingsMenu::mouse(std::int32_t x, std::int32_t y,
         m_page = Page::Bugs;
     } else if (*id == kIslands) {
         m_page = Page::Islands;
-        if (m_setup.world_seed == 0 && editable) {
-            // The preview's world is the game's: a number for it now.
-            std::random_device device;
-            m_setup.world_seed = (std::uint64_t{device()} << 32U) | device();
+        if (m_setup.world_seed == 0 && editable && m_scope != SetupScope::MultiplayerEndless) {
+            // The preview's world is the game's: a number for it now. A multiplayer game has its
+            // number already (0 is one of them).
+            m_setup.world_seed = new_seed();
         }
-    } else if (*id == kReroll && editable) {
-        std::random_device device;
-        m_setup.world_seed = (std::uint64_t{device()} << 32U) | device();
+    } else if (*id == kReroll && editable && m_reroll) {
+        m_setup.world_seed = new_seed();
     } else if (*id == kBugsOriginal && editable) {
         m_setup.rules.bugs = sim::OriginalBugs::all();
     } else if (*id == kBugsFixed && editable) {

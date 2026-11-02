@@ -39,8 +39,10 @@ constexpr std::uint32_t kShipClear = 5;          // from a start to the nearest 
 constexpr std::uint32_t kTilesPerIsland = 9500;  // the original: 17-20 islands on 500 x 350
 constexpr std::uint32_t kPlanIslands = 18;       // islands the original's resource counts are made for
 constexpr std::uint32_t kPlanPlayers = 4;
-constexpr std::uint64_t kPlanStream = 0x5701'D0A1ULL;        // the islands
-constexpr std::uint64_t kStartOrderStream = 0x5701'D0A2ULL;  // which player gets which start area
+constexpr std::uint64_t kPlanLand = 500ULL * 350 * 13 / 100;  // land of the original's plans: about 13 %
+constexpr std::uint64_t kMaxOreScale = 20000;                 // percent: veins of the level at most 200 times
+constexpr std::uint64_t kPlanStream = 0x5701'D0A1ULL;         // the islands
+constexpr std::uint64_t kStartOrderStream = 0x5701'D0A2ULL;   // which player gets which start area
 
 // Ore, crop and treasure entries of the original's plans per level (Endlosspiel<D><V>.szs).
 constexpr auto kCropBuildings = id::kPlanCrops;
@@ -972,12 +974,26 @@ WorldPlan Planner::finish() {
     const auto scaled = [&](std::uint32_t base) {
         return static_cast<std::uint16_t>(std::max<std::uint32_t>(1, (base * scale + 50) / 100));
     };
+    // Islands of their own size: the veins also by the land, so that a world of few giants has as
+    // many per tile of land as the original's (whose large islands take more veins each).
+    std::uint32_t ore_scale = scale;
+    if (free_sizes()) {
+        std::uint64_t land = 0;
+        for (const Planned& p : m_islands) {
+            land += std::uint64_t(p.rect.w) * std::uint64_t(p.rect.h) * m_s.landscape.fill() / 1000;
+        }
+        ore_scale = static_cast<std::uint32_t>(
+            std::min<std::uint64_t>(std::max<std::uint64_t>(scale, land * 100 / kPlanLand), kMaxOreScale));
+    }
+    const auto ores_scaled = [&](std::uint32_t base) {
+        return static_cast<std::uint16_t>(std::max<std::uint32_t>(1, (base * ore_scale + 50) / 100));
+    };
     plan.max_crops = 2;
     plan.gold_min_size = 1;
     plan.gold_max_size = 2;
-    plan.ores[0] = ScenarioPlan::Resource{id::kOreMine, scaled(kBigIron[d]), 0};
-    plan.ores[1] = ScenarioPlan::Resource{id::kOreMine, scaled(kSmallIron[d]), 1};
-    plan.ores[2] = ScenarioPlan::Resource{id::kGoldMine, scaled(kGold[d]), 2};
+    plan.ores[0] = ScenarioPlan::Resource{id::kOreMine, ores_scaled(kBigIron[d]), 0};
+    plan.ores[1] = ScenarioPlan::Resource{id::kOreMine, ores_scaled(kSmallIron[d]), 1};
+    plan.ores[2] = ScenarioPlan::Resource{id::kGoldMine, ores_scaled(kGold[d]), 2};
     if (m_s.gold_islands != 0) {
         plan.ores[2].count = m_s.gold_islands;
         out.gold_islands = m_s.gold_islands;

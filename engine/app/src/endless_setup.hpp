@@ -27,6 +27,10 @@ enum class SetupScope : std::uint8_t {
     Savegame,            ///< a saved game: its rules, to look at only (the game keeps its own)
 };
 
+/// A multiplayer game's world numbers: 0 .. kMultiplayerSeeds - 1, short enough to type and to
+/// tell the others.
+inline constexpr std::uint32_t kMultiplayerSeeds = 100000;
+
 struct EndlessSetup {
     sim::Rules rules = sim::Rules::open1602();
     bool own_world = false;      ///< a world of its own (`world`) instead of the level's map

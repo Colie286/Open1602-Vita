@@ -46,6 +46,12 @@ constexpr std::uint16_t kGoldAmount = 0x0640;  // 50 t
 constexpr std::uint16_t kTreasureMoney = 1000;
 
 constexpr std::size_t kMaxMountains = 40;
+// Islands of their own shape: a vein slot for every so many tiles of their rectangle, at least the
+// two of the original's island record.
+constexpr std::uint32_t kTilesPerVein = 2000;
+// Islands of their own shape from this shorter side on get lakes, one per so many tiles.
+constexpr std::uint16_t kLakeSide = 48;
+constexpr std::uint32_t kTilesPerLake = 6000;
 constexpr std::uint32_t kMaxCraters = 20;  // in the whole world (0x00609128)
 
 // Size of the island records in the state chunks, whose first byte is the island number.
@@ -71,13 +77,25 @@ struct Mountain {
 
 /// Deposit slots as the island record keeps them (INSEL5 +0x1C, 2 x 8 bytes): bytes the
 /// generator does not write keep what the template had. The high bytes of the places are
-/// Open1602's, for islands wider or higher than 255 tiles (assets::kLargeIslandChunk).
+/// Open1602's, for islands wider or higher than 255 tiles (assets::kLargeIslandChunk). Islands of
+/// their own shape may have more slots than the record's two (`limit`, by their size); those beyond
+/// it go into assets::kLargeIslandChunk too.
 struct DepositSlots {
-    std::array<std::uint8_t, 16> bytes{};
-    std::array<std::uint8_t, 2> high_x{};
-    std::array<std::uint8_t, 2> high_y{};
+    static constexpr std::size_t kRecordSlots = 2;  ///< the slots of the original's island record
+    std::vector<std::uint8_t> bytes = std::vector<std::uint8_t>(8 * kRecordSlots, 0);
+    std::vector<std::uint8_t> high_x = std::vector<std::uint8_t>(kRecordSlots, 0);
+    std::vector<std::uint8_t> high_y = std::vector<std::uint8_t>(kRecordSlots, 0);
     std::uint8_t count = 0;
+    std::uint8_t limit = kRecordSlots;
 
+    /// More slots than the record's: an island of its own shape.
+    void set_limit(std::uint8_t slots) {
+        limit = std::max<std::uint8_t>(slots, kRecordSlots);
+        bytes.resize(8 * std::size_t{limit}, 0);
+        high_x.resize(limit, 0);
+        high_y.resize(limit, 0);
+    }
+    [[nodiscard]] bool full() const noexcept { return count >= limit; }
     [[nodiscard]] std::uint8_t ware(std::size_t i) const noexcept { return bytes[8 * i]; }
     [[nodiscard]] std::uint16_t x(std::size_t i) const noexcept {
         return static_cast<std::uint16_t>(bytes[8 * i + 1] | (high_x[i] << 8));
@@ -85,8 +103,10 @@ struct DepositSlots {
     [[nodiscard]] std::uint16_t y(std::size_t i) const noexcept {
         return static_cast<std::uint16_t>(bytes[8 * i + 2] | (high_y[i] << 8));
     }
+    /// Whether the record cannot hold them: places beyond 8 bits or more than its two slots.
     [[nodiscard]] bool large() const noexcept {
-        return std::any_of(high_x.begin(), high_x.end(), [](std::uint8_t v) { return v != 0; }) ||
+        return count > kRecordSlots ||
+               std::any_of(high_x.begin(), high_x.end(), [](std::uint8_t v) { return v != 0; }) ||
                std::any_of(high_y.begin(), high_y.end(), [](std::uint8_t v) { return v != 0; });
     }
     [[nodiscard]] bool at(std::uint16_t px, std::uint16_t py) const noexcept {
@@ -113,7 +133,7 @@ struct DepositSlots {
             ++i;
         }
         if (i == count) {
-            if (count >= 2) {
+            if (full()) {
                 return false;
             }
             ++count;
@@ -144,6 +164,8 @@ struct Slot {
     /// records were moved onto it.
     std::int32_t village_dx = 0;
     std::int32_t village_dy = 0;
+    /// The ore mountains of `map` by type (Generator::mountains, all of them), once looked for.
+    mutable std::array<std::optional<std::vector<Mountain>>, 3> mountains_found;
 
     [[nodiscard]] bool has(std::uint8_t ware) const {
         for (std::size_t i = 0; i < deposits.count; ++i) {
@@ -183,6 +205,11 @@ std::vector<std::uint8_t> large_island(const Slot& slot) {
     for (std::size_t i = 0; i < slot.deposits.count; ++i) {
         u16(slot.deposits.x(i));
         u16(slot.deposits.y(i));
+    }
+    // The slots beyond the record's two, 8 bytes each as the record has them.
+    for (std::size_t i = DepositSlots::kRecordSlots; i < slot.deposits.count; ++i) {
+        out.insert(out.end(), slot.deposits.bytes.begin() + static_cast<std::ptrdiff_t>(8 * i),
+                   slot.deposits.bytes.begin() + static_cast<std::ptrdiff_t>(8 * i + 8));
     }
     return out;
 }
@@ -235,7 +262,11 @@ private:
     void give_own_shape(Slot& slot);
     void place_village(Slot& slot);
     void hand_out_crops();
+    /// Islands of their own shape: their open sea in step with the world's.
+    void seamless_sea(Slot& slot) const;
     void place_ores();
+    /// The island a vein goes to, of islands that have room for it (not empty).
+    Slot* pick_for_vein(const std::vector<Slot*>& candidates);
     void place_treasures();
     void guarantee();
     void reserve_home_iron();
@@ -248,6 +279,9 @@ private:
     [[nodiscard]] std::vector<Slot*> in_reach(const StartArea& start) const;
 
     [[nodiscard]] std::vector<Mountain> mountains(const Slot& slot, int type, bool free_only) const;
+    /// The first `most` ore mountains of the island's map (free ones only: without a deposit).
+    [[nodiscard]] std::vector<Mountain> find_mountains(const Slot& slot, int type, std::size_t most,
+                                                       bool free_only) const;
     [[nodiscard]] std::vector<Slot*> crop_candidates(std::uint8_t ware, std::uint8_t min_size, std::uint8_t max_size,
                                                      std::uint32_t max_crops) const;
     [[nodiscard]] std::vector<Slot*> ore_candidates(std::uint8_t ware, int type, std::uint32_t min_mountains,
@@ -448,6 +482,7 @@ bool Generator::wants_own_shape(const ScenarioPlan::Island& e) {
 }
 
 void Generator::count_mountains(Slot& slot) const {
+    slot.mountains_found = {};  // the map is new
     slot.mountains = {};
     for (const Mountain& m : mountains(slot, 2, false)) {
         const assets::BuildingType* b = m_buildings.by_sprite(slot.map->top(m.x, m.y).sprite);
@@ -487,6 +522,10 @@ void Generator::give_own_shape(Slot& slot) {
         r.big_mountains = static_cast<std::uint8_t>(std::min<std::uint32_t>(big, 255));
         r.small_mountains = static_cast<std::uint8_t>(std::min<std::uint32_t>(small, 255));
         r.volcano = own->volcano;
+        // Lakes inland on large islands, a river running into each: one for every kTilesPerLake.
+        if (std::min(own->width, own->height) >= kLakeSide) {
+            r.lakes = static_cast<std::uint8_t>(std::min<std::uint32_t>(area / kTilesPerLake, 255));
+        }
     } else {
         // In the place of its template: as large, with as many ore mountains, the volcano one of
         // the big ones.
@@ -498,6 +537,7 @@ void Generator::give_own_shape(Slot& slot) {
         r.small_mountains = static_cast<std::uint8_t>(std::min<std::uint32_t>(slot.mountains[1], 255));
     }
     slot.base = shapes::make_island(r);
+    seamless_sea(slot);
     slot.map = IslandMap::from_island(slot.base, m_buildings, m_warnings, nullptr);
     if ((slot.plan.flags & kPlanOwnShape) != 0 && own != m_own_islands.end() && own->village) {
         place_village(slot);
@@ -505,8 +545,31 @@ void Generator::give_own_shape(Slot& slot) {
     // Nothing of the template's header survives: no deposits, no treasure flag.
     slot.loaded_header.clear();
     slot.deposits = DepositSlots{};
+    if ((slot.plan.flags & kPlanOwnShape) != 0 && own != m_own_islands.end()) {
+        // Of its own size: veins by its area, as many as a big template's two up to its size,
+        // then one more for every kTilesPerVein tiles (a 200 x 200 island has twenty).
+        const std::uint32_t area = std::uint32_t{own->width} * own->height;
+        slot.deposits.set_limit(static_cast<std::uint8_t>(std::clamp<std::uint32_t>(area / kTilesPerVein, 2, 255)));
+    }
     slot.treasure = false;
     count_mountains(slot);
+}
+
+void Generator::seamless_sea(Slot& slot) const {
+    // The open sea of an island of its own shape in the phase the world's open sea has at its
+    // place (the renderer's frame + 3 x + y), so that no seam shows where the island's rectangle
+    // meets the world's sea.
+    const assets::BuildingType* sea = m_buildings.by_id(shapes::ids::kDarkSea);
+    if (sea == nullptr || sea->anim_count < 2 || slot.base.layers.empty()) {
+        return;
+    }
+    for (assets::IslandTile& t : slot.base.layers.front()) {
+        if (t.cod_id() != shapes::ids::kDarkSea) {
+            continue;
+        }
+        const std::uint32_t phase = (3U * (slot.plan.x + t.x) + slot.plan.y + t.y) % sea->anim_count;
+        t.bits = (t.bits & ~(0xFU << 2)) | ((phase & 0xFU) << 2);
+    }
 }
 
 void Generator::place_village(Slot& slot) {
@@ -645,11 +708,33 @@ void Generator::place_village(Slot& slot) {
 }
 
 std::vector<Mountain> Generator::mountains(const Slot& slot, int type, bool free_only) const {
-    // 0x0046C2F0: origins of ore mountains, rows from the top, each row from the right.
+    // 0x0046C2F0: origins of ore mountains, rows from the top, each row from the right. The
+    // original sees the first 40; an island of its own shape, which may have far more, all of
+    // them, or its veins would all lie in its north.
+    if (!slot.own_shape) {
+        return find_mountains(slot, type, kMaxMountains, free_only);
+    }
+    std::optional<std::vector<Mountain>>& found = slot.mountains_found[static_cast<std::size_t>(type)];
+    if (!found) {
+        found = find_mountains(slot, type, std::numeric_limits<std::size_t>::max(), false);
+    }
+    if (!free_only) {
+        return *found;
+    }
+    std::vector<Mountain> out;
+    for (const Mountain& m : *found) {
+        if (!slot.deposits.at(m.x, m.y)) {
+            out.push_back(m);
+        }
+    }
+    return out;
+}
+
+std::vector<Mountain> Generator::find_mountains(const Slot& slot, int type, std::size_t most, bool free_only) const {
     std::vector<Mountain> out;
     const IslandMap& map = *slot.map;
-    for (std::uint32_t y = 0; y < map.height() && out.size() < kMaxMountains; ++y) {
-        for (std::uint32_t x = map.width(); x-- > 0 && out.size() < kMaxMountains;) {
+    for (std::uint32_t y = 0; y < map.height() && out.size() < most; ++y) {
+        for (std::uint32_t x = map.width(); x-- > 0 && out.size() < most;) {
             const MapCell& cell = map.top(x, y);
             const assets::BuildingType* b = cell.empty() ? nullptr : m_buildings.by_sprite(cell.sprite);
             if (b == nullptr || b->prod_kind != prod::kOreMountain || b->ware != ware::kOreMountain ||
@@ -775,7 +860,7 @@ std::vector<Slot*> Generator::ore_candidates(std::uint8_t ware, int type, std::u
     // fails, the original compares the ware byte of the first deposit slot instead.
     std::vector<Slot*> out;
     for (Slot* s : m_by_number) {
-        if (s->plan.size < min_size || s->plan.size > max_size || s->deposits.count >= 2 || s->crops >= max_crops) {
+        if (s->plan.size < min_size || s->plan.size > max_size || s->deposits.full() || s->crops >= max_crops) {
             continue;
         }
         bool ok = false;
@@ -791,11 +876,40 @@ std::vector<Slot*> Generator::ore_candidates(std::uint8_t ware, int type, std::u
         for (std::size_t i = 0; i < s->deposits.count; ++i) {
             same += ware == 0 || s->deposits.ware(i) == ware ? 1U : 0U;
         }
-        if (same < max_same) {
+        // An island of its own shape with more slots takes as many more of one ware (a fixed
+        // number of gold islands still has one vein each).
+        std::uint32_t most = max_same;
+        if (max_same != 255 && !(ware == ware::kGold && m_gold_islands != 0)) {
+            most = max_same * std::max<std::uint32_t>(1, (std::uint32_t{s->deposits.limit} + 1) / 2);
+        }
+        if (same < most) {
             out.push_back(s);
         }
     }
     return out;
+}
+
+Slot* Generator::pick_for_vein(const std::vector<Slot*>& candidates) {
+    // Among islands of the original's two slots each as likely; once an island of its own shape
+    // has more, by the slots still free, so that a large island gets its share.
+    const bool more = std::any_of(candidates.begin(), candidates.end(),
+                                  [](const Slot* s) { return s->deposits.limit > DepositSlots::kRecordSlots; });
+    if (!more) {
+        return candidates[m_random.below(static_cast<std::uint32_t>(candidates.size()))];
+    }
+    std::uint32_t total = 0;
+    for (const Slot* s : candidates) {
+        total += std::uint32_t{s->deposits.limit} - s->deposits.count;
+    }
+    std::uint32_t roll = m_random.below(std::max<std::uint32_t>(total, 1));
+    for (Slot* s : candidates) {
+        const std::uint32_t free = std::uint32_t{s->deposits.limit} - s->deposits.count;
+        if (roll < free) {
+            return s;
+        }
+        roll -= free;
+    }
+    return candidates.back();
 }
 
 void Generator::place_ores() {
@@ -854,7 +968,7 @@ void Generator::place_ores() {
                 ++m_lost;
                 continue;
             }
-            Slot& s = *candidates[m_random.below(static_cast<std::uint32_t>(candidates.size()))];
+            Slot& s = *pick_for_vein(candidates);
             const std::vector<Mountain> free = mountains(s, search, true);
             if (free.empty()) {
                 ++m_lost;  // S-019: the island had mountains, but none free
@@ -944,7 +1058,7 @@ void Generator::place_treasures() {
     const auto candidates_of = [&](std::uint8_t min_size, std::uint8_t max_size) {
         std::vector<Slot*> out;
         for (Slot* s : m_by_number) {
-            if (s->plan.size >= min_size && s->plan.size <= max_size && s->deposits.count < 2 && !s->treasure &&
+            if (s->plan.size >= min_size && s->plan.size <= max_size && !s->deposits.full() && !s->treasure &&
                 !(min_size >= 3 && is_home(*s))) {
                 out.push_back(s);
             }
@@ -1017,7 +1131,7 @@ void Generator::guarantee() {
         // island makes room (gold is rarer than iron).
         std::vector<std::pair<Slot*, Mountain>> spots;
         for (Slot* s : m_by_number) {
-            if (s->deposits.count >= 2 || (ware == ware::kGold && s->plan.size == 0)) {
+            if (s->deposits.full() || (ware == ware::kGold && s->plan.size == 0)) {
                 continue;
             }
             for (const Mountain& m : mountains(*s, 2, true)) {
@@ -1170,7 +1284,7 @@ bool Generator::give_start_gold(const StartArea& start, const std::vector<Slot*>
     std::vector<std::pair<Slot*, Mountain>> spots;
     for (const bool little : {false, true}) {
         for (Slot* s : near) {
-            if (s->deposits.count >= 2 || (s->plan.size == 0) != little) {
+            if (s->deposits.full() || (s->plan.size == 0) != little) {
                 continue;
             }
             for (const Mountain& m : mountains(*s, 2, true)) {
@@ -1200,7 +1314,7 @@ bool Generator::give_start_gold(const StartArea& start, const std::vector<Slot*>
             const std::int64_t dx = std::int64_t{s->plan.x} + s->map->width() / 2 - start.x;
             const std::int64_t dy = std::int64_t{s->plan.y} + s->map->height() / 2 - start.y;
             const std::vector<Mountain> free = mountains(*s, 2, true);
-            if (s->deposits.count < 2 && !free.empty() && dx * dx + dy * dy < best) {
+            if (!s->deposits.full() && !free.empty() && dx * dx + dy * dy < best) {
                 best = dx * dx + dy * dy;
                 spots.assign(1, {s, free.front()});
             }
@@ -1243,7 +1357,7 @@ void Generator::top_up_gold() {
         std::vector<std::pair<Slot*, Mountain>> spots;
         for (const bool little : {false, true}) {
             for (Slot* s : m_by_number) {
-                if (s->deposits.count >= 2 || s->has(ware::kGold) || (s->plan.size == 0) != little) {
+                if (s->deposits.full() || s->has(ware::kGold) || (s->plan.size == 0) != little) {
                     continue;
                 }
                 for (const Mountain& m : mountains(*s, 2, true)) {
@@ -1292,8 +1406,10 @@ std::vector<std::uint8_t> Generator::header(const Slot& slot, const std::vector<
     h[0x17] = static_cast<std::uint8_t>(craters.size());
     h[0x18] = slot.treasure ? 1 : 0;
     h[0x19] = slot.crops;
-    h[0x1A] = slot.deposits.count;
-    std::copy_n(slot.deposits.bytes.begin(), 8 * slot.deposits.count, h.begin() + 0x1C);
+    // The record's two slots; more are in assets::kLargeIslandChunk.
+    const std::size_t in_record = std::min<std::size_t>(slot.deposits.count, DepositSlots::kRecordSlots);
+    h[0x1A] = static_cast<std::uint8_t>(in_record);
+    std::copy_n(slot.deposits.bytes.begin(), 8 * in_record, h.begin() + 0x1C);
     for (std::size_t i = 0; i < craters.size(); ++i) {
         const std::size_t o = 0x3C + 8 * i;
         if (full) {
@@ -1571,9 +1687,12 @@ core::Result<GeneratedWorld> Generator::run(const assets::ChunkFile& scenario, b
         }
         out.add("INSEL5", header(*s, craters, owners));
         // An island wider or higher than 255 tiles (of its own shape only) in Open1602's chunks.
-        const bool large = s->map->width() > 255 || s->map->height() > 255 || s->deposits.large();
-        if (large) {
+        // More deposits than the record holds, or places beyond 8 bits: in Open1602's chunk too.
+        const bool large = s->map->width() > 255 || s->map->height() > 255;
+        if (large || s->deposits.large()) {
             out.add(std::string(assets::kLargeIslandChunk), large_island(*s));
+        }
+        if (large) {
             out.add(std::string(assets::kLargeTilesChunk), assets::large_tile_bytes(s->base.layers.front()));
         } else {
             std::vector<std::uint8_t> tiles =

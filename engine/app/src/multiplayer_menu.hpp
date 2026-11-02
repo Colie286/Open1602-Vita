@@ -70,9 +70,13 @@ struct HostSetup {
 
 /// The host's settings as the lobby passes them on (net::Lobby::setup, which the session does not
 /// read): what is played and its settings, as "key = value" text.
-[[nodiscard]] std::vector<std::uint8_t> lobby_setup(const EndlessSetup& settings, SetupScope scope);
+/// A new endless game's also its world number (`settings.world_seed`) and `level`.
+[[nodiscard]] std::vector<std::uint8_t> lobby_setup(const EndlessSetup& settings, SetupScope scope,
+                                                    std::uint8_t level = 1);
 /// The settings of a lobby's setup; nothing if it has none or not in this form.
 [[nodiscard]] std::optional<std::pair<EndlessSetup, SetupScope>> read_lobby_setup(std::span<const std::uint8_t> bytes);
+/// The level of a new endless game in a lobby's setup (1 if it names none).
+[[nodiscard]] std::uint8_t read_lobby_level(std::span<const std::uint8_t> bytes);
 /// Whether the host may block a slot of `lobby` (nobody plays it, the world is still made for all
 /// the slots): only in a new endless game before it starts. A scenario's or savegame's players
 /// are in its world already.
@@ -191,6 +195,14 @@ public:
         m_form.set_scale(scale);
         m_settings.set_scale(scale);
     }
+    /// What makes the preview of the islands of a new endless game, and its colours
+    /// (GameSettingsMenu).
+    void set_preview_maker(GameSettingsMenu::PreviewMaker maker) { m_settings.set_preview_maker(std::move(maker)); }
+    void set_preview_colours(const GameSettingsMenu::PreviewColours& colours) {
+        m_settings.set_preview_colours(colours);
+    }
+    /// The start dialog over the screens (for the tests: its preview).
+    [[nodiscard]] GameSettingsMenu& settings_dialog() noexcept { return m_settings; }
     /// The banners by id (render::BannerTable): a slot shows the colour of its banner
     /// (net::LobbySeat::banner); `other` for a banner beyond them.
     void set_banners(std::vector<MenuBanner> banners, std::uint8_t other) {
@@ -236,7 +248,10 @@ private:
     /// The game from the host on its way (MultiplayerModel::join), in `box` of the lobby.
     void layout_join_progress(const MultiplayerModel& model, ui::Rect box);
     /// The start dialog over the screen: the host's settings to choose, or to look at.
-    void open_settings(const EndlessSetup& setup, SetupScope scope, GameSettingsMenu::Mode mode);
+    /// `level` the difficulty of a new endless game (its preview); `reroll` whether its world
+    /// number may change there (only while the host creates the game).
+    void open_settings(const EndlessSetup& setup, SetupScope scope, GameSettingsMenu::Mode mode, std::uint8_t level,
+                       bool reroll);
     /// Back from the start dialog to the screen it was opened from.
     void close_settings();
     /// The settings button and the summary of the rules below `y` in the right column.

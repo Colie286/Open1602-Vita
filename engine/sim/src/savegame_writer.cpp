@@ -32,6 +32,7 @@ constexpr std::size_t kMaxOwnIslands = 255;  // island numbers are one byte
 /// craters, object refs), so an island is at most 255 tiles wide and high. Open1602 itself keeps
 /// 16 bits (SC-13): the limit binds only this export.
 constexpr std::uint32_t kMaxIslandSide = 255;
+constexpr std::size_t kMaxDeposits = 2;  // the slots of the island record
 constexpr std::size_t kMaxCities = 75;
 constexpr std::size_t kMaxShips = 150;
 constexpr std::size_t kMaxSoldiers = 400;
@@ -194,6 +195,11 @@ private:
         for (const WorldIsland& i : m_world.islands()) {
             if (i.header.number >= max_islands) {
                 return make_error(ErrorCode::LimitExceeded, "island number " + std::to_string(i.header.number));
+            }
+            if (i.header.deposits.size() > kMaxDeposits) {
+                // Islands of their own shape may have more veins than the island record holds.
+                return make_error(ErrorCode::LimitExceeded,
+                                  "island " + std::to_string(i.header.number) + " has more than two deposits");
             }
             if (i.map.width() > kMaxIslandSide || i.map.height() > kMaxIslandSide) {
                 return make_error(ErrorCode::LimitExceeded,
@@ -478,7 +484,7 @@ private:
             }
         }
         // Deposits (8 bytes each from 0x1C).
-        r[0x1A] = static_cast<std::uint8_t>(std::min<std::size_t>(h.deposits.size(), 2));
+        r[0x1A] = static_cast<std::uint8_t>(std::min<std::size_t>(h.deposits.size(), kMaxDeposits));
         for (std::size_t k = 0; k < 2; ++k) {
             const std::size_t o = 0x1C + 8 * k;
             if (k < h.deposits.size()) {

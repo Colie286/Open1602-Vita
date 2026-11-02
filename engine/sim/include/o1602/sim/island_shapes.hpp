@@ -49,6 +49,9 @@ struct ShapeRequest {
     std::uint8_t big_mountains = 0;    ///< ore mountains for big veins (4 x 4)
     std::uint8_t small_mountains = 0;  ///< ore mountains for small veins (3 x 3)
     bool volcano = false;              ///< a volcano (the big ore mountain 21108), placed first
+    /// Lakes inland, each with a river from a mountain beside it running into it. Those that find
+    /// no room are left out.
+    std::uint8_t lakes = 0;
     Roughness roughness = Roughness::Natural;
     Form form = Form::Compact;
     Share forest = Share::Normal;

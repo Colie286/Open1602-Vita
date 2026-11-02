@@ -292,6 +292,8 @@ TEST_CASE("island shapes: light water past the surf, dark far out, the band edge
         const auto i = static_cast<std::size_t>(t.y * w + t.x);
         id[i] = t.cod_id();
         rotation[i] = t.rotation();
+        // The open sea is never turned, as the world's around the island.
+        CHECK((t.cod_id() != ids::kDarkSea || t.rotation() == 0));
         switch (t.cod_id()) {
             case ids::kLightSea:
                 band[i] = 1;

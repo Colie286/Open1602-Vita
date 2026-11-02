@@ -114,7 +114,9 @@ struct Island {
 /// Open1602's chunks for islands wider or higher than 255 tiles, which the original's records
 /// cannot hold (island coordinates are one byte there). After an INSEL5:
 /// - kLargeIslandChunk: width and height (u16 each), the number of deposits (u8) and for each its x
-///   and y (u16 each); they replace the header's one-byte values.
+///   and y (u16 each); they replace the header's one-byte values. Then the deposits beyond the
+///   header's two (islands of their own shape may have more), 8 bytes each as the header has them.
+/// The chunk also follows an island that is not large but has more than two deposits.
 /// - kLargeTilesChunk: a layer of tiles as INSELHAUS, 10 bytes each: id u16, x u16, y u16, bits u32.
 inline constexpr std::string_view kLargeIslandChunk = "O1602ISL";
 inline constexpr std::string_view kLargeTilesChunk = "O1602HAUS";

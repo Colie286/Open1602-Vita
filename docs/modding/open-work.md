@@ -395,6 +395,16 @@ are tried. `o1602-tool new-world` makes room for the largest island of its own s
 than four players for a .gam (seven slots less the natives and pirates); an output ending in `.o1602`
 takes any number of players.
 
+Part 10 done on 2026-11-02, after players' feedback on large worlds: islands of their own size get
+veins by their size, one for every 2000 tiles of their rectangle (at least the original's two; the
+slots beyond the island record's two are kept in `O1602ISL`, so such a world has no .gam), the
+veins of a world grow with its land as well as with its islands and players, a vein goes to an
+island by the slots it has left, and all its ore mountains count, not only the first 40 from the
+north. Islands of 48 tiles and more on their shorter side get a lake inland for every 6000 tiles,
+with a small mountain beside it whose river runs into it; other rivers try the way to a lake nearby
+first. The open sea of an island of its own shape is no longer turned at random and takes the
+phase of the world's sea around it, so that no strip of other waves shows between two islands.
+
 Still open: the climates of the islands as data.
 
 ## Order of work

@@ -528,7 +528,7 @@ void MapViewer::handle_multiplayer(const MultiplayerEvent& e) {
                 m_hosted->settings = e.setup.settings;
                 const net::Lobby& lobby = host->lobby();
                 host->set_lobby_info(lobby.title, lobby.game,
-                                     lobby_setup(m_hosted->game_settings(), m_hosted->scope()));
+                                     lobby_setup(m_hosted->game_settings(), m_hosted->scope(), m_hosted->level));
                 if (!(e.setup.settings == m_app_settings.multiplayer)) {
                     m_app_settings.multiplayer = e.setup.settings;
                     save_settings();
@@ -682,7 +682,7 @@ core::Status MapViewer::host_lobby(const HostSetup& setup) {
         saved.rules = world->saved_rules().value_or(m_options.rules);
         lobby.setup = lobby_setup(saved, SetupScope::Savegame);
     } else {
-        lobby.setup = lobby_setup(setup.game_settings(), setup.scope());
+        lobby.setup = lobby_setup(setup.game_settings(), setup.scope(), setup.level);
     }
     // The host plays the first open slot (the first slot if all are computers), unless it only hosts.
     // A savegame's host plays the slot it played before, if the game knows it.

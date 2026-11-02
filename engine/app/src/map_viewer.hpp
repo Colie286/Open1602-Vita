@@ -230,7 +230,7 @@ private:
     /// How the game stands for the local player now.
     [[nodiscard]] sim::GameOutcome local_outcome() const;
     /// Makes the start dialog's preview of a new world (its page of the islands).
-    [[nodiscard]] GameSettingsMenu::PreviewMaker preview_maker() const;
+    [[nodiscard]] GameSettingsMenu::PreviewMaker preview_maker(bool multiplayer) const;
     /// A new endless game of `level` (from the menu): name and banner of the human (one of the
     /// original's four or a further one), with the settings of the start dialog (rules, an own world).
     core::Status start_endless(std::uint8_t level, sim::BannerId banner, const std::string& name,
