@@ -566,6 +566,8 @@ private:
     };
     [[nodiscard]] const Census* census() const;
     mutable Census m_census;
+    /// Free land from which `grown` grows a stage's orders, during the grow pass of `run_stage`.
+    std::uint32_t m_grow_from = 0;  ///< 0: kGrowFrom
     /// The order and plan of can_place(), reused so that a site test allocates nothing.
     mutable BuildOrder m_place_order;
     mutable BuildPlan m_place_plan;

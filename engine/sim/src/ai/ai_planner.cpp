@@ -529,7 +529,7 @@ std::uint32_t Engine::grown(const CityPlan& r, std::uint32_t n, bool any_stage) 
     if (classic() || (r.stage < stage::kSecond && !any_stage)) {
         return n;
     }
-    return grown_count(r.land, n);
+    return grown_count(r.land, n, any_stage || m_grow_from == 0 ? kGrowFrom : m_grow_from);
 }
 
 std::uint32_t Engine::houses_wanted(const City& c, const CityPlan& r, std::uint32_t n) const {
@@ -730,11 +730,16 @@ void Engine::run_stage(AiPlayer& p, City& c, CityPlan& r) {
     };
     const auto idle = [&] {
         if (!classic()) {
+            // A city at its last stage that earns well grows on the original's large islands too
+            // (from kGrowLand tiles); before, it would spend what its next stage needs.
+            m_grow_from = r.stage == stage::kAristocrats2 && net_income(p) >= kGrowIncome ? kGrowLand : kGrowFrom;
             for (const ComputerList list : asked) {
                 if (first_need(p, c, r, money, order_of(m_world.balance().computer_orders, list), true)) {
+                    m_grow_from = 0;
                     return;
                 }
             }
+            m_grow_from = 0;
         }
         nothing_to_do(p);
     };
@@ -1390,7 +1395,10 @@ bool Engine::need_market(AiPlayer& p, std::uint32_t n) {
         return false;
     }
     if (!affordable(p, *c, *b)) {
-        return true;
+        // The original waits for the market, even in a city without a woodcutter that lacks the wood
+        // for it: the woodcutter comes later in the order, so the city waits for good. Open1602 goes
+        // on with the order then.
+        return classic() || r->slots[kSlotWoodcutter].count != 0;
     }
     if (plan_building(p, kMarket, *b, kSlotMarket, true)) {
         reserve(p, *b);

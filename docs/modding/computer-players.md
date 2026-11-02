@@ -138,8 +138,9 @@ and package entries multiplied by its land / 1000, up to eight times, rounded up
 order's own number only while at most an eighth of the city's houses hold pioneers, so that the city
 moves up before it spreads. A colony does the same with its caps on luxury fields and farms. So a
 computer fills an island of 3000 free tiles with up to three times as many houses and the farms and
-workshops to feed them, while maps of the original's islands play as before. The original's computer
-players (`Rules::bugs.classic_ai`, `--ai classic`) keep the plain numbers.
+workshops to feed them. On the original's large islands a city at the aristocrats' last stage that
+earns at least 50 gold a minute more than it pays grows the same way from 1000 tiles of free land,
+once there is no next stage its growing could hold up. The original's computer players (`Rules::bugs.classic_ai`, `--ai classic`) keep the plain numbers.
 
 ## What they get from nowhere
 

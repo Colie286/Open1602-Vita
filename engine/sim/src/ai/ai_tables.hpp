@@ -182,11 +182,15 @@ inline const PublicTask* public_task(std::uint8_t task) {
 inline constexpr std::uint32_t kGrowFrom = 2000;
 inline constexpr std::uint32_t kGrowLand = 1000;
 inline constexpr std::uint32_t kGrowMax = 8;
+/// A city at the aristocrats' last stage grows from kGrowLand tiles of free land (the original's
+/// large islands) while the computer earns at least this much gold a minute more than it pays.
+inline constexpr std::int32_t kGrowIncome = 50;
 
-/// `n` of an order grown for a city with `land` tiles of free land, in sixteenths so that a little
-/// more land already adds a little; rounded up, at most kMaxOrderCount.
-inline constexpr std::uint32_t grown_count(std::uint32_t land, std::uint32_t n) noexcept {
-    if (land <= kGrowFrom || n == 0) {
+/// `n` of an order grown for a city with more than `from` tiles of free land (else `n`), in
+/// sixteenths so that a little more land already adds a little; rounded up, at most kMaxOrderCount.
+inline constexpr std::uint32_t grown_count(std::uint32_t land, std::uint32_t n,
+                                           std::uint32_t from = kGrowFrom) noexcept {
+    if (land <= from || n == 0) {
         return n;
     }
     const std::uint64_t f = std::min<std::uint64_t>(std::uint64_t{land} * 16 / kGrowLand, 16 * kGrowMax);

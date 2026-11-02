@@ -114,6 +114,7 @@ TEST_CASE("ai tables: Needs and public tasks name each slot once") {
 TEST_CASE("ai tables: a city on a large island grows its orders with its free land") {
     CHECK(grown_count(500, 44) == 44);  // the original's islands: the original's orders
     CHECK(grown_count(kGrowFrom, 44) == 44);
+    CHECK(grown_count(kGrowLand * 3 / 2, 44, kGrowLand) == 66);  // a thriving city on an original's island
     CHECK(grown_count(kGrowLand * 3, 44) == 132);
     CHECK(grown_count(kGrowLand * 5 / 2, 44) == 110);
     CHECK(grown_count(kGrowLand * 3, 1) == 3);
