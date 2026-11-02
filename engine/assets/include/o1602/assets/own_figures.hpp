@@ -52,6 +52,26 @@ struct OwnUnit {
     [[nodiscard]] std::string name(std::string_view language) const;
 };
 
+/// A ship of a package that shipyards build: a figure whose `like` names a ship of the original's
+/// shipyards (or another package's), followed by its wreck (docs/modding/own-figures.md#ships).
+/// A shipyard builds it beside the original's ship of its type: a click on that type's button
+/// again picks the next one.
+struct OwnShip {
+    std::string id;            ///< "<package>:<name>", as its OwnFigure
+    std::uint32_t figure = 0;  ///< its number; the wreck follows
+    std::uint8_t type = 0;     ///< the original's ship it stands beside, an index of figure::kShips
+    std::string icon;          ///< an icon of a package (icons.toml) for the shipyard, empty: the original's
+    LocalizedNames names;      ///< Windows-1252
+    /// Its image is a tint template (`tint = true`), in the owner's colour for every banner.
+    bool tint = false;
+
+    /// The name in `language`, else in English, else the first, else the id.
+    [[nodiscard]] std::string name(std::string_view language) const;
+};
+
+/// The ship of `ships` with number `figure`, nullptr for the original's.
+[[nodiscard]] const OwnShip* find_own_ship(std::span<const OwnShip> ships, std::uint32_t figure) noexcept;
+
 /// The entry of `own` called `id`, nullptr if there is none.
 [[nodiscard]] const OwnFigure* find_own_figure(std::span<const OwnFigure> own, std::string_view id) noexcept;
 
@@ -70,16 +90,17 @@ struct OwnUnit {
 void apply_own_figures_file(FigureTable& table, std::vector<OwnFigure>& own, std::string_view package,
                             std::string_view utf8, std::vector<std::string>& warnings,
                             std::span<const PackageImage> images = {}, std::span<const PackageSound> sounds = {},
-                            std::vector<OwnUnit>* units = nullptr);
+                            std::vector<OwnUnit>* units = nullptr, std::vector<OwnShip>* ships = nullptr);
 
 /// The red figure `id` names when it names a unit family: "anno1602:<name>" of one of the
 /// original's (a unit's name stands for its four colours) or "<package>:<name>" of `own`; whether
 /// that figure heads a family of a table is the caller's to check (FigureTable::unit_of).
 [[nodiscard]] std::optional<std::uint32_t> unit_family_number(std::span<const OwnFigure> own, std::string_view id);
 
-/// The sprites (first, count) of the terrain sheet that units of `units` draw as tint templates.
-[[nodiscard]] std::vector<std::pair<std::uint32_t, std::uint32_t>> tint_template_sprites(std::span<const OwnUnit> units,
-                                                                                         const FigureTable& table);
+/// The sprites (first, count) of the terrain sheet that units of `units` and ships of `ships` draw
+/// as tint templates.
+[[nodiscard]] std::vector<std::pair<std::uint32_t, std::uint32_t>> tint_template_sprites(
+    std::span<const OwnUnit> units, const FigureTable& table, std::span<const OwnShip> ships = {});
 
 /// The unit family of `units` whose red figure is `family`, nullptr for the original's.
 [[nodiscard]] const OwnUnit* find_own_unit(std::span<const OwnUnit> units, std::uint32_t family) noexcept;

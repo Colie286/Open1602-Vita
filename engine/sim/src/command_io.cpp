@@ -144,6 +144,7 @@ void io(A& a, T& t)
     a(t.ship_type);
     a(t.on);
     a(t.ship);
+    a(t.figure);
 }
 
 template <class A, class T>

@@ -361,6 +361,7 @@ core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDir
     viewer->m_own_buildings = std::move(rules.own);
     viewer->m_own_figures = std::move(rules.own_figures);
     viewer->m_own_units = std::move(rules.own_units);
+    viewer->m_own_ships = std::move(rules.own_ships);
     viewer->m_goods = std::move(rules.goods);
     viewer->m_classes = std::move(rules.classes);
     viewer->m_levels = std::move(rules.levels);
@@ -456,6 +457,7 @@ core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDir
             viewer->m_hud->set_banners(&viewer->m_banners);
             viewer->m_hud->set_messages(&viewer->m_messages);
             viewer->m_hud->set_own_units(viewer->m_own_units);
+            viewer->m_hud->set_own_ships(viewer->m_own_ships);
             viewer->m_hud->set_available([self = viewer.get()](std::uint32_t id) {
                 const sim::Player* p = self->m_state->world.player(self->m_local_player);
                 const assets::BuildingType* b = self->m_buildings.by_id(id);
@@ -630,7 +632,7 @@ void MapViewer::start_preloading() {
     options.derive_missing_sheets = m_options.derive_small_figures;
     options.dither = m_app_settings.display.classic_graphics;
     options.package_images = m_package_images;
-    options.template_sprites = assets::tint_template_sprites(m_own_units, m_figures);
+    options.template_sprites = assets::tint_template_sprites(m_own_units, m_figures, m_own_ships);
     // The thread works on its own copies: nothing it reads changes under it.
     m_preloader = std::make_unique<render::GraphicsPreloader>(
         [game = m_game, palette = m_palette, banners = m_banners, figures = m_figures, options](
@@ -3489,8 +3491,10 @@ void MapViewer::reload_mods() {
     m_own_buildings = std::move(rules.own);
     m_own_figures = std::move(rules.own_figures);
     m_own_units = std::move(rules.own_units);
+    m_own_ships = std::move(rules.own_ships);
     if (m_hud) {
         m_hud->set_own_units(m_own_units);
+        m_hud->set_own_ships(m_own_ships);
     }
     m_goods = std::move(rules.goods);
     m_classes = std::move(rules.classes);

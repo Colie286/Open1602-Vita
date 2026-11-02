@@ -11,6 +11,7 @@
 
 #include "o1602/assets/cod_parser.hpp"
 #include "o1602/assets/figure_table.hpp"
+#include "o1602/assets/package_graphics.hpp"
 #include "o1602/render/dither.hpp"
 #include "o1602/render/figure_animation.hpp"
 #include "o1602/render/flag_tint.hpp"
@@ -457,6 +458,21 @@ TEST_CASE("flags: one tinted block per banner in the atlas and in the draw list"
     layers.banner_flags = nullptr;
     REQUIRE(render::ship_sprites(sim::make_ship("A", 10, 20, 21, 1, 0), world, render::WorldView{}, layers, 0, s));
     CHECK(!s.has_flag);
+
+    // A ship of a package with its own image draws it from the terrain sheet, whose packages'
+    // images here stand where the hulls are; below half health it keeps its image.
+    assets::FigureType cog = *figures->get(21);
+    cog.sheet = assets::FigureSheet::Stadtfld;
+    cog.gfx = assets::kFirstPackageSprite + 2;
+    cog.ship.max_health = 64;
+    const auto number = figures->add(cog);
+    REQUIRE(number.ok());
+    layers.sheet_base[static_cast<std::size_t>(assets::FigureSheet::Stadtfld)] =
+        atlas->sheet_base(0) - assets::kFirstPackageSprite;
+    sim::Ship package_ship = sim::make_ship("A", 10, 20, static_cast<std::uint16_t>(*number), 1, 0);
+    package_ship.health = 10;
+    REQUIRE(render::ship_sprites(package_ship, world, render::WorldView{}, layers, 0, s));
+    CHECK(s.hull.sprite == atlas->sheet_base(0) + 2);
 }
 
 TEST_CASE("figures: workers and animals vanish into crops and trees") {

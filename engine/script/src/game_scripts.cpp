@@ -758,6 +758,35 @@ void GameScripts::add_api(Package& package) {
             m_simulation->script_unit(*player, *family, static_cast<std::int32_t>(*x), static_cast<std::int32_t>(*y));
         return id ? Value{std::int64_t{*id}} : Value{false};
     });
+    add("add_ship", [this, &package](std::span<const Value> args) -> core::Result<Value> {
+        if (m_simulation == nullptr || m_simulation->figures() == nullptr) {
+            return script_error("game.add_ship: only while the game runs, not at the top level");
+        }
+        const auto player = player_argument(*m_world, args, 0);
+        std::optional<std::uint32_t> figure;
+        if (const auto number = integer(args, 1)) {
+            if (*number >= 0 && *number <= 0xFFFF) {
+                figure = static_cast<std::uint32_t>(*number);
+            }
+        } else if (const auto* id = args.size() > 1 ? std::get_if<std::string>(&args[1]) : nullptr) {
+            figure = assets::figure_number(m_world->own_figures(), *m_simulation->figures(),
+                                           id->find(':') == std::string::npos ? package.id + ":" + *id : *id);
+        }
+        const auto x = integer(args, 2);
+        const auto y = integer(args, 3);
+        if (!player) {
+            return script_error("game.add_ship: no such player");
+        }
+        if (!x || !y || std::abs(*x) > 0xFFFF || std::abs(*y) > 0xFFFF) {
+            return script_error("game.add_ship: x and y must be integers");
+        }
+        if (!figure) {
+            return Value{false};
+        }
+        const auto id =
+            m_simulation->script_ship(*player, *figure, static_cast<std::int32_t>(*x), static_cast<std::int32_t>(*y));
+        return id ? Value{std::int64_t{*id}} : Value{false};
+    });
     add("move_unit", [this, unit_order](std::span<const Value> args) -> core::Result<Value> {
         if (m_simulation == nullptr) {
             return script_error("game.move_unit: only while the game runs, not at the top level");

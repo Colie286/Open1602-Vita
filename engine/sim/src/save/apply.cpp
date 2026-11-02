@@ -473,6 +473,8 @@ core::Status apply_decoded(World& world, Decoded& d) {
             CostBuilding& b = world.cost_buildings()[i];
             const CostBuilding& y = d.fleet->yards[i];
             b.order = y.order;
+            b.order_figure =
+                y.order != CostBuilding::kNoOrder && y.order_figure < assets::kMaxFigures ? y.order_figure : 0;
             b.progress = y.progress;
             b.wood = y.wood;
             b.cloth = y.cloth;

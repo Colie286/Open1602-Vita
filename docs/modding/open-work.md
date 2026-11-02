@@ -27,7 +27,7 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 
 | Item | What is missing | Size |
 |---|---|---|
-| 2 | ships of a package's own that shipyards build (soldiers of a package's own are done), and computers that train a package's soldiers | large: shipyard, AI and savegame |
+| 2 | computers that train a package's soldiers and build a package's ships (soldiers and ships of a package's own are done) | medium: the AI's unit and ship choice |
 | 4 | videos in a modern format (today only Smacker and Bink 2) | medium: a decoder in `third_party` (e.g. a royalty-free format such as AV1 or VP9 in WebM) |
 | 5 | the original's 32 rows of needs (`kNeeds`), its 55 fixed building slots of a city, which building of the original produces what (`producer_slot`), the first colony's crop by the computer's slot (`first_crop`) and the four unit families and ship types the computers build, all still compiled in | large: the AI's core tables |
 | 9 | climates of a package's own, with their ground, forest and crops (today north and south) | large: climate tables, the generator, fertility and the start dialog |
@@ -147,8 +147,12 @@ the highest free figure numbers from 1023 down; `figures.toml` changes their val
 package names them as its carriers or workers (`figure`), and a game keeps them (section `OWNF`).
 Soldiers of a package's own done on 2026-11-02 ([own-figures.md](own-figures.md#soldiers)): a figure
 whose `like` names a unit is a unit of four colours; castles train it beside the unit it copies, a
-ship's hold carries it, and a game keeps it (`FLEE` version 6). Still open: ships of a package's own
-for the shipyards, and computers that train a package's soldiers.
+ship's hold carries it, and a game keeps it (`FLEE` version 6). Ships of a package's own done on
+2026-11-02 ([own-figures.md](own-figures.md#ships)): a figure whose `like` names a ship of the
+shipyards is a ship and its wreck; shipyards build it beside the ship it copies, and a game keeps
+the order (`FLEE` version 7). Graphics of packages in player colour are templates
+([flags.md](flags.md#graphics-of-packages-in-player-colour)). Still open: computers that train a
+package's soldiers and build a package's ships.
 
 ### 3. Free goods list, resident classes and unlock levels (section 2; MD-2, MD-3, MD-8)
 

@@ -57,7 +57,9 @@ std::vector<sim::Command> every_kind() {
     trade.mode = sim::TradeSetting::Mode::Buy;
     trade.price = 123;
     all.emplace_back(trade);
-    all.emplace_back(sim::ShipyardOrder{});
+    sim::ShipyardOrder yard;
+    yard.figure = 4094;  // a package's ship
+    all.emplace_back(yard);
     all.emplace_back(sim::ExploreOrder{});
     all.emplace_back(sim::DiplomacyOrder{});
     sim::SoldierOrder soldiers;

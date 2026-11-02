@@ -196,30 +196,56 @@ core::Result<std::uint32_t> FigureTable::add_unit_family(std::span<const FigureT
     if (colours.size() != kUnitVariants) {
         return make_error(ErrorCode::OutOfRange, "a unit family has " + std::to_string(kUnitVariants) + " colours");
     }
+    const auto first = add_block(colours);
+    if (!first) {
+        return make_error(ErrorCode::Unsupported, "figuren.cod has no " + std::to_string(kUnitVariants) +
+                                                      " numbers in a row free below " + std::to_string(kMaxFigures) +
+                                                      " for another unit");
+    }
+    m_unit_families.push_back(*first);
+    return *first;
+}
+
+core::Result<std::uint32_t> FigureTable::add_ship(std::span<const FigureType> ship_and_wreck, std::uint8_t type) {
+    if (ship_and_wreck.size() != 2 || type >= figure::kShips.size()) {
+        return make_error(ErrorCode::OutOfRange, "a ship of a package is a ship and its wreck, of one of " +
+                                                     std::to_string(figure::kShips.size()) + " types");
+    }
+    const auto first = add_block(ship_and_wreck);
+    if (!first) {
+        return make_error(ErrorCode::Unsupported, "figuren.cod has no 2 numbers in a row free below " +
+                                                      std::to_string(kMaxFigures) + " for another ship");
+    }
+    m_ships.emplace_back(*first, type);
+    return *first;
+}
+
+std::optional<std::uint32_t> FigureTable::add_block(std::span<const FigureType> figures) {
+    const auto n = static_cast<std::uint32_t>(figures.size());
+    if (n == 0 || n > kMaxFigures) {
+        return std::nullopt;
+    }
     const auto free = [&](std::uint32_t number) { return number >= m_types.size() || !m_types[number].defined; };
-    for (std::uint32_t first = kMaxFigures - kUnitVariants + 1; first-- > 0;) {
+    for (std::uint32_t first = kMaxFigures - n + 1; first-- > 0;) {
         bool room = true;
-        for (std::uint32_t k = 0; k < kUnitVariants && room; ++k) {
+        for (std::uint32_t k = 0; k < n && room; ++k) {
             room = free(first + k);
         }
         if (!room) {
             continue;
         }
-        if (std::size_t{first} + kUnitVariants > m_types.size()) {
-            m_types.resize(std::size_t{first} + kUnitVariants);
+        if (std::size_t{first} + n > m_types.size()) {
+            m_types.resize(std::size_t{first} + n);
         }
-        for (std::uint32_t k = 0; k < kUnitVariants; ++k) {
-            FigureType f = colours[k];
+        for (std::uint32_t k = 0; k < n; ++k) {
+            FigureType f = figures[k];
             f.number = first + k;
             f.defined = true;
             m_types[first + k] = std::move(f);
         }
-        m_unit_families.push_back(first);
         return first;
     }
-    return make_error(ErrorCode::Unsupported, "figuren.cod has no " + std::to_string(kUnitVariants) +
-                                                  " numbers in a row free below " + std::to_string(kMaxFigures) +
-                                                  " for another unit");
+    return std::nullopt;
 }
 
 core::Result<FigureTable> FigureTable::load(const GameDirectory& game) {

@@ -4,6 +4,7 @@
 // workshops, a chapel, a house and a Kontor of the local and another player, ships and cities.
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -16,6 +17,7 @@
 
 #include "o1602/assets/cod_parser.hpp"
 #include "o1602/assets/game_directory.hpp"
+#include "o1602/assets/own_figures.hpp"
 #include "o1602/assets/text_table.hpp"
 #include "o1602/sim/simulation.hpp"
 #include "o1602/sim/world.hpp"
@@ -700,6 +702,58 @@ TEST_CASE("selection panels: the shipyard window orders a ship of the types a sm
     CHECK(p->panel().selected(39018));
     shown = texts(*p);
     CHECK(std::find(shown.begin(), shown.end(), "12") != shown.end());  // running cost at rest
+}
+
+TEST_CASE("selection panels: a second click on a ship type picks a ship of a package of that type") {
+    Game g("o1602-test-selection-werft-cog");
+    Town t;
+    add_city(t.world, 3, kLocal, "Haven");
+    // A cog of a package beside the small trade ship (type 0).
+    assets::FigureType cog;
+    cog.defined = true;
+    const std::array<assets::FigureType, 2> cog_and_wreck{cog, cog};
+    const auto number = t.figures.add_ship(cog_and_wreck, 0);
+    REQUIRE(number.ok());
+    std::vector<assets::OwnShip> ships(1);
+    ships[0].id = "fleet:cog";
+    ships[0].figure = *number;
+    ships[0].names.push_back({"en", "Cog"});
+    sim::Simulation simulation(t.world, t.buildings, t.figures);
+    SelectionPanels panels(*g.dir);
+    PanelContext c{simulation, t.buildings, t.figures, &g.texts, kLocal};
+    c.own_ships = ships;
+    const Selection yard = building(1, 5);
+    SelectionPanel* p = panels.panel_for(yard, c);
+    REQUIRE(p != nullptr);
+    p->refresh(yard, c);
+
+    std::vector<sim::Command> out;
+    const auto order = [&](std::initializer_list<std::int32_t> types) {
+        out.clear();
+        p->clicked(ui::PanelEvent{ui::PanelEvent::Kind::Clicked, 39016}, yard, c, out);
+        for (const std::int32_t id : types) {
+            p->clicked(ui::PanelEvent{ui::PanelEvent::Kind::Clicked, id}, yard, c, out);
+            p->refresh(yard, c);
+        }
+        p->clicked(ui::PanelEvent{ui::PanelEvent::Kind::Clicked, 60022}, yard, c, out);
+        REQUIRE(out.size() == 1);
+        const auto* build = std::get_if<sim::ShipyardOrder>(&out[0]);
+        REQUIRE(build != nullptr);
+        CHECK(build->op == sim::ShipyardOrder::Op::Build);
+        return *build;
+    };
+    // The first type is picked when the choice opens: a click on it again picks the cog.
+    auto build = order({60003});
+    CHECK(build.ship_type == 0);
+    CHECK(build.figure == *number);
+    // Once more: after the last ship of a package the original's again.
+    build = order({60003, 60003});
+    CHECK(build.ship_type == 0);
+    CHECK(build.figure == 0);
+    // Another type forgets the cog.
+    build = order({60003, 60005});
+    CHECK(build.ship_type == 2);
+    CHECK(build.figure == 0);
 }
 
 TEST_CASE("selection panels: the castle window recruits, shows the training and sends the unit out") {

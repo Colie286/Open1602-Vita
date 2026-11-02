@@ -284,6 +284,11 @@ public:
     /// package's). Returns its id; nothing for no such player, no unit family, or a tile soldiers
     /// cannot stand on.
     std::optional<std::uint32_t> script_unit(PlayerId player, std::uint32_t family, std::int32_t x, std::int32_t y);
+    /// A ship of `player` that shipyards build (`figure`: the original's or a package's) appears on
+    /// sailable world tile (x, y), new and empty (Fleet::add_ship). Its id, or nothing.
+    std::optional<std::uint32_t> script_ship(PlayerId player, std::uint32_t figure, std::int32_t x, std::int32_t y) {
+        return m_fleet.add_ship(player, figure, x, y);
+    }
 
     /// Gives `player` the mission `mission`, or none, from now on. The player gets a slot of their
     /// own, so whoever shared the old mission keeps it; a computer's mission counts for it (goal
@@ -304,6 +309,8 @@ public:
     [[nodiscard]] const Logistics& logistics() const noexcept { return m_logistics; }
     /// Ships, the free trader and shipyards.
     [[nodiscard]] const Fleet& fleet() const noexcept { return m_fleet; }
+    /// The figure table of the game, the packages' figures included; nullptr without one.
+    [[nodiscard]] const assets::FigureTable* figures() const noexcept { return m_figures; }
     /// Whether `player` may cheat now (Rules::cheats, the code it typed, the people in the game).
     [[nodiscard]] bool cheats_allowed(PlayerId player) const;
     /// Soldiers, towers and the hostile lists.

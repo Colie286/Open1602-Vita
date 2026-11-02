@@ -98,6 +98,34 @@ board a ship a soldier of a package fills a hold as the original's units do; the
 original's unit of its kind (`Kind`) and keeps which soldier it holds (version 6 of `FLEE`,
 [o1602-save.md](../formats/o1602-save.md)). Computers train only the original's units so far.
 
+## Ships
+
+A figure whose `like` names a ship that shipyards build, `anno1602:small_merchant_ship`,
+`anno1602:large_merchant_ship`, `anno1602:small_warship`, `anno1602:large_warship` or a ship of a
+package, is a ship of the package: two figures, the ship and after it its wreck, copied from the
+ship it names and its wreck. Shipyards build it beside the original's ship of its type: in the
+type choice of the shipyard's window a click on that type's button again picks it, the next click
+the next ship of a package of that type, and after the last the original's again. A small yard
+builds only the small types, as for the original's. Its values come from `figures.toml` as every
+figure's: the material it is built from (`material`, `material_amount`), holds, cannons, speed and
+hit points.
+
+```toml
+# mods/cogs/own_figures.toml
+[cog]
+like = "anno1602:small_merchant_ship"
+image = "cogs:cog"          # the ship's sprites in every direction
+tint = true                 # the image is a template: pure grey takes on the owner's colour
+icon = "cogs:cog_button"    # icons.toml: the shipyard's button while the cog is picked
+name.en = "Cog"
+name.de = "Kogge"
+```
+
+`icon`, `name.<language>` and `tint` work as for soldiers. A shipyard keeps which ship of a
+package it builds (version 7 of `FLEE`, [o1602-save.md](../formats/o1602-save.md)). A script sets
+one down with `game.add_ship` ([scripts.md](scripts.md)). Computers build only the original's ships
+so far.
+
 ## Numbers and savegames
 
 The engine gives every figure of a package a number of the figure table, the highest free one
@@ -117,5 +145,8 @@ none of them, and a game with them cannot be saved for the original.
 (a soldier: its red figure, the original's unit beside which it stands, icon and names),
 `apply_own_figures_file`, `figure_number`; `FigureTable::add` gives a copy its number,
 `FigureTable::add_unit_family` a soldier its four, and `FigureTable::unit_families` and `unit_of`
-know them. `sim::CargoSlot::unit` names a soldier of a package in a hold.
+know them. `OwnShip` is a ship of a package, `FigureTable::add_ship` gives it and its wreck their
+numbers and `FigureTable::ship_type_of` names the type it stands beside; `sim::CostBuilding::order_figure`
+is the ship of a package a shipyard builds (`sim::yard_ship`). `sim::CargoSlot::unit` names a
+soldier of a package in a hold.
 `sim::World::own_figures()` carries them through a game and its savegame.

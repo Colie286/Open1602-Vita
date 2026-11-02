@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 #include "o1602/assets/cod_parser.hpp"
@@ -196,6 +197,30 @@ public:
     /// castles train it (unit_families). The number of its red figure, or an error when there is no
     /// room.
     core::Result<std::uint32_t> add_unit_family(std::span<const FigureType> colours);
+    /// Adds a ship of a package that shipyards build beside the original's ship of `type` (an index
+    /// of figure::kShips): the ship and its wreck (`ship_and_wreck`, as the original's ship is
+    /// followed by its wreck) under the highest two consecutive free numbers below kMaxFigures.
+    /// The ship's number, or an error when there is no room or `type` is no ship type.
+    core::Result<std::uint32_t> add_ship(std::span<const FigureType> ship_and_wreck, std::uint8_t type);
+    /// The ship type (an index of figure::kShips) of a ship shipyards build: the original's or a
+    /// package's (add_ship); nothing for other figures.
+    [[nodiscard]] std::optional<std::uint8_t> ship_type_of(std::uint32_t figure) const noexcept {
+        for (std::size_t t = 0; t < figure::kShips.size(); ++t) {
+            if (figure::kShips[t] == figure) {
+                return static_cast<std::uint8_t>(t);
+            }
+        }
+        for (const auto& [number, type] : m_ships) {
+            if (number == figure) {
+                return type;
+            }
+        }
+        return std::nullopt;
+    }
+    /// The packages' ships (number, type) in the order they were added.
+    [[nodiscard]] std::span<const std::pair<std::uint32_t, std::uint8_t>> package_ships() const noexcept {
+        return m_ships;
+    }
 
     /// The red figures of the unit families castles train: the original's four
     /// (kUnitFamilies), then those of the packages in the order they were added.
@@ -242,7 +267,12 @@ public:
     }
 
 private:
+    /// Puts `figures` under the highest figures.size() consecutive free numbers below kMaxFigures;
+    /// the first number, or nothing without room.
+    std::optional<std::uint32_t> add_block(std::span<const FigureType> figures);
+
     std::vector<FigureType> m_types;
+    std::vector<std::pair<std::uint32_t, std::uint8_t>> m_ships;
     std::array<std::uint32_t, 8> m_unit_upkeep{};
     std::uint32_t m_tower_upkeep = 0;
     std::array<std::uint32_t, 8> m_unit_cost{};
