@@ -38,8 +38,9 @@ struct ComputerNeed {
         RoadsIfMason,  ///< stone roads once it has a stonemason
         Colony,        ///< a colony (n: the mode)
         Package,       ///< n producers of the package's good `slot` (a ware number)
+        Crop,          ///< first_crops: the crop (`slot`, a field ware, or ore) a computer's first colony grows
     };
-    static constexpr std::uint8_t kKinds = 17;
+    static constexpr std::uint8_t kKinds = 18;
     /// A condition on the gold the player had when the stage ran.
     enum class When : std::uint8_t { Never, Always, Gold4000, Gold5000, Gold8000 };
     static constexpr std::uint8_t kWhens = 5;
@@ -77,8 +78,11 @@ enum class ComputerList : std::uint8_t {
     MerchantsSmallTail,
     Aristocrats,
     Aristocrats2,
+    /// Not a stage: the crops of the computers' first colonies, the computer of player p taking
+    /// entry p modulo their number (Kind::Crop).
+    FirstCrops,
 };
-inline constexpr std::size_t kComputerLists = 23;
+inline constexpr std::size_t kComputerLists = 24;
 /// The names of the lists in computers.toml, by ComputerList.
 extern const std::array<std::string_view, kComputerLists> kComputerListNames;
 
@@ -104,6 +108,10 @@ inline constexpr std::uint32_t kMaxOrderCount = 1000;
 /// Whether every order is valid, has at most kMaxOrderNeeds entries and the orders are sorted by
 /// their list, each list once (a savegame's are checked with it).
 [[nodiscard]] bool valid(const std::vector<ComputerOrder>& orders) noexcept;
+
+/// The crop (a field ware, or ore) the first colony of the computer of `player` looks for, by the
+/// list first_crops of `orders`; 0 (any island) without one.
+[[nodiscard]] std::uint8_t first_crop(const std::vector<ComputerOrder>& orders, std::uint32_t player);
 
 /// The file of a package with its orders.
 inline constexpr std::string_view kComputersFile = "computers.toml";

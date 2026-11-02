@@ -197,20 +197,6 @@ inline constexpr std::uint32_t grown_count(std::uint32_t land, std::uint32_t n,
     return static_cast<std::uint32_t>(std::min<std::uint64_t>((n * f + 15) / 16, kMaxOrderCount));
 }
 
-/// Crop the first colony of a computer must grow fully, by its slot.
-inline std::uint8_t first_crop(PlayerId player) {
-    switch (player % 4) {
-        case 1:
-            return ware::kSpiceField;
-        case 2:
-            return ware::kTobaccoField;
-        case 3:
-            return ware::kWineField;
-        default:
-            return ware::kOre;
-    }
-}
-
 /// The original's cheats: money and goods the computers get on every difficulty. The defaults are
 /// the original's; a game takes them from its balance (`cheats_of`, balance.toml's [computers]).
 struct Cheats {

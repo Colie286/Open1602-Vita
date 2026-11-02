@@ -130,6 +130,19 @@ line, the rest of the order is kept.
 A game keeps the orders that differ from the original's (section `AIOR` of the savegame), so it
 plays with them whatever the packages installed later say.
 
+**The first colony.** One more list is no stage: `first_crops`, the crop the island of a computer's
+first colony has to grow. The computer of player `p` takes entry `p` modulo their number; without
+entries it takes any island. Its entries are `crop_ore` (an island with ore), `crop_tobacco`,
+`crop_spices`, `crop_sugar`, `crop_cotton`, `crop_wine` and `crop_cocoa`, without numbers or
+conditions; the original's list is `crop_ore, crop_spices, crop_tobacco, crop_wine`. A crop in
+another list or something else in this one is passed over with a warning.
+
+```toml
+# mods/sweet/computers.toml: every computer founds its first colony on sugar or cocoa
+[first_crops]
+order = "crop_sugar, crop_cocoa"
+```
+
 **Large islands.** The numbers of an order were made for the original's islands, where no city
 has 2000 tiles of free land. Once a stage's orders have nothing more to do, a city past the settlers
 (the lists from `second` and `main` on) with more than 2000 tiles of free land on its island goes

@@ -19,7 +19,7 @@ const std::array<std::string_view, kComputerLists> kComputerListNames = {
     "citizens2",        "citizens_small",  "merchants",
     "merchants_luxury", "merchants_tail",  "merchants2",
     "merchants2_tail",  "merchants_small", "merchants_small_tail",
-    "aristocrats",      "aristocrats2"};
+    "aristocrats",      "aristocrats2",    "first_crops"};
 
 namespace {
 
@@ -112,6 +112,19 @@ constexpr std::array<KindInfo, ComputerNeed::kKinds> kKindInfo = {{
     {Kind::RoadsIfMason, "roads_if_mason", false, 0, 0},
     {Kind::Colony, "colony", true, 1, 4},
     {Kind::Package, "", true, 0, kMaxOrderCount},
+    {Kind::Crop, "", false, 0, 0},
+}};
+
+/// The crops `Kind::Crop` names: what a first colony's island is to grow (the original: by
+/// player % 4, ore for the first).
+constexpr std::array<SlotName, 7> kCropNames = {{
+    {"crop_ore", assets::ware::kOre},
+    {"crop_tobacco", assets::ware::kTobaccoField},
+    {"crop_spices", assets::ware::kSpiceField},
+    {"crop_sugar", assets::ware::kSugarField},
+    {"crop_cotton", assets::ware::kCottonField},
+    {"crop_wine", assets::ware::kWineField},
+    {"crop_cocoa", assets::ware::kCocoaField},
 }};
 
 const KindInfo& info(Kind k) {
@@ -216,6 +229,9 @@ constexpr ComputerNeed roads_if_mason() {
 }
 constexpr ComputerNeed colony(std::uint32_t mode) {
     return {Kind::Colony, 0, mode};
+}
+constexpr ComputerNeed crop(std::uint8_t ware) {
+    return {Kind::Crop, ware, 0};
 }
 
 constexpr When kAlways = When::Always;
@@ -453,12 +469,16 @@ constexpr std::array kAristocrats2Order = {processing(),
                                            colony(4)};
 
 /// The original's orders, by ComputerList.
+/// The original's first_crop by player % 4.
+constexpr std::array kFirstCrops = {crop(assets::ware::kOre), crop(assets::ware::kSpiceField),
+                                    crop(assets::ware::kTobaccoField), crop(assets::ware::kWineField)};
+
 const std::array<std::span<const ComputerNeed>, kComputerLists> kDefaultOrders = {
     kFoundedOrder,         kColonyOrder,       kColonyMaterials,    kPioneersOrder,      kSettlersOrder,
     kSecondOrder,          kSecondLuxuryOrder, kSecondFarmingOrder, kMainOrder,          kMainRichOrder,
     kMain2Order,           kCitizensOrder,     kCitizens2Order,     kCitizensSmallOrder, kMerchantsOrder,
     kMerchantsLuxuryOrder, kMerchantsTail,     kMerchants2Order,    kMerchants2Tail,     kMerchantsSmallOrder,
-    kMerchantsSmallTail,   kAristocratsOrder,  kAristocrats2Order};
+    kMerchantsSmallTail,   kAristocratsOrder,  kAristocrats2Order,  kFirstCrops};
 
 // ---------------------------------------------------------------------------------------------
 // computers.toml
@@ -524,6 +544,9 @@ std::optional<ComputerNeed> read_need(std::string_view text, const assets::Goods
     } else if (const auto pub = slot_of(kPublicNames, w[0])) {
         need.kind = Kind::Public;
         need.slot = *pub;
+    } else if (const auto crop_ware = slot_of(kCropNames, w[0])) {
+        need.kind = Kind::Crop;
+        need.slot = *crop_ware;
     } else if (w[0].find(':') != std::string_view::npos) {
         const assets::OwnGood* good = goods.own(w[0]);
         if (good == nullptr) {
@@ -552,6 +575,10 @@ std::optional<ComputerNeed> read_need(std::string_view text, const assets::Goods
         }
         need.n = *n;
         ++at;
+    }
+    if (need.kind == Kind::Crop && w.size() > 1) {
+        problem = "a crop takes no condition";
+        return std::nullopt;
     }
     for (; at < w.size(); ++at) {
         const std::string_view prefix = flag_prefix(need.kind);
@@ -585,6 +612,16 @@ std::span<const ComputerNeed> order_of(const std::vector<ComputerOrder>& orders,
     return default_order(list);
 }
 
+std::uint8_t first_crop(const std::vector<ComputerOrder>& orders, std::uint32_t player) {
+    std::vector<std::uint8_t> crops;
+    for (const ComputerNeed& n : order_of(orders, ComputerList::FirstCrops)) {
+        if (n.kind == Kind::Crop) {
+            crops.push_back(n.slot);
+        }
+    }
+    return crops.empty() ? std::uint8_t{0} : crops[player % crops.size()];
+}
+
 bool valid(const ComputerNeed& need) noexcept {
     if (static_cast<std::uint8_t>(need.kind) >= ComputerNeed::kKinds ||
         static_cast<std::uint8_t>(need.flag) >= ComputerNeed::kWhens ||
@@ -605,6 +642,8 @@ bool valid(const ComputerNeed& need) noexcept {
             return !name_of(kPublicNames, need.slot).empty();
         case Kind::Package:
             return need.slot >= assets::ware::kFirstOwn;
+        case Kind::Crop:
+            return need.when == ComputerNeed::When::Always && !name_of(kCropNames, need.slot).empty();
         default:
             return need.slot == 0;
     }
@@ -668,6 +707,11 @@ void apply_computers_file(std::vector<ComputerOrder>& orders, std::string_view p
                 if (!need) {
                     problem += ", the entry is passed over";
                     warnings.push_back(in + problem);
+                } else if ((need->kind == Kind::Crop) != (list == ComputerList::FirstCrops)) {
+                    warnings.push_back(
+                        in + "'" + std::string(trim(entry)) +
+                        (list == ComputerList::FirstCrops ? "' is no crop" : "' belongs in [first_crops]") +
+                        ", the entry is passed over");
                 } else if (needs.size() >= kMaxOrderNeeds) {
                     warnings.push_back(in + "more than " + std::to_string(kMaxOrderNeeds) +
                                        " entries, the rest is passed over");
@@ -700,6 +744,9 @@ std::string order_text(std::span<const ComputerNeed> needs, const assets::Goods&
                 break;
             case Kind::Public:
                 out += name_of(kPublicNames, n.slot);
+                break;
+            case Kind::Crop:
+                out += name_of(kCropNames, n.slot);
                 break;
             case Kind::Package:
                 if (const assets::OwnGood* good = goods.own(n.slot)) {

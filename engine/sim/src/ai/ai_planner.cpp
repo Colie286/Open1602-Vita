@@ -626,6 +626,8 @@ bool Engine::first_need(AiPlayer& p, const City& c, const CityPlan& r, std::int3
             case StageNeed::Kind::Package:
                 found = package_order(p, c, r, n.slot, count(n.n));
                 break;
+            case StageNeed::Kind::Crop:
+                break;  // first_crops only: nothing a stage builds
         }
         if (found) {
             return true;

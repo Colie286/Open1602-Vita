@@ -474,7 +474,7 @@ void Engine::root(AiPlayer& p) {
             p.settle.cursor = static_cast<std::uint16_t>(rng().below(16));
             p.settle.need = p.pirates ? 150 : 1800;
             p.settle.floor = 300;
-            p.settle.crop = p.pirates ? 0 : first_crop(p.player);
+            p.settle.crop = p.pirates ? 0 : first_crop(m_world.balance().computer_orders, p.player);
             p.settle.active = true;
             pick_island(p);
         }

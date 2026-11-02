@@ -53,7 +53,7 @@ TEST_CASE("computer orders: every list has the original's order, every entry of 
         CHECK(sim::order_of({}, list).data() == order.data());
     }
     CHECK(sim::kComputerListNames[0] == "founded");
-    CHECK(sim::kComputerListNames[sim::kComputerLists - 1] == "aristocrats2");
+    CHECK(sim::kComputerListNames[sim::kComputerLists - 1] == "first_crops");
     CHECK(sim::order_text(sim::default_order(sim::ComputerList::Founded), {}) ==
           "market 1, fisher 1, woodcutter 1, houses 8");
 }
@@ -181,15 +181,49 @@ TEST_CASE("computer orders: only what the computers can run is valid") {
     CHECK(!sim::valid(balance));
 }
 
+TEST_CASE("computer orders: the crops of the computers' first colonies are a list of their own") {
+    // The original's: ore, spices, tobacco, wine by player % 4.
+    CHECK(sim::first_crop({}, 0) == assets::ware::kOre);
+    CHECK(sim::first_crop({}, 1) == assets::ware::kSpiceField);
+    CHECK(sim::first_crop({}, 2) == assets::ware::kTobaccoField);
+    CHECK(sim::first_crop({}, 3) == assets::ware::kWineField);
+    CHECK(sim::first_crop({}, 4) == assets::ware::kOre);
+    CHECK(sim::order_text(sim::default_order(sim::ComputerList::FirstCrops), {}) ==
+          "crop_ore, crop_spices, crop_tobacco, crop_wine");
+
+    std::vector<std::string> warnings;
+    const auto orders = read("[first_crops]\norder = \"crop_cocoa, crop_wine\"\n", warnings);
+    CHECK(warnings.empty());
+    CHECK(sim::first_crop(orders, 0) == assets::ware::kCocoaField);
+    CHECK(sim::first_crop(orders, 1) == assets::ware::kWineField);
+    CHECK(sim::first_crop(orders, 2) == assets::ware::kCocoaField);
+    // No crop: any island.
+    const auto none = read("[first_crops]\norder = \"\"\n", warnings);
+    CHECK(warnings.empty());
+    CHECK(sim::first_crop(none, 0) == 0);
+
+    // A crop elsewhere, a building here, a crop with a condition: passed over.
+    const auto wrong = read(
+        "[first_crops]\norder = \"crop_sugar gold_4000, market 0, crop_cotton\"\n"
+        "[main]\nappend = \"crop_ore\"\n",
+        warnings);
+    CHECK(warnings.size() == 3);
+    CHECK(sim::first_crop(wrong, 7) == assets::ware::kCottonField);
+    CHECK(sim::order_of(wrong, sim::ComputerList::Main).data() == sim::default_order(sim::ComputerList::Main).data());
+    CHECK(!sim::valid(Need{Kind::Crop, assets::ware::kOre, 0, When::Never, When::Never}));
+    CHECK(!sim::valid(Need{Kind::Crop, assets::ware::kFirstOwn, 0}));
+}
+
 TEST_CASE("computer orders: a game keeps its orders in the savegame (AIOR), a wrong entry loads nothing") {
     const assets::BuildingTable buildings;
     sim::World world(60, 40);
     std::vector<std::string> warnings;
     sim::Balance balance;
-    balance.computer_orders =
-        read("[settlers]\norder = \"market 0, houses 30, cattle 4 gold_4000\"\n[aristocrats2]\nappend = \"monument\"\n",
-             warnings);
-    REQUIRE(balance.computer_orders.size() == 2);
+    balance.computer_orders = read(
+        "[settlers]\norder = \"market 0, houses 30, cattle 4 gold_4000\"\n[aristocrats2]\nappend = \"monument\"\n"
+        "[first_crops]\norder = \"crop_sugar\"\n",
+        warnings);
+    REQUIRE(balance.computer_orders.size() == 3);
     world.set_balance(balance);
     auto bytes = sim::write_game(world, buildings);
     REQUIRE(bytes.ok());

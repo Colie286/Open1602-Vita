@@ -17,7 +17,7 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 | 2. Content | change 16 values of the original's buildings and 10 of its figures; add buildings and figures of its own, each copying one of the original, and replace another package's building; soldiers that castles train and ships that shipyards build, which computers train and build too |
 | 3. Goods, classes, levels | add trade goods, change the original's classes and add up to eight in all with their needs and public buildings, change and add unlock levels with messages of their own |
 | 4. Graphics and sound | PNG images for buildings, figures, ships and icons; music and sounds as WAV, Ogg Vorbis or FLAC for messages, buildings and figures; Smacker and Bink 2 videos for messages |
-| 5. Computer players | they build the chains of a package's goods; their stage orders, public buildings, cheat amounts and when a city moves on are data |
+| 5. Computer players | they build the chains of a package's goods; they train soldiers and build ships of packages; their stage orders, public buildings, cheat amounts, when a city moves on and the crop of their first colony are data |
 | 6. Lua scripts | a sandboxed Lua 5.4 script per package that hears what happens and reads and changes the game (money, goods, missions, buildings, ships, land units, diplomacy, who wins) |
 | 7. Scenarios and campaigns | scenarios with maps, briefings, goals and scripts; campaigns of up to five parts that carry money and a script table on |
 | 8. Factions | factions of a package's own that take the base game's slots, and settlers or pirates left wholly to a script |
@@ -28,7 +28,7 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 | Item | What is missing | Size |
 |---|---|---|
 | 4 | videos in a modern format (today only Smacker and Bink 2) | medium: a decoder in `third_party` (e.g. a royalty-free format such as AV1 or VP9 in WebM) |
-| 5 | the original's 32 rows of needs (`kNeeds`), its 55 fixed building slots of a city, which building of the original produces what (`producer_slot`), the first colony's crop by the computer's slot (`first_crop`) and the four unit families and ship types the computers build, all still compiled in | large: the AI's core tables |
+| 5 | the original's 32 rows of needs (`kNeeds`), its 55 fixed building slots of a city and which building of the original produces what (`producer_slot`), all still compiled in | large: the AI's core tables |
 | 9 | climates of a package's own, with their ground, forest and crops (today north and south) | large: climate tables, the generator, fertility and the start dialog |
 
 ### Smaller adjustments
@@ -234,8 +234,12 @@ name a package's good.
 
 Part 4 done on 2026-11-01 ([computer-players.md](computer-players.md#when-a-city-moves-on)): when a
 city moves on to its next stage is `balance.toml`'s table `[computer_stages]` (savegame `BALA`
-version 3). Still open: the original's Needs (`kNeeds`), the 55 slots, `producer_slot`, the first
-colony's crop and the unit families and ship types as data.
+version 3).
+
+Part 5 done on 2026-11-02: computers train soldiers and build ships of a package of the family
+or type they want ([own-figures.md](own-figures.md)), and the crop of their first colony is the list
+`first_crops` of `computers.toml` ([computer-players.md](computer-players.md#in-which-order)). Still
+open: the original's Needs (`kNeeds`), the 55 slots and `producer_slot` as data.
 
 ### 6. Lua scripts (section 6)
 
