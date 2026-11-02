@@ -4,12 +4,15 @@
 // computers and players who try to give orders for others.
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -2712,4 +2715,101 @@ TEST_CASE("net: without waiting at the start the host's game runs at once") {
     CHECK(!lobby.host->starting());
     CHECK(lobby.host->frames() > 0);
     CHECK(lobby.host_count(net::SessionEvent::Kind::Started) == 0);  // nothing was held
+}
+
+TEST_CASE("net: a game loaded in the background: the computer goes on meanwhile, then plays in step") {
+    net::LoopbackNetwork network(20, 5);
+    Host host(network);
+    Computer a(network, "Anna");
+    // Reading the game waits for the test: as a large world on a slow computer.
+    std::promise<void> go;
+    std::shared_future<void> gate = go.get_future().share();
+    std::atomic<int> prepared = 0;
+    a.session->load_in_background([&a, gate, &prepared](std::vector<std::uint8_t> save) -> net::ClientSession::Finish {
+        gate.wait();
+        ++prepared;
+        auto bytes = std::make_shared<std::vector<std::uint8_t>>(std::move(save));
+        return [&a, bytes] { return a.game.load(*bytes); };
+    });
+    run_for(network, host, {&a}, 1500);
+    // The game is here and being read: nothing of it runs, the session still answers at once.
+    CHECK(!a.session->playing());
+    CHECK(a.count(net::SessionEvent::Kind::Loaded) == 0);
+    CHECK(!a.session->ended());
+    CHECK(prepared == 0);
+    const std::uint64_t host_frames = host.session->frames();
+    CHECK(host_frames > 0);
+
+    go.set_value();
+    for (int i = 0; i < 1000 && !a.session->playing(); ++i) {
+        step(network, host, {&a});
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    REQUIRE(a.session->playing());
+    CHECK(prepared == 1);
+    CHECK(a.count(net::SessionEvent::Kind::Loaded) == 1);
+    // The frames that came while it was read were kept, in order: it catches up and stays in step.
+    run_for(network, host, {&a}, 12'000);
+    CHECK(!a.session->ended());
+    CHECK(a.session->frames() + 20 > host.session->frames());
+    CHECK(host.session->fingerprints_compared() > 0);
+    CHECK(host.session->fingerprints_matched() == host.session->fingerprints_compared());
+}
+
+TEST_CASE("net: a game that cannot be read in the background ends the session as one read at once") {
+    net::LoopbackNetwork network(5, 0);
+    Host host(network);
+    Computer a(network, "Anna");
+    a.session->load_in_background(
+        [](std::vector<std::uint8_t>) -> net::ClientSession::Finish { throw std::runtime_error("damaged"); });
+    for (int i = 0; i < 500 && !a.session->ended(); ++i) {
+        step(network, host, {&a});
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    CHECK(a.session->ended());
+    CHECK(a.session->end_reason() == net::EndReason::LoadFailed);
+}
+
+TEST_CASE("net: over real UDP, a game read for longer than the connection's timeout keeps the connection") {
+    constexpr std::uint16_t kPort = 46022;
+    auto listening = net::enet_listen(kPort, 4);
+    if (!listening) {
+        SKIP("UDP port 46022 is not free here");
+    }
+    auto connecting = net::enet_connect("127.0.0.1", kPort);
+    REQUIRE(connecting.ok());
+
+    Game host_game = Game::fresh();
+    net::HostSession host(std::move(listening).value(), *host_game.simulation, buildings(), 0, "Gastgeber", kContent);
+    Game game;
+    net::Hello hello;
+    hello.content = kContent;
+    hello.name = "Anna";
+    net::ClientSession client(std::move(connecting).value(), hello, [](std::span<const std::uint8_t>) {
+        return nullptr;  // not used: the game is read in the background
+    });
+    // Reading takes 10 s, longer than a link that hears nothing lives here (without hearing the host
+    // meanwhile, the host drops it).
+    client.load_in_background([&game](std::vector<std::uint8_t> save) -> net::ClientSession::Finish {
+        std::this_thread::sleep_for(std::chrono::seconds(10));
+        auto bytes = std::make_shared<std::vector<std::uint8_t>>(std::move(save));
+        return [&game, bytes] { return game.load(*bytes); };
+    });
+    const auto start = std::chrono::steady_clock::now();
+    auto last = start;
+    while (std::chrono::steady_clock::now() - start < std::chrono::seconds(25) &&
+           !(client.playing() && client.frames() > 20) && !client.ended()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        const auto now = std::chrono::steady_clock::now();
+        const auto ms = static_cast<std::uint32_t>(
+            std::min<std::int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(now - last).count(), 100));
+        last = now;
+        host.update(ms);
+        client.update(ms);
+    }
+    CHECK(!client.ended());
+    REQUIRE(client.playing());
+    CHECK(client.frames() > 20);
+    CHECK(std::chrono::steady_clock::now() - start >= std::chrono::seconds(10));
+    CHECK(host.roster().size() == 2);  // the host never let it go
 }

@@ -247,6 +247,11 @@ private:
     void announce_take_overs();
     /// The game a host sent: replaces the world (also after a desync); nullptr if it cannot be read.
     sim::Simulation* load_from_host(std::span<const std::uint8_t> save);
+    /// The same in two steps (net::ClientSession::load_in_background()): reads the game on a worker
+    /// thread and returns what starts it on the game thread.
+    [[nodiscard]] net::ClientSession::Finish prepare_host_game(std::vector<std::uint8_t> save);
+    /// Starts the game a host sent, read as `world` (with the `warnings` of reading it).
+    sim::Simulation* start_host_game(core::Result<sim::World> world, const std::vector<std::string>& warnings);
     /// Fingerprint of the game data the simulation depends on: computers of a multiplayer game
     /// must have the same.
     [[nodiscard]] std::uint64_t content_fingerprint() const;

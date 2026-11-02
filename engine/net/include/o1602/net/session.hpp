@@ -546,6 +546,11 @@ private:
 class ClientSession final : public Session {
 public:
     using Loader = std::function<sim::Simulation*(std::span<const std::uint8_t> save)>;
+    /// Loading a game in two steps (load_in_background()): `Prepare` gets the savegame on a worker
+    /// thread and does what takes long and touches nothing of the program (reading and unpacking
+    /// it); the `Finish` it returns makes the running game of it on the game thread, as a Loader.
+    using Finish = std::function<sim::Simulation*()>;
+    using Prepare = std::function<Finish(std::vector<std::uint8_t> save)>;
     /// A connection to the successor (nullptr if none can be made now).
     using Connect = std::function<std::unique_ptr<Transport>()>;
     /// Keeps a package the host sent (its files, in package_hash order): false if it cannot, which
@@ -577,6 +582,10 @@ public:
     /// Where the packages go that the host sends when the Hello asks for them (Hello::fetch_packages),
     /// before the game that uses them is loaded. Without, a computer that gets one ends the session.
     void keep_packages_with(KeepPackage keep) { m_keep_package = std::move(keep); }
+    /// Loads the games from the host in two steps, the long one on a worker thread (in place of the
+    /// Loader): the program goes on meanwhile and the connection stays alive, also for a large
+    /// world on a slow computer; what comes from the host meanwhile waits until the game is there.
+    void load_in_background(Prepare prepare) { m_prepare = std::move(prepare); }
 
     /// Taken in by the host (in the lobby or the game).
     [[nodiscard]] bool welcomed() const noexcept { return m_welcomed; }
@@ -619,6 +628,11 @@ private:
     /// One event of the transport, as update() takes them in turn.
     void handle(TransportEvent& e);
     void load(Snapshot& m);
+    /// The game of `head` (Snapshot without its bytes) is loaded as `simulation` (nullptr: it could not be).
+    void loaded(sim::Simulation* simulation, const Snapshot& head);
+    /// While a game is prepared on a worker (m_pending): keeps the connection alive; once it is
+    /// ready, finishes it. False while it is still being prepared.
+    bool finish_pending();
     void turn(Turn& m);
     void package_files(PackageFiles& m);
     void run(std::uint32_t real_ms, const sim::Simulation::BeforeTick& before_tick);
@@ -635,6 +649,13 @@ private:
     static constexpr LinkId kHost = 0;
     Hello m_hello;
     Loader m_load;
+    Prepare m_prepare;  ///< load_in_background()
+    /// A game being prepared on a worker (load_in_background()), and its snapshot without the bytes.
+    struct Pending {
+        std::future<Finish> finish;
+        Snapshot head;
+    };
+    std::optional<Pending> m_pending;
     sim::Simulation* m_simulation = nullptr;
     bool m_connected = false;
     bool m_welcomed = false;

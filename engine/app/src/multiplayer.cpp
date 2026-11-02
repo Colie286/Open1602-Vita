@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <ctime>
+#include <memory>
 #include <random>
 
 #include "map_viewer.hpp"
@@ -93,6 +94,22 @@ core::Status MapViewer::start_multiplayer() {
 sim::Simulation* MapViewer::load_from_host(std::span<const std::uint8_t> save) {
     std::vector<std::string> warnings;
     auto world = sim::read_game(save, m_buildings, &warnings, &m_figures);
+    return start_host_game(std::move(world), warnings);
+}
+
+net::ClientSession::Finish MapViewer::prepare_host_game(std::vector<std::uint8_t> save) {
+    // On a worker thread: reading and unpacking the game, the long part of a large world, while
+    // the program goes on and keeps the connection. It only reads the game's tables, which change
+    // only when a game starts on the game thread (make_state), not before this one is finished.
+    auto warnings = std::make_shared<std::vector<std::string>>();
+    auto world =
+        std::make_shared<core::Result<sim::World>>(sim::read_game(save, m_buildings, warnings.get(), &m_figures));
+    save = {};  // the bytes are no longer needed: freed here, not on the game thread
+    // The rest on the game thread, where the game starts.
+    return [this, world, warnings] { return start_host_game(std::move(*world), *warnings); };
+}
+
+sim::Simulation* MapViewer::start_host_game(core::Result<sim::World> world, const std::vector<std::string>& warnings) {
     if (!world) {
         std::fprintf(stderr, "multiplayer: the host's game cannot be loaded: %s\n", world.error().message.c_str());
         return nullptr;
@@ -893,6 +910,7 @@ core::Status MapViewer::join_game(const std::string& address, std::uint16_t port
     auto client = std::make_unique<net::ClientSession>(
         std::move(transport).value(), hello,
         [this](std::span<const std::uint8_t> save) { return load_from_host(save); }, config);
+    client->load_in_background([this](std::vector<std::uint8_t> save) { return prepare_host_game(std::move(save)); });
     // A broken connection: back to this host first; only if it cannot be reached, on to the
     // successor (MS-2).
     client->reconnect_with([address, port]() -> std::unique_ptr<net::Transport> {

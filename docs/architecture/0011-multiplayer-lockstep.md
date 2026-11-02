@@ -125,7 +125,10 @@ menu in `engine/app` (`multiplayer_menu.hpp`, `multiplayer.cpp`).
     While the game comes in, the joining computer's lobby shows a progress bar
     (`ClientSession::join_stage()`: the host still writes it, its parts come in with the bytes so far,
     it is loaded); the whole message is read one update after its last part, so that a frame can
-    show the loading first. At most 4 connections
+    show the loading first. The game reads and unpacks it on a worker thread
+    (`ClientSession::load_in_background()`) and only starts it on the game thread: meanwhile the
+    computer keeps hearing the host, so that a large world on a slow computer does not outlast the
+    connection's timeout, and the messages that came meanwhile are read once the game is there. At most 4 connections
     come from one address, the host takes at most 8 spectators (`max_spectators`), and a computer it
     kicked does not come back in the same session unless it returns to a slot with its token (MS-12).
 11. **Lobby.** A host may start without a game: it holds a `Lobby` with the title, a description of
