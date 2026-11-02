@@ -27,13 +27,14 @@ namespace fs = std::filesystem;
 /// The options that take no value: the word after one of them is a positional argument
 /// ("render-world --owners a.gam out.png").
 inline constexpr std::string_view kFlags[] = {
-    "--no-template", "--original-data", "--original-limits", "--original-flags", "--original-sheets", "--owners", "--production",
-    "--sheet",       "--together",      "--via-own",        "--walkers",         "--wall",   "--wares",
+    "--no-template", "--original-data", "--original-limits", "--original-flags", "--original-sheets",
+    "--owners",      "--production",    "--sheet",           "--together",       "--via-own",
+    "--walkers",     "--wall",          "--wares",
 };
 /// The options whose value is a whole number.
 inline constexpr std::string_view kNumbers[] = {
     "--anim",    "--count",  "--every",    "--first", "--gold-islands", "--island", "--level", "--minutes", "--period",
-    "--players", "--repeat", "--rotation", "--seed",  "--simulate", "--stars",     "--time",   "--wav",   "--zoom",
+    "--players", "--repeat", "--rotation", "--seed",  "--simulate",     "--stars",  "--time",  "--wav",     "--zoom",
 };
 
 /// A whole number that is the whole text ("6O" is none, not 6).
