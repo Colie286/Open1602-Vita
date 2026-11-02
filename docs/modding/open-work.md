@@ -34,14 +34,11 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 
 ### Smaller adjustments
 
-Things found while testing on 2026-11-01 that are not wrong but worth doing:
+Things found while testing on 2026-11-01 that are not wrong but worth doing. Done on 2026-11-02:
+`o1602-tool state` and `o1602-tool islands` read Open1602's own `.o1602` too (with the original's
+building table), and islands wider or higher than 255 tiles get native villages, within their first
+255 tiles (the village's records hold tile coordinates in bytes).
 
-- `o1602-tool state` and `o1602-tool islands` read only the original's files, not `.o1602`, so a
-  world with more than four players can be looked at only in the game. Both could read Open1602's
-  own format (`sim::is_open1602_save`, `sim::read_game`).
-- `place_village` (world generator) skips islands wider or higher than 255 tiles, because the
-  village's records hold tile coordinates in bytes; giant islands never get a native village. The
-  village could be placed within the island's first 255 tiles.
 - The table of package files above and the table of fixed limits at the end of ADR 0007 must be
   kept up to date with each new file and each limit removed.
 

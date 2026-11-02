@@ -117,6 +117,15 @@ core::Bytes truncated() {
     return bytes;
 }
 
+/// The head of an Open1602 savegame (magic and an empty header), enough for the tool to tell it
+/// from the original's files.
+core::Bytes own_save_head() {
+    const std::string_view magic = "OPEN1602";
+    core::Bytes bytes(magic.begin(), magic.end());
+    bytes.resize(32, 0);
+    return bytes;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -136,7 +145,7 @@ int main(int argc, char** argv) {
         core::Bytes bytes;
     } files[] = {
         {"world.gam", savegame()},  {"haeuser.cod", script()},      {"sprites.bsh", sprites()},
-        {"palette.col", palette()}, {"truncated.gam", truncated()},
+        {"palette.col", palette()}, {"truncated.gam", truncated()}, {"own.o1602", own_save_head()},
     };
     for (const auto& [name, bytes] : files) {
         if (auto status = core::write_file(dir / name, bytes); !status) {

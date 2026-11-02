@@ -93,9 +93,96 @@ int cmd_savegames(const Args& args) {
     return 0;
 }
 
+/// A savegame of Open1602's own (.o1602) with the original's building table, which it needs to be
+/// read (ANNO1602_DIR); nullopt when the file is none.
+struct OwnSave {
+    assets::BuildingTable buildings;
+    sim::World world;
+};
+std::optional<core::Result<OwnSave>> read_own_save(const fs::path& path) {
+    auto bytes = core::read_file(path);
+    if (!bytes || !sim::is_open1602_save(*bytes)) {
+        return std::nullopt;
+    }
+    auto game = assets::GameDirectory::from_environment();
+    if (!game) {
+        return core::Result<OwnSave>(game.error());
+    }
+    auto buildings = assets::BuildingTable::load(*game);
+    if (!buildings) {
+        return core::Result<OwnSave>(buildings.error());
+    }
+    std::vector<std::string> warnings;
+    auto world = sim::read_game(*bytes, *buildings, &warnings);
+    for (const auto& text : warnings) {
+        std::fprintf(stderr, "warning: %s\n", text.c_str());
+    }
+    if (!world) {
+        return core::Result<OwnSave>(world.error());
+    }
+    return core::Result<OwnSave>(OwnSave{std::move(buildings).value(), std::move(world).value()});
+}
+
+/// `state` of a .o1602: players, cities with their goods, ships.
+int own_state(const sim::World& world) {
+    for (std::size_t i = 0; i < world.players().size(); ++i) {
+        const sim::Player& p = world.players()[i];
+        std::printf("player %zu: role %u, banner %u, money %d %s\n", i, static_cast<unsigned>(p.role),
+                    static_cast<unsigned>(p.banner), p.money, core::cp1252_to_utf8(p.name).c_str());
+    }
+    for (const sim::City& c : world.cities()) {
+        std::size_t goods = 0;
+        for (const std::uint32_t amount : c.goods) {
+            goods += amount != 0 ? 1U : 0U;
+        }
+        std::printf("city: island %u #%u, owner %u, \"%s\", %zu goods in stock\n", c.island, c.index,
+                    static_cast<unsigned>(c.owner), core::cp1252_to_utf8(c.name).c_str(), goods);
+    }
+    for (const sim::Ship& s : world.ships()) {
+        std::printf("ship \"%s\": figure %u, owner %u, at %u,%u\n", core::cp1252_to_utf8(s.name).c_str(), s.figure,
+                    static_cast<unsigned>(s.owner), s.x, s.y);
+    }
+    std::printf("%zu players, %zu cities, %zu ships, %zu soldiers\n", world.players().size(), world.cities().size(),
+                world.ships().size(), world.soldiers().size());
+    return 0;
+}
+
+/// `islands` of a .o1602: size, position and the most common buildings on the top layer.
+int own_islands(const sim::World& world, const assets::BuildingTable& buildings) {
+    for (const sim::WorldIsland& island : world.islands()) {
+        const sim::IslandMap& map = island.map;
+        std::map<std::uint32_t, std::size_t> histogram;
+        for (std::uint32_t y = 0; y < map.height(); ++y) {
+            for (std::uint32_t x = 0; x < map.width(); ++x) {
+                const sim::MapCell& cell = map.top(x, y);
+                const assets::BuildingType* b = cell.empty() ? nullptr : buildings.by_sprite(cell.sprite);
+                if (b != nullptr) {
+                    ++histogram[b->id];
+                }
+            }
+        }
+        std::vector<std::pair<std::size_t, std::uint32_t>> top;
+        for (const auto& [id, n] : histogram) {
+            top.emplace_back(n, id);
+        }
+        std::sort(top.rbegin(), top.rend());
+        std::printf("island #%u  size %ux%u  pos (%u,%u)  %zu distinct ids; most common:", island.header.number,
+                    map.width(), map.height(), island.x, island.y, histogram.size());
+        for (std::size_t i = 0; i < std::min<std::size_t>(5, top.size()); ++i) {
+            std::printf(" %u(x%zu)", top[i].second, top[i].first);
+        }
+        std::printf("\n");
+    }
+    std::printf("%zu islands\n", world.islands().size());
+    return 0;
+}
+
 int cmd_state(const Args& args) {
     if (args.positional.size() != 1) {
         return usage();
+    }
+    if (auto own = read_own_save(fs::path(args.positional[0]))) {
+        return *own ? own_state((*own)->world) : fail(own->error());
     }
     auto file = assets::ChunkFile::load(fs::path(args.positional[0]));
     if (!file) {
@@ -169,6 +256,9 @@ int cmd_state(const Args& args) {
 int cmd_islands(const Args& args) {
     if (args.positional.size() != 1) {
         return usage();
+    }
+    if (auto own = read_own_save(fs::path(args.positional[0]))) {
+        return *own ? own_islands((*own)->world, (*own)->buildings) : fail(own->error());
     }
     auto file = assets::ChunkFile::load(fs::path(args.positional[0]));
     if (!file) {

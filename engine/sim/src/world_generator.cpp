@@ -611,12 +611,11 @@ void Generator::place_village(Slot& slot) {
     // template holds the beach, surf, forest and ground around it too, and often a whole island,
     // which would never find room on another.
     constexpr std::uint64_t kVillageStream = 0x1602'D0F0ULL;
-    constexpr std::size_t kTemplates = 24;   // templates tried before the island stays without
-    constexpr std::uint32_t kMaxSide = 255;  // tile coordinates of the original's records are bytes
+    constexpr std::size_t kTemplates = 24;  // templates tried before the island stays without
+    // The tile coordinates of the village's records are bytes: on a larger island the village
+    // lies within its first 255 tiles from the north-west.
+    constexpr std::int32_t kMaxSide = 255;
     const IslandMap& map = *slot.map;
-    if (map.width() > kMaxSide || map.height() > kMaxSide) {
-        return;
-    }
     Random random(m_shape_seed, kVillageStream + slot.plan.number);
     const std::uint8_t climate = slot.plan.climate & 1U;
     std::vector<std::string> paths;
@@ -706,8 +705,10 @@ void Generator::place_village(Slot& slot) {
         const std::int32_t h = y1 - y0 + 1;
         // Every place with a tile of room around the box, one of them by chance.
         std::vector<std::pair<std::int32_t, std::int32_t>> places;
-        for (std::int32_t oy = 1; oy + h + 1 <= height; ++oy) {
-            for (std::int32_t ox = 1; ox + w + 1 <= width; ++ox) {
+        const std::int32_t reach_x = std::min(width, kMaxSide);  // the village's box ends before
+        const std::int32_t reach_y = std::min(height, kMaxSide);
+        for (std::int32_t oy = 1; oy + h + 1 <= reach_y; ++oy) {
+            for (std::int32_t ox = 1; ox + w + 1 <= reach_x; ++ox) {
                 if (room_for(ox - 1, oy - 1, w + 2, h + 2)) {
                     places.emplace_back(ox, oy);
                 }
@@ -1740,7 +1741,21 @@ core::Result<GeneratedWorld> Generator::run(const assets::ChunkFile& scenario, b
             add(std::string(assets::kLargeIslandChunk), large_island(*s));
         }
         if (large) {
-            add(std::string(assets::kLargeTilesChunk), assets::large_tile_bytes(s->base.layers.front()));
+            // The village after the island's tiles, as in INSELHAUS (its places lie within 255).
+            std::vector<assets::IslandTile> tiles = s->base.layers.front();
+            const std::vector<std::uint8_t> village = village_tiles(*s, natives);
+            for (std::size_t o = 0; o + 8 <= village.size(); o += 8) {
+                assets::IslandTile t;
+                t.id = static_cast<std::uint16_t>(village[o] | (village[o + 1] << 8U));
+                t.x = village[o + 2];
+                t.y = village[o + 3];
+                t.bits = static_cast<std::uint32_t>(village[o + 4]) |
+                         (static_cast<std::uint32_t>(village[o + 5]) << 8U) |
+                         (static_cast<std::uint32_t>(village[o + 6]) << 16U) |
+                         (static_cast<std::uint32_t>(village[o + 7]) << 24U);
+                tiles.push_back(t);
+            }
+            add(std::string(assets::kLargeTilesChunk), assets::large_tile_bytes(tiles));
         } else {
             std::vector<std::uint8_t> tiles =
                 s->own_shape ? tile_bytes(s->base.layers.front()) : std::vector<std::uint8_t>{};
