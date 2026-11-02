@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Own worlds (docs/re/worldgen.md, "Custom worlds"): the plan of islands and start areas.
+// Own worlds: the plan of islands and start areas.
 
 #include <algorithm>
 #include <array>

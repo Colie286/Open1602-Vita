@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The tutorial's steps (engine/app/src/tutorial.hpp, docs/re/tutorial.md): which page its window
+// The tutorial's steps (engine/app/src/tutorial.hpp): which page its window
 // shows and which help bubbles point where, chapter by chapter.
 
 #include <algorithm>

@@ -37,12 +37,12 @@ std::uint32_t production_frame(const assets::BuildingType& building, std::uint32
     if (count < 2) {
         return 0;
     }
-    if (building.prod_kind == static_cast<std::int32_t>(sim::ProductionKind::Markt)) {  // 0x0047CCD0
+    if (building.prod_kind == static_cast<std::int32_t>(sim::ProductionKind::Markt)) {
         const std::uint32_t progress = production != nullptr ? production->produced : 0;
         return std::min(((count - 1) * progress + sim::Production::kProgressDone / 2) / sim::Production::kProgressDone,
                         count - 1);
     }
-    if (building.stock_animation) {  // 0x0047CC80
+    if (building.stock_animation) {
         if (production == nullptr || building.max_stock == 0) {
             return 0;
         }
@@ -51,7 +51,7 @@ std::uint32_t production_frame(const assets::BuildingType& building, std::uint32
         const std::uint32_t frame = ((count - 1) * production->stock + building.max_stock / 2) / building.max_stock;
         return std::min(frame, count - 1);
     }
-    std::uint32_t frame = global_frame;  // 0x0047CD10: no state -> the global frame alone
+    std::uint32_t frame = global_frame;  // no state -> the global frame alone
     if (production != nullptr) {
         frame =
             phase.value_or(production->anim_phase) + (production->enabled && production->working() ? global_frame : 0);

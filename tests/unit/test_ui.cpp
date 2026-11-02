@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Interface layouts (GAD), fonts and text, panels at work (docs/formats/gad.md, docs/re/ui.md).
+// Interface layouts (GAD), fonts and text, panels at work (docs/formats/gad.md).
 
 #include <array>
 #include <cctype>
@@ -207,7 +207,7 @@ TEST_CASE("ui: a panel draws by state and answers the mouse") {
     panel.set_disabled(500, true);
     items = panel.draw(fonts);
     CHECK(items[1].kind == ui::DrawItem::Kind::SpriteRaster);
-    // Faded: the gadget itself on every second pixel, no black checkerboard (0x004073C0).
+    // Faded: the gadget itself on every second pixel, no black checkerboard.
     panel.set_disabled(500, false);
     const std::size_t plain = panel.draw(fonts).size();
     panel.set_faded(500, true);

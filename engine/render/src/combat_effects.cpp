@@ -14,7 +14,7 @@ namespace o1602::render {
 namespace {
 
 constexpr std::uint16_t kNoFigure = 0xFFFF;  // NOOBJEKT: swordsmen leave no hit
-/// Height of the hit on a building (Projectile_Hit 0x00445930); ships are hit at 0.
+/// Height of the hit on a building; ships are hit at 0.
 constexpr double kBuildingHitHeight = 1.0;
 
 std::uint64_t tile_key(std::uint16_t island, std::uint16_t x, std::uint16_t y) {
@@ -39,7 +39,7 @@ std::uint8_t first_anim_frame(const assets::FigureType& type, std::uint64_t elap
 }  // namespace
 
 std::optional<WreckFrame> wreck_frame(const assets::FigureType& wreck, std::uint64_t elapsed_ms) {
-    // 0x00452300: when the timer runs out the next ANIM starts with a timer of its whole run,
+    // When the timer runs out the next ANIM starts with a timer of its whole run,
     // AnimSpeed * AnimRept * AnimAnz; from ANIM 3 on the figure is freed when it runs out.
     std::uint64_t t = elapsed_ms;
     for (std::uint8_t anim = 0; anim <= 3; ++anim) {
@@ -73,7 +73,7 @@ void CombatEffects::military(const sim::World& world, const assets::BuildingTabl
     std::unordered_map<std::uint64_t, const sim::Tower*> tower_index;
     for (const sim::MilitaryEvent& e : events) {
         if (e.kind == sim::MilitaryEvent::Kind::Hit) {
-            // Projectile_Hit 0x00445930: the shooter's Hitfignr where the shot landed, at the height
+            // The shooter's Hitfignr where the shot landed, at the height
             // of the target plus the effect's Fahnoffs[2], for its Worktime.
             const assets::FigureType* type = effect_type(figures, e.figure);
             if (type == nullptr) {
@@ -101,7 +101,7 @@ void CombatEffects::military(const sim::World& world, const assets::BuildingTabl
             b.life_ms = type->work_time_ms;
             m_bursts.push_back(b);
         } else if (e.kind == sim::MilitaryEvent::Kind::Shot && e.unit.kind == sim::Target::Kind::Building) {
-            // Fx_SpawnTowerShot 0x00447F00: the tower's Shotfignr Fahnoffs[0] out from its centre
+            // The tower's Shotfignr Fahnoffs[0] out from its centre
             // towards where it aims, Fahnoffs[2] high, turned like the tower.
             // Towers by origin, made at the first shot of the call (FB-17); the first tower at a
             // tile wins, as a linear search would find it.
@@ -146,7 +146,7 @@ void CombatEffects::ships(const sim::World& world, const assets::FigureTable& fi
         if (e.kind != sim::ShipEvent::Kind::Fired) {
             continue;
         }
-        // Net_ApplyShot 0x00447880: the ship type's Shotfignr goes with the ship and replaces the
+        // The ship type's Shotfignr goes with the ship and replaces the
         // smoke of its last shot. A ship fires with its side to the bearing: heading = bearing + 2
         // is the right side, bearing + 6 the left.
         const sim::Ship* ship = world.ship(e.ship);
@@ -173,8 +173,7 @@ void CombatEffects::frame(const sim::World& world, const assets::FigureTable& fi
     const auto drawn = static_cast<std::uint64_t>(drawn_ms);
     const auto elapsed = [&](std::uint64_t start) { return drawn > start ? drawn - start : 0U; };
 
-    // A sunk ship leaves its wreck where it went down when its figure is freed (ShipWreck_Spawn
-    // 0x00446E10).
+    // A sunk ship leaves its wreck where it went down when its figure is freed.
     for (auto& [id, s] : m_sinking) {
         s.seen = false;
     }

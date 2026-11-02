@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Courses of ships (docs/re/ships.md, "Pathfinding at sea").
+// Courses of ships.
 //
 // The original plans a ship's course in a square window around the ship (161 x 161 tiles for an
-// ordinary order, 0x00455A20) with the wavefront of the land figures: open sea and the water tiles
+// ordinary order) with the wavefront of the land figures: open sea and the water tiles
 // inside an island's rectangle are sailable, coast, beach, surf, piers and buildings are not, other
 // ships nearby are blocked out as 3 x 3 squares. A target further away than the window is reached in
 // legs through the window edge closest to it. The course is stored as runs of one or two tiles in one
@@ -138,7 +138,7 @@ struct SeaPlan {
     std::vector<Obstacle> ships;
     bool soft_ships = false;
     /// Water within reach of hostile cannon towers: about eight times as expensive (cost class
-    /// 0x7F, 0x0046D720); the ship still sails there if there is no other way. World tiles,
+    /// 0x7F); the ship still sails there if there is no other way. World tiles,
     /// inclusive.
     struct Danger {
         std::int32_t x0 = 0;

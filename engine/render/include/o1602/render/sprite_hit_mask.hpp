@@ -2,7 +2,7 @@
 //
 // Which pixels of a sprite are visible, one bit per pixel, kept after the atlas pixels went to the
 // GPU (SpriteAtlas::drop_pixels). Buildings and units are picked by the visible pixel under the
-// mouse, the one drawn last winning, as in the original (Map_PickAtScreen 0x00487940 reads an ID per
+// mouse, the one drawn last winning, as in the original (reads an ID per
 // screen pixel that the renderer writes with the figure).
 #pragma once
 

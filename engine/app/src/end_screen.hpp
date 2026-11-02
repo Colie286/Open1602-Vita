@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The players' score sheets (Screen_PlayerStatus; ENDE.GAD, docs/re/ui.md "Endbildschirm"): after
+// The players' score sheets (ENDE.GAD): after
 // a game is decided, and from the info panel's "Bewertung" while it runs. The labels are part of
 // the background picture; the screen fills in a player's figures and points, the total, the name
 // and the coat of arms, and offers the coats of arms of the other players to look at theirs.

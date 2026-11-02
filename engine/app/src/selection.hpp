@@ -2,28 +2,28 @@
 //
 // What the player selected on the map, and how the windows tell a fresh selection from a repeated
 // click: a window always opens on its first page; a Kontor or market place clicked again shows its
-// stock (Panel_UpdateSelection 0x0043AA00). Needs no platform, so that the tests have it.
+// stock. Needs no platform, so that the tests have it.
 #pragma once
 
 #include <cstdint>
 
 namespace o1602::app {
 
-/// The modes of the side panel (CTRL.GAD, Hud_SetMode 0x0043B660).
+/// The modes of the side panel (CTRL.GAD).
 namespace side_mode {
 inline constexpr std::int32_t kBuild = 30011;
 inline constexpr std::int32_t kMilitary = 30012;
 inline constexpr std::int32_t kInfo = 30013;
 inline constexpr std::int32_t kOptions = 30014;
 /// A second military button in the place of the first and drawn over it. The original hides it and
-/// makes it unclickable at the start of a game (0x0042BF22); left in, it takes the clicks meant for
+/// makes it unclickable at the start of a game; left in, it takes the clicks meant for
 /// the military mode and covers the military button's selected picture.
 inline constexpr std::int32_t kMilitaryDuplicate = 30015;
 }  // namespace side_mode
 
 /// The mode after a left click on the map in `mode` (`selected`: it selected a building or a
 /// unit). The settings give way to the info mode, which shows the window of the selection
-/// (Map_OnLeftUp 0x0040AFF0 handles the settings like the info mode and calls 0x0043B7F0); a
+/// (the original handles the settings like the info mode); a
 /// click on nothing keeps them. The build and the military mode stay.
 [[nodiscard]] constexpr std::int32_t mode_after_selecting(std::int32_t mode, bool selected) noexcept {
     return mode == side_mode::kOptions && selected ? side_mode::kInfo : mode;

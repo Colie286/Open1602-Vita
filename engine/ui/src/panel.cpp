@@ -182,7 +182,7 @@ std::int32_t Panel::flow_rows(std::int32_t id) const {
 
 std::optional<std::pair<std::vector<std::string>, std::int32_t>> Panel::flow_lines(
     std::size_t index, const std::array<const Font*, kFontSlots>& fonts) const {
-    // 0x00407D7D: width Size.x, line height Posoffs.y, lines Size.y / Posoffs.y.
+    // Width Size.x, line height Posoffs.y, lines Size.y / Posoffs.y.
     const assets::Gadget& g = m_layout.gadgets[index];
     const State& s = m_state[index];
     const Font* font = g.block >= 0 && g.block < static_cast<std::int32_t>(kFontSlots)
@@ -199,7 +199,7 @@ std::optional<std::pair<std::vector<std::string>, std::int32_t>> Panel::flow_lin
 }
 
 std::optional<std::size_t> Panel::hit(std::int32_t x, std::int32_t y) const {
-    // The last gadget under the mouse is on top; hidden ones still answer (0x00406660).
+    // The last gadget under the mouse is on top; hidden ones still answer.
     std::optional<std::size_t> found;
     for (std::size_t i = 0; i < m_layout.gadgets.size(); ++i) {
         const assets::Gadget& g = m_layout.gadgets[i];
@@ -214,7 +214,7 @@ std::optional<std::size_t> Panel::hit(std::int32_t x, std::int32_t y) const {
 }
 
 void Panel::slide(std::size_t index, std::int32_t gx, std::int32_t gy) {
-    // 0x00406A00: x from the left, y from the bottom.
+    // X from the left, y from the bottom.
     const assets::Gadget& g = m_layout.gadgets[index];
     State& s = m_state[index];
     s.slider[0] = std::clamp(gx - g.pos[0] - g.slider_offset[0], 0, std::max<std::int32_t>(0, g.slider_size[0]));
@@ -303,7 +303,7 @@ void Panel::draw_gadget(std::vector<DrawItem>& out, std::size_t index, std::uint
     const assets::Gadget& g = m_layout.gadgets[index];
     const State& s = m_state[index];
     const double k = m_scale;
-    // Draw position: trunc((Pos + Posoffs + 0.5) * scale) plus the slider's offset (0x00407AED).
+    // Draw position: trunc((Pos + Posoffs + 0.5) * scale) plus the slider's offset.
     std::int32_t x = to_pixels(g.pos[0] + g.offset[0], k);
     std::int32_t y = to_pixels(g.pos[1] + g.offset[1], k);
     // Only along the slider's own axes (Slidhorflg 0x40, Slidverflg 0x80 at +0x19).
@@ -383,7 +383,7 @@ void Panel::draw_gadget(std::vector<DrawItem>& out, std::size_t index, std::uint
             out.push_back(item);
             break;
         case GadgetKind::Bar: {
-            // 0x00407F7C: horizontal bars follow the slider, vertical ones grow upwards.
+            // Horizontal bars follow the slider, vertical ones grow upwards.
             item.kind = DrawItem::Kind::Fill;
             item.x = to_pixels(g.pos[0] + g.offset[0], k);
             item.y = to_pixels(g.pos[1] + g.offset[1], k);

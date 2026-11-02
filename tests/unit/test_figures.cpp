@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Figure animations (ANIM), land figures with shadows, half-size sheets (docs/re/figures.md).
+// Figure animations (ANIM), land figures with shadows, half-size sheets.
 
 #include <algorithm>
 #include <optional>
@@ -49,7 +49,7 @@ assets::FigureTable make_deer() {
 
 }  // namespace
 
-TEST_CASE("figures: ANIM objects and the sprite formula of 0x0044F8F0") {
+TEST_CASE("figures: ANIM objects and the sprite formula") {
     const auto figures = make_deer();
     const assets::FigureType* deer = figures.get(89);
     REQUIRE(deer != nullptr);
@@ -100,7 +100,7 @@ TEST_CASE("figures: an animation of more than 255 frames or runs still ends (FB-
     CHECK(s.anim == 1);  // JUMPTO after 255 runs of 255 frames
 }
 
-TEST_CASE("figures: animation stepping like 0x0045D0B0") {
+TEST_CASE("figures: animation stepping") {
     const auto figures = make_deer();
     const assets::FigureType& deer = *figures.get(89);
 
@@ -162,13 +162,13 @@ TEST_CASE("figures: land figure with shadow, position and depth") {
     layers.sheet_base[static_cast<std::size_t>(assets::FigureSheet::Schatten)] = atlas->sheet_base(2);
 
     sim::World world;
-    // Made on land: height 0.56 (0x00446CA0 callers).
+    // Made on land: height 0.56 (callers).
     const render::FigureInstance deer{10.5, 20.5, 89, 1, 2, 3, render::kLandHeight, 0, sim::kNoPlayer, std::nullopt};
     render::FigureSprites f;
     REQUIRE(render::land_figure_sprites(deer, world, render::WorldView{render::Zoom::Large, 0}, layers, f));
     REQUIRE(f.count == 2);
     // Point: x = (10.5 - 20.5 + 350) * 32 = 10880, y = 31 * 16 = 496; the original keeps the figure
-    // at Y = y + Posoffs[1] = 505 (0x00451CC5). Body and shadow are lifted by trunc(0.56 * 32) = 17
+    // at Y = y + Posoffs[1] = 505. Body and shadow are lifted by trunc(0.56 * 32) = 17
     // and one pixel for the tile rows of Open1602 starting one lower.
     const render::DrawCommand& shadow = f.parts[0];
     CHECK(shadow.mode == render::DrawCommand::Mode::Shadow);
@@ -184,8 +184,8 @@ TEST_CASE("figures: land figure with shadow, position and depth") {
     CHECK(f.row == (496 + 9 - 1) / 16);  // the height does not change the row
     CHECK(f.depth == 505);
 
-    // Half of it in a crop: the bottom 6 of 12 rows are left out, the shadow goes up by as much
-    // (0x00451250, 0x00401B70); all of it hidden: nothing drawn.
+    // Half of it in a crop: the bottom 6 of 12 rows are left out, the shadow goes up by as much;
+    // all of it hidden: nothing drawn.
     render::FigureInstance in_crop = deer;
     in_crop.crop = 128;
     render::FigureSprites c;
@@ -197,7 +197,7 @@ TEST_CASE("figures: land figure with shadow, position and depth") {
     CHECK(!render::land_figure_sprites(in_crop, world, render::WorldView{render::Zoom::Large, 0}, layers, c));
 
     // On an island the local player has not discovered, only figures without an island (deer)
-    // show (0x00451590); kNoPlayer sees everything.
+    // show; kNoPlayer sees everything.
     REQUIRE(world.add_island(sim::WorldIsland{assets::IslandHeader{}, sim::IslandMap(4, 4), 9, 19}).ok());
     render::FigureInstance worker = deer;
     worker.island = 0;
@@ -245,8 +245,8 @@ TEST_CASE("figures: a display figure's shadow follows its picture and height (ki
     render::FigureSprites f;
     REQUIRE(render::effect_figure_sprites(e, world, render::WorldView{render::Zoom::Large, 0}, layers, 0, f));
     REQUIRE(f.count == 2);
-    // The shadow figure's ANIM 0 with the body's frame and direction (0x0044F8F0), centred on the
-    // point lifted by trunc(0.6 * 32) = 19 and the one row of Open1602 (0x0045092D).
+    // The shadow figure's ANIM 0 with the body's frame and direction, centred on the
+    // point lifted by trunc(0.6 * 32) = 19 and the one row of Open1602.
     const render::DrawCommand& shadow = f.parts[0];
     CHECK(shadow.mode == render::DrawCommand::Mode::Shadow);
     CHECK(shadow.sprite == atlas->sheet_base(2) + 8 + 3 + 2 * 8);

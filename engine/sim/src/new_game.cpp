@@ -44,8 +44,8 @@ void put_name(std::vector<std::uint8_t>& record, std::string_view name) {
     std::copy_n(name.begin(), std::min(name.size(), kNameSize - 1), record.begin() + kNameOffset);
 }
 
-/// PLAYER4 after the reset (0x00474380), the gated load (0x00477911) and the start
-/// (0x00477520, 0x00474C70): slot 0 is the human with the chosen colour, slots 1-3 computers with
+/// PLAYER4 after the reset, the gated load and the start:
+/// slot 0 is the human with the chosen colour, slots 1-3 computers with
 /// the other colours in order and the names of their colours, then trader, pirates, natives.
 /// Money, unlocks and the relation bytes come from the file.
 std::vector<std::uint8_t> players(std::span<const std::uint8_t> data, const assets::TextTable& text,
@@ -103,8 +103,8 @@ std::vector<std::uint8_t> players(std::span<const std::uint8_t> data, const asse
     return out;
 }
 
-/// TIMERS after the reset (0x0040DFE0, 0x00469270): the file's values only where the gated loader
-/// reads them (0x00484D30), the rest as the new game sets it.
+/// TIMERS after the reset: the file's values only where the gated loader
+/// reads them, the rest as the new game sets it.
 std::vector<std::uint8_t> timers(std::span<const std::uint8_t> data, const NewGameOptions& options) {
     std::vector<std::uint8_t> t(kTimersSize, 0);
     std::copy_n(data.begin(), std::min(data.size(), kTimersSize), t.begin());

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The production cycle of workshops, farms, mines, hunters, fishers and markets, once per game
-// second (the original's 0x0047DAF0, docs/re/production.md):
+// second:
 //
 // A switched-on building counts down the seconds of its running cycle. When the cycle ends,
 // the raw material it used is taken and its product added to the store (scaled by the cycle's
@@ -37,7 +37,7 @@ struct ProductionEvent {
     std::uint8_t ware = 0;
 };
 
-/// Seconds a building waits when it cannot start a cycle (0x0047DCEB: 11).
+/// Seconds a building waits when it cannot start a cycle (11).
 inline constexpr std::uint16_t kIdleWaitSeconds = 11;
 /// Rates below this (half of the raw material of a cycle) do not start a cycle.
 inline constexpr std::uint8_t kMinRate = 64;

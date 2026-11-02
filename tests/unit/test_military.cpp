@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Soldiers, towers and building damage (docs/re/military.md).
+// Soldiers, towers and building damage.
 
 #include <algorithm>
 #include <array>
@@ -344,7 +344,7 @@ TEST_CASE("military: a tree of nobody is shot down on order without war; one's o
     // Without an order nobody shoots at trees.
     f.run(5'000);
     CHECK(f.count(sim::MilitaryEvent::Kind::Shot) == 0);
-    // Ctrl + click (Haus_IsDestroyable 0x00464A80): 3 HP, a musket does 2.4 at full damage.
+    // Ctrl + click: 3 HP, a musket does 2.4 at full damage.
     REQUIRE(f.military->order(sim::SoldierOrder{0, {id}, sim::Target::building(0, 20, 5), true}));
     f.run(20'000);
     CHECK(f.count(sim::MilitaryEvent::Kind::WarDeclared) == 0);
@@ -1077,7 +1077,7 @@ TEST_CASE("military: a destroyed Kontor becomes the destroyed Kontor; the city k
     // The destroyed Kontor is no target any more.
     CHECK(!combat.fighter(sim::Target::building(0, 10, 5)).has_value());
     // Ships still trade at the destroyed Kontor of a computer player in the game, but not of a
-    // defeated or neutral owner (0x0044E747).
+    // defeated or neutral owner.
     CHECK(sim::kontor_open(world, buildings, *world.city(0, 0)));
     world.player(1)->status = sim::PlayerStatus::Defeated;
     CHECK(!sim::kontor_open(world, buildings, *world.city(0, 0)));

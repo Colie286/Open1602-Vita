@@ -25,7 +25,7 @@ using core::make_error;
 
 namespace {
 
-// Limits of the original (docs/re/savegame-writer.md, section 7).
+// Limits of the original (section 7).
 constexpr std::size_t kMaxIslands = 50;
 constexpr std::size_t kMaxOwnIslands = 255;  // island numbers are one byte
 /// Island coordinates are one byte in the original's records (INSELHAUS, SIEDLER, KONTOR2, HIRSCH2,
@@ -38,7 +38,7 @@ constexpr std::size_t kMaxShips = 150;
 constexpr std::size_t kMaxSoldiers = 400;
 constexpr std::size_t kMaxTowers = 350;
 constexpr std::size_t kTowerSize = 0x24;
-constexpr std::size_t kOriginalMissionSlots = 4;  // 0x005B8A80: 4 x 0x88C
+constexpr std::size_t kOriginalMissionSlots = 4;  // 4 x 0x88C
 constexpr std::size_t kCityNameMax = 23;
 constexpr std::size_t kShipNameMax = 23;
 constexpr std::uint8_t kNoOwner = 7;
@@ -325,7 +325,7 @@ private:
         const Player* p = m_world.player(s.owner);
         return p != nullptr && m_world.behaviour(*p) == FactionBehaviour::Pirates ? 3 : 1;
     }
-    /// A target as the original's object reference (docs/re/ships.md).
+    /// A target as the original's object reference.
     [[nodiscard]] std::uint32_t ref_of(const Target& t) const {
         // A reference loaded from a file goes back as it was while it names the same target.
         if (t.raw != 0 && target_from_ref(m_world, t.raw) == t) {
@@ -521,7 +521,7 @@ private:
     }
 
     /// Layer 1 (`ground`): every building of the ground layer, of no city and no owner. Layer 2:
-    /// the buildings on top that differ from the ground (0x00468BF0), with their city and owner.
+    /// the buildings on top that differ from the ground, with their city and owner.
     core::Bytes island_layer(std::uint16_t i, bool top_layer,
                              const std::unordered_map<std::uint32_t, assets::IslandTile>& source) const {
         const WorldIsland& island = m_world.islands()[i];
@@ -568,8 +568,8 @@ private:
         return out;
     }
 
-    /// Whether the top tile counts as the ground's (0x00468BF0): no city, and the same picture
-    /// (0x00464F30), or water or grass of the same ware, growing or not. The original then does not
+    /// Whether the top tile counts as the ground's: no city, and the same picture,
+    /// or water or grass of the same ware, growing or not. The original then does not
     /// save it; on loading, the tile shows the ground.
     [[nodiscard]] bool same_as_ground(const IslandMap& map, std::uint32_t x, std::uint32_t y) const {
         const MapCell& t = map.top(x, y);
@@ -689,7 +689,7 @@ private:
 
     void houses() {
         const auto raw = m_source.by_key("SIEDLER", kHouseSize, [](auto r) { return key3(r[0], r[1], r[2]); });
-        // Runtime word bits 2..10 -> dword 2 bits (0x00485530).
+        // Runtime word bits 2..10 -> dword 2 bits.
         constexpr std::array<std::uint8_t, 9> kServiceBits = {30, 23, 24, 28, 25, 26, 29, 31, 27};
         core::Bytes out;
         for (const House& h : m_world.houses()) {
@@ -769,7 +769,7 @@ private:
 
     // ---- Cities ----------------------------------------------------------------------------------
 
-    /// Id (- 20000) of the first producer of a ware (the original's ware table, 0x00609160).
+    /// Id (- 20000) of the first producer of a ware (the original's ware table).
     [[nodiscard]] std::uint16_t producer_id(std::uint8_t ware) const {
         // The first building in record order that produces the ware (records may have gaps).
         const assets::BuildingType* first = nullptr;
@@ -805,8 +805,8 @@ private:
             r[5] = c.population_message;
             put32(r, 0x08, static_cast<std::uint32_t>(std::clamp<std::int64_t>(c.purchases, 0, 0xFFFFFFFFLL)));
             put32(r, 0x0C, static_cast<std::uint32_t>(std::clamp<std::int64_t>(c.sales, 0, 0xFFFFFFFFLL)));
-            // The loader turns a 0 in the satisfaction, the tax rate and the food supply into 128
-            // (0x00484C6C): a stored 0 that loaded as 128 stays 0.
+            // The loader turns a 0 in the satisfaction, the tax rate and the food supply into 128:
+            // a stored 0 that loaded as 128 stays 0.
             const auto keep = [](std::uint8_t& stored, std::uint8_t v) {
                 if (!(stored == 0 && v == 128)) {
                     stored = v;
@@ -908,7 +908,7 @@ private:
             if (player != nullptr && p >= raw.size()) {
                 // No record of a source file (a game loaded from Open1602's own savegame or made
                 // new): controller, colour and name from the player.
-                // As a new game sets them (0x00477520): in the session, nobody blamed, no mission.
+                // As a new game sets them: in the session, nobody blamed, no mission.
                 r[4] = static_cast<std::uint8_t>(original_kind(*player));
                 r[6] = 1;
                 r[0x0C] = 0xFF;
@@ -959,8 +959,8 @@ private:
                     r[0x24] = player->scenario.own_development;
                     r[0x25] = player->scenario.rival_development;
                 }
-                // An absent slot keeps its controller: the original retires it again when loading
-                // (0x0048C0F0), and so a file written back unchanged stays the same.
+                // An absent slot keeps its controller: the original retires it again when loading,
+                // and so a file written back unchanged stays the same.
                 if (player->status == PlayerStatus::Defeated) {
                     r[4] = static_cast<std::uint8_t>(assets::PlayerKind::Defeated);
                 }
@@ -999,7 +999,7 @@ private:
         add("PLAYER4", std::move(out));
     }
 
-    /// AUFTRAG4 (0x00478380): the first four missions; a slot is written if it has goals, slot 0
+    /// AUFTRAG4: the first four missions; a slot is written if it has goals, slot 0
     /// also if it has a text (the endless games).
     void missions() {
         core::Bytes out;
@@ -1013,7 +1013,7 @@ private:
         add("AUFTRAG4", std::move(out));
     }
 
-    /// HANDLER: the free trader's goods, one record per trader ship (0x004600C0).
+    /// HANDLER: the free trader's goods, one record per trader ship.
     void traders() {
         constexpr std::size_t kSize = 0x25C;
         constexpr std::size_t kGoods = 50;
@@ -1259,14 +1259,14 @@ private:
                 r[o + 2] = static_cast<std::uint8_t>(c->x);  // fits: check()
                 r[o + 3] = static_cast<std::uint8_t>(c->y);
             } else if (r[o] != 0) {
-                // Only the low byte tells (0x0048C0F0); a ref that was set is cleared whole so the
+                // Only the low byte tells; a ref that was set is cleared whole so the
                 // file does not depend on what ran before.
                 std::fill_n(r.begin() + static_cast<std::ptrdiff_t>(o), 4, std::uint8_t{0});
             }
         };
         ref(0xC4, v.eruptions.empty() ? std::nullopt : std::optional<CraterRef>(v.eruptions.front().crater));
         if (v.eruptions.empty() && v.last) {
-            // The original ends an eruption with "last = running; running.low = 0" (0x00447350):
+            // The original ends an eruption with "last = running; running.low = 0":
             // the running ref keeps the crater of the last eruption.
             r[0xC4] = 0;
             r[0xC5] = number(v.last->island);

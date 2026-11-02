@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The islands of a scenario that makes them at the start (docs/re/worldgen.md): the endless games
+// The islands of a scenario that makes them at the start: the endless games
 // of the original carry no islands but a world plan (SZENE) with each island's number, place, size
 // class and climate. When the game starts, the original draws for each island one of the island
 // templates of its climate and size, puts native villages on a few of them, hands out the
@@ -50,7 +50,7 @@ public:
         : m_table(table), m_index(start & 511U) {}
     explicit PlanRandom(std::uint64_t seed) noexcept : m_seeded(true), m_random(seed, 0x1602'5EEDULL) {}
 
-    /// The original takes Rnd() % n (0x0048C570), slightly favouring small numbers.
+    /// The original takes Rnd() % n, slightly favouring small numbers.
     [[nodiscard]] std::uint32_t below(std::uint32_t n) noexcept;
     [[nodiscard]] std::uint32_t draws() const noexcept { return m_draws; }
 

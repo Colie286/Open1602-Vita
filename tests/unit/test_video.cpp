@@ -559,7 +559,7 @@ TEST_CASE("videos: the logos and the intro queue, any other request replaces wha
     CHECK((drain(queue) == std::vector<std::uint16_t>{8, 9, 58}));
     CHECK(!queue.waiting());
 
-    // Video_Request 0x00488C00: the latest request wins and stops the running one.
+    // The latest request wins and stops the running one.
     CHECK(!queue.request(queued(8, true)));
     CHECK(!queue.request(queued(9, true)));
     CHECK(queue.request(queued(63)));
@@ -567,7 +567,7 @@ TEST_CASE("videos: the logos and the intro queue, any other request replaces wha
     CHECK((drain(queue) == std::vector<std::uint16_t>{998}));
 }
 
-TEST_CASE("videos: the end of the campaigns follows the success video (Video_Update 0x00492410)") {
+TEST_CASE("videos: the end of the campaigns follows the success video") {
     app::VideoQueue queue;
     CHECK(queue.request(queued(2510)));
     app::VideoRequest end = queued(assets::kCampaignsEndVideo);

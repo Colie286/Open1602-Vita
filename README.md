@@ -265,18 +265,12 @@ Without arguments `o1602-tool` lists every command with its options.
 | `tests/` | Unit tests and tests against the original data ([how to run them](tests/README.md)) |
 | `docs/` | [Plan](docs/00-plan.md), [status](docs/status.md), [file formats](docs/formats/README.md), [architecture decisions](docs/architecture/README.md), [languages](docs/modding/languages.md), [packages](docs/modding/packages.md), [messages](docs/modding/messages.md), [build menu](docs/modding/build-menu.md), [data limits](docs/modding/data-limits.md) and [open work](docs/modding/open-work.md) for modding |
 | `data/` | Files the engine brings itself: [interface texts](docs/modding/languages.md), the [application icon](data/icons/README.md), the Linux desktop entry |
-| `re/` | Analysis scripts and notes |
 | `bin/` | Not in git: the game and `o1602-tool` built by the `release` and `vcpkg` presets ([Running](#running)) |
-
-The analysis of the original game (`docs/re/`) and the symbol tables (`re/symbols/`) are kept in the
-private companion repository **open1602-re**, which holds the reverse-engineering notes. They are not
-part of a public clone, so links into `docs/re/` only work for maintainers who have it set up
-([CONTRIBUTING.md](CONTRIBUTING.md#reverse-engineering)).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). The most important rules: no original files and no decompiled
-code in the repository; every finding about the original is documented with its evidence.
+See [CONTRIBUTING.md](CONTRIBUTING.md). The most important rules: no original files and no code of the
+original program in the repository; behaviour is described as a specification and implemented from it.
 
 ## License
 

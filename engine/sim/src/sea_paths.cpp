@@ -14,7 +14,7 @@ namespace {
 
 constexpr std::uint8_t kBlocked = 1;
 constexpr std::uint8_t kVisited = 4;
-constexpr std::uint32_t kStraight = kStepStraight;  // open sea (0x0046F8A0 class 0)
+constexpr std::uint32_t kStraight = kStepStraight;  // open sea (class 0)
 constexpr std::uint32_t kDiagonal = kStepDiagonal;
 constexpr std::uint32_t kSoftStraight = 500;  // around a ship lying still (cost class 0x7E)
 constexpr std::uint32_t kSoftDiagonal = 711;
@@ -200,7 +200,7 @@ SeaCourse SeaPlanner::plan(const SeaMap& sea, const SeaPlan& r) {
             }
         }
     }
-    // Water near hostile towers first; the ships close by are marked over it (0x00455A20).
+    // Water near hostile towers first; the ships close by are marked over it.
     for (const SeaPlan::Danger& d : r.danger) {
         for (std::int32_t y = std::max(d.y0, y0); y <= std::min(d.y1, y0 + size - 1); ++y) {
             for (std::int32_t x = std::max(d.x0, x0); x <= std::min(d.x1, x0 + size - 1); ++x) {
@@ -208,7 +208,7 @@ SeaCourse SeaPlanner::plan(const SeaMap& sea, const SeaPlan& r) {
             }
         }
     }
-    // Other ships (0x004560A0): 3 x 3 squares, softened after a failure for ships lying still.
+    // Other ships: 3 x 3 squares, softened after a failure for ships lying still.
     for (const SeaPlan::Obstacle& o : r.ships) {
         if (o.x == r.start_x && o.y == r.start_y) {
             continue;
@@ -366,7 +366,7 @@ SeaCourse SeaPlanner::plan(const SeaMap& sea, const SeaPlan& r) {
         const std::uint8_t dir = dirs[i];
         const std::uint8_t cls = m_class[at(x, y)];
         std::uint8_t n = 0;
-        // A run: same direction and cost class, at most two tiles (0x0046CF70).
+        // A run: same direction and cost class, at most two tiles.
         while (i < dirs.size() && dirs[i] == dir && n < kMaxRunTiles && m_class[at(x, y)] == cls) {
             x += step_x(dir);
             y += step_y(dir);

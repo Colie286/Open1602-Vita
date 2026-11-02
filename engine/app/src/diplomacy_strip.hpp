@@ -53,7 +53,7 @@ inline constexpr std::int32_t kTreatiesShift = 96;
 /// Top left of the frame of place `index` of `count` in the strip.
 [[nodiscard]] std::array<std::int32_t, 2> strip_slot(std::size_t index, std::size_t count) noexcept;
 
-/// The other humans and computers, by player number (0x00433C1C): the partners of the window.
+/// The other humans and computers, by player number: the partners of the window.
 [[nodiscard]] std::vector<sim::PlayerId> partners(const sim::World& world, sim::PlayerId local);
 
 /// Treaties a partner offered the local player that are not answered yet.

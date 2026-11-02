@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The trade cart, "fahrender Händler" (docs/re/ships.md#the-trade-cart): a player's TRADER1 that
+// The trade cart, "fahrender Händler": a player's TRADER1 that
 // the city panel's button 43026 sends out from the Kontor. The original keeps it in the ship table
-// (SHIP4 kind 5) with a ship's name, holds and trade route, and moves it with its own logic
-// (Cart_Logic 0x00456410): on land, through the walk grid of the carriers (0x0046EBA0), to a
-// clicked tile or within 2 tiles of a market or Kontor (0x00456870). There it trades as a ship
+// (SHIP4 kind 5) with a ship's name, holds and trade route, and moves it with its own logic:
+// on land, through the walk grid of the carriers, to a
+// clicked tile or within 2 tiles of a market or Kontor. There it trades as a ship
 // does at a Kontor: its owner's goods for nothing, a foreign city's with a trade treaty.
 #include <algorithm>
 #include <cstdlib>
@@ -21,10 +21,10 @@ constexpr std::uint32_t kCartIdleMs = 1000;   // an idle cart decides again afte
 constexpr std::uint32_t kCartNoWayMs = 2000;  // after a plan without a way
 constexpr std::uint8_t kCartMaxFailures = 2;  // the order is given up after the third failed plan
 /// A tile takes 6 250 000 * Wegspeed / Speed microseconds straight, sqrt 2 times that diagonally
-/// (0x0044A690: 0.16 * Speed / Wegspeed tiles per second).
+/// (0.16 * Speed / Wegspeed tiles per second).
 constexpr std::uint64_t kCartStraightUs = 6'250'000;
 constexpr std::uint64_t kCartDiagonalUs = 8'838'835;
-constexpr std::uint8_t kFootprintCost = 40;  // a building it stands in (0x004710B0)
+constexpr std::uint8_t kFootprintCost = 40;  // a building it stands in
 constexpr std::size_t kMaxCartRuns = 255;    // one tile per run; a longer way is planned on
 
 /// The island whose rectangle holds the world tile, if any.
@@ -252,7 +252,7 @@ std::uint32_t Fleet::cart_run_us(const Ship& ship, std::uint8_t direction) const
 }
 
 bool Fleet::plan_cart(Ship& ship) {
-    // The A* of 0x0046D4D0 over the walk grid of the carriers (roads, open ground, ruins, squares,
+    // The A* over the walk grid of the carriers (roads, open ground, ruins, squares,
     // bridges, piers, the middle of gates) of the whole island; Open1602's exact search.
     ShipMotion& m = ship.motion;
     m.path.clear();
@@ -333,7 +333,7 @@ bool Fleet::plan_cart(Ship& ship) {
 }
 
 void Fleet::decide_cart(Ship& ship) {
-    // Cart_Logic 0x00456410: at the end of each tile whether it has arrived, the next stop of its
+    // At the end of each tile whether it has arrived, the next stop of its
     // route, a way to the target. No sea, no fighting, no other ships in its way.
     ShipMotion& m = ship.motion;
     if (ship.sinking) {

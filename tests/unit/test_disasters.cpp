@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Fires and plagues, doctors and firemen (docs/re/disasters.md).
+// Fires and plagues, doctors and firemen.
 
 #include <algorithm>
 
@@ -353,7 +353,7 @@ TEST_CASE("disasters: doctors cure on foot, firemen put out fires along the road
             if (w.kind != sim::WalkerKind::Firefighter) {
                 return;
             }
-            // The fireman stays on the road in front of the fire (0x00473650), turned to it.
+            // The fireman stays on the road in front of the fire, turned to it.
             fireman_inside = fireman_inside || on_bakery(w.tile);
             if (w.working()) {
                 put_out_from_road = w.tile.y == 10 && w.direction == sim::direction_between(w.tile, {20, 8});

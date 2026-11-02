@@ -7,7 +7,7 @@ Short, dated decisions with their rationale. New decision = new file
 |---|---|---|
 | [0001](0001-language-and-build.md) | C++20, CMake, SDL3 | accepted |
 | [0002](0002-license-and-original-data.md) | GPL-3.0, no original data in the repository | accepted |
-| [0003](0003-reimplementation.md) | Reimplementation instead of decompiled code | accepted |
+| [0003](0003-reimplementation.md) | Reimplementation from a specification | accepted |
 | [0004](0004-deterministic-simulation.md) | Deterministic, command-based simulation | accepted |
 | [0005](0005-module-structure.md) | Module structure and dependency rules | accepted |
 | [0006](0006-handling-original-bugs.md) | Handling bugs of the original, `sim::Rules` | accepted |

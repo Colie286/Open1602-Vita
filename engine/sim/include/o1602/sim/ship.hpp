@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Ships and what they carry (docs/re/ships.md): position, course, cargo, trade route, the goods of
+// Ships and what they carry: position, course, cargo, trade route, the goods of
 // the free trader. The rules that move them are in ships.hpp.
 #pragma once
 
@@ -17,7 +17,7 @@
 
 namespace o1602::sim {
 
-/// A hold of a ship: one ware, at most 50 t (docs/re/ships.md).
+/// A hold of a ship: one ware, at most 50 t.
 struct CargoSlot {
     std::uint8_t ware = 0;     ///< 0 = empty
     std::uint32_t amount = 0;  ///< 1/32 t
@@ -34,7 +34,7 @@ struct RouteEntry {
 
 struct RouteStop {
     /// Wares per stop: the original has three; Open1602 takes as many as a ship has holds, at most
-    /// eight (docs/re/ships.md, "Trade routes"), the first three as the original's.
+    /// eight, the first three as the original's.
     static constexpr std::size_t kEntries = 8;
     /// Wares of the original (SHIP4, the computer players' supply runs, the pirates' plunder).
     static constexpr std::size_t kOriginalEntries = 3;
@@ -44,7 +44,7 @@ struct RouteStop {
 };
 
 /// The automatic trade route of a ship: its stops, sailed in a loop. The original has four;
-/// Open1602 takes eight (docs/re/ships.md, "Trade routes"), the first four as the original's.
+/// Open1602 takes eight, the first four as the original's.
 struct TradeRoute {
     static constexpr std::size_t kStops = 8;
     /// Stops of the original (SHIP4, its route window, the computer players' supply runs).
@@ -65,7 +65,7 @@ struct TradeRoute {
         }
         return false;
     }
-    /// A patrol: a route of positions only (`Ship_IsPatrolling 0x0044EA90`).
+    /// A patrol: a route of positions only.
     [[nodiscard]] bool patrol() const noexcept {
         bool any = false;
         for (const RouteStop& s : stops) {
@@ -107,7 +107,7 @@ struct TraderGood {
 };
 
 /// How a ship is moving right now. Ships sail from tile centre to tile centre in runs of one or two
-/// tiles; between runs they decide what to do next (docs/re/ships.md, "Sailing").
+/// tiles; between runs they decide what to do next.
 struct ShipMotion {
     enum class Phase : std::uint8_t {
         Idle,     ///< nothing to do; decides again at the end of a short wait
@@ -173,7 +173,7 @@ struct Ship {
     std::uint32_t trader_ore_ms = 0;
     bool trader = false;
     /// The computer player's job of the ship in an original savegame (SHIP4 +0x24, +0x3E, +0x40),
-    /// taken over once when the computer players start on it (docs/re/ai.md). Open1602 keeps the
+    /// taken over once when the computer players start on it. Open1602 keeps the
     /// jobs with the computer players' state.
     struct OriginalJob {
         std::uint16_t mission = 0;
@@ -181,8 +181,8 @@ struct Ship {
         std::uint8_t counter = 0;
     };
     std::optional<OriginalJob> original_job;
-    /// Exploring an island (ship + 0x1A4): steps of 1.5 s left, 0 = not exploring; the next step
-    /// at game time `explore_next_ms` (docs/re/ships.md#exploring).
+    /// Exploring an island: steps of 1.5 s left, 0 = not exploring; the next step
+    /// at game time `explore_next_ms`.
     std::uint8_t explore_steps = 0;
     std::uint64_t explore_next_ms = 0;
     /// Island whose surroundings (rectangle + 5 tiles) the ship is in, for discovering islands;
@@ -194,7 +194,7 @@ struct Ship {
     std::uint16_t source_slot = 0xFFFF;
 
     /// A player's trade cart ("fahrender Händler", TRADER1): a ship record that drives on land, on
-    /// the island of its city (docs/re/ships.md#the-trade-cart). Nothing at sea sees it.
+    /// the island of its city. Nothing at sea sees it.
     [[nodiscard]] bool cart() const noexcept { return figure == assets::figure::kTradeCart; }
     /// Goods of a ware on board.
     [[nodiscard]] std::uint32_t load(std::uint8_t ware) const noexcept {

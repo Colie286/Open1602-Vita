@@ -23,7 +23,7 @@ constexpr std::size_t kTileSize = 8;
 constexpr std::size_t kLargeTileSize = 10;
 constexpr std::size_t kHeaderDeposits = 2;  // the deposits an INSEL5 header holds
 
-/// Size class of an INSEL5 island by its width, as the original's loader sets it (0x00469900) before it
+/// Size class of an INSEL5 island by its width, as the original's loader sets it before it
 /// builds the template path: the stored value is ignored. Wider islands keep it.
 std::uint16_t size_class_of_width(std::uint32_t width, std::uint16_t stored) {
     static constexpr std::uint8_t kLimits[] = {33, 43, 56, 76, 111};  // lit, mit, med, big, lar
@@ -188,7 +188,7 @@ std::vector<std::uint8_t> large_tile_bytes(const std::vector<IslandTile>& tiles)
 }
 
 std::string IslandHeader::template_path() const {
-    // Name tables of the original: 0x0049A8A4 (climate directories) and 0x0049A890 (size prefixes).
+    // Name tables of the original: (climate directories) and (size prefixes).
     static constexpr const char* kClimate[] = {"Nord", "Sued", "Nord", "Sued"};
     static constexpr const char* kSize[] = {"lit", "mit", "med", "big", "lar"};
     if (template_number == kNoTemplate || stored_complete || climate > 3 || template_size > 4) {

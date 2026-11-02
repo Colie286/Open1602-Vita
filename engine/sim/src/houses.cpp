@@ -23,9 +23,9 @@ constexpr std::uint8_t kFull = kFullSupply;
 constexpr std::uint8_t kNoMarket = 6;  // market distance class without (or far from) a market
 constexpr std::size_t kMaxNeighbourTiles = 40;
 
-// ---- Tables of 0x00478630 -------------------------------------------------------------------
+// ---- Tables -------------------------------------------------------------------
 
-/// 0x00403370: fixed point steps of 1/256 between (x0, y0) and (x1, y1), byte values.
+/// Fixed point steps of 1/256 between (x0, y0) and (x1, y1), byte values.
 template <std::size_t N>
 void lerp(std::array<std::int32_t, N>& t, std::int32_t x0, std::int32_t x1, std::int32_t y0, std::int32_t y1) {
     const std::int32_t step = ((y1 - y0) * 256) / (x1 - x0);  // C division: towards zero
@@ -57,7 +57,7 @@ struct Tables {
         lerp(t5, 0, 3, 102, 128);
         lerp(t5, 3, 6, 128, 192);
         lerp(t2, 0, 6, 160, 115);
-        // round(0.375 * distance): the market distance class (0x005A6AF0). In integers (ADR 0004):
+        // round(0.375 * distance): the market distance class. In integers (ADR 0004):
         // the class is the largest v with 3 * sqrt(n) / 8 + 1 / 2 >= v, that is (8v - 4)^2 <= 9n.
         for (std::size_t i = 0; i < 17; ++i) {
             for (std::size_t j = 0; j < 17; ++j) {
@@ -77,7 +77,7 @@ const Tables& tables() {
     return kTables;
 }
 
-/// What a class of inhabitants needs to live in a house (0x0047BFA0): one of the services of
+/// What a class of inhabitants needs to live in a house: one of the services of
 /// every entry. The market is no service bit of House::services; kMarketNeed stands for it.
 constexpr std::uint16_t kMarketNeed = assets::public_building::kMarket;
 using ServiceNeeds = std::array<std::uint16_t, 6>;
@@ -137,7 +137,7 @@ std::uint16_t service_bit(std::int32_t prod_kind) noexcept {
 }
 
 /// Gap between the centre column(s) of a building and the nearest column of a house, the
-/// measure of 0x00482120 (an even width has two centre columns). The original assumes a 2 x 2
+/// measure (an even width has two centre columns). The original assumes a 2 x 2
 /// house; Open1602 uses its real size.
 std::int32_t gap(std::int32_t origin, std::uint32_t size, std::int32_t house, std::uint32_t house_size) noexcept {
     const auto w = static_cast<std::int32_t>(size) - 1;
@@ -205,7 +205,7 @@ public:
             return;
         }
         const std::int32_t rate = growth_rate(city, *h);
-        // What the city remembers for its monuments (city + 0x1F8, + 0x1E4).
+        // What the city remembers for its monuments.
         if (rate > 0 && city.house_growth <= 0) {
             city.growing_since_ms = m_world.time_ms();
         }
@@ -286,7 +286,7 @@ private:
         return amount;
     }
 
-    /// The tiles around a house tell which way it faces a road (0x00467940): left 2, right 0,
+    /// The tiles around a house tell which way it faces a road: left 2, right 0,
     /// top 3, bottom 1; none keeps the rotation.
     std::uint8_t road_rotation(const House& h, std::uint8_t current) const {
         const IslandMap& map = m_world.islands()[h.island].map;
@@ -362,7 +362,7 @@ private:
             city.available(m.wood) < cost.wood) {
             return false;
         }
-        // 0x0047B160: min(stock, cost), nothing below a ton.
+        // Min(stock, cost), nothing below a ton.
         const auto take = [&](std::uint8_t ware, std::uint32_t amount) {
             city.ensure_ware(ware);
             const std::uint32_t t = std::min(city.goods[ware], amount);
@@ -387,7 +387,6 @@ private:
         }
     }
 
-    /// 0x0047C080.
     void grow(City& city, House& h, std::uint32_t add) {
         const std::uint8_t c = h.resident_class;
         std::uint32_t v = h.inhabitants64 + add;
@@ -436,7 +435,6 @@ private:
         set_inhabitants(city, h, std::min(v, max_inhabitants64(m_buildings, h.resident_class)));
     }
 
-    /// 0x0047BBC0.
     void shrink(City& city, House& h, std::uint32_t sub) {
         const std::uint8_t c = h.resident_class;
         std::uint32_t v = h.inhabitants64 > sub ? h.inhabitants64 - sub : 0;
@@ -460,7 +458,7 @@ private:
         set_inhabitants(city, h, v);
     }
 
-    /// Nobody lives there any more: every tile becomes a ruin (0x00463F40).
+    /// Nobody lives there any more: every tile becomes a ruin.
     void abandon(City& city, House& h) {
         const House copy = h;
         set_inhabitants(city, h, 0);
@@ -507,7 +505,7 @@ private:
 
 namespace {
 
-/// The needs of 0x0047BFA0 of a class of the original; classes beyond the table need what the last
+/// The needs of a class of the original; classes beyond the table need what the last
 /// one needs.
 std::span<const std::uint16_t> original_needs(std::uint8_t resident_class) noexcept {
     return kServiceNeeds[std::min<std::size_t>(resident_class, kServiceNeeds.size() - 1)];
@@ -707,7 +705,7 @@ std::int32_t growth_rate(const City& city, const House& house) noexcept {
     const std::uint16_t disaster = house.services & hs::kDisasterMask;
     const std::size_t dist = std::min<std::size_t>(house.market_distance, kNoMarket);
     if (food > 87 && s > 107 && house.services_complete && disaster == 0) {
-        // A fire or plague anywhere in the city stops all growth (city + 0x1FE).
+        // A fire or plague anywhere in the city stops all growth.
         if (food >= kFull && s >= kFull && city.disasters == 0) {
             return (128 - t.t1[food]) * t.t2[dist] / 128;
         }

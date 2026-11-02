@@ -38,7 +38,7 @@
 
 namespace o1602::sim {
 
-/// A spot in a forest where deer live (island + 0x6C, HIRSCH2): the island keeps up to 8.
+/// A spot in a forest where deer live (HIRSCH2): the island keeps up to 8.
 /// Coordinates are 16 bit like the islands; the original's 8 bits only bind the .GAM export.
 struct DeerSpot {
     bool used = false;
@@ -47,7 +47,7 @@ struct DeerSpot {
     std::uint64_t respawn_ms = 0;  ///< game time before which no new deer comes
 };
 
-/// A volcano crater: the origin tile of a volcano mountain (docs/re/volcanoes.md).
+/// A volcano crater: the origin tile of a volcano mountain.
 struct Crater {
     std::uint16_t x = 0;  ///< island tile (8 bit in the original's format, 16 here)
     std::uint16_t y = 0;
@@ -63,9 +63,9 @@ struct WorldIsland {
     std::uint8_t deer_phase = 0;  ///< island epochs (30 s) since the last deer census, 0..3
     /// Phase of the island epochs (World::island_phase) the island was last ticked in (INSEL5 +0x0A).
     /// A new game takes it from the template, so islands whose template says otherwise than 0 get
-    /// their first epoch at once (docs/re/newgame.md).
+    /// their first epoch at once.
     std::uint8_t last_phase = 0;
-    /// Drought on the island (docs/re/growth.md#drought).
+    /// Drought on the island.
     struct Drought {
         std::uint8_t strength = 0;   ///< 0 = none; lowers the fertility by strength/128
         std::uint64_t end_ms = 0;    ///< game time it ends; then the strength halves every epoch
@@ -75,10 +75,10 @@ struct WorldIsland {
     /// Volcano craters, at most two (INSEL5 +0x17/+0x3C).
     std::vector<Crater> craters{};
     bool volcano_erupted = false;  ///< a volcano of the island has erupted (for the computer players)
-    /// Players who know the island (island + 0x43): a ship of theirs came close (docs/re/ships.md).
+    /// Players who know the island: a ship of theirs came close.
     std::vector<bool> discovered{};
 
-    /// Players who explored the island's crops with a ship (island + 0x42, docs/re/ships.md#erkunden).
+    /// Players who explored the island's crops with a ship.
     std::vector<bool> explored{};
 
     [[nodiscard]] bool discovered_by(PlayerId p) const noexcept { return p < discovered.size() && discovered[p]; }
@@ -99,7 +99,7 @@ private:
     }
 };
 
-/// Whether player `p` knows the deposit (explored it; docs/re/ships.md#erkunden). Up to 32 players.
+/// Whether player `p` knows the deposit (explored it). Up to 32 players.
 [[nodiscard]] inline bool deposit_known(const assets::IslandHeader::Deposit& d, PlayerId p) noexcept {
     return p < 32 && (d.mask >> p & 1U) != 0;
 }
@@ -109,7 +109,7 @@ private:
 /// from the network too and must not break lines of lists and files.
 [[nodiscard]] bool valid_name(std::string_view name, std::size_t max_length) noexcept;
 
-/// Natives' goodwill towards a player who starts a game (0x0046A220).
+/// Natives' goodwill towards a player who starts a game.
 inline constexpr std::uint32_t kNativeGoodwillStart = 200;
 /// Goodwill never grows above this: far above what trade reaches against the decay (tens of
 /// thousands), and low enough that no product with it leaves 32 bits.
@@ -134,10 +134,10 @@ struct City {
     /// does not fit when a cart unloads (S-024); Open1602 lets a cart load only what will fit.
     std::vector<std::uint32_t> incoming;
     /// Room per ware in 1/32 t, the same for every ware: the Maxlager of the warehouse plus 10 t
-    /// for every further market or warehouse of the city (0x0047AB00). Computed by the logistics.
+    /// for every further market or warehouse of the city. Computed by the logistics.
     std::uint32_t capacity = 0;
 
-    /// Consumption accounting of one good (city + 0x150 + 12 * e, MARKT2): what the inhabitants
+    /// Consumption accounting of one good (MARKT2): what the inhabitants
     /// asked for and what they got, both decaying by 15/16 every 10 s, in 1/8192 t.
     struct Supply {
         std::uint64_t demand = 0;               ///< A (the original keeps 32 bits and overflows, see consumption.md)
@@ -149,11 +149,11 @@ struct City {
     std::vector<std::uint8_t> satisfaction;  ///< per class, 128 = content
     std::vector<std::uint8_t> tax_rate;      ///< per class, 128 = normal (64..192)
     std::vector<Supply> supply;              ///< per ware
-    std::uint8_t food_ratio = 128;           ///< supply of food (city + 0x255)
-    /// Pride in a castle or cathedral (city + 0x200): each adds 800, the city tick takes 1/256 off.
+    std::uint8_t food_ratio = 128;           ///< supply of food
+    /// Pride in a castle or cathedral: each adds 800, the city tick takes 1/256 off.
     /// Every 32 lower the taxes the satisfaction is measured against by 1/128. Not in the .GAM.
     std::uint16_t satisfaction_bonus = 0;
-    /// One house per target class may try out the next class (city + 0x234): its inhabitants
+    /// One house per target class may try out the next class: its inhabitants
     /// count for that class in the demand for one tick, then it upgrades or gives up.
     struct UpgradeSlot {
         std::uint32_t inhabitants = 0;  ///< 0 = free
@@ -164,24 +164,24 @@ struct City {
     std::uint8_t epoch = 0;                  ///< counts the city's 10-s ticks, 0..7
     /// The player keeps building material from the people (city window): no house upgrades.
     bool material_lock = false;
-    /// Game time the lock was switched on or the people last complained about it (city + 0x1E8).
+    /// Game time the lock was switched on or the people last complained about it.
     std::uint64_t material_reminder_ms = 0;
     std::uint8_t worst_good = 0;  ///< the scarcest good whose supply keeps falling, 0 = none
-    /// The last population message of the city (city + 0x253, 0x11 = 100 inhabitants ... 0x1D =
+    /// The last population message of the city (0x11 = 100 inhabitants ... 0x1D =
     /// 9000; 0 = none yet): each comes once, as the city first passes its mark.
     std::uint8_t population_message = 0;
-    /// Fires and plagues burning in the city now (city + 0x1FE, kept by recount_disasters): any
+    /// Fires and plagues burning in the city now (kept by recount_disasters): any
     /// of them stops the growth of every house.
     std::uint16_t disasters = 0;
-    /// Game time of the next check for plague, robbers and fire (city + 0x1E0, every 60-67 s).
+    /// Game time of the next check for plague, robbers and fire (every 60-67 s).
     std::uint64_t next_event_ms = 0;
-    /// The growth of the house the growth pass looked at last (city + 0x1F8, > 0 grows) and the
-    /// game time it last turned positive or the people last wanted a monument (city + 0x1E4). The
+    /// The growth of the house the growth pass looked at last (> 0 grows) and the
+    /// game time it last turned positive or the people last wanted a monument. The
     /// original does not save either: after loading its savegames both are 0, here too.
     std::int32_t house_growth = 0;
     std::uint64_t growing_since_ms = 0;
-    /// What the Kontor offers to other players' ships and the free trader, per ware (city ware
-    /// slot +2, +4, +8; docs/re/ships.md). A ware is sold or bought, not both.
+    /// What the Kontor offers to other players' ships and the free trader, per ware.
+    /// A ware is sold or bought, not both.
     struct Trade {
         bool sell = false;
         bool buy = false;
@@ -191,20 +191,20 @@ struct City {
         std::uint32_t limit = 0;       ///< buys only up to this stock (1/32 t)
     };
     std::vector<Trade> trade;  ///< per ware
-    /// Natives: goodwill towards each player (city + 0x206); selling to them raises it, buying
+    /// Natives: goodwill towards each player; selling to them raises it, buying
     /// from them uses it up. Indexed by PlayerId, one entry per player (fit_goodwill); a player
     /// without an entry gets nothing.
     std::vector<std::uint32_t> goodwill;
-    bool trader_inbound = false;  ///< a free trader sails here (city + 0x257 bit 1)
-    /// Ships that gave up their way to the Kontor since the last route stop there (city + 0x252);
-    /// at four, a computer owner blames the human ships near it (Fleet, docs/re/ships.md).
+    bool trader_inbound = false;  ///< a free trader sails here
+    /// Ships that gave up their way to the Kontor since the last route stop there;
+    /// at four, a computer owner blames the human ships near it (Fleet).
     std::uint8_t ships_gave_up = 0;
-    /// Game time a building of the city was last hit (city + 0x1EC): the natives send more warriors
+    /// Game time a building of the city was last hit: the natives send more warriors
     /// for 10 minutes after.
     std::uint64_t last_attacked_ms = 0;
     /// Natives: the village has cursed its destroyer (once).
     bool cursed = false;
-    /// Trade statistics of the city's Kontor (city + 0x1F0, + 0x1F4): every purchase and sale adds
+    /// Trade statistics of the city's Kontor: every purchase and sale adds
     /// 32 times its value, the city tick takes 1/90 off every 10 s; divided by 480 they are a
     /// moving average per minute (the city window).
     std::int64_t purchases = 0;
@@ -235,7 +235,7 @@ struct City {
         const std::uint32_t r = reserved_of(ware);
         return s > r ? s - r : 0;
     }
-    /// Room left for a ware; less than a ton counts as none (0x0047AA00).
+    /// Room left for a ware; less than a ton counts as none.
     [[nodiscard]] std::uint32_t free_space(std::uint8_t ware) const noexcept {
         const std::uint32_t s = stock(ware);
         const std::uint32_t room = capacity > s ? capacity - s : 0;
@@ -258,7 +258,7 @@ struct City {
     }
 };
 
-/// A fire or a plague on a building (the original's list 0x005A5100, docs/re/disasters.md).
+/// A fire or a plague on a building (the original's list).
 struct Disaster {
     enum class Kind : std::uint8_t { Plague = 1, Fire = 2 };
     Kind kind = Kind::Fire;
@@ -324,7 +324,7 @@ struct Animal {
     std::uint16_t figure = 0;  ///< FIGUR number (HIRSCH, ANTILOPE)
 };
 
-/// A house and its inhabitants (the original's house list at 0x005A77E8, SIEDLER).
+/// A house and its inhabitants (the original's house list, SIEDLER).
 struct House {
     std::uint16_t island = 0;  ///< index into World::islands()
     std::uint16_t x = 0;       ///< origin tile of the building
@@ -343,7 +343,7 @@ struct House {
     [[nodiscard]] std::uint32_t inhabitants() const noexcept { return inhabitants64 >> 6; }
 };
 
-/// The 16 house timer groups: group g ticks every 15 s + 64 ms * g (docs/re/houses.md).
+/// The 16 house timer groups: group g ticks every 15 s + 64 ms * g.
 struct HouseClocks {
     static constexpr std::size_t kGroups = 16;
     std::array<std::uint32_t, kGroups> time_ms{};
@@ -358,7 +358,7 @@ struct CostBuilding {
     std::uint16_t x = 0;
     std::uint16_t y = 0;
     bool enabled = true;
-    /// Shipyards (the original's WERFT table 0x005A6C18, docs/re/ships.md): the ship being built
+    /// Shipyards (the original's WERFT): the ship being built
     /// and the material in the yard.
     static constexpr std::uint8_t kNoOrder = 0xFF;
     std::uint8_t order = kNoOrder;  ///< ship type 0..3 (HANDEL1, HANDEL2, KRIEG1, KRIEG2)
@@ -373,7 +373,7 @@ struct CostBuilding {
     /// Finished ships that found no free water to be launched on (WERFT + 0x10); at 100 a computer
     /// owner blames the human ships near the yard.
     std::uint8_t failed_launches = 0;
-    /// Castles (MILITAR, 0x0055EB80): weapons in store (swords, muskets, cannons, 1/32 t) and the
+    /// Castles (MILITAR): weapons in store (swords, muskets, cannons, 1/32 t) and the
     /// training slots (3, 5 or 8 used by castle size). `countdown` counts the seconds to the next
     /// training step.
     std::array<std::uint32_t, 3> weapons{};
@@ -401,7 +401,7 @@ struct GrowthState {
 
 class World;
 
-/// An object reference of the original files (SHIP4 targets and route stops, docs/re/ships.md):
+/// An object reference of the original files (SHIP4 targets and route stops):
 /// byte 0 the type (1-3 a ship by its slot, whose id is slot + 1; 0x32-0x34 a building, 0x35 a city,
 /// 0x37 a world position). Unknown types give no target.
 [[nodiscard]] Target target_from_ref(const World& world, std::uint32_t ref);
@@ -631,7 +631,7 @@ public:
         std::uint8_t difficulty = 2;
         std::uint32_t flags = 0;                 ///< the k... bits above
         std::uint32_t pirate_interval_s = 1500;  ///< TIMERS +0xB8: time between two new pirate ships
-        /// TIMERS +0xA5 (0x005B62FC): the tutorial; set only in Einführungsspiel0-4. Its computer
+        /// TIMERS +0xA5: the tutorial; set only in Einführungsspiel0-4. Its computer
         /// opponents keep their towns as they are and do not recruit, buy peace or order ships.
         bool tutorial = false;
     };
@@ -640,7 +640,7 @@ public:
     /// Game time from which droughts may come again (TIMERS +0xB4; 90 min into a new game).
     [[nodiscard]] std::uint64_t next_drought_ms() const noexcept { return m_next_drought_ms; }
     void set_next_drought_ms(std::uint64_t t) noexcept { m_next_drought_ms = t; }
-    /// Phase of the drought table (0..31, the original's 0x00548D30); drawn once per world. The
+    /// Phase of the drought table (0..31); drawn once per world. The
     /// original rolls it anew at every load and does not save it.
     [[nodiscard]] std::optional<std::uint8_t> drought_seed() const noexcept { return m_drought_seed; }
     void set_drought_seed(std::uint8_t s) noexcept { m_drought_seed = static_cast<std::uint8_t>(s & 31U); }
@@ -750,7 +750,7 @@ public:
     [[nodiscard]] const Mission* mission_of(const Player& player) const noexcept {
         return player.mission < m_missions.size() ? &m_missions[player.mission] : nullptr;
     }
-    /// The end of the game: a player accomplished the mission (docs/re/missions.md). Missions are
+    /// The end of the game: a player accomplished the mission. Missions are
     /// not checked any more afterwards; whether the game goes on is the frontend's choice.
     struct GameEnd {
         std::uint64_t time_ms = 0;
@@ -830,7 +830,7 @@ private:
 
 /// A Kontor allows `Maxware` wares to sell and as many to buy as its second value (HAUS +0x45,
 /// +0x46). When a Kontor of a city is built or loaded and the city sells or buys more wares than
-/// it allows, all the city's trade settings are switched off (0x00481EE0). True if they were.
+/// it allows, all the city's trade settings are switched off. True if they were.
 /// Data without Maxware (both 0) sets no limit.
 bool trim_trade_settings(City& city, const assets::BuildingType& kontor);
 

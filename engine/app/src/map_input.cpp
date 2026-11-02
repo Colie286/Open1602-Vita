@@ -715,7 +715,7 @@ void MapInput::run_action(const ui::KeyBinding& b) {
             } else {
                 m_units.scatter(world());
             }
-            // The group takes its places around where it stands (0x0044C6D0).
+            // The group takes its places around where it stands.
             if (const auto c = m_units.centre(world())) {
                 submit_orders(m_units.move_orders(world(), local(), c->first, c->second, false));
             }
@@ -1106,8 +1106,8 @@ void MapInput::select_building_at_mouse(const Selection& before) {
         set_mode(mode);
     }
     if (sel.kind == Selection::Kind::Building) {
-        // Looking at a farm, a plantation or a forester picks its field in the build menu
-        // (BuildMenu_SelectFarmByWare 0x004331B0): the field whose grown stage gives the raw material.
+        // Looking at a farm, a plantation or a forester picks its field in the build menu:
+        // the field whose grown stage gives the raw material.
         const sim::SubTile t = w.islands()[sel.island].map.sub_tile(buildings, sel.x, sel.y);
         if (t.building != nullptr && t.building->raw_ware != 0) {
             for (const assets::BuildingType& field : buildings.types()) {
@@ -1122,7 +1122,7 @@ void MapInput::select_building_at_mouse(const Selection& before) {
 }
 
 void MapInput::plant_fields() {
-    // The selected farm's field (the one its window picks in the build menu, 0x004331B0) on all
+    // The selected farm's field (the one its window picks in the build menu) on all
     // open ground in its catchment; with nothing selected or another building nothing happens.
     if (m_hud && m_hud->selection().kind == Selection::Kind::Building) {
         const Selection& sel = m_hud->selection();
@@ -1381,7 +1381,7 @@ std::optional<render::TileHit> MapInput::building_tile_at(double sx, double sy, 
 }
 
 std::optional<ui::UnitRef> MapInput::unit_at(double sx, double sy) const {
-    // Pixel exact (Map_PickAtScreen 0x00487940): the unit whose visible pixel is under the mouse,
+    // Pixel exact: the unit whose visible pixel is under the mouse,
     // the one drawn last if several overlap - unless a map tile is drawn over it there, a building
     // in front of it: the front-most picture takes the click.
     const ZoomGraphics* graphics = m_host.graphics();
@@ -1475,7 +1475,7 @@ void MapInput::map_left_up(double x, double y, std::uint16_t mod, int clicks) {
         return;
     }
     // Ctrl + left click is a command on the object in both mappings, as in the original
-    // ("command on this object", 0x0040A1C7): wounded soldiers onto their own doctor to be healed.
+    // ("command on this object"): wounded soldiers onto their own doctor to be healed.
     if ((m_original_mouse || ctrl) && !m_units.empty() && m_units.owner(world()) == local()) {
         map_order(x, y, shift, ctrl);
         return;
@@ -1501,7 +1501,7 @@ void MapInput::map_order(double x, double y, bool queue, bool on_object) {
         if (!tile) {
             return;
         }
-        // Back and forth between where the units are and the click (0x00440BD0).
+        // Back and forth between where the units are and the click.
         std::vector<sim::Command> orders;
         for (const ui::UnitRef& r : m_units.units()) {
             if (r.kind == ui::UnitRef::Kind::Ship) {
@@ -1534,8 +1534,7 @@ void MapInput::map_order(double x, double y, bool queue, bool on_object) {
     }
     const bool attack_pick = pick == Pick::Attack;
     // Ctrl (or F first) also takes a tree or field as a target, to shoot it down, and another
-    // player's road, bridge or pier; a plain click there is a move (Haus_IsDestroyable 0x00464A80
-    // with the Ctrl flag).
+    // player's road, bridge or pier; a plain click there is a move.
     const bool fell = attack_pick || on_object;
     const auto is_tree = [](const sim::SubTile& t) {
         return t.building != nullptr && t.building->kind == sim::building_kind::kForest;
@@ -1600,8 +1599,8 @@ void MapInput::map_order(double x, double y, bool queue, bool on_object) {
             submit_orders(m_units.target_orders(world(), local(), t, queue, false));
             return;
         }
-        // Another player's building is attacked, as in the original's military mode
-        // (Haus_IsDestroyable 0x00464A80); terrain never.
+        // Another player's building is attacked, as in the original's military mode;
+        // terrain never.
         if (const auto hit = building_tile_at(x, y, [&](std::uint16_t island, const sim::SubTile& t) {
                 if (t.building == nullptr) {
                     return false;
@@ -1682,7 +1681,7 @@ void MapInput::selection_changed(bool box) {
         sel.ship = m_units.units().front().id;
     }
     m_hud->set_selection(sel);
-    // 0x0040AFF0: in the info mode a group (by rectangle) or a land unit goes to the military mode.
+    // In the info mode a group (by rectangle) or a land unit goes to the military mode.
     if (!m_units.empty() && m_hud->mode() != Hud::kModeMilitary && m_hud->mode() != Hud::kModeBuild &&
         ((box && m_units.size() >= 2) || m_units.kind() == ui::UnitRef::Kind::Soldier)) {
         set_mode(Hud::kModeMilitary);
@@ -1759,7 +1758,7 @@ void MapInput::draw_overlay() {
         if (!b || !health) {
             continue;
         }
-        // Figure_Draw 0x0044FA90, in world pixels: a green and red bar right above the picture
+        // In world pixels: a green and red bar right above the picture
         // (ship: flag or hull), centred on the unit; its group's number (NUMBERS.BSH, sprite
         // group + 1) 2 pixels right of the bar, half the bar's height higher.
         const bool ship = ref.kind == ui::UnitRef::Kind::Ship;
@@ -1803,7 +1802,7 @@ void MapInput::draw_overlay() {
     if (graphics != nullptr && !digits.empty()) {
         graphics->renderer->draw(digits, ox, oy, k);
     }
-    // The selection rectangle: a thin white outline (0x0040CAC0).
+    // The selection rectangle: a thin white outline.
     if (const auto& at = m_press.at(); m_press.rubber_band() && at) {
         const SDL_FRect band{
             static_cast<float>(std::min(at->first, m_mouse_x)), static_cast<float>(std::min(at->second, m_mouse_y)),

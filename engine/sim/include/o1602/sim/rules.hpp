@@ -2,7 +2,7 @@
 //
 // Settings of a game (ADR 0008): points where Open1602 lets the players choose, like the
 // configurable endless games of later Anno titles, and points that differ between Open1602 and the
-// original (ADR 0006, docs/re/bugs.md).
+// original (ADR 0006).
 //
 // Only points that change balance or feel are switchable. Bugs and exploits of the original are
 // fixed; those whose fix changes how the game plays can be brought back one by one (OriginalBugs,
@@ -16,12 +16,12 @@ namespace o1602::sim {
 
 /// What a player gets back when he demolishes a building.
 enum class Refund : std::uint8_t {
-    None,     ///< nothing, as in the original (0x00464B40)
+    None,     ///< nothing, as in the original
     Partial,  ///< Rules::refund_percent of the building's costs
     Full,     ///< all the building's costs
 };
 
-/// How often droughts come (docs/re/growth.md#drought). The original takes it from the difficulty of
+/// How often droughts come. The original takes it from the difficulty of
 /// the game; the rows are its drought tables.
 enum class Droughts : std::uint8_t {
     Game,      ///< as the game's difficulty and settings say (original)
@@ -31,14 +31,14 @@ enum class Droughts : std::uint8_t {
     Frequent,  ///< 10 in 32, 15 minutes ("hard")
 };
 
-/// Whether volcanoes erupt (docs/re/volcanoes.md). The original has a game setting for it.
+/// Whether volcanoes erupt. The original has a game setting for it.
 enum class Volcanoes : std::uint8_t {
     Game,  ///< as the game's settings say (original)
     Off,   ///< never
     On,    ///< always, whatever the game says
 };
 
-/// Whether pirates come (docs/re/pirates.md). The original has a game setting for it, which the
+/// Whether pirates come. The original has a game setting for it, which the
 /// endless games of the two easy levels set: there they never come.
 enum class Pirates : std::uint8_t {
     Game,  ///< as the game's settings say (original)
@@ -46,7 +46,7 @@ enum class Pirates : std::uint8_t {
     On,    ///< always, whatever the game says
 };
 
-/// Whether large iron veins run out (docs/re/logistics.md, "Mines and deposits"). The original's
+/// Whether large iron veins run out. The original's
 /// game settings say it per game (TIMERS +0xA8 bit 3): every endless game and about 60 scenarios
 /// keep them, the other scenarios use them up.
 enum class OreVeins : std::uint8_t {
@@ -63,25 +63,25 @@ enum class Computers : std::uint8_t {
     On,    ///< always, whatever the game says
 };
 
-/// How many nests the pirates found (docs/re/pirates.md). The original has one for the whole world,
+/// How many nests the pirates found. The original has one for the whole world,
 /// which suits its four players; with more players most of them would never meet a pirate.
 enum class PirateNests : std::uint8_t {
     One,     ///< one nest, as in the original
     Scaled,  ///< as the pirates' faction grows them (one for every four players begun), spread over the map
 };
 
-/// Which towns players see without a ship having come near their island (docs/re/ships.md#sailing).
+/// Which towns players see without a ship having come near their island.
 /// An island counts as discovered for every player as soon as it holds a city the setting names,
 /// also one founded later; what else is on it shows with it.
 enum class Reveal : std::uint8_t {
     None,      ///< nothing: every island is discovered by ship, also those with the towns of others
     Original,  ///< by ship, but a city a human or a computer founds shows its island to every player
-               ///< at once, as the original does (0x00468DD2); native villages and pirate nests by ship
+               ///< at once, as the original does; native villages and pirate nests by ship
     All,       ///< the cities of human and computer players, native villages and pirate nests, also
                ///< those there from the start
 };
 
-/// What the free trader pays for goods (docs/re/ships.md, "Free trader").
+/// What the free trader pays for goods.
 enum class TraderPrices : std::uint8_t {
     /// As players know it: about half the base price. The original means to follow the market but
     /// gathers its statistics at a rate that depends on the frame rate, so they are almost always
@@ -92,7 +92,7 @@ enum class TraderPrices : std::uint8_t {
     Market,
 };
 
-/// How far the free trader looks for his next Kontor (docs/re/ships.md, "Free trader"). The
+/// How far the free trader looks for his next Kontor. The
 /// original weighs the 12 nearest Kontors by profit alone, whatever the distance; on the larger maps
 /// of more than four players he then mostly sails across the world.
 enum class TraderReach : std::uint8_t {
@@ -148,7 +148,7 @@ struct VictoryConditions {
 
 /// Bugs and exploits of the original that a game can bring back (ADR 0008, "Original settings"). Each
 /// is fixed in Open1602 by default; its original way is a choice for players who want the game as
-/// they know it. Only bugs whose fix changes how the game plays belong here (docs/re/bugs.md); bugs
+/// they know it. Only bugs whose fix changes how the game plays belong here; bugs
 /// that only break the game (crashes, saving, griefing other players) stay fixed without a choice.
 /// A new one is a bool here and in kAll, the place in engine/sim that reads it, a SetupItem on the
 /// dialog's page, a line of settings.cfg and a key of the savegame's RULE.
@@ -197,12 +197,12 @@ struct OriginalBugs {
     /// without Kontor, market, tower and houses (fixed: the village or city is gone and its land is
     /// free).
     bool native_land = false;
-    /// S-097 to S-099, the original's computer players (docs/re/ai.md): while a settlement ship
+    /// S-097 to S-099, the original's computer players: while a settlement ship
     /// sails no city develops, a city whose colony search failed waits for it for ever, an
     /// unreachable site is searched afresh (and found again), the fisher looks in two directions
     /// only, mines and quarries only within seven tiles of the road runs, castles never count and
     /// bakeries are asked for without a mill. They stall after about two hours where Open1602's
-    /// grow on (docs/original-comparison.md, section 3).
+    /// grow on.
     bool classic_ai = false;
 
     /// Every bug, for counting and switching them all.
@@ -267,7 +267,7 @@ struct Rules {
     TraderPrices trader_prices = TraderPrices::Original;
     /// How far the free trader looks. Up to four players both are the original.
     TraderReach trader_reach = TraderReach::Scaled;
-    /// Whether large iron veins run out (docs/re/logistics.md, "Mines and deposits"). Endless: the
+    /// Whether large iron veins run out. Endless: the
     /// ore mine still digs only down to 120 t; below that the deep mine digs on, as in the original,
     /// but the vein stays at the last ton above it instead of being used up. Small veins run out
     /// either way, gold never does.

@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The build menu (docs/re/ui.md#baumenü): eight category buttons in BAU.GAD, and per category a
-// pop-up of building icons in rows that the code builds itself (BuildMenu_OnCategoryPress
-// 0x00432A70). Which buildings belong to which category is a table in the original's code, not
-// data; here it is data (BuildMenuDefinition), with the original's lists as the default, and the
-// packages' build_menu.toml add, move and remove buildings (ADR 0007, docs/modding/build-menu.md).
-// The eight categories are the buttons of BAU.GAD.
+// The build menu: eight category buttons in BAU.GAD, and per category a
+// pop-up of building icons in rows that the code builds itself. Which buildings belong to which category is a table in
+// the original's code, not data; here it is data (BuildMenuDefinition), with the original's lists as the default, and
+// the packages' build_menu.toml add, move and remove buildings (ADR 0007, docs/modding/build-menu.md). The eight
+// categories are the buttons of BAU.GAD.
 #pragma once
 
 #include <cstddef>
@@ -58,7 +57,7 @@ struct BuildCategory {
 
 struct BuildMenuDefinition {
     std::vector<BuildCategory> categories;
-    std::int32_t default_category = 31006;  ///< selected at the start of a game (Farmen, 0x0042BAD0)
+    std::int32_t default_category = 31006;  ///< selected at the start of a game (Farmen)
     std::int32_t locked_icon_offset = 43;   ///< the grey "?" of a building not yet available
 
     [[nodiscard]] const BuildCategory* category(std::int32_t button) const noexcept;
@@ -66,7 +65,7 @@ struct BuildMenuDefinition {
     [[nodiscard]] const BuildCategory* category_of(std::uint32_t id) const noexcept;
 };
 
-/// The original's categories (lists 0x00498440.., row sizes 0x004985A0..).
+/// The original's categories and their row sizes.
 [[nodiscard]] const BuildMenuDefinition& original_build_menu();
 
 /// The build menu of the game: original_build_menu() with the packages' changes once

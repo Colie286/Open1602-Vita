@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Castles: recruiting, training, sending units out; soldiers on board ships (docs/re/military.md).
+// Castles: recruiting, training, sending units out; soldiers on board ships.
 #include <algorithm>
 #include <span>
 
@@ -51,7 +51,7 @@ std::uint32_t Military::army_size(PlayerId player) const {
 
 std::optional<std::pair<std::int32_t, std::int32_t>> Military::exit_cell(std::uint16_t island, std::uint16_t x,
                                                                          std::uint16_t y) const {
-    // A cell soldiers can stand on next to the building (0x00463A70), searched from the middle of
+    // A cell soldiers can stand on next to the building, searched from the middle of
     // its lower edge outwards.
     const auto b = building_at(*m_world, *m_buildings, island, {x, y});
     if (!b || island >= m_world->islands().size()) {
@@ -135,7 +135,7 @@ bool Military::castle(const CastleOrder& o) {
             return true;
         }
         case CastleOrder::Op::Release: {
-            // "Einheit aussenden" (0x004491B0): a trained unit leaves the castle. Units still in
+            // "Einheit aussenden": a trained unit leaves the castle. Units still in
             // training stay (the original's button state is open).
             if (o.slot >= c->slots.size() || c->slots[o.slot].training) {
                 return false;
@@ -238,7 +238,7 @@ void Military::castles_tick() {
 }
 
 void Military::castle_second(CostBuilding& c) {
-    // Castles_Tick 0x004798E0: a countdown in seconds; at 0 the training points of the castle go to
+    // A countdown in seconds; at 0 the training points of the castle go to
     // the units in order, the first taking all it needs.
     if (c.island >= m_world->islands().size() || c.slots.empty()) {
         return;
@@ -312,7 +312,7 @@ void Military::castle_second(CostBuilding& c) {
 
 std::optional<Target> Military::warrior_target(std::uint16_t island, TilePos origin, std::uint32_t width,
                                                std::uint32_t height, std::uint8_t city) {
-    // 0x00467820, called by 0x0047EB30 with a reach of 7: from the hut's origin, with the hut's
+    // Called with a reach of 7: from the hut's origin, with the hut's
     // footprint opened as the start area, a search over the 15 x 15 square around it (no circle)
     // walks on roads, open ground, ruins, squares, bridges, beach ruins, piers and the middle of
     // gates (the Land class, all at the Wegspeed of speed type 3). The goals are the roads and
@@ -458,7 +458,7 @@ void Military::castle_delivery(std::uint16_t island, std::uint16_t x, std::uint1
 }
 
 bool Military::board(Soldier& s, Ship& ship) {
-    // Soldier_Board 0x00458000: the first empty hold takes the unit, its health as the amount.
+    // The first empty hold takes the unit, its health as the amount.
     const assets::FigureType* type = type_of(s);
     if (type == nullptr || ship.owner != s.owner || ship.sinking) {
         return false;
@@ -486,7 +486,7 @@ bool Military::unload(const UnloadOrder& o) {
     if (ship == nullptr || ship->sinking || (o.player != kNoPlayer && ship->owner != o.player)) {
         return false;
     }
-    // Land within 6 tiles of the ship (0x00448D90, Balance::castle_unload_range): the nearest cell
+    // Land within 6 tiles of the ship (Balance::castle_unload_range): the nearest cell
     // soldiers can stand on.
     const auto range = static_cast<std::int32_t>(m_world->balance().castle_unload_range);
     const std::int32_t sx = 2 * ship->x + 1;

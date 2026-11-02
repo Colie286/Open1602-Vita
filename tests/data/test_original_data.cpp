@@ -157,7 +157,7 @@ TEST_CASE("data: haeuser.cod interprets with the predefined symbols") {
     const auto game = require_game();
     const auto doc = parse_original_cod(game, "haeuser.cod", assets::cod_predefined_haeuser());
 
-    // Only the two references that are undefined in the original as well (see docs/re/bugs.md).
+    // Only the two references that are undefined in the original as well.
     CHECK(undefined_symbols(doc) == (std::set<std::string>{"WAV_BAECKER", "FAHNEKONTOR"}));
     CHECK(doc.diagnostics.size() == 2);
     CHECK(doc.symbols.size() < 650);  // capacity of the original symbol table
@@ -692,7 +692,7 @@ TEST_CASE("data: savegames of the installation (if any) load like scenarios") {
             CHECK(b->origin.x == tower.x);
             CHECK(b->origin.y == tower.y);
         }
-        // PRODLIST2 names buildings by their origin tile (the lookup of 0x0047CBF0): every entry
+        // PRODLIST2 names buildings by their origin tile (the lookup): every entry
         // is the origin of a building with a HAUS_PRODTYP.
         CHECK(world->productions().size() == state->production.size());
         for (const auto& p : world->productions()) {
@@ -786,7 +786,7 @@ TEST_CASE("data: growth classes, growing tiles and deposits of a savegame") {
     const auto game = require_game();
     auto buildings = assets::BuildingTable::load(game);
     REQUIRE(buildings.ok());
-    // Classes from Interval / AnimAnz (0x00462F1D): wheat 0, sugar cane 2, the other plantations 3,
+    // Classes from Interval / AnimAnz: wheat 0, sugar cane 2, the other plantations 3,
     // fish shoals 5, forest 20, meadows 31.
     std::set<std::uint32_t> classes;
     for (const auto& b : buildings->types()) {
@@ -983,7 +983,7 @@ TEST_CASE("data: houses of a savegame add up to the cities' inhabitants") {
             CHECK(sums[key] == c.inhabitants[k]);
         }
     }
-    // The coverage by markets, Kontors and public buildings recomputed like 0x00482120 equals
+    // The coverage by markets, Kontors and public buildings recomputed equals
     // what the original saved (bits 2..10, market, distance class, services complete).
     const std::vector<sim::House> saved = world->houses();
     sim::update_services(*world, *buildings);
@@ -1402,7 +1402,7 @@ TEST_CASE("data: unlocked build levels of the players follow the BAUINFRA table"
     CHECK(checked > 0);
 }
 
-TEST_CASE("data: crops of the players stand on fertile tiles (0x004684A0)") {
+TEST_CASE("data: crops of the players stand on fertile tiles") {
     // The original plants a crop withered where the tile is not fertile; living crops of the
     // players (not the natives' plantations of the scenario) therefore lie on fertile tiles.
     const auto game = require_game();
@@ -1535,7 +1535,7 @@ TEST_CASE("data: the human player builds and demolishes a house in a savegame") 
     CHECK(after.city == index);
 }
 
-TEST_CASE("data: a stone wall is built over a palisade in a savegame (0x00464660)") {
+TEST_CASE("data: a stone wall is built over a palisade in a savegame") {
     const auto game = require_game();
     auto buildings = assets::BuildingTable::load(game);
     REQUIRE(buildings.ok());
@@ -1606,7 +1606,7 @@ TEST_CASE("data: a stone wall is built over a palisade in a savegame (0x00464660
     CHECK(b->kreuz_base == buildings->by_id(22501)->kreuz_base);
 }
 
-TEST_CASE("data: a dragged road follows the tiles of its city (0x0040AB20)") {
+TEST_CASE("data: a dragged road follows the tiles of its city") {
     const auto game = require_game();
     auto buildings = assets::BuildingTable::load(game);
     REQUIRE(buildings.ok());
@@ -1664,7 +1664,7 @@ TEST_CASE("data: a dragged road follows the tiles of its city (0x0040AB20)") {
     CHECK(paths > 0);
 }
 
-TEST_CASE("data: walls on the beach and the piers of Kontors come out as in the savegames (0x004653A0)") {
+TEST_CASE("data: walls on the beach and the piers of Kontors come out as in the savegames") {
     const auto game = require_game();
     auto buildings = assets::BuildingTable::load(game);
     REQUIRE(buildings.ok());
@@ -1774,7 +1774,7 @@ TEST_CASE("data: walls on the beach and the piers of Kontors come out as in the 
     CHECK(kontors > 0);
 }
 
-TEST_CASE("data: a drought withers the fields of an island and returns them (0x0046B3E0)") {
+TEST_CASE("data: a drought withers the fields of an island and returns them") {
     const auto game = require_game();
     auto buildings = assets::BuildingTable::load(game);
     auto figures = assets::FigureTable::load(game);
@@ -1877,7 +1877,7 @@ TEST_CASE("data: a drought withers the fields of an island and returns them (0x0
     CHECK(withered_fields().size() <= before);
 }
 
-TEST_CASE("data: craters of scenarios and savegames are the volcano mountains (0x0046C1C0)") {
+TEST_CASE("data: craters of scenarios and savegames are the volcano mountains") {
     const auto game = require_game();
     auto buildings = assets::BuildingTable::load(game);
     auto figures = assets::FigureTable::load(game);
@@ -1936,7 +1936,7 @@ TEST_CASE("data: craters of scenarios and savegames are the volcano mountains (0
     CHECK(craters > 0);
 }
 
-TEST_CASE("data: a volcano erupts in a savegame and its lava hits what it should (0x00446ED0)") {
+TEST_CASE("data: a volcano erupts in a savegame and its lava hits what it should") {
     const auto game = require_game();
     auto buildings = assets::BuildingTable::load(game);
     auto figures = assets::FigureTable::load(game);
@@ -1977,7 +1977,7 @@ TEST_CASE("data: a volcano erupts in a savegame and its lava hits what it should
     }
 }
 
-TEST_CASE("data: a savegame written back without changes is the original file (0x0040D6F0)") {
+TEST_CASE("data: a savegame written back without changes is the original file") {
     const auto game = require_game();
     auto buildings = assets::BuildingTable::load(game);
     REQUIRE(buildings.ok());
@@ -2079,8 +2079,8 @@ TEST_CASE("data: a game played on in Open1602 saves and loads to the same state"
     // And the state matches.
     CHECK(loaded->time_ms() / 100 == world.time_ms() / 100);
     REQUIRE(loaded->islands().size() == world.islands().size());
-    // Every tile comes back; the original saves no ripening of grass and fish outside the cities
-    // (0x00468BF0), which therefore shows the ground's stage again.
+    // Every tile comes back; the original saves no ripening of grass and fish outside the cities,
+    // which therefore shows the ground's stage again.
     std::size_t tiles = 0;
     std::size_t grass = 0;
     for (std::size_t i = 0; i < world.islands().size(); ++i) {

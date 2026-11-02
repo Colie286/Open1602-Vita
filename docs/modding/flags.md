@@ -32,7 +32,7 @@ coat of arms or lettering in fixed colours.
   89 × 30 pixels; half and quarter size for the other levels). The phases run at 90 ms per frame.
 - **Anchor point:** The engine centres the image horizontally above the mast. On buildings the
   bottom edge of the image lies at the height `Fahnoffs[2]` of the flag figure; on ships the top edge hangs
-  down from the masthead ([figures.md](../re/figures.md), [rendering.md](../re/rendering.md) §6).
+  down from the masthead §6).
   In the original images the cloth starts just right of centre (column 46 of 89, row 6); a
   custom flag should have the same attachment point, otherwise it floats next to the mast.
 - **Cloth in greys:** base tone 128, shadows below, highlights above. Draw with a
@@ -48,7 +48,7 @@ if a motif should not be tintable – this is how the pirates keep their skull.
 
 The same rules are meant to apply to custom units in player colour (soldiers, cavalry, cannoneers): cloth
 in pure grey, everything else deviating by at least one value. For the original units
-Open1602 already generates the template itself ([figures.md](../re/figures.md#soldiers-and-player-colours)).
+Open1602 already generates the template itself.
 
 ## Interface art in player colour
 

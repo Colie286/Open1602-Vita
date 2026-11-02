@@ -88,7 +88,7 @@ before a good the people need runs out.
 
 8. **The other tabs.** Beside "Waren" the window has four tabs, all for the scope chosen above:
    - "Betriebe": every kind of production building with its number, its utilisation as the
-     building window shows it (`app/production_utilisation.hpp`, the original's Prod_Utilisation),
+     building window shows it (`app/production_utilisation.hpp`, as in the original),
      how many work, wait for raw material or are switched off, and their running costs. A click
      opens the page of its good.
    - "Bevölkerung": the inhabitants of each class with their satisfaction and taxes now, all of

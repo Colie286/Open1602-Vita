@@ -18,11 +18,11 @@ namespace o1602::sim {
 
 namespace {
 
-constexpr std::uint32_t kProductionPeriodMs = 1000;  // 0x0047DAF0: once per game second
-constexpr std::uint32_t kUpkeepPeriodMs = 5000;      // 0x00476350: each player once per 5 s
-constexpr std::uint32_t kDiplomacyTickMs = 5000;     // 0x00476350: the diplomacy counters fade
-constexpr std::uint8_t kDefeatChecks = 40;           // 0x00476350: 40 checks of 5 s
-constexpr std::size_t kArchClass = 2;                // 0x004805D0(K, 2): inhabitants of class 2 and up
+constexpr std::uint32_t kProductionPeriodMs = 1000;  // once per game second
+constexpr std::uint32_t kUpkeepPeriodMs = 5000;      // each player once per 5 s
+constexpr std::uint32_t kDiplomacyTickMs = 5000;     // the diplomacy counters fade
+constexpr std::uint8_t kDefeatChecks = 40;           // 40 checks of 5 s
+constexpr std::size_t kArchClass = 2;                // inhabitants of class 2 and up
 constexpr std::uint64_t kArchInhabitants = 200;      // more than 199, in the largest city
 constexpr std::uint16_t kMissionMessage = 0x54;      // "Ihr konntet den Euch gestellten Auftrag erfüllen!"
 constexpr std::uint16_t kColourWinMessage = 0x6B;    // "Der rote Spieler konnte seinen Auftrag erfüllen!" + colour
@@ -90,7 +90,7 @@ Simulation::Simulation(World& world, const assets::BuildingTable& buildings, con
         m_state_damaged = true;
         (void)restore_state(fresh.take());
     }
-    // As the original after every load: the computer players look at the world anew (0x0042B710).
+    // As the original after every load: the computer players look at the world anew.
     m_ai.reset();
     // As when the original loads a game: every deer spot gets its deer.
     m_logistics.spawn_deer_at_spots();
@@ -607,7 +607,7 @@ bool Simulation::ask_founding(const DiplomacyOrder& order) {
     if (ship == nullptr || ship->owner != order.player) {
         return false;
     }
-    // The island by the ship (0x0046AAA0), where the ship panel offers the founding.
+    // The island by the ship, where the ship panel offers the founding.
     const auto site = kontor_site_near(*m_world, *m_buildings, ship->x, ship->y);
     if (!site) {
         return false;
@@ -647,7 +647,7 @@ bool Simulation::switch_production(const ProductionSwitch& s) {
     p.enabled = s.on;
     if (s.on && !p.working()) {
         // An idle building starts its next cycle in the next second; the time it waited does not
-        // count against its productivity (0x0047CFA0).
+        // count against its productivity.
         p.idle_cycles = 0;
         p.elapsed = p.elapsed > p.countdown ? static_cast<std::uint16_t>(p.elapsed - p.countdown) : 0;
         p.countdown = 0;
@@ -662,7 +662,7 @@ bool Simulation::city_order(const CityOrder& o) {
     }
     switch (o.op) {
         case CityOrder::Op::TaxRate: {
-            // 0x0047F130 posts the rate, 0x0047F850 measures the class against it at once.
+            // The original posts the rate measures the class against it at once.
             const auto& classes = m_buildings->resident_classes();
             if (o.resident_class >= classes.size() || o.resident_class >= city->tax_rate.size() ||
                 o.rate < CityOrder::kMinTax || o.rate > CityOrder::kMaxTax) {
@@ -681,7 +681,7 @@ bool Simulation::city_order(const CityOrder& o) {
             city->name = o.name;
             return true;
         case CityOrder::Op::MaterialLock:
-            // Switching the lock on starts the people's clock (0x0048073A).
+            // Switching the lock on starts the people's clock.
             if (o.on && !city->material_lock) {
                 city->material_reminder_ms = m_world->time_ms();
             }
@@ -842,7 +842,7 @@ void Simulation::handle(const std::vector<ConstructionEvent>& events, std::size_
     m_tower_islands.clear();
     if (storage) {
         m_logistics.update_storage();
-        // A smaller warehouse loses what does not fit (0x00482120).
+        // A smaller warehouse loses what does not fit.
         for (std::size_t i = first; i < events.size(); ++i) {
             if (events[i].kind != ConstructionEvent::Kind::StorageChanged) {
                 continue;
@@ -855,10 +855,9 @@ void Simulation::handle(const std::vector<ConstructionEvent>& events, std::size_
 }
 
 std::span<const Simulation::TickStep> Simulation::tick_steps() noexcept {
-    // The original runs its subsystems in this order (0x00489670): growth first (0x0047CA80),
-    // production (0x0047DAF0), then the cities (0x0047F8A0) and houses (0x0047B9C0), ..., the
-    // computer players after the players' tick (AI_Tick 0x0042B4B0) and the figures last
-    // (0x00451890). Changing the order changes the game.
+    // The original runs its subsystems in this order: growth first, production, then the cities
+    // and houses, ..., the computer players after the players' tick and the figures last.
+    // Changing the order changes the game.
     static constexpr std::array<TickStep, 16> kSteps = {{
         {"diplomacy", &Simulation::diplomacy_step},
         {"growth", &Simulation::growth_step},
@@ -966,7 +965,7 @@ void Simulation::trim_events() {
 }
 
 void Simulation::diplomacy_step() {
-    // Every 5 s the diplomacy counters fade (Player_Tick 0x00476350; the original takes one
+    // Every 5 s the diplomacy counters fade (the original takes one
     // player per call, each once in 5 s).
     if (m_time_ms % kDiplomacyTickMs != 0) {
         return;
@@ -994,7 +993,7 @@ void Simulation::production_step() {
 }
 
 void Simulation::cities_step() {
-    // The cities consume every 10 s (0x0047F8A0 comes after the production in the original).
+    // The cities consume every 10 s (comes after the production in the original).
     if (!elapsed(m_city_ms, kCityTickMs)) {
         return;
     }
@@ -1007,7 +1006,7 @@ void Simulation::cities_step() {
 }
 
 void Simulation::city_events_step() {
-    // Every 60-67 s a city may catch the plague, send out a robber or catch fire (0x0047F8A0).
+    // Every 60-67 s a city may catch the plague, send out a robber or catch fire.
     advance_city_events(*m_world, *m_buildings, m_rules, m_disaster_events.sink(), &m_robbers);
     for (const RobberSpawn& r : m_robbers) {
         m_logistics.spawn_robber(r);
@@ -1027,14 +1026,14 @@ void Simulation::houses_step() {
 }
 
 void Simulation::upkeep_step() {
-    // Soldiers' upkeep of human players every 5 s (0x00476350): a twelfth of the upkeep per minute.
+    // Soldiers' upkeep of human players every 5 s: a twelfth of the upkeep per minute.
     if (elapsed(m_upkeep_ms, kUpkeepPeriodMs)) {
         pay_upkeep();
     }
 }
 
 void Simulation::disasters_step() {
-    // Disasters in epochs of 10 s (0x0047A020): they spread, end or burn the building down.
+    // Disasters in epochs of 10 s: they spread, end or burn the building down.
     if (!elapsed(m_disaster_ms, kDisasterEpochMs)) {
         return;
     }
@@ -1044,9 +1043,9 @@ void Simulation::disasters_step() {
 }
 
 void Simulation::islands_step() {
-    // Island epochs of 30 s (0x0046B3E0): droughts, then deer come back and settle. The phase
+    // Island epochs of 30 s: droughts, then deer come back and settle. The phase
     // steps every 30 s; an island whose last phase differs is ticked. In a new game that happens
-    // at once for islands whose template says so (docs/re/newgame.md).
+    // at once for islands whose template says so.
     const bool epoch = elapsed(m_island_ms, Logistics::kIslandEpochMs);
     if (epoch) {
         m_world->set_island_phase(static_cast<std::uint8_t>(m_world->island_phase() + 1U));
@@ -1145,7 +1144,7 @@ void Simulation::logistics_step() {
 void Simulation::pay_upkeep() {
     const std::vector<std::uint32_t> upkeep = military_upkeep(*m_world, *m_figures);
     for (std::size_t p = 0; p < upkeep.size(); ++p) {
-        // Computer players pay nothing, as in the original (0x00475B00).
+        // Computer players pay nothing, as in the original.
         Player* player = m_world->player(static_cast<PlayerId>(p));
         if (player != nullptr && player->role == PlayerRole::Human) {
             player->money = money_plus(player->money, -static_cast<std::int64_t>(upkeep[p] / 12));
@@ -1154,7 +1153,7 @@ void Simulation::pay_upkeep() {
 }
 
 void Simulation::players_tick() {
-    // Player_Tick 0x00476350: each player once per 5 s; nothing more once the game is over.
+    // Each player once per 5 s; nothing more once the game is over.
     if (m_world->game_end()) {
         return;
     }
@@ -1198,8 +1197,8 @@ void Simulation::players_tick() {
                 }
                 break;
             case PlayerRole::Computer:
-                // The AI root retires a computer with no city and no ship (0x00429070), not in
-                // the tutorial (0x0042942C).
+                // The AI root retires a computer with no city and no ship, not in
+                // the tutorial.
                 if (!city && !ship && !m_world->game_settings().tutorial) {
                     defeat(id, GameEvent::Reason::Retired, true);
                 }
@@ -1370,7 +1369,7 @@ void Simulation::accomplish(PlayerId winner) {
 }
 
 void Simulation::accomplish(PlayerId winner, std::uint16_t message, bool co_winners) {
-    // Op 0x3E (0x00476950): the winner, and every other human or computer who meets his own
+    // Op 0x3E: the winner, and every other human or computer who meets his own
     // mission at this moment; the original checks players without a mission against mission 0
     // (S-106). Victory conditions count as everyone's mission, but a time limit has one winner.
     // The game is over for everybody.
@@ -1402,7 +1401,7 @@ void Simulation::accomplish(PlayerId winner, std::uint16_t message, bool co_winn
 }
 
 void Simulation::defeat(PlayerId id, GameEvent::Reason reason, bool blame) {
-    // Op 3 sub 9 (0x004766A0): the player is out. Unless he went bankrupt, the player blamed for
+    // Op 3 sub 9: the player is out. Unless he went bankrupt, the player blamed for
     // it (who last destroyed his Kontor or market) counts him as defeated. With 200 inhabitants
     // of the third class or higher in his largest city he may build a triumphal arch; otherwise
     // the allowance counts as used up straight away. The original does not credit him on the
@@ -1433,8 +1432,8 @@ void Simulation::defeat(PlayerId id, GameEvent::Reason reason, bool blame) {
 }
 
 std::uint64_t Simulation::upper_inhabitants_of_largest_city(PlayerId player) const {
-    // 0x004805D0 with 0x00480580: the first city of the player with the most Einwohner
-    // (0x0047F790, workers included); a player whose cities are all empty has none.
+    // The first city of the player with the most Einwohner
+    // (workers included); a player whose cities are all empty has none.
     const City* largest = nullptr;
     std::uint32_t most = 0;
     for (const City& c : m_world->cities()) {

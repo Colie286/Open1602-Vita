@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Shows the original's videos (docs/re/videos.md): the logos and the intro at the start,
+// Shows the original's videos: the logos and the intro at the start,
 // the videos of messages, victory and defeat, and the pause video. The picture fills the window
 // in black with the video in the middle, twice as large as the original at 1024 pixels width and
 // grown with the window, never larger than it; the sound goes to GameSound. One video at a time.

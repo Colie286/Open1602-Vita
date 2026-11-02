@@ -5,7 +5,7 @@ Since 2026-10-18 Open1602 saves in its own format ([o1602-save.md](o1602-save.md
 **exported** as `.GAM` for the original, and for older Open1602 savegames; its sections
 from `RULE` onwards are the same as in the own format.
 
-Exported savegames are `.GAM` files of the original ([savegame-writer.md](../re/savegame-writer.md))
+Exported savegames are `.GAM` files of the original
 with an additional chunk `O1602` after `WIFF`. The original does not know the name and skips
 it; if it saves the game again, the chunk is dropped. Open1602 reads it after the chunks of the original and
 uses it to replace whatever it contains.
@@ -33,7 +33,7 @@ rounds values, combines bits or orders lists:
   doctors, fire brigade, robbers, with path, cargo and reservations, plus the logistics statistics;
 - diplomacy, exploring, ships with course and route, soldiers, towers and castles;
 - the state of the computer opponents (task stack, plans per city, search, reservations, settlement,
-  ship missions, attacks; [ai.md](../re/ai.md)), which the original does not save at all.
+  ship missions, attacks), which the original does not save at all.
 
 **Tiles** are only included where loading the chunks of the original would give something different:
 ripe grass and fishing grounds outside the cities, which the original does not save. For this the
@@ -85,18 +85,18 @@ older readers, marked optional.
 | `TILE` | differing tiles: island number, x, y, layer, building id, sub-tile, rotation, phase, owner, city, random value |
 | `PLAY` `CITY` `PROD` `HOUS` `GROW` `COST` `SHIP` `ANIM` `DISA` `VOLC` | the lists of the world, complete (`SOLD`, the soldiers of older versions, is still read) |
 | `PSTA` | per player (order as in `PLAY`): mission, status (playing, defeated, absent), won, defeated opponents, the two counters of the defeat rules, trade statistics |
-| `MISN` | the missions (goals, loss conditions, values, text, the islands of the island goals recorded at the start) and the end of the game (time, winner) ([missions.md](../re/missions.md)) |
+| `MISN` | the missions (goals, loss conditions, values, text, the islands of the island goals recorded at the start) and the end of the game (time, winner) |
 | `CSTA` | trade statistics per city (island, number, purchases, sales) |
 | `MLCK` | per city (island, number) the game time the building material was locked or the people last complained about it |
 | `CPOP` | per city (island, number) the last population message |
-| `CGUP` | per city (island, number) the ships that gave up their way to its Kontor (city + 0x252); optional |
+| `CGUP` | per city (island, number) the ships that gave up their way to its Kontor; optional |
 | `GLDG` | per city (island, number) its goods statistics: minutes closed, per good the ledger (counts of the running minute and quarter, 60 minute and 48 quarter samples of 16 flows, or 17 in version 2, and the stock, warning given), then the history of the city window's figures if the city keeps one (human players only); optional ([ADR 0012](../architecture/0012-goods-statistics.md)) |
 | `SCOR` | the score's counters per player (soldiers killed and lost, ships sunk and lost), then per city the growth of the house looked at last and the game time since it grows |
 | `FLEE` | ships in full (position in 1/4096 tile, course, holds with price, trade route, destinations with the original's reference, the trader's goods), next ship number, discovered islands, trade settings and affection of the cities, shipyard fields (order, build points, wood, cloth, tick, repair, failed launches: a byte that was reserved and 0 before); `SHIP` remains for older readers |
 | `ARMY` | soldiers in full (position in 1/4096 tile, hit points, home, destination, planning, clocks, patrol, path), next soldier number, cannon towers, building damage, shots in flight, weapons and slots of the castles |
 | `EPOC` | phase of the island epochs and, per island, the phase last seen |
-| `XPLR` | exploring: per island "growing explored" per player, and per deposit the player mask (32 bit) ([ships.md](../re/ships.md#exploring)) |
-| `DIPL` | diplomacy: per player pair peace, trade, time of war, tribute, trade and damage; per player all 32 events and the culprit ([diplomacy.md](../re/diplomacy.md)) |
+| `XPLR` | exploring: per island "growing explored" per player, and per deposit the player mask (32 bit) |
+| `DIPL` | diplomacy: per player pair peace, trade, time of war, tribute, trade and damage; per player all 32 events and the culprit |
 | `QUEU` | command chains: per ship, then per soldier with a queue, the id and up to 16 waiting destinations (Shift+right-click) |
 | `STNC` | per ship, then per soldier with a stance, the id and the flags attack move (bit 0) and hold position (bit 1) (ADR 0010) |
 | `SIMU` | the state of the running game, below |
@@ -167,7 +167,7 @@ An Open1602 from before 2026-10-24 refuses a file with `SIMU` 2, as the section 
 - The chunk cannot yet carry more than 7 players, 150 ships, 400 soldiers or 350 towers, nor an
   island wider or higher than 255 tiles (the original's records keep island coordinates in one
   byte); the writer rejects such worlds. With Open1602's rules (fleet limit 100 per player,
-  unit limit 250) this is reachable ([savegame-writer.md](../re/savegame-writer.md#open)).
+  unit limit 250) this is reachable.
 - Commands not yet executed between two ticks are not saved (saving
   happens between the ticks).
 

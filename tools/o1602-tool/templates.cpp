@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // o1602-tool template-stats: what the original's island templates are made of, as the island
-// generator's rules need it (docs/re/worldgen.md): every building id the templates use with its
+// generator's rules need it: every building id the templates use with its
 // kind, size, rotations and how many templates have it; what lies next to rivers, river mouths,
 // slopes and rocks; how far rocks lie from the ore mountains; how large the patches of each ground
 // are; and a few templates with rivers as maps of letters.

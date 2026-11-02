@@ -184,7 +184,7 @@ std::optional<sim::BuildOrder> BuildTool::build_order(const sim::World& world, s
     order.island = spot.island;
     const Spot start = m_drag_start && m_drag_start->island == spot.island ? *m_drag_start : spot;
     // Trees come in RandAnz variants RandAdd records apart; the original's menu draws one per tile
-    // with rand() (docs/re/construction.md: the variant is part of the order).
+    // with rand() (the variant is part of the order).
     const auto variant = [&](std::int32_t x, std::int32_t y) {
         if (b->kind != sim::kind::kForest || b->rand_count <= 1) {
             return b->id;
@@ -199,7 +199,7 @@ std::optional<sim::BuildOrder> BuildTool::build_order(const sim::World& world, s
         }
     };
     if (const auto line = line_kind(*b); m_drag_start && line) {
-        // The original's path search from the drag start to the cursor (0x0040AB20).
+        // The original's path search from the drag start to the cursor.
         for (const sim::DragStep& step : sim::drag_path(world, *m_buildings, spot.island, *line, {start.x, start.y},
                                                         {spot.x, spot.y}, m_rotation)) {
             if (order.items.size() < kMaxItems) {

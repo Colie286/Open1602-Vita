@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Townsfolk, sea creatures and jugglers (docs/re/flavor.md): life in the picture, no part of the game.
+// Townsfolk, sea creatures and jugglers: life in the picture, no part of the game.
 
 #include <algorithm>
 #include <cmath>
@@ -175,9 +175,9 @@ TEST_CASE("ambient: townsfolk walk from their house along the road to a tavern a
             CHECK(f.x >= 103.0);
             CHECK(f.x <= 111.5);
             CHECK(f.sheet == assets::FigureSheet::Traeger);
-            // At the height of its house tile (0x0044B140): land, 17 px up at full zoom.
+            // At the height of its house tile: land, 17 px up at full zoom.
             CHECK(std::abs(f.z - render::kLandHeight) < 1e-9);
-            // On the line through the tile centres of the road, no lane (0x00459F40).
+            // On the line through the tile centres of the road, no lane.
             CHECK(f.y == 110.5);
         }
         return !walked;
@@ -348,7 +348,7 @@ TEST_CASE("ambient: a juggler on the market of a city with more than 59 citizens
     CHECK(j.x == 100 + 20 + 2.0 + 2.1);  // centre of the 4 x 3 market and Fahnoffs 2.1
     CHECK(j.y == 100 + 2 + 1.5);
     CHECK(j.z == 0.6);
-    CHECK(j.ground == 0.6);  // the shadow under his feet, at his height (0x0045092D)
+    CHECK(j.ground == 0.6);  // the shadow under his feet, at his height
     CHECK(j.direction == 2);
 }
 

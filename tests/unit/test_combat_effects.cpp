@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Hits, cannon smoke and wrecks (docs/re/military.md#effects): pictures made from the events of
+// Hits, cannon smoke and wrecks: pictures made from the events of
 // the simulation.
 
 #include <algorithm>

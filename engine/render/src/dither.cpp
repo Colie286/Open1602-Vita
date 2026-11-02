@@ -34,7 +34,7 @@ void Dither::apply(DrawCommand& c, const SpriteAtlas& atlas) const noexcept {
         }
         const AtlasRect& r = atlas.rect(c.sprite);
         // The original blackens the pixels with x + y even on its screen. Open1602's rows lie one
-        // pixel lower (docs/re/figures.md#drawing), so here those are the pixels with x + y odd,
+        // pixel lower, so here those are the pixels with x + y odd,
         // the ones hatch_pixel leaves out: block 1 where the sprite's top left corner is hatched.
         const auto phase = static_cast<std::uint32_t>(hatch_pixel(c.x, c.y - r.height) ? 1 : 0);
         c.sprite = s.dithered + phase * s.count + (c.sprite - s.base);

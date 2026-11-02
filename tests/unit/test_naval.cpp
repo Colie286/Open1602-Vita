@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Ships in a fight (docs/re/military.md, "Naval combat").
+// Ships in a fight.
 
 #include <algorithm>
 #include <memory>
@@ -252,7 +252,7 @@ TEST_CASE("naval: a warship sent against a tree of nobody shoots it down, withou
     REQUIRE(s.world.island(0).map.place(*s.buildings.by_id(20106), 0, 4, 0, 0).ok());
     s.start();
     const std::uint32_t warship = s.add(34, 24, kWarship, 0, 8);
-    // Ctrl + click on the tree (Haus_IsDestroyable 0x00464A80): 3 HP, one broadside of 4.0 HP.
+    // Ctrl + click on the tree: 3 HP, one broadside of 4.0 HP.
     sim::ShipOrder o;
     o.player = 0;
     o.ship = warship;
@@ -298,7 +298,7 @@ TEST_CASE("naval: a ship stops shooting once its target building is gone; terrai
     Sea s(false, true);
     REQUIRE(s.world.island(0).map.place(*s.buildings.by_id(20107), 0, 4, 0, 0, 1, 0).ok());
     s.start();
-    // The ground of another player is terrain: nothing to shoot at (Haus_IsDestroyable 0x00464A80).
+    // The ground of another player is terrain: nothing to shoot at.
     CHECK(!s.combat->fighter(sim::Target::building(0, 5, 0)).has_value());
     CHECK(s.combat->fighter(sim::Target::building(0, 0, 4)).has_value());
     s.world.diplomacy().set_peace(s.world, 0, 1, sim::Treaty::None, 0);
@@ -335,7 +335,7 @@ TEST_CASE("naval: a warship sent against another player's road (Ctrl or F) shoot
                       [](const auto& e) { return e.kind == sim::MilitaryEvent::Kind::BuildingDestroyed; }));
 }
 
-TEST_CASE("naval: what units can shoot at (Haus_IsDestroyable)") {
+TEST_CASE("naval: what units can shoot at") {
     assets::BuildingType b;
     b.kind = assets::kind::kBuilding;
     CHECK(sim::destroyable(b, false));

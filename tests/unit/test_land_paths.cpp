@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Ways of soldiers on land: LandMap and LandPlanner (docs/re/military.md, "Movement").
+// Ways of soldiers on land: LandMap and LandPlanner.
 
 #include <algorithm>
 #include <cstdint>

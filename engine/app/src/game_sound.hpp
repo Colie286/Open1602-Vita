@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The sounds of a running game (docs/re/audio.md): turns the simulation's events, the scenery's
+// The sounds of a running game: turns the simulation's events, the scenery's
 // sounds and the player's orders into effects, voice messages and music, and feeds the device.
 // Each computer plays its own sounds; nothing here changes the game.
 #pragma once
@@ -96,7 +96,7 @@ public:
     void set_video_check(std::function<bool(std::uint16_t)> check) { m_voices.set_video_check(std::move(check)); }
     /// The video a message asked for, once.
     [[nodiscard]] std::optional<std::uint16_t> take_video() noexcept { return m_voices.take_video(); }
-    /// A video starts (docs/re/videos.md): its tracks, decoded beforehand (VideoPlayer), play at
+    /// A video starts: its tracks, decoded beforehand (VideoPlayer), play at
     /// the effects' volume, the music stops, voices and music wait until stop_video().
     void start_video(const std::vector<std::shared_ptr<const audio::Pcm>>& tracks);
     void stop_video();
@@ -108,11 +108,11 @@ public:
     void ships(const sim::World& world, const assets::FigureTable& figures, const std::vector<sim::ShipEvent>& events,
                sim::PlayerId local, std::uint64_t game_ms);
     /// Birds and surf: only within the scenery's reach, and at most one of each per frame, as the
-    /// original plays at most one sound per figure type and pass (0x0044F970).
+    /// original plays at most one sound per figure type and pass.
     void scenery(const std::vector<render::AmbientSound>& sounds);
     /// Work and animal sounds (AnimSmp) of the figures on screen: once per cycle of an animation
-    /// and figure type, at the first figure of that type in view, only at normal speed
-    /// (Figure_PlayAnimSound 0x0044F970). Figures outside `drawn` are passed over unlooked at.
+    /// and figure type, at the first figure of that type in view, only at normal speed.
+    /// Figures outside `drawn` are passed over unlooked at.
     void figures(const std::vector<const std::vector<render::FigureInstance>*>& lists,
                  const std::vector<render::EffectFigure>& effects, const assets::FigureTable& table,
                  std::uint64_t game_ms, std::uint32_t speed, const render::TileBox& drawn = {});

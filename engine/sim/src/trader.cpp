@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The free trader (docs/re/ships.md, "Free trader"): ships of the trader player that sail from
+// The free trader: ships of the trader player that sail from
 // Kontor to Kontor, buy what the players sell cheaply and sell what they want dearer than they
 // bought it. His goods are kept apart from the holds (the original's HANDLER table).
 #include <algorithm>
@@ -77,7 +77,7 @@ std::size_t trader_candidates(const World& world, const Rules& rules, std::size_
 }
 
 std::uint16_t Fleet::trader_max_price(std::uint8_t ware) const {
-    // 0x00454AC0: three quarters of the average price Kontors pay, half the base price without
+    // Three quarters of the average price Kontors pay, half the base price without
     // statistics; nothing for a ware the traders already hold plenty of.
     const std::uint16_t base = m_world->goods().price(ware);
     std::uint32_t p = base * 64U / 128U;
@@ -97,7 +97,7 @@ std::uint16_t Fleet::trader_max_price(std::uint8_t ware) const {
 }
 
 std::uint32_t Fleet::trader_buy_amount(const Ship& ship, const City& city, std::uint8_t ware) const {
-    // 0x00454B80: from a Kontor that sells above what it keeps, at most 10 t a visit and 50 t held;
+    // From a Kontor that sells above what it keeps, at most 10 t a visit and 50 t held;
     // goods that have not sold are not topped up.
     const City::Trade* t = city.trade_of(ware);
     if (t == nullptr || !t->sell) {
@@ -123,7 +123,7 @@ std::uint32_t Fleet::trader_buy_amount(const Ship& ship, const City& city, std::
 }
 
 std::uint32_t Fleet::trader_sell_amount(const Ship& ship, const City& city, std::uint8_t ware) const {
-    // 0x00454C10: to a Kontor that buys up to its limit, only above his own price, as far as the
+    // To a Kontor that buys up to its limit, only above his own price, as far as the
     // owner's money goes.
     const City::Trade* t = city.trade_of(ware);
     const std::uint32_t have = held(ship, ware);
@@ -150,8 +150,8 @@ std::uint32_t Fleet::trader_sell_amount(const Ship& ship, const City& city, std:
 }
 
 void Fleet::trader_leave(Ship& ship) {
-    // 0x00454F50: a trader that reaches its Kontor or gives it up is no longer on its way there
-    // (city +0x257 bit 1), so the city counts in full again when the next trader chooses. Fix S-119:
+    // A trader that reaches its Kontor or gives it up is no longer on its way there,
+    // so the city counts in full again when the next trader chooses. Fix S-119:
     // also when the trader sinks or his order ends otherwise; the original keeps the mark then.
     if (!ship.trader || ship.target.kind != Target::Kind::City) {
         return;
@@ -162,7 +162,7 @@ void Fleet::trader_leave(Ship& ship) {
 }
 
 void Fleet::trader_choose(Ship& ship) {
-    // 0x004547E0: of the 12 nearest Kontors of human and computer players (not the last one), the
+    // Of the 12 nearest Kontors of human and computer players (not the last one), the
     // one promising the most profit; half for a Kontor another trader is sailing to already.
     // Rules::trader_reach narrows them on the larger maps of more than four players.
     struct Candidate {
@@ -181,7 +181,7 @@ void Fleet::trader_choose(Ship& ship) {
             continue;
         }
         if (owner->scenario.has(scenario_flag::kNoTrader)) {
-            continue;  // a scenario keeps the trader away from this player (player +0x70 bit 2)
+            continue;  // a scenario keeps the trader away from this player
         }
         ++kontors;
         if (ship.previous == Target::city_of(c.island, c.index)) {
@@ -269,7 +269,7 @@ void Fleet::trader_choose(Ship& ship) {
 }
 
 bool Fleet::trader_trade(Ship& ship, City& city) {
-    // 0x00454D90: buys first, then sells, whole tons; the Kontor's owner pays or earns, the
+    // Buys first, then sells, whole tons; the Kontor's owner pays or earns, the
     // trader's own money never changes. Afterwards his goods age.
     bool traded = false;
     Player* owner = m_world->player(city.owner);
@@ -339,7 +339,7 @@ bool Fleet::trader_trade(Ship& ship, City& city) {
 }
 
 void Fleet::trader_restock(Ship& ship, std::uint32_t dt_ms) {
-    // Tools and, once someone mines iron, iron ore come to him from nowhere (0x00454C90, 0x00454D20),
+    // Tools and, once someone mines iron, iron ore come to him from nowhere,
     // unless players offer enough of them; the original counts run ends (S-078).
     const std::uint32_t restock_ms = m_world->balance().trader_restock_s * 1000U;
     const auto supplied = [&](std::uint8_t ware, std::uint32_t max_price) {
@@ -370,7 +370,7 @@ void Fleet::trader_restock(Ship& ship, std::uint32_t dt_ms) {
         ship.trader_ore_ms += dt_ms;
         if (ship.trader_ore_ms >= restock_ms) {
             ship.trader_ore_ms = 0;
-            // Set for good when an iron mine is built (0x00481450).
+            // Set for good when an iron mine is built.
             bool iron_mined = (m_world->game_settings().flags & World::GameSettings::kIronMined) != 0;
             for (const Production& p : m_world->productions()) {
                 if (iron_mined) {
@@ -408,7 +408,7 @@ void Fleet::spawn_trader() {
     if (trader == kNoPlayer || type == nullptr) {
         return;
     }
-    // A random tile of the map edge (0x0046AB40); Open1602 makes sure it is water.
+    // A random tile of the map edge; Open1602 makes sure it is water.
     Random& random = m_world->random(RandomStream::Ships);
     const auto w = static_cast<std::int32_t>(m_world->width());
     const auto h = static_cast<std::int32_t>(m_world->height());
@@ -463,7 +463,7 @@ void Fleet::trader_tick(std::uint32_t dt_ms) {
         return;
     }
     m_trader_ms -= kTraderCheckMs;
-    // Market statistics and the number of Kontors (0x004802A0, 0x004801C0).
+    // Market statistics and the number of Kontors.
     m_market.assign(m_world->goods().end(), Market{});
     std::uint32_t kontors = 0;
     for (const City& c : m_world->cities()) {

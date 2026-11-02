@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Ships at sea (docs/re/ships.md): sailing to a target along a planned course, trading at Kontors,
+// Ships at sea: sailing to a target along a planned course, trading at Kontors,
 // trade routes, the free trader and shipyards.
 //
-// Like the original (0x00452370), a ship decides what to do only at the end of each run of one or
+// Like the original, a ship decides what to do only at the end of each run of one or
 // two tiles, after a turn step or a wait: whether it has arrived, what it trades there, where it
 // sails next, whether another ship lies ahead. The original makes these decisions only on the
 // owner's computer and sends the course to the others; Open1602 makes them on every computer from
@@ -31,7 +31,7 @@
 
 namespace o1602::sim {
 
-/// Ships the pirates may have (Pirates_MaxShips 0x0040F310): 0 to 4, by the highest level a human
+/// Ships the pirates may have: 0 to 4, by the highest level a human
 /// or computer player reached.
 [[nodiscard]] std::uint32_t pirate_max_ships(const World& world) noexcept;
 
@@ -48,7 +48,7 @@ namespace o1602::sim {
 [[nodiscard]] std::uint32_t pirate_region(const World& world, std::uint32_t x, std::uint32_t y,
                                           std::uint32_t nests) noexcept;
 
-/// The pirate nest's offer (0x0041DD80): its N most valuable wares (N = Maxware of its Kontor) for
+/// The pirate nest's offer: its N most valuable wares (N = Maxware of its Kontor) for
 /// sale at 40 % of the base price, everything else off. The pirates' task 5 runs it every 42 s,
 /// and the pirate step again whenever the nest eats 10 t of its food.
 void pirate_nest_offer(World& world, const assets::BuildingTable& buildings, City& nest);
@@ -62,7 +62,7 @@ void pirate_nest_offer(World& world, const assets::BuildingTable& buildings, Cit
 /// faction's reach_players the share a game of that many would have, at least 3.
 [[nodiscard]] std::size_t trader_candidates(const World& world, const Rules& rules, std::size_t kontors) noexcept;
 
-/// Room of one hold of a ship (0x00446A60).
+/// Room of one hold of a ship.
 inline constexpr std::uint32_t kHoldCapacity = 50 * 32;
 /// Room of one of the trade cart's three holds (History Edition: "10t Holz" in each).
 inline constexpr std::uint32_t kCartHoldCapacity = 10 * 32;
@@ -71,10 +71,10 @@ inline constexpr std::uint32_t kCartHoldCapacity = 10 * 32;
     return ship.cart() ? kCartHoldCapacity : kHoldCapacity;
 }
 
-/// How near a trade cart must be to a market or Kontor to trade there (0x00456870): 2 tiles from
+/// How near a trade cart must be to a market or Kontor to trade there: 2 tiles from
 /// any tile of it.
 inline constexpr std::int32_t kCartReach = 2;
-/// Stops of a trade cart's route (SHIP4 +0x052 holds four for a cart, docs/re/ships.md#the-trade-cart).
+/// Stops of a trade cart's route (SHIP4 +0x052 holds four for a cart).
 inline constexpr std::uint8_t kCartStops = 4;
 
 /// The cities whose market or Kontor a trade cart on the world tile (wx, wy) reaches, as indices
@@ -92,12 +92,12 @@ inline constexpr std::uint8_t kCartStops = 4;
 [[nodiscard]] std::uint32_t cart_places(const World& world, const assets::BuildingTable& buildings, PlayerId player,
                                         std::uint16_t island);
 
-/// Whether a world tile lies within reach of a building (0x004670D0): the integer circle of radius
+/// Whether a world tile lies within reach of a building: the integer circle of radius
 /// 5 around its centre. Ships trade with a Kontor, are repaired by a shipyard from there.
 [[nodiscard]] bool building_in_reach(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
                                      std::uint32_t bx, std::uint32_t by, std::int32_t wx, std::int32_t wy);
 
-/// The first city whose Kontor a ship at (wx, wy) can trade with (0x0047AF50), if any.
+/// The first city whose Kontor a ship at (wx, wy) can trade with, if any.
 [[nodiscard]] std::optional<std::size_t> kontor_in_reach(const World& world, const assets::BuildingTable& buildings,
                                                          std::int32_t wx, std::int32_t wy);
 
@@ -108,15 +108,15 @@ struct KontorSite {
     std::uint32_t y = 0;
 };
 
-/// The land a ship at (wx, wy) lies at for founding a Kontor (0x00448EF0, radius 4): only from
+/// The land a ship at (wx, wy) lies at for founding a Kontor (radius 4): only from
 /// within an island's rectangle, a search through the sea, surf and beach of the disc of radius 4
 /// round the ship to the first land tile outside the circles of every market and Kontor of that
-/// island. Ship_ContextActions (0x0044E630) offers „Kontor errichten“ when the owner has no city
+/// island. The ship's window offers „Kontor errichten“ when the owner has no city
 /// on that island yet.
 [[nodiscard]] std::optional<KontorSite> kontor_site_near(const World& world, const assets::BuildingTable& buildings,
                                                          std::int32_t wx, std::int32_t wy);
 
-/// Whether ships can load, unload or trade at the city's Kontor (0x0044E747): a destroyed Kontor
+/// Whether ships can load, unload or trade at the city's Kontor: a destroyed Kontor
 /// ("Kontor zerstört") only while its owner is a human or computer player still in the game, not
 /// one of the natives, pirates or a defeated player.
 [[nodiscard]] bool kontor_open(const World& world, const assets::BuildingTable& buildings, const City& city);
@@ -127,7 +127,7 @@ struct ShipOrder {
     std::uint32_t ship = 0;  ///< Ship::id
     Target target;           ///< none = stop
     /// Given in the military mode (or as an attack): an object of another player (not the free
-    /// trader) means war with him (0x0044D540).
+    /// trader) means war with him.
     bool attack = false;
     /// Open1602 (ADR 0010): on the way the ship fights every enemy it meets, then sails on.
     bool attack_move = false;
@@ -186,13 +186,13 @@ struct TradeSetting {
 };
 
 /// "Insel erkunden": a ship standing in the rectangle of an island explores its crops and
-/// deposits (button 0x9487; docs/re/ships.md#erkunden).
+/// deposits (button 0x9487).
 struct ExploreOrder {
     PlayerId player = kNoPlayer;
     std::uint32_t ship = 0;
 };
 
-/// Further orders of the ship panel (docs/re/ships.md#ship-window): cannons, cargo overboard, the
+/// Further orders of the ship panel: cannons, cargo overboard, the
 /// name, offering the ship for sale and buying a ship another player offers.
 struct ShipCommand {
     enum class Op : std::uint8_t {
@@ -208,16 +208,16 @@ struct ShipCommand {
         WithdrawSale,
         Buy,  ///< `player` buys the ship at its price from its owner (0x84D)
         /// The white flag up (`on`: the ship stops and decides nothing more, never fires) or down
-        /// (op 0x23, `Ship_SetHold 0x0044E980`).
+        /// (op 0x23).
         WhiteFlag,
         Scuttle,  ///< "Schiff versenken": it sinks without an attacker (op 0x0C, attacker 7)
         /// Back and forth between where it lies and the world tile `x`, `y`, fighting what it
-        /// meets (two position stops and the route on, 0x00440BD0).
+        /// meets (two position stops and the route on).
         Patrol,
         /// Open1602: stop and stay; fire at what comes in range, chase nothing (until the next order).
         Hold,
         /// A computer that finds no island for its city gives its ship to the pirates (the root
-        /// task 0x00429070: the ship stops, then ship op 5 with value 5). Only a computer's ship.
+        /// task: the ship stops, then ship op 5 with value 5). Only a computer's ship.
         ToPirates,
     };
     static constexpr std::size_t kMaxNameLength = 40;
@@ -368,9 +368,9 @@ public:
     /// What buying the ship costs (Preis * sale factor / 128).
     [[nodiscard]] std::int32_t sale_price(const Ship& ship) const;
     [[nodiscard]] ExploreState explore_state(const Ship& ship, PlayerId player) const;
-    /// The island whose rectangle holds the ship's tile (0x0046A570), if any.
+    /// The island whose rectangle holds the ship's tile, if any.
     [[nodiscard]] std::optional<std::uint16_t> island_at_ship(const Ship& ship) const;
-    /// A shot hit ship `ship` (0x00445930): it loses health and sails slower, sinks at 0. A
+    /// A shot hit ship `ship`: it loses health and sails slower, sinks at 0. A
     /// computer's ship hit by pirates surrenders.
     void hit(std::uint32_t ship, std::uint32_t damage, PlayerId attacker, bool by_pirates);
     /// The ship goes down: it turns to an odd heading, sinks for Stirbtime and is gone with its cargo.
@@ -451,9 +451,9 @@ private:
     /// The ship goes to `owner` as it lies (bought, or given to the pirates).
     void change_owner(Ship& ship, PlayerId owner);
     void finish_order(Ship& ship);
-    /// A ship gave up its way to the Kontor of `target` (0x00454F50 with 1).
+    /// A ship gave up its way to the Kontor of `target` (with 1).
     void gave_up_city(const Target& target);
-    /// A computer's complaint (0x00428640, 0x004287B0): the first human player at peace with
+    /// A computer's complaint: the first human player at peace with
     /// `owner` that has ships within `reach` tiles of the world tile (x, y) gets event 10.
     void complain_of_ships(PlayerId owner, std::int32_t x, std::int32_t y, std::int32_t reach);
     void route_next_stop(Ship& ship);
@@ -545,7 +545,7 @@ private:
     /// only one ton at a time (+0x9C, 400 t).
     std::uint32_t m_tools_given = 0;
     std::uint32_t m_tools_quota = 400 * 32;
-    /// Market statistics of the last full pass over the cities, per ware (0x0049AF28): demand and
+    /// Market statistics of the last full pass over the cities, per ware: demand and
     /// offers of all Kontors with the price sums.
     struct Market {
         std::uint64_t demand = 0;

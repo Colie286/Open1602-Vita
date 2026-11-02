@@ -2,7 +2,7 @@
 //
 // Writes the chunk container of the original's data files (docs/formats/chunks.md): a sequence of
 // { char name[16]; uint32_t size; uint8_t payload[size]; }. A savegame ends with WIFF, the 32-bit
-// sum of all payload words before it (0x00490730); the original never reads it.
+// sum of all payload words before it; the original never reads it.
 #pragma once
 
 #include <cstdint>

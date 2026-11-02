@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Mission goals and the values they look at (docs/re/missions.md).
+// Mission goals and the values they look at.
 #include <algorithm>
 #include <limits>
 #include <optional>
@@ -52,7 +52,7 @@ assets::MissionRecord::CityGoal record_goal(const Mission::CityGoal& g) {
     return {g.inhabitants, g.resident_class, g.count};
 }
 
-/// Whether an island has the resource of an island goal (0x0046B0A0).
+/// Whether an island has the resource of an island goal.
 bool island_has(const WorldIsland& island, std::uint8_t resource) {
     if (resource >= kFirstCrop && resource <= kLastCrop) {
         return (island.header.fertility >> (resource - kFirstCrop) & 1U) != 0;
@@ -167,7 +167,7 @@ Mission mission_from_record(const assets::MissionRecord& r, std::vector<std::str
     for (std::size_t i = 0; i < 3; ++i) {
         m.cities[i] = city_goal(r.cities[i], kClasses, warnings);
     }
-    // The loader sorts the city goals by size, largest first (0x00477FEE), and sets the goal bit
+    // The loader sorts the city goals by size, largest first, and sets the goal bit
     // of each one whose size is not 0.
     std::stable_sort(m.cities.begin(), m.cities.end(), [](const Mission::CityGoal& a, const Mission::CityGoal& b) {
         return a.inhabitants > b.inhabitants;
@@ -248,7 +248,7 @@ void prepare_missions(World& world) {
         }
     }
     world.set_missions(std::move(missions));
-    // Settings bit 5 when a mission of a player asks to defeat the pirates (0x00484EE1).
+    // Settings bit 5 when a mission of a player asks to defeat the pirates.
     World::GameSettings settings = world.game_settings();
     for (const Player& p : world.players()) {
         const Mission* m = world.mission_of(p);
@@ -440,7 +440,7 @@ std::vector<std::uint32_t> military_upkeep(const World& world, const assets::Fig
             upkeep[s.owner] += figures.unit_upkeep(type->kind);
         }
     }
-    // Units in training or waiting in a castle count too (player + 0xA6 from recruiting on).
+    // Units in training or waiting in a castle count too (from recruiting on).
     for (const CostBuilding& b : world.cost_buildings()) {
         if (b.kind != CostBuilding::Kind::Castle || b.island >= world.islands().size()) {
             continue;
@@ -463,13 +463,13 @@ std::vector<std::uint32_t> military_upkeep(const World& world, const assets::Fig
             }
         }
     }
-    // Cannon towers (Turm: line of figuren.cod, player + 0xA4).
+    // Cannon towers (Turm: line of figuren.cod).
     for (const Tower& t : world.towers()) {
         if (t.owner < upkeep.size()) {
             upkeep[t.owner] += figures.tower_upkeep();
         }
     }
-    // Computer players pay nothing (0x00475B00).
+    // Computer players pay nothing.
     for (std::size_t p = 0; p < upkeep.size(); ++p) {
         if (world.players()[p].role != PlayerRole::Human) {
             upkeep[p] = 0;
@@ -538,7 +538,7 @@ MissionCheck check_mission(const World& world, const assets::BuildingTable& buil
     }
     const std::uint32_t required = m->goals & ~goal::kComputers;
     // A mission without goals (the endless games: a text only) does nothing, not even its loss
-    // conditions (0x00475440).
+    // conditions.
     if (required == 0 || (pl->role == PlayerRole::Computer && (m->goals & goal::kComputers) == 0)) {
         return check;
     }
@@ -663,7 +663,7 @@ MissionCheck check_mission(const World& world, const assets::BuildingTable& buil
     }
     check.achieved = a;
     check.won = (required & ~a) == 0;
-    // Loss conditions (0x00475440, rt + 0x04).
+    // Loss conditions (rt + 0x04).
     if ((m->losses & loss::kProtectedCity) != 0) {
         bool kept = false;
         for (std::size_t i = 0; i < world.cities().size() && !kept; ++i) {

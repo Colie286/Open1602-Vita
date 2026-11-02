@@ -86,7 +86,7 @@ constexpr std::uint64_t city_key(const sim::City& city) noexcept {
     return (std::uint64_t{city.island} << 8U) | city.index;
 }
 
-/// The name of a building as the build menu calls it (Haus_GetMenuName 0x0042D230).
+/// The name of a building as the build menu calls it.
 std::string building_name(const assets::BuildingType& b, const PanelContext& c) {
     if (const ui::BuildCategory* cat = ui::build_menu().category_of(b.id)) {
         return c.texts != nullptr ? cat->name(cat->index_of(b.id).value_or(0), c.texts->section(cat->names))
@@ -99,7 +99,7 @@ std::int64_t utilisation(const sim::Production& p, const assets::BuildingType& b
     return production_utilisation(p, b, c.figures);
 }
 
-/// What remains of a raw material beside the share the running cycle already took (0x0047D540).
+/// What remains of a raw material beside the share the running cycle already took.
 std::int64_t free_stock(std::uint16_t stock, std::uint32_t per_cycle, std::uint8_t rate) {
     const std::int64_t used = (std::int64_t{per_cycle} * rate) >> 7;
     return std::max<std::int64_t>(0, std::int64_t{stock} - used);
@@ -286,7 +286,7 @@ public:
         m_panel.set_text(62006, building_name(*b, c));
         m_panel.set_text(62003, c.text("GAME", kGameRunningCost));
         m_panel.set_text(62004, std::to_string(b->running_cost));
-        // The building's icon of the build menu (Haus_GetMenuIcon 0x0042D3A0).
+        // The building's icon of the build menu.
         const ui::BuildCategory* cat = ui::build_menu().category_of(b->id);
         if (const ui::BuildButton* button =
                 cat != nullptr ? cat->button_at(cat->index_of(b->id).value_or(0)) : nullptr) {
@@ -342,8 +342,7 @@ constexpr std::int32_t kKSlots = 11;
 constexpr std::int32_t kPriceSteps = 1024;
 
 /// STADT (the city), KONTOR (the buy or sell list, with the LAGER layout as the ware picker) and
-/// LAGER (the stock) (CityPanel_Refresh 0x00434640, KontorPanel_Refresh 0x00434B40,
-/// StockPanel_Refresh 0x00434810).
+/// LAGER (the stock).
 class CityPanel final : public SelectionPanel {
 public:
     CityPanel(assets::GadgetLayout stadt, assets::GadgetLayout kontor, assets::GadgetLayout lager)
@@ -426,7 +425,7 @@ public:
                 return;
             }
             if (e.id == city_ids::kTitle) {
-                c.start_rename(NameTarget::of(*city), out);  // 0x0043CE00 → 0x00409910(2, …)
+                c.start_rename(NameTarget::of(*city), out);  //(2, …)
             } else if (e.id == city_ids::kSell || e.id == city_ids::kBuy) {
                 m_page = Page::Kontor;
                 m_sell = e.id == city_ids::kSell;
@@ -511,7 +510,7 @@ public:
             return;
         }
         if (e.kind == ui::PanelEvent::Kind::Clicked && e.id == city_ids::kKTitle) {
-            c.start_rename(NameTarget::of(*city), out);  // 0x0043CE00, gadget 34002
+            c.start_rename(NameTarget::of(*city), out);  // gadget 34002
             return;
         }
         const std::vector<std::uint8_t> list = wares(*city, c.world().goods());
@@ -748,7 +747,7 @@ private:
         m_stadt.set_graphic(city_ids::kBalanceIcon, m_balance_icon + (balance < 0 ? 1 : 0), 0);
         m_stadt.set_selected(city_ids::kMaterialLock,
                              m_material_lock.shown(city_key(city), city.material_lock, c.now_ms));
-        // The trade cart: requested or jumped to (two pictures, 0x00448B70 finds the cart).
+        // The trade cart: requested or jumped to (two pictures, finds the cart).
         const bool cart = sim::trade_cart_of(c.world(), c.local, city.island) != nullptr;
         m_stadt.set_graphic(city_ids::kTrader, m_cart_icon + (cart ? kCartIconJump : 0), 0);
         m_stadt.set_selected(city_ids::kTrader, m_cart_pick);
@@ -783,7 +782,7 @@ private:
         for (const std::int32_t id : {city_ids::kKName, city_ids::kKPrice}) {
             m_kontor.set_visible(id, chosen);
         }
-        // The original fades all of 0x84D5 .. 0x84E8 while no ware is chosen (0x004073C0).
+        // The original fades all of 0x84D5 .. 0x84E8 while no ware is chosen.
         for (std::int32_t id = city_ids::kKLimit; id <= city_ids::kKPriceSlider; ++id) {
             m_kontor.set_faded(id, !chosen);
         }
@@ -844,8 +843,7 @@ private:
 
 // ---- Houses --------------------------------------------------------------------------------------
 
-/// SIEDLER: the class of a house, its city's supply and the public buildings it lacks
-/// (HousePanel_Refresh 0x00438A30).
+/// SIEDLER: the class of a house, its city's supply and the public buildings it lacks.
 class SettlerPanel final : public SimplePanel {
 public:
     explicit SettlerPanel(assets::GadgetLayout layout) : SimplePanel(std::move(layout)) {
@@ -1125,7 +1123,7 @@ private:
         {sim::panel_service::kTheater, 4, 68},
     }};
 
-    /// What a class needs of public buildings (Class_RequiredServices 0x0047F320).
+    /// What a class needs of public buildings.
     /// A class a package added needs what classes.toml gives it, else what the original's class it
     /// looks like needs.
     static std::uint32_t required(const PanelContext& c, std::uint32_t cls) {
@@ -1135,7 +1133,7 @@ private:
     static bool ware_unlocked(std::uint8_t w, const sim::Player* owner) {
         return owner != nullptr && owner->unlocked(sim::infra::ware_level(w));
     }
-    /// Sign of the growth rate: 1 grows, 0 stays, -1 shrinks a little, -2 a lot (0x0047B3B0).
+    /// Sign of the growth rate: 1 grows, 0 stays, -1 shrinks a little, -2 a lot.
     static int growth_state(const sim::City& city, const sim::House& house) {
         const std::int32_t rate = sim::growth_rate(city, house);
         return rate > 0 ? 1 : rate == 0 ? 0 : rate >= -64 ? -1 : -2;
@@ -1143,7 +1141,7 @@ private:
     static std::uint8_t tax_of(const sim::City& city, std::uint8_t cls) {
         return cls < city.tax_rate.size() ? city.tax_rate[cls] : std::uint8_t{128};
     }
-    /// Taxes of one class per minute (City_ClassTax 0x0047F370).
+    /// Taxes of one class per minute.
     static std::int64_t class_tax(const sim::City& city, const assets::ResidentClass& rc, std::uint8_t cls,
                                   std::uint8_t tax) {
         const std::int64_t n = cls < city.inhabitants.size() ? city.inhabitants[cls] : 0;
@@ -1171,8 +1169,7 @@ const sim::CostBuilding* cost_building_at(const Selection& s, const PanelContext
     return nullptr;
 }
 
-/// WERFT (the yard and its order) and BAUSHIP (the choice of the ship type)
-/// (ShipyardPanel_Refresh 0x00435B40, ShipTypePanel_Refresh 0x00435EF0).
+/// WERFT (the yard and its order) and BAUSHIP (the choice of the ship type).
 class ShipyardPanel final : public SelectionPanel {
 public:
     ShipyardPanel(assets::GadgetLayout werft, assets::GadgetLayout bauship)
@@ -1387,7 +1384,7 @@ private:
 
 // ---- Castles -------------------------------------------------------------------------------------
 
-/// MILITAR: training places, the unit to train, its pay and weapons (CastlePanel_Refresh 0x004385E0).
+/// MILITAR: training places, the unit to train, its pay and weapons.
 class CastlePanel final : public SimplePanel {
 public:
     explicit CastlePanel(assets::GadgetLayout layout) : SimplePanel(std::move(layout)) {
@@ -1594,8 +1591,7 @@ private:
 
 // ---- A foreign Kontor --------------------------------------------------------------------------
 
-/// HANDEL: what a foreign Kontor with a trade treaty wants and offers (ForeignKontorPanel_Refresh
-/// 0x004357D0).
+/// HANDEL: what a foreign Kontor with a trade treaty wants and offers.
 class ForeignKontorPanel final : public SelectionPanel {
 public:
     explicit ForeignKontorPanel(assets::GadgetLayout layout) : m_lists(std::move(layout)) {}
@@ -1755,7 +1751,7 @@ SelectionPanel* SelectionPanels::panel_for(const Selection& s, const PanelContex
         }
         return nullptr;
     }
-    // Panel_UpdateSelection 0x0043AA00: the building's HAUS_PRODTYP Kind decides.
+    // The building's HAUS_PRODTYP Kind decides.
     switch (b->prod_kind) {
         case sim::prod::kWorkshop:
             return c.world().production(s.island, s.x, s.y) != nullptr ? get("PROD") : nullptr;

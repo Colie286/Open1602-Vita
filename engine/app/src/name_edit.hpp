@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Typing the name of an own ship or city in its window (docs/re/ui.md#name-input). The names live in
+// Typing the name of an own ship or city in its window. The names live in
 // the world only (sim::Ship::name, sim::City::name): every window, list and message reads them from
 // there, so a new name shows everywhere at once. The typed name becomes a command (ShipCommand or
 // CityOrder Rename) that every computer of the game carries out at the same tick and the savegame
@@ -35,18 +35,18 @@ struct NameTarget {
 [[nodiscard]] const std::string* name_of(const sim::World& world, const NameTarget& target);
 
 /// Whether `player` may rename `target` now: an own city, an own ship that is not sinking (the
-/// original takes clicks on the name only then, ShipPanel_Refresh 0x00436170).
+/// original takes clicks on the name only then).
 [[nodiscard]] bool can_rename(const sim::World& world, sim::PlayerId player, const NameTarget& target);
 
 /// The command that gives `target` the name `name`.
 [[nodiscard]] sim::Command rename_command(sim::PlayerId player, const NameTarget& target, std::string name);
 
-/// The name being typed (the original's text input 0x00409910 / 0x00409630). A click on the name
+/// The name being typed (the original's text input). A click on the name
 /// starts it; Enter, a click elsewhere in the window or closing the window keeps the name, Escape
 /// takes it back (Open1602: the original has no way back and changes the name with every key).
 class NameEdit {
 public:
-    /// Characters of a name: the original's input takes 16 (0x0043CE00: 0x00409910(…, 17)).
+    /// Characters of a name: the original's input takes 16.
     static constexpr std::size_t kMaxLength = 16;
     /// The cursor behind the text while typing, as in the original.
     static constexpr char kCursor = '_';

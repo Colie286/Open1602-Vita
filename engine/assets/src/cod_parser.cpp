@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Reimplementation of the .cod interpreter. Specification: docs/formats/cod.md.
-// Original functions (1602.exe): Cod_ParseLine 0x00402260 (tokenizer + evaluation),
-// Cod_DefineSymbol 0x004020D0, Cod_LoadHaeuser 0x00460750 / Cod_LoadFiguren 0x00441210
-// (Objekt / EndObj / Nummer / ObjFill handling).
+// Interpreter for the .cod description language. Specification: docs/formats/cod.md.
 #include "o1602/assets/cod_parser.hpp"
 
 #include <algorithm>
@@ -156,7 +153,7 @@ public:
 
     bool at_end() const { return m_end; }
 
-    /// Cod_ParseLine: reads one logical line and returns its statement.
+    /// Reads one logical line and returns its statement.
     Statement read_statement() {
         Statement st;
         st.line = m_line;
@@ -257,7 +254,7 @@ public:
         return st;
     }
 
-    /// Evaluation part of Cod_ParseLine: applies the tokens to the target symbol.
+    /// Evaluation part of the line parser: applies the tokens to the target symbol.
     void evaluate(const Statement& st) {
         Symbol& sym = m_doc.symbols.get_or_create(st.lhs);
         sym.count = st.count;
@@ -464,7 +461,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------------------------
-// Object structure (Objekt / EndObj / Nummer / ObjFill), as in Cod_LoadHaeuser / Cod_LoadFiguren.
+// Object structure (Objekt / EndObj / Nummer / ObjFill), as the original reads haeuser.cod and figuren.cod.
 
 constexpr std::int32_t kMaxObjFill = 10000;  // original: clamped to the table size (e.g. MAXHAUS = 500)
 // Records all ObjFill statements of one file may make, nested records counted: a copy holds the

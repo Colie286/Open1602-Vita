@@ -281,7 +281,7 @@ would (`game.move_unit`, `game.attack_unit`). The scripts' part of item 6 is don
 
 Scenarios as map plus start conditions plus goals plus an optional script, campaigns as a sequence
 of scenarios with transitions. The original's scenarios and campaigns play with their missions
-(the 18 goal bits of `AUFTRAG4`, [missions.md](../re/missions.md)), but there is no format of
+(the 18 goal bits of `AUFTRAG4`), but there is no format of
 Open1602's own for a package's scenario: goals beyond the original's bits, start conditions for
 more players, transitions with carried-over values, texts and videos. Depends on item 6 for
 scripted goals.
@@ -313,12 +313,12 @@ or pirates to the scripts; the game no longer steers it.
 
 ### 9. Island generator, stage 2 (section 5)
 
-Stage 1 builds worlds from the original's island templates ([worldgen.md](../re/worldgen.md)).
+Stage 1 builds worlds from the original's island templates.
 Stage 2, islands of their own shapes from height and moisture maps with the rules (climate, size,
 shape, frequencies) as data. Climates and templates are already in one registry (MD-7, PR #142),
 which stage 2 builds on.
 
-Part 1 done on 2026-10-31 ([worldgen.md](../re/worldgen.md#island-shapes-world-generator-stage-2)):
+Part 1 done on 2026-10-31:
 `sim::shapes::make_island` draws an island of its own shape in the size of the template the plan
 placed, with its coast from the templates' tiles (beach, its corners and surf by the rules read from
 all 114 templates), forest of the climate and as many ore mountains as the template. A world's
@@ -326,7 +326,7 @@ setting "island shapes" (`WorldSettings::shapes`, start dialog, `--island-shapes
 original's templates (default), islands of their own shape, or both mixed; islands with a native
 village or a volcano keep their template (volcanoes no longer since part 5).
 
-Part 2 done on 2026-10-31 ([worldgen.md](../re/worldgen.md#islands-of-their-own-size)): with
+Part 2 done on 2026-10-31: with
 "Own" island shapes the plan draws every island's size itself (`WorldSettings::Landscape`): the
 share of the map that is land (5–45 %), the sides of the smallest and the largest island (16–200 and
 40–1000 tiles, four times the original's largest; an island over 255 tiles is kept in Open1602's own
@@ -346,7 +346,7 @@ giants|even`, `--island-land`, `--island-min`, `--island-max`, `--island-spread`
 `--island-coast`, `--island-outline`, `--island-forest`, `--island-mountains`; `sim::set_landscape`,
 `sim::kLandscapePresets`).
 
-Part 4 done on 2026-11-01 ([worldgen.md](../re/worldgen.md#what-the-templates-are-made-of)), from
+Part 4 done on 2026-11-01, from
 `o1602-tool template-stats` over all 662 templates: the ore mountains of islands of their own shape
 lie in a ring of slopes turned to them, as every mountain of the templates (the mines stand on the
 slopes), the ground mixes the templates' fifteen most common kinds of ground tile by tile, and two
@@ -354,7 +354,7 @@ of three mountains send a river from a spring on their slopes straight out to a 
 beach that faces its way.
 
 Part 5 done on 2026-11-01: volcanoes on islands of their own shape. A volcano is the big ore mountain
-21108 ([volcanoes.md](../re/volcanoes.md)); the big mountains of islands of their own shape are now
+21108; the big mountains of islands of their own shape are now
 always 21109, and a volcano is laid only where it is asked for (`ShapeRequest::volcano`), first, in
 its ring of slopes and without a river. With "Own" island shapes the plan gives the volcanoes of the
 setting to islands of their own shape (not a home, at least 24 tiles on the shorter side;

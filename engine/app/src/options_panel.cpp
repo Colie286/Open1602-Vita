@@ -303,7 +303,7 @@ void OptionsPanel::stop_editing() {
 void OptionsPanel::refresh(const OptionsModel& model) {
     switch (m_page) {
         case Page::Root:
-            // The original offers no resolutions in a game of several players (0x00439630); window and
+            // The original offers no resolutions in a game of several players; window and
             // full screen concern this computer alone, so Open1602 offers them always. The texts are
             // set here: the language may change after the panel was made.
             m_option.set_text(kResolutionLabel, ui::tr("options.window"));
@@ -374,7 +374,7 @@ void OptionsPanel::refresh_disk(const OptionsModel& model) {
     m_disk.set_disabled(m_slots_up, m_slot_first == 0);
     m_disk.set_disabled(m_slots_down, m_slot_first + m_slot_rows_shown >= count);
     m_disk.set_disabled(kSave, m_slot < model.reserved_slots);
-    // A client of a game of several players cannot load (0x00439630).
+    // A client of a game of several players cannot load.
     m_disk.set_visible(kLoad, !model.multiplayer);
 }
 
@@ -469,7 +469,7 @@ std::vector<OptionsEvent> OptionsPanel::mouse(std::int32_t x, std::int32_t y, bo
                 break;
             case Page::Disk:
                 if (e.id >= kSlotFrame && e.id < kSlotFrame + static_cast<std::int32_t>(m_slot_rows_shown)) {
-                    // Choosing a slot starts typing its name (0x0043F7F4).
+                    // Choosing a slot starts typing its name.
                     const std::size_t slot = m_slot_first + static_cast<std::size_t>(e.id - kSlotFrame);
                     if (slot >= model.slot_names.size()) {
                         break;
@@ -673,7 +673,7 @@ void OptionsPanel::type(std::string_view text) {
     if (!m_editing) {
         return;
     }
-    constexpr std::size_t kMaxName = 18;  // the original's limit (0x00409910 with 0x13)
+    constexpr std::size_t kMaxName = 18;  // the original's limit (with 0x13)
     for (const char c : text) {
         if (static_cast<unsigned char>(c) >= 0x20 && m_name.size() < kMaxName) {
             m_name.push_back(c);

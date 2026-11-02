@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Building and demolishing (docs/re/construction.md).
+// Building and demolishing.
 
 #include <algorithm>
 #include <optional>
@@ -239,11 +239,11 @@ TEST_CASE("construction: the first Kontor at the coast founds a city, paid from 
     CHECK(!island.world.islands()[0].discovered_by(1));
     const sim::BuildPlan plan = island.build({{kKontor, 5, 10, 0, 0}}, 0);
     REQUIRE(plan.placed == 1);
-    // The city of a human or a computer shows its island to its founder (0x00468DD2); to the other
+    // The city of a human or a computer shows its island to its founder; to the other
     // players as the game setting says, which the simulation applies.
     CHECK(island.world.islands()[0].discovered_by(0));
     CHECK(!island.world.islands()[0].discovered_by(1));
-    // The long side faces the beach on the left (0x00467AF0).
+    // The long side faces the beach on the left.
     CHECK(plan.items[0].rotation == 2);
     REQUIRE(island.world.cities().size() == 1);
     const sim::City& city = island.world.cities()[0];
@@ -298,7 +298,7 @@ TEST_CASE("construction: roads fit to their neighbours, a drag stops when the go
     CHECK(island.world.players()[0].money == 2);
 }
 
-TEST_CASE("construction: a building on a buried treasure gives its gold to the builder and tells (0x004084D0)") {
+TEST_CASE("construction: a building on a buried treasure gives its gold to the builder and tells") {
     Island island;
     island.found();
     assets::IslandHeader::Deposit treasure;
@@ -338,7 +338,7 @@ TEST_CASE("construction: a building on a buried treasure gives its gold to the b
     }));
 }
 
-TEST_CASE("construction: the preview shows what an order costs, affordable or not (0x0040D160)") {
+TEST_CASE("construction: the preview shows what an order costs, affordable or not") {
     Island island;
     island.found();
     const auto preview = [&](std::vector<sim::BuildItem> items) {
@@ -465,7 +465,7 @@ TEST_CASE("construction: a market claims land; demolished, the land and what sta
     CHECK(island.city_at(12, 11) == 0);       // the Kontor still covers this
 }
 
-TEST_CASE("construction: a market needs one full edge in the city, like the original (0x00464450)") {
+TEST_CASE("construction: a market needs one full edge in the city, like the original") {
     Island island;
     island.found();
     // The Kontor's circle ends between x 14 and 15 on rows 11 and 12: the left edge is inside.
@@ -680,7 +680,7 @@ TEST_CASE("construction: a new city shows its island to the other players as the
         CHECK(island.world.islands()[0].discovered_by(0));  // the founder always
         return island.world.islands()[0].discovered_by(1);
     };
-    // As the original (0x00468DD2) and with all settlements shown: at once.
+    // As the original and with all settlements shown: at once.
     CHECK(founded_seen_by_other(sim::Reveal::Original));
     CHECK(founded_seen_by_other(sim::Reveal::All));
     // Nothing: the others find the island by ship.
@@ -815,7 +815,7 @@ TEST_CASE("construction: walls and towers on the beach, piers in front of a new 
     CHECK(island.at(4, 18)->id == kBeach);
 }
 
-TEST_CASE("construction: the water mill turns its wheel to the river (0x004680F0)") {
+TEST_CASE("construction: the water mill turns its wheel to the river") {
     // The river west of the mill: rotation 0; east of it: 2 (the shipyard's sides the other way round).
     for (const auto& [x, rotation] : {std::pair<std::int32_t, std::uint8_t>{9, 0}, {8, 2}}) {
         Island island(0x2U, 0, 9);
@@ -833,7 +833,7 @@ TEST_CASE("construction: the water mill turns its wheel to the river (0x004680F0
     CHECK(plan.items[0].refusal == sim::BuildRefusal::NoRiver);
 }
 
-TEST_CASE("construction: a stone wall replaces a palisade, never the other way round (0x00464660)") {
+TEST_CASE("construction: a stone wall replaces a palisade, never the other way round") {
     Island island;
     island.found();
     // A palisade of three pieces, the first on the beach.
@@ -854,7 +854,7 @@ TEST_CASE("construction: a stone wall replaces a palisade, never the other way r
     CHECK(island.at(6, 15)->kreuz_base == 17);
 }
 
-TEST_CASE("construction: what the build menu offers (Haus_IsAvailableForPlayer 0x0042D530)") {
+TEST_CASE("construction: what the build menu offers") {
     sim::Player p;
     assets::BuildingType house;
     CHECK(sim::building_available(p, house));  // level 0: always

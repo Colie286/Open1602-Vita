@@ -15,5 +15,5 @@ game draws its draw lists through `o1602::render_sdl`.
 | `localization.hpp` | Open1602's own texts in the installation's language (`data/locale/*.lang`, embedded) |
 | `text_format.hpp` | Safe filling of the printf patterns of `Text.cod` |
 
-The layouts are read in `engine/assets` (`gad.hpp`). Description: [docs/re/ui.md](../../docs/re/ui.md),
+The layouts are read in `engine/assets` (`gad.hpp`). Description:
 [docs/formats/gad.md](../../docs/formats/gad.md).

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The sounds of the game as the original plays them (docs/re/audio.md): effects at a place on the
+// The sounds of the game as the original plays them: effects at a place on the
 // screen, the voice messages and the music. Audio is presentation only: it follows the simulation's
 // events and the camera, draws from its own random numbers (the original takes the game's rand(),
 // S-112) and never changes the game.
@@ -40,10 +40,10 @@ inline constexpr SampleId kWavShipMove = 87;       ///< + 0..4
 /// Open1602 (D-001): SAMPLES/Backer.wav, which the original never loads, for the bakery that names
 /// the undefined WAV_BAECKER (assets::fixes::kBakerySound).
 inline constexpr SampleId kWavBakery = 92;
-inline constexpr SampleId kWavTest = 58;  ///< "Test" of the effects' volume (plantage.wav, 0x0049572D)
+inline constexpr SampleId kWavTest = 58;  ///< "Test" of the effects' volume (plantage.wav)
 
 /// File of a sound relative to the game directory ("SAMPLES/kanone5.wav"), nothing for the
-/// numbers the original leaves silent (GameInit 0x00494870).
+/// numbers the original leaves silent (GameInit).
 [[nodiscard]] std::optional<std::string> sample_file(SampleId id);
 
 /// Volume in the original's unit, 1/100 dB of attenuation (-4000 .. 0), as a gain.
@@ -114,7 +114,7 @@ private:
 };
 
 /// The widest view the original hears its scenery in (birds and surf): its game view at 1024 x 768
-/// (768 x 734, docs/re/ui.md) at the small zoom level, in pixels of the large level (four each).
+/// (768 x 734) at the small zoom level, in pixels of the large level (four each).
 inline constexpr double kWidestViewWidth = 768.0 * 4;
 inline constexpr double kWidestViewHeight = 734.0 * 4;
 
@@ -134,7 +134,7 @@ struct SceneryReach {
 
 // ---- Voice messages ------------------------------------------------------------------------------
 
-/// What a message (MELDUNG number) brings (table 0x0049B210): its kind of voice message, the first
+/// What a message (MELDUNG number) brings: its kind of voice message, the first
 /// voice file and how many there are (every second number), the videos and flags.
 struct MessageAudio {
     std::uint8_t kind = 0;  ///< [SPEECHKIND], 0 = only the master switch
@@ -170,7 +170,7 @@ struct MessagePlayback {
 };
 
 /// The voice of the messages (Speech8): four waiting at most, one speaking at a time, never cut
-/// off (0x00488D00, 0x00488D50). A message that finds no room, or has no voice, sounds event.wav.
+/// off. A message that finds no room, or has no voice, sounds event.wav.
 class Voices {
 public:
     Voices(Mixer& mixer, SoundBank& bank, Effects& effects, std::uint32_t seed = 1602)
@@ -184,12 +184,12 @@ public:
     /// A message for the local player; `visible` whether its place is on screen. Returns the
     /// message's flags (kMessageNormalSpeed asks the game to slow down). A message plays its video
     /// instead of a voice when videos of its kind are on and its place is off screen, or always
-    /// (flag 0x01), or at a quarter of the times (flag 0x08) (Msg_Audio 0x00488E80).
+    /// (flag 0x01), or at a quarter of the times (flag 0x08).
     std::uint16_t message(std::uint16_t message, bool visible);
     /// The same for a message described by its playback (own sound before the Speech8 voices).
     std::uint16_t message(const MessagePlayback& m, bool visible);
     /// One of `count` voice files base, base + 2, ... at random, without a message (the menu's
-    /// "Wählt Euer Banner": Speech_Queue(0x6B, 5, 2) 0x0048C008). False if muted or no room.
+    /// "Wählt Euer Banner":). False if muted or no room.
     bool speak(std::uint16_t base, std::uint8_t count);
     /// The video the last messages asked for (the latest wins), once.
     [[nodiscard]] std::optional<std::uint16_t> take_video() noexcept { return std::exchange(m_video, std::nullopt); }
@@ -225,7 +225,7 @@ private:
 
 // ---- Music ---------------------------------------------------------------------------------------
 
-/// The music (Music_Update 0x00489190): the tracks of MUSIC8 except Fight1..3, at random (not
+/// The music: the tracks of MUSIC8 except Fight1..3, at random (not
 /// one of the last few) or in order; battle music while shots fall near the middle of the view, back
 /// 25 s after the last; a change fades out over 3 s. The order of the tracks is by name, not by
 /// the file system's (U-014). The tracks of content packages come after the original's
@@ -246,9 +246,9 @@ public:
     void update(std::uint64_t game_ms, std::uint32_t real_ms);
 
     [[nodiscard]] const std::vector<std::string>& tracks() const noexcept { return m_tracks; }
-    /// Stops the track at once (a video starts, 0x00488C00); the next update picks a new one.
+    /// Stops the track at once (a video starts); the next update picks a new one.
     void stop();
-    /// Plays `title` now (a click on it in the list, 0x00488C20); the list goes on from there.
+    /// Plays `title` now (a click on it in the list); the list goes on from there.
     void play(const std::string& title);
     /// Title playing now, empty if none (also while its file is still being decoded).
     [[nodiscard]] std::string playing() const;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The path of a dragged road or wall (docs/re/construction.md). The expected paths come from an
+// The path of a dragged road or wall. The expected paths come from an
 // independent model of the original's search.
 
 #include <string>

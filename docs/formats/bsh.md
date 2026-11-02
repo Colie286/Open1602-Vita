@@ -30,12 +30,12 @@ Open1602 refuses more than 16 384 (HI-7).
 
 ## Record type
 
-The blitters test the low byte of `type` (`0x00401B10`, `0x00401BF0`):
+The blitters test the low byte of `type`:
 
 | Type | Data | Drawn by |
 |---|---|---|
 | 1, 6 | RLE (below) | every blitter |
-| 2 | `width × height` palette indices row by row, index 0 transparent (`0x00403670`) | only the plain blitter; the recolouring one (owner colours, shading) skips it |
+| 2 | `width × height` palette indices row by row, index 0 transparent | only the plain blitter; the recolouring one (owner colours, shading) skips it |
 | 13 | true colour RLE (below), History Edition only | – (the History Edition's own renderer) |
 | other | – | nothing |
 
@@ -103,8 +103,7 @@ ZEI28V/ZEI24V only 33: codes 32–64). All glyphs of a font have the same height
 advance is the width, without spacing. Individual glyphs (e.g. index 14 in `ZEI20V.ZEI`) set one or two
 pixels beyond `width`: they overlap the next glyph (the original clips nothing;
 `SpriteSheet::decode(i, extra_width)` keeps them). The pixels only use palette indices 1 (body)
-and 7 (shadow), which are recoloured when drawing. Fonts per resolution, colours and line wrapping:
-[ui.md](../re/ui.md#fonts). Open1602: `ui::Font`.
+and 7 (shadow), which are recoloured when drawing. Open1602: `ui::Font`.
 
 ## Tools
 

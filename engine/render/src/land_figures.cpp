@@ -56,8 +56,7 @@ constexpr std::uint8_t kGrapes = assets::ware::kWineField;
 constexpr std::uint8_t kCocoa = assets::ware::kCocoaField;
 constexpr std::uint8_t kTree = assets::ware::kTree;
 
-/// Share hidden by a growing crop of `ware` at growth stage 0, 1, 2, 3, 4 and later (tables at
-/// 0x004514FC, 0x00451520-0x00451550).
+/// Share hidden by a growing crop of `ware` at growth stage 0, 1, 2, 3, 4 and later.
 std::uint16_t growing_cut(std::uint8_t ware, std::uint8_t stage) noexcept {
     struct Row {
         std::uint8_t ware;
@@ -81,7 +80,7 @@ std::uint16_t growing_cut(std::uint8_t ware, std::uint8_t stage) noexcept {
     return 0;  // meadows and anything else
 }
 
-/// Share hidden by a ripe crop of `ware` (0x00451560).
+/// Share hidden by a ripe crop of `ware`.
 std::uint16_t ripe_cut(std::uint8_t ware) noexcept {
     switch (ware) {
         case kGrain:
@@ -279,10 +278,10 @@ void SoldierFigures::sync(const sim::World& world, const assets::BuildingTable& 
         f.owner = s.owner;
         const bool seen = view.contains(f.x, f.y);
         if (seen) {
-            f.z = spawn_height(world, buildings, f.x, f.y, true);  // 0x0045E1F0 with 0x00451180
+            f.z = spawn_height(world, buildings, f.x, f.y, true);
         }
-        f.sheet = assets::FigureSheet::Soldat;  // draw kind 4 (0x0044FA90)
-        // Kind 4 shows only on an island the local player has discovered (0x00451590).
+        f.sheet = assets::FigureSheet::Soldat;  // draw kind 4
+        // Kind 4 shows only on an island the local player has discovered.
         f.island = s.island;
         AnimState state;
         std::uint8_t sim_anim = 0;

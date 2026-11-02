@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Soldiers: savegame records, colour variants and tinted units (docs/re/figures.md).
+// Soldiers: savegame records, colour variants and tinted units.
 
 #include <cstring>
 #include <optional>

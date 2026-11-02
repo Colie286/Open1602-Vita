@@ -387,7 +387,7 @@ assets::Gadget piece(std::int32_t id, assets::GadgetKind kind, std::int32_t gfx,
 assets::GadgetLayout build_popup(const BuildCategory& category, const std::vector<bool>& available,
                                  const assets::Gadget& button, std::int32_t gfx_bauhaus,
                                  std::int32_t locked_icon_offset) {
-    // Rows with something to pick; none at all: the last row, all "?" (0x00432D82).
+    // Rows with something to pick; none at all: the last row, all "?".
     struct Row {
         std::size_t first = 0;  ///< position of its first building in the list
         std::size_t count = 0;

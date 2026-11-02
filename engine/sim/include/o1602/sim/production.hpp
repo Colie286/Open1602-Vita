@@ -2,7 +2,7 @@
 //
 // State of the production buildings (workshops, farms, mines, hunters, fishers, markets). Until the
 // economy simulation exists the state comes from the savegame (PRODLIST2) and stays as loaded; the
-// renderer already uses it for building animations, smoke and status icons (docs/re/production.md).
+// renderer already uses it for building animations, smoke and status icons.
 #pragma once
 
 #include <cstdint>
@@ -33,7 +33,7 @@ inline constexpr std::uint8_t kAllWares = ware::kAll;
            b.prod_kind <= static_cast<std::int32_t>(ProductionKind::Fischerei);
 }
 
-/// State of one production building (the original's PRODLIST entry, 20 bytes at 0x0054A3B8).
+/// State of one production building (the original's PRODLIST entry, 20 bytes).
 /// Goods are counted in 1/32 t (assets::kStockUnitsPerTon), times in game seconds.
 struct Production {
     std::uint16_t island = 0;  ///< index into World::islands()
@@ -60,7 +60,7 @@ struct Production {
     std::uint16_t reserved = 0;
 
     static constexpr std::uint8_t kFullRate = 128;
-    /// `flags` bit: the player forbids market carts to collect here (+0x0F bit 4, 0x0047CD60).
+    /// `flags` bit: the player forbids market carts to collect here (+0x0F bit 4).
     static constexpr std::uint8_t kNoPickupFlag = 0x10;
     /// `flags` bit: the building burns (+0x0F bit 7, not saved): no new cycle, no smoke.
     static constexpr std::uint8_t kBurningFlag = 0x80;
@@ -75,7 +75,7 @@ struct Production {
     }
 };
 
-/// What the icon above a building of the local player shows (0x0047CDD0).
+/// What the icon above a building of the local player shows.
 enum class ProductionStatus : std::uint8_t {
     Ok,          ///< no icon
     Disabled,    ///< switched off by the player
@@ -94,7 +94,7 @@ enum class ProductionStatus : std::uint8_t {
     return p.idle_cycles >= b.max_idle_cycles ? ProductionStatus::NoRawGoods : ProductionStatus::Ok;
 }
 
-/// Smoke rises from the chimney while the building works (0x0047CF30).
+/// Smoke rises from the chimney while the building works.
 [[nodiscard]] constexpr bool smoke_visible(const Production& p) noexcept {
     return p.enabled && p.working();
 }

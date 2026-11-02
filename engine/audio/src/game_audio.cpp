@@ -17,8 +17,8 @@ namespace o1602::audio {
 
 namespace {
 
-// Files of the sound numbers as GameInit loads them (0x004954A6..0x00495973); numbers 54 and 68
-// share the file of 55 and 53 (0x004957BE). Empty: the original leaves them silent. The last one
+// Files of the sound numbers as the original loads them; numbers 54 and 68
+// share the file of 55 and 53. Empty: the original leaves them silent. The last one
 // is Open1602's (kWavBakery, D-001).
 constexpr std::array<const char*, kSampleCount> kSampleFiles = {
     nullptr,    "kanone5",  "kanone7",  "kanone6",  "kanone8",  "muskete1", "schwert1", "schwert2", "schwert3",
@@ -35,7 +35,7 @@ constexpr std::array<const char*, kSampleCount> kSampleFiles = {
 };
 static_assert(kWavBakery == assets::fixes::kBakerySound, "the bakery's sound has one number");
 
-// The messages' voices and videos (0x0049B210, 0x70 entries): kind, first voice, voices, videos,
+// The messages' voices and videos (0x70 entries): kind, first voice, voices, videos,
 // flags. Open1602 gives 0x5D (trade routes) its own kind, kSpeechRoutes; the original has 0.
 constexpr std::array<MessageAudio, 0x70> kMessages = {{
     {0, 0, 0, 0, 0},    {1, 282, 3, 1, 6},  {1, 295, 4, 1, 6},  {1, 187, 4, 1, 4},  {1, 198, 5, 1, 8},
@@ -66,7 +66,7 @@ static_assert(kMessages[0x5D].kind == kSpeechRoutes, "the trade routes have a sw
 
 constexpr std::uint32_t kBattleMs = 25'000;       // back to normal music after the last shot
 constexpr std::uint32_t kBattleStartMs = 10'000;  // a new battle track only shortly after a shot
-constexpr std::int32_t kFadeRate = 42;            // Music_SetMode(.., 42): about 3 s
+constexpr std::int32_t kFadeRate = 42;            // about 3 s
 constexpr std::size_t kHistory = 8;
 
 std::string lower(std::string_view s) {
@@ -262,7 +262,7 @@ std::uint16_t Voices::message(std::uint16_t message, bool visible) {
 }
 
 std::uint16_t Voices::message(const MessagePlayback& m, bool visible) {
-    // Video first (Msg_Audio 0x00488E80): off screen, or always, or at a quarter of the times. The
+    // Video first: off screen, or always, or at a quarter of the times. The
     // random numbers are the interface's own, not the game's (S-112).
     const bool videos_on = m_settings.video[0] && (m.kind >= m_settings.video.size() || m_settings.video[m.kind]);
     if (m.videos > 0 && videos_on && m_video_check) {
@@ -329,7 +329,7 @@ void Voices::update() {
         if (pcm) {
             PlayOptions o;
             o.group = Group::Speech;
-            // Voices are a quarter less attenuated than the effects (0x00488D50).
+            // Voices are a quarter less attenuated than the effects.
             o.volume = gain_of(m_settings.effect_volume - m_settings.effect_volume / 4);
             m_voice = m_mixer->play(std::move(pcm), o);
             return;
@@ -412,7 +412,7 @@ void Music::set_settings(const AudioSettings& s) {
 }
 
 void Music::shot(float x, float y, float view_width_px, float view_height_px, std::uint64_t game_ms) {
-    // Near the middle of the view (0x004479B1): max + min / 4 of the pixel offsets within 1000.
+    // Near the middle of the view: max + min / 4 of the pixel offsets within 1000.
     const float dx = std::fabs(x) * view_width_px / 2.0F;
     const float dy = std::fabs(y) * view_height_px / 2.0F;
     if (std::max(dx, dy) + std::min(dx, dy) / 4.0F > 1000.0F || m_fights.empty()) {
@@ -476,7 +476,7 @@ std::optional<std::string> Music::pick(std::uint64_t game_ms) {
         return std::nullopt;
     }
     if (m_settings.random_music) {
-        // Not one of the last min(n / 2, 8) (Music_Update): only enabled tracks are drawn (U-016).
+        // Not one of the last min(n / 2, 8): only enabled tracks are drawn (U-016).
         std::vector<std::size_t> candidates;
         const std::size_t window = std::min<std::size_t>(enabled / 2, kHistory);
         for (std::size_t i = 0; i < m_tracks.size(); ++i) {

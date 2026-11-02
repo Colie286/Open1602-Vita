@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Sound files and the mixer (docs/formats/wav.md, docs/re/audio.md).
+// Sound files and the mixer (docs/formats/wav.md).
 
 #include <algorithm>
 #include <cmath>
@@ -296,7 +296,7 @@ TEST_CASE("audio: voice messages wait in four slots and speak one at a time") {
     CHECK(voices.waiting() == 0);
 }
 
-TEST_CASE("audio: messages with a video play it instead of their voice (Msg_Audio 0x00488E80)") {
+TEST_CASE("audio: messages with a video play it instead of their voice") {
     FakeGame fake;
     auto game = assets::GameDirectory::open(fake.root);
     REQUIRE(game.ok());

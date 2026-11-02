@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// High score lists and campaign progress (docs/re/missions.md "Kampagnen").
+// High score lists and campaign progress.
 //
 // The original writes both into its installation: the list of a scenario to Szenes/<name>.hss
-// (HighScore_Insert 0x0048E540, twelve lines), the progress into Game.dat. Open1602 never writes
+// (twelve lines), the progress into Game.dat. Open1602 never writes
 // there (T-005): it keeps its own copies in the user's data folder, in the same text format for the
 // lists, and starts a list from the original's file the first time it adds a line.
 #pragma once
@@ -28,7 +28,7 @@ inline constexpr std::size_t kHighScoreNameLength = 31;
 /// points, stars, game id" per line, padded with empty lines to kHighScoreLines, "EndObj;".
 [[nodiscard]] std::string write_high_scores(const std::vector<HighScore>& scores);
 
-/// Puts `entry` into the list as HighScore_Insert (0x0048E540) does: above the first line with
+/// Puts `entry` into the list as the original does: above the first line with
 /// as many points or fewer. A line of the same game id and name keeps the better result of the
 /// two, so a game ended again after loading a savegame holds one line. The list then has
 /// kHighScoreLines lines (empty ones at the end). The index of the line that holds the result,
@@ -47,7 +47,7 @@ struct CampaignProgress {
     /// furthest part open, counted from 0.
     std::map<std::string, std::uint32_t> package_campaigns;
 
-    /// A single player game won (GameDat_Write 0x00487FB0): a numbered mission n (or 0, 1) that
+    /// A single player game won: a numbered mission n (or 0, 1) that
     /// was the furthest opens n + 1 (at most kLastNumbered); otherwise a campaign opens `part + 1`
     /// if that is further than before. True if something changed.
     bool record_win(std::uint32_t campaign, std::uint32_t part, std::uint32_t mission_number);

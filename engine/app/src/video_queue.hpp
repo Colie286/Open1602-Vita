@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Which video of the original plays when and where (docs/re/videos.md, ADR 0010): the waiting
+// Which video of the original plays when and where (ADR 0010): the waiting
 // videos, the one playing, and the pause video. Needs no platform, so that the tests have it;
 // VideoController plays what it decides.
 #pragma once
@@ -44,7 +44,7 @@ struct VideoRequest {
     bool intro = false;     ///< the logos and the intro: they queue after each other
     bool in_frame = false;  ///< in the picture frame of the main menu (the credits)
     /// Waits behind the videos before it instead of replacing them: the original's chain after the
-    /// running video (Video_Update 0x00492410, next video 0x005B7014), e.g. 2990 after the success.
+    /// running video (next video), e.g. 2990 after the success.
     bool follows = false;
     /// In the minimap's window while the game goes on (video_plays_in_minimap); set when the
     /// video starts, by whether there is a minimap on screen then.
@@ -54,7 +54,7 @@ struct VideoRequest {
 /// The videos waiting and the one playing.
 class VideoQueue {
 public:
-    /// Video_Request 0x00488C00: the latest request wins, it replaces the waiting ones; the logos
+    /// The latest request wins, it replaces the waiting ones; the logos
     /// and the intro (`intro`) and a chained video (`follows`) only queue after the others. True if
     /// the running video must stop for it.
     bool request(const VideoRequest& request);
@@ -64,7 +64,7 @@ public:
     void started(const VideoRequest& request, bool minimap_shown);
     /// The video playing, or the one played last.
     [[nodiscard]] const VideoRequest& now() const noexcept { return m_now; }
-    /// Escape: skipping a logo or the intro skips the whole start (0x00492690).
+    /// Escape: skipping a logo or the intro skips the whole start.
     void skip_start();
     [[nodiscard]] bool waiting() const noexcept { return !m_waiting.empty(); }
     void clear() { m_waiting.clear(); }

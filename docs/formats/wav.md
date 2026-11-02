@@ -1,6 +1,6 @@
 # WAV – sounds, speech, music
 
-RIFF WAVE files in three folders. What the game does with them is described in [audio.md](../re/audio.md).
+RIFF WAVE files in three folders.
 Open1602: `audio::decode_wav` (`engine/audio/src/wav.cpp`).
 
 | Folder | Contents | Format |

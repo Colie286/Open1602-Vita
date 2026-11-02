@@ -9,7 +9,7 @@
 namespace o1602::render {
 
 /// Global animation frame per building type, advanced in real time like the original
-/// (0x00468420, called every frame with the GetTickCount delta): an accumulator per type
+/// (called every frame with the GetTickCount delta): an accumulator per type
 /// collects milliseconds; when accumulator + dt/2 reaches AnimTime, the frame counter steps by one.
 /// Animations are presentation only - they do not influence the simulation (ADR 0004).
 /// At most one step per update is kept from the original (U-006).

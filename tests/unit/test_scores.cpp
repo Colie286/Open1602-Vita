@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Scores, high score lists, campaign progress and the end screen's figures
-// (docs/re/missions.md).
+// Scores, high score lists, campaign progress and the end screen's figures.
 
 #include <cstring>
 
@@ -52,7 +51,7 @@ assets::HighScore line(std::string name, std::int64_t points, std::uint32_t game
 }  // namespace
 
 TEST_CASE("scores: the curves of the original") {
-    // City points per Einwohner / 20 (checked against 0x00474F90's table).
+    // City points per Einwohner / 20 (checked against's table).
     const std::array<std::pair<std::size_t, int>, 11> city{{{0, 12},
                                                             {15, 14},
                                                             {25, 19},
@@ -338,7 +337,7 @@ TEST_CASE("campaign progress: wins open the next mission") {
     CHECK(odd.campaigns.empty());
 }
 
-TEST_CASE("campaign progress: the last part of campaign 5 ends the campaigns (0x00487FB0)") {
+TEST_CASE("campaign progress: the last part of campaign 5 ends the campaigns") {
     const assets::CampaignProgress p;
     CHECK(p.ends_campaigns(5, 3, 0xFF));
     CHECK(p.ends_campaigns(5, 4, 0xFF));

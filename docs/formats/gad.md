@@ -2,8 +2,7 @@
 
 `GADDATA/*.GAD` (52 files, 45 of which the game loads) and `GADDATA/TOOLS.INC`. **Plain text** in the language
 of the `.cod` files ([cod.md](cod.md)): symbols, `@` for relative values, `ObjFill`, `Nummer`, `[n]` for one
-value of a symbol, `Include: "file"`. Unlike `haeuser.cod` they are **not encrypted**. Loader
-`Gad_LoadFile 0x00405480`. What the game does with the layouts is described in [ui.md](../re/ui.md).
+value of a symbol, `Include: "file"`. Unlike `haeuser.cod` they are **not encrypted**.
 
 Open1602: `assets::parse_gad`, `assets::load_gad` (`engine/assets/src/gad.cpp`), at runtime `ui::Panel`.
 
@@ -32,40 +31,40 @@ Open1602: `assets::parse_gad`, `assets::load_gad` (`engine/assets/src/gad.cpp`),
 - Predefined: `GADGET = 1`, `MAXGADGET = 300` and the kinds `GAD_UNUSED` … `GAD_TEXTFL` (0–10).
 - `Include` reads the file at this point into the same symbol table (path relative to the layout).
 - The number of gadgets is the **highest `Nummer` + 1**; the 300 default records of `ObjFill` do not count.
-  The original keeps at most `MAXGADGET` (300) gadgets per layout. Open1602 lifts that on purpose (L-010
-  in [ui.md](../re/ui.md)) and reads at most 4096 gadgets per file (`kMaxGadgets`,
+  The original keeps at most `MAXGADGET` (300) gadgets per layout. Open1602 lifts that on purpose (L-010)
+  and reads at most 4096 gadgets per file (`kMaxGadgets`,
   [data-limits.md](../modding/data-limits.md)), enough for any layout and small enough that a large
   `Nummer` cannot exhaust memory; gadgets with a higher `Nummer` are left out with a warning.
-- **Value pairs keep their second value:** the loader copies the value slots of the symbol, not what the line
+- **Value pairs keep their second value:** a gadget takes the value slots of the symbol, not what the line
   wrote. `Color: 5` takes over the second value of the last `Color:` line, `@Pos: +30` changes only x.
 - Unknown keys are skipped (`Moveselflg` in `CHAT.GAD`); unknown symbols are 0 (in
   `FARBWAHL`, `HOST`, `MISSION` `ZEINR` is missing, in `MILITAR`, `STADT` `IDNIX`; D-013).
 
-## Keys (record of 0x4C bytes)
+## Keys
 
-| Key | Record | Meaning |
-|---|---|---|
-| `Id` | +0x00 | identifier the code uses (`IDHAUPT+n`; `IDNIX` = decoration) |
-| `Kind` | +0x04 | kind (below) |
-| `Basenr` | +0x08 | gadget of the group or background |
-| `Color` | +0x10, +0x14 | text colour 0–9 (or palette index for FILL/BALKEN) for state 0 / 1 |
-| `Reiheflg` | +0x18 bit 0 | member of a group (same `Basenr`), exactly one selected |
-| `Flipflg` | bit 2 | toggle: a click inverts the state |
-| `Noselflg` | bit 3 | not clickable |
-| `Selmoveflg` | bit 5 | pressing or dragging over it selects it (colour choice) |
-| `Menuflg` | bit 6 | the code already reacts to the press |
-| `Baseflg` / `Baseselflg` | bit 7 / +0x19 bit 0 | draw the gadget `Basenr` first / only in state ≠ 0 |
-| `Clipflg` | +0x19 bit 1 | no reader |
-| `Nodrawflg` | bit 2 | not drawn, **but clickable** |
-| `Rasterflg` | bit 3 | disabled: checkerboard over it |
-| `Alphaflg` | bit 4 | semi-transparent (checkerboard) |
-| `Sliderflg`, `Slidhorflg`, `Slidverflg` | bits 5–7 | slider (horizontal, vertical) |
-| `Slidoffs`, `Slidsize` | +0x20, +0x24 | origin and travel of the slider (0 = `Size`) |
-| `Posoffs` | +0x28 | drawing offset (text anchor; for TEXTFL y = line height) |
-| `Pressoff` | +0x2C | image step for state 1 |
-| `Pos`, `Size` | +0x30, +0x38 | click area (not the image size) |
-| `Blocknr` | +0x40 | image block (0 TOOLS, 1 START, 2 SYMBOL, 3 BAUHAUS, 4 BAUSHIP) **or font** for text |
-| `Gfxnr` | +0x44 | image in the block (constants from `TOOLS.INC`) |
+| Key | Meaning |
+|---|---|
+| `Id` | identifier the code uses (`IDHAUPT+n`; `IDNIX` = decoration) |
+| `Kind` | kind (below) |
+| `Basenr` | gadget of the group or background |
+| `Color` | text colour 0–9 (or palette index for FILL/BALKEN) for state 0 / 1 |
+| `Reiheflg` | member of a group (same `Basenr`), exactly one selected |
+| `Flipflg` | toggle: a click inverts the state |
+| `Noselflg` | not clickable |
+| `Selmoveflg` | pressing or dragging over it selects it (colour choice) |
+| `Menuflg` | the code already reacts to the press |
+| `Baseflg` / `Baseselflg` | draw the gadget `Basenr` first / only in state ≠ 0 |
+| `Clipflg` | no reader |
+| `Nodrawflg` | not drawn, **but clickable** |
+| `Rasterflg` | disabled: checkerboard over it |
+| `Alphaflg` | semi-transparent (checkerboard) |
+| `Sliderflg`, `Slidhorflg`, `Slidverflg` | slider (horizontal, vertical) |
+| `Slidoffs`, `Slidsize` | origin and travel of the slider (0 = `Size`) |
+| `Posoffs` | drawing offset (text anchor; for TEXTFL y = line height) |
+| `Pressoff` | image step for state 1 |
+| `Pos`, `Size` | click area (not the image size) |
+| `Blocknr` | image block (0 TOOLS, 1 START, 2 SYMBOL, 3 BAUHAUS, 4 BAUSHIP) **or font** for text |
+| `Gfxnr` | image in the block (constants from `TOOLS.INC`) |
 
 The text of a gadget is never in the layout; the code sets it.
 

@@ -32,7 +32,7 @@ constexpr std::int32_t kPreviewBlock = 3;  // BAUHAUS
 constexpr std::int32_t kPreviewW = 160;    // the preview's box (gadget size)
 constexpr std::int32_t kPreviewH = 110;
 
-/// LEISTE lines of the build menu's gadgets (Hud_UpdateTooltip 0x0042DA80).
+/// LEISTE lines of the build menu's gadgets.
 std::optional<std::size_t> bau_help(std::int32_t id, bool auto_align) {
     if (id >= 31001 && id <= 31008) {
         return static_cast<std::size_t>(23 + id - 31001);
@@ -188,7 +188,7 @@ std::optional<BuildPanel::Action> BuildPanel::mouse(std::int32_t x, std::int32_t
         bool closed = false;
         for (const ui::PanelEvent& e : m_popup->mouse(x, y, down)) {
             if (e.kind == ui::PanelEvent::Kind::Pressed && e.id == ui::kPopupBackdrop) {
-                // A press beside the icons closes the pop-up and goes on to the panel (0x0043D0C9).
+                // A press beside the icons closes the pop-up and goes on to the panel.
                 closed = true;
             } else if (e.kind == ui::PanelEvent::Kind::Clicked && e.id >= ui::kPopupSlot &&
                        e.id < ui::kPopupSlot + 1000) {

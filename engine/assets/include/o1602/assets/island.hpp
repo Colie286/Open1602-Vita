@@ -39,30 +39,30 @@ struct IslandHeader {
         std::uint16_t x = 0;    ///< origin tile of the mountain it lies in (one byte in the original's)
         std::uint16_t y = 0;
         /// Byte 3: bit p = player slot p knows the deposit (explored it, or a computer bound it to
-        /// a mountain of its own; docs/re/ships.md#erkunden). 32 bits in Open1602.
+        /// a mountain of its own. 32 bits in Open1602.
         std::uint32_t mask = 0;
         std::uint8_t kind = 0;     ///< 0 big vein, 1 small vein
         std::uint16_t amount = 0;  ///< left, 1/32 t
     };
     std::vector<Deposit> deposits;
-    /// INSEL5 +0x1B: bit p = player slot p has explored the island's crops (island +0x42).
+    /// INSEL5 +0x1B: bit p = player slot p has explored the island's crops.
     std::uint8_t explored = 0;
-    /// INSEL5 +0x08: island epochs (of 30 s) until the next deer census, 0..3 (island +0x68).
+    /// INSEL5 +0x08: island epochs (of 30 s) until the next deer census, 0..3.
     std::uint8_t deer_phase = 0;
-    /// INSEL5 +0x0A: the phase of the island epochs the island was last ticked in (island +0x64);
+    /// INSEL5 +0x0A: the phase of the island epochs the island was last ticked in;
     /// an island whose value differs from TIMERS +0x01 is ticked at once.
     std::uint8_t last_phase = 0;
     /// INSEL5 +0x5C: bit (ware - 45) set = the island is fertile for that crop or resource.
     std::uint32_t fertility = 0;
-    /// Drought (docs/re/growth.md): INSEL5 +0x66 strength (0 = none, 0x40 random, 0x26 curse;
-    /// island +0x45), +0x6C end as game time in 1/10 s (island +0x60), +0x03 bit 0 a curse of the
-    /// natives that turns into a drought at the next island epoch (island +0x44 bit 5).
+    /// Drought: INSEL5 +0x66 strength (0 = none, 0x40 random, 0x26 curse),
+    /// +0x6C end as game time in 1/10 s, +0x03 bit 0 a curse of the
+    /// natives that turns into a drought at the next island epoch.
     std::uint8_t drought_strength = 0;
     std::uint32_t drought_end = 0;
-    /// INSEL5 +0x68: bit p = player slot p has discovered the island (island +0x43, 0x00468740).
+    /// INSEL5 +0x68: bit p = player slot p has discovered the island.
     std::uint32_t discovered = 0;
     bool curse_pending = false;
-    /// Volcano craters (docs/re/volcanoes.md): INSEL5 +0x17 count (at most 2), entries of 8 bytes
+    /// Volcano craters: INSEL5 +0x17 count (at most 2), entries of 8 bytes
     /// at +0x3C (island record +0x30): [1] x, [2] y = origin of the volcano mountain, [6..7] lava
     /// throws left of a running eruption. +0x03 bit 2: a volcano of the island has erupted.
     struct Crater {
@@ -76,7 +76,7 @@ struct IslandHeader {
     std::vector<std::uint8_t> raw;  ///< complete chunk payload for not yet decoded fields
 
     /// Template file relative to the game directory, e.g. "Sued/big06.scp", or empty if the island
-    /// does not use a template. Rule of the original loader (path built like 0x00469690).
+    /// does not use a template. Rule of the original loader (path built).
     [[nodiscard]] std::string template_path() const;
 };
 
@@ -90,7 +90,7 @@ struct IslandTile {
     std::uint16_t x = 0;
     std::uint16_t y = 0;
     /// Packed attributes, decoded by the accessors below (layout from the build routine
-    /// 1602.exe @ 0x004084D0, see docs/formats/scp.md).
+    /// See docs/formats/scp.md).
     std::uint32_t bits = 0;
 
     static constexpr std::uint32_t kCodIdOffset = 20000;

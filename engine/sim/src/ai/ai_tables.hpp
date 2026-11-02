@@ -74,7 +74,7 @@ inline std::optional<std::uint8_t> producer_slot(std::uint8_t w, std::uint8_t ra
     return std::nullopt;
 }
 
-/// A Need of the production table (docs/re/ai.md, table of the Needs).
+/// A Need of the production table (table of the Needs).
 struct NeedDef {
     std::uint8_t slot;
     std::uint8_t task;
@@ -197,7 +197,7 @@ inline constexpr std::uint32_t grown_count(std::uint32_t land, std::uint32_t n,
     return static_cast<std::uint32_t>(std::min<std::uint64_t>((n * f + 15) / 16, kMaxOrderCount));
 }
 
-/// Crop the first colony of a computer must grow fully (0x00429070), by its slot.
+/// Crop the first colony of a computer must grow fully, by its slot.
 inline std::uint8_t first_crop(PlayerId player) {
     switch (player % 4) {
         case 1:
@@ -219,7 +219,7 @@ struct Cheats {
     std::int32_t founding_below = 500;  ///< a founding with less money than this ...
     std::int32_t founding_money = 799;  ///< ... gets this much
     std::uint32_t founding_bricks = 8;  ///< tons into a new city
-    /// Task 5's subsidy of a computer that is behind (0x00428370), per step: money below the
+    /// Task 5's subsidy of a computer that is behind, per step: money below the
     /// first number gets the second, below the third (from settlers on) the fourth.
     std::int32_t subsidy_poor_below = 4733, subsidy_poor = 797;
     std::int32_t subsidy_below = 9376, subsidy = 1793;

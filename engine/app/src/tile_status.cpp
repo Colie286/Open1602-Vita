@@ -27,7 +27,7 @@ constexpr std::size_t kLeisteNativeWarrior = 227;
 // [LANDSCHAFT] line of the natives' houses on a pirate island.
 constexpr std::size_t kLandscapeNativeHut = 2;
 
-/// The list the original keeps after the build menu's (0x00498610), named from [LANDSCHAFT].
+/// The list the original keeps after the build menu's, named from [LANDSCHAFT].
 constexpr auto kLandscapeIds = sim::id::kLandscape;
 
 std::string line(const assets::TextTable& texts, std::string_view section, std::size_t i) {
@@ -131,7 +131,7 @@ std::string tile_status(const sim::WorldIsland& island, std::int32_t x, std::int
     if (!island.map.contains(x, y)) {
         return {};
     }
-    // Who has not discovered the island sees its terrain only (island +0xAFC instead of +0xAF8).
+    // Who has not discovered the island sees its terrain only.
     const auto ux = static_cast<std::uint32_t>(x);
     const auto uy = static_cast<std::uint32_t>(y);
     const sim::MapCell& cell = island.discovered_by(local) ? island.map.top(ux, uy) : island.map.ground(ux, uy);

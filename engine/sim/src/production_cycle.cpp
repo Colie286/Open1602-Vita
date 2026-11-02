@@ -33,7 +33,7 @@ void emit(std::vector<ProductionEvent>* events, ProductionEvent::Kind kind, std:
     }
 }
 
-/// Which production kinds fetch their main raw material (the switch at 0x0047DF0B): workshops
+/// Which production kinds fetch their main raw material (the switch): workshops
 /// (carriers), farms and fishers between cycles (farmers, fishing boats), mines (from the deposit),
 /// cattle farms, markets and warehouses (carts) and two kinds that need city money.
 bool asks_for_main_raw(const assets::BuildingType& b, const Production& p) noexcept {
@@ -135,14 +135,13 @@ void finish_cycle(Production& p, const assets::BuildingType& b, std::uint32_t in
         p.produced = static_cast<std::uint16_t>(p.produced >> 1);
     }
 
-    // The doctor and the fire brigade look for work at the end of every cycle, i.e. every 11 s
-    // (0x0047DF07: 0x0044AF90, 0x0044B470).
+    // The doctor and the fire brigade look for work at the end of every cycle, i.e. every 11 s.
     if (b.prod_kind == prod::kKlinik || b.prod_kind == prod::kBrunnen) {
         emit(events, ProductionEvent::Kind::NeedsRawGoods, index, 0, 0);
         return;
     }
 
-    // What the building asks for (0x0047DE60 ff.): the second raw material if it is the one that
+    // What the building asks for (ff.): the second raw material if it is the one that
     // is shorter, otherwise the main one - the original dispatches carriers, farmers, miners or
     // market carts depending on the production kind.
     if (p.rate != 0 || p.stock < b.max_stock) {

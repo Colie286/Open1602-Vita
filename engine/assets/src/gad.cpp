@@ -15,7 +15,7 @@ constexpr std::size_t kMaxIncludeDepth = 4;
 /// The text of a layout with all its includes: the original's are a few kilobytes.
 constexpr std::size_t kMaxExpandedBytes = 1U << 20;
 
-// Symbols the GAD loader defines before parsing (0x004054D6..0x00405582).
+// Symbols the GAD loader defines before parsing.
 constexpr CodPredefinedSymbol kPredefined[] = {
     {"GADGET", 1},      {"MAXGADGET", 300}, {"GAD_UNUSED", 0},  {"GAD_NIX", 1},   {"GAD_GFX", 2},
     {"GAD_GFXRAST", 3}, {"GAD_GFXFILL", 4}, {"GAD_TEXTL", 5},   {"GAD_TEXTZ", 6}, {"GAD_TEXTR", 7},
@@ -23,7 +23,7 @@ constexpr CodPredefinedSymbol kPredefined[] = {
 };
 
 /// "Include: "FILE"" lines replaced by the file's text, as the original parses an include into the
-/// same symbol table at that point (0x004057DE).
+/// same symbol table at that point.
 std::string expand_includes(std::string_view text,
                             const std::function<std::optional<std::string>(std::string_view)>& include,
                             std::vector<std::string>& warnings, std::size_t depth) {
@@ -163,7 +163,7 @@ GadgetLayout parse_gad(std::string_view text,
         g.size = {r.integer("Size", 0), r.integer("Size", 1)};
         g.block = r.integer("Blocknr");
         g.gfx = r.integer("Gfxnr");
-        // Sliders: a range of 0 is the gadget's size (0x00406492).
+        // Sliders: a range of 0 is the gadget's size.
         if (g.slider) {
             for (std::size_t a = 0; a < 2; ++a) {
                 if (g.slider_size[a] == 0) {

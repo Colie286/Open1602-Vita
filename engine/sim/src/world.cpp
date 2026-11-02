@@ -695,7 +695,7 @@ void add_players(World& world, const std::vector<assets::PlayerRecord>& players)
         player.ships_sunk = p.ships_sunk;
         player.ships_lost = p.ships_lost;
         if (p.kind == assets::PlayerKind::Human || p.kind == assets::PlayerKind::Computer) {
-            // The loader 0x00477911 takes the scenario's switches for these slots only.
+            // The takes the scenario's switches for these slots only.
             player.scenario = {p.scenario_flags, p.rival_inhabitants, p.own_inhabitants, p.own_development,
                                p.rival_development};
         }
@@ -748,7 +748,7 @@ void load_cities(World& world, const assets::GameState& state, const WarningSink
         city.owner = player_from_original(c.owner);
         city.name = c.name;
         city.inhabitants.assign(c.inhabitants.begin(), c.inhabitants.end());
-        // The loader of the original (0x00484C6C, 0x00484C13) turns a stored 0 into 128 in the
+        // The loader of the original turns a stored 0 into 128 in the
         // satisfaction, the tax rate and the food supply.
         const auto loaded = [](std::uint8_t v) { return v == 0 ? std::uint8_t{128} : v; };
         for (const std::uint8_t v : c.satisfaction) {
@@ -790,7 +790,7 @@ void load_cities(World& world, const assets::GameState& state, const WarningSink
 void load_houses(World& world, const assets::GameState& state, const assets::BuildingTable& buildings,
                  const WarningSink& warn) {
     // Only on a dwelling (HAUS_PRODTYP Kind WOHNUNG); the class is the building's, as in the loader
-    // of the original (0x00483EE0).
+    // of the original.
     for (const auto& r : state.houses) {
         const auto island = world.island_index(r.island);
         if (!island || !world.islands()[*island].map.contains(r.x, r.y)) {
@@ -852,7 +852,7 @@ void load_island_states(World& world, const assets::ChunkFile& file, const asset
             }
         }
         // Craters: the list of the savegame. The original searches them when it builds a world from
-        // a scenario (SZENE chunk, 0x0048C5C0), whose list may be empty (Bündnispolitik), and for
+        // a scenario (SZENE chunk), whose list may be empty (Bündnispolitik), and for
         // islands without a list (INSEL3/4).
         constexpr std::size_t kCraterFields = 0x4C;
         if (island.header.raw.size() >= kCraterFields && !scenario) {
@@ -886,7 +886,7 @@ void load_volcanoes(World& world, const assets::GameState& state, const WarningS
     }
     if (state.running_volcano) {
         // The original keeps no lava in its savegames and starts a running eruption anew, with a
-        // new pattern and without the message (0x0048C0F0, S-062).
+        // new pattern and without the message (S-062).
         if (const auto ref = crater_ref(*state.running_volcano)) {
             const auto seed = static_cast<std::uint16_t>(world.random(RandomStream::Islands).below(0x8000));
             if (!erupt(world, *ref, seed, false, nullptr)) {
@@ -904,7 +904,7 @@ void load_timers(World& world, const assets::GameState& state) {
                                                     state.tutorial.value_or(0) != 0});
     }
     if (state.next_drought) {
-        // A stored 0 becomes 60 minutes, as in the original's loader (0x00484E3C).
+        // A stored 0 becomes 60 minutes, as in the original's loader.
         const std::uint32_t next = *state.next_drought != 0 ? *state.next_drought : 36'000U;
         world.set_next_drought_ms(std::uint64_t{next} * 100);
     }
@@ -1134,7 +1134,7 @@ void load_growth(World& world, const assets::GameState& state, const assets::Bui
 /// AUFTRAG4: the missions, with a slot for each one a player names.
 void load_missions(World& world, const assets::ChunkFile& file, const std::vector<assets::PlayerRecord>& players,
                    std::vector<std::string>* warnings, const WarningSink& warn) {
-    // docs/re/missions.md: the record of slot s goes to mission s; players name theirs by slot.
+    // The record of slot s goes to mission s; players name theirs by slot.
     if (auto records = assets::load_missions(file); !records) {
         warn(records.error().message);
     } else {
@@ -1173,7 +1173,7 @@ void load_player_states(World& world, const std::vector<assets::PlayerRecord>& p
         }
         Player& p = *pp;
         p.status = status_from_original(r.kind);
-        // Only humans and computers have missions (Player_Tick reads the slot for controller 0, 0x0C).
+        // Only humans and computers have missions (controllers 0 and 0x0C).
         if (r.mission < world.missions().size() && (p.role == PlayerRole::Human || p.role == PlayerRole::Computer)) {
             p.mission = r.mission;
         } else if (r.mission != 0xFF && (p.role == PlayerRole::Human || p.role == PlayerRole::Computer)) {
@@ -1181,7 +1181,7 @@ void load_player_states(World& world, const std::vector<assets::PlayerRecord>& p
         }
         p.opponents_defeated = r.arches_allowed;
         p.bankrupt_checks = static_cast<std::uint8_t>(std::min<std::uint16_t>(r.defeat_counter, 39));
-        // A human or computer with no city and no ship is a slot nobody plays (0x0048C0F0).
+        // A human or computer with no city and no ship is a slot nobody plays.
         if (p.status == PlayerStatus::Playing && (p.role == PlayerRole::Human || p.role == PlayerRole::Computer) &&
             !owns_city(world, static_cast<PlayerId>(i)) && !owns_ship(world, static_cast<PlayerId>(i))) {
             p.status = PlayerStatus::Absent;
@@ -1206,7 +1206,7 @@ void load_extension(World& world, const assets::ChunkFile& file, const assets::B
 
 /// Clears the trade settings of each player city that trades more wares than its Kontor allows.
 void trim_all_trade_settings(World& world, const assets::BuildingTable& buildings) {
-    // 0x00481EE0 on loading: such a city loses all its trade settings.
+    // The original on loading: such a city loses all its trade settings.
     for (const City& c : world.cities()) {
         const Player* owner = world.player(c.owner);
         const assets::BuildingType* kontor = kontor_of(world, buildings, c);
@@ -1223,7 +1223,7 @@ core::Result<World> load_world(const assets::ChunkFile& file, const assets::Buil
                                const assets::GameDirectory& game, std::vector<std::string>* warnings,
                                const WorldStart& start) {
     if (plans_islands(file)) {
-        // The SZENE handler of the original makes the islands while the scenario loads (0x0048C5C0).
+        // The SZENE handler of the original makes the islands while the scenario loads.
         auto generated = generate_islands(file, game, buildings, start, warnings);
         if (!generated) {
             return generated.error();

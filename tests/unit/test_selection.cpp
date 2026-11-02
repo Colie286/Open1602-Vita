@@ -99,7 +99,7 @@ TEST_CASE("selection: the same object keeps its serial, a new one gets another")
 
 TEST_CASE("selection: a building or unit selected from the settings shows in the info mode") {
     namespace m = app::side_mode;
-    // Map_OnLeftUp 0x0040AFF0: the settings handle the click like the info mode and switch to it.
+    // The settings handle the click like the info mode and switch to it.
     CHECK(app::mode_after_selecting(m::kOptions, true) == m::kInfo);
     // A click on nothing keeps the settings open.
     CHECK(app::mode_after_selecting(m::kOptions, false) == m::kOptions);

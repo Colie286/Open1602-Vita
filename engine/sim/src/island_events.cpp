@@ -16,7 +16,7 @@ constexpr std::uint64_t kLongDroughtMs = 9'000 * kTenth;  // 15 minutes on "hard
 constexpr std::uint64_t kHalfHourTenths = 18'000;
 constexpr std::uint8_t kWeakest = 12;  // weaker droughts are over
 
-/// The drought tables (0x0049AD78 and the bytes before it): rows by difficulty, a drought where
+/// The drought tables (and the bytes before it): rows by difficulty, a drought where
 /// the bit of the index is set. Difficulty 1 only meets one stray byte before the table (S-043).
 constexpr std::array<std::uint32_t, 4> kDroughtTable = {
     0,
@@ -103,7 +103,7 @@ std::uint32_t recovery_scan(World& world, const assets::BuildingTable& buildings
     return recovered;
 }
 
-/// The drought roll of one island (0x0046B3E0): only once the next drought time has come.
+/// The drought roll of one island: only once the next drought time has come.
 void roll_drought(World& world, std::uint16_t i, std::uint8_t level, std::vector<IslandEvent>* events) {
     const std::uint64_t now = world.time_ms();
     if (level == 0 || now < world.next_drought_ms()) {

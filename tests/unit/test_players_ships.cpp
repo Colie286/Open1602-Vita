@@ -341,7 +341,7 @@ TEST_CASE("world renderer: warehouse flags in the owner's colour") {
 
     const auto flags = render::collect_building_figures(world, *buildings, *figures);
     REQUIRE(flags.size() == 2);
-    // Centre of the footprint plus Fahnoffs turned with the building (0x004466A0).
+    // Centre of the footprint plus Fahnoffs turned with the building.
     CHECK(flags[0].x == 7.5);  // 5 + 1 + 2/2 + 0.5
     CHECK(flags[0].y == 7.0);  // 5 + 1 + 3/2 - 0.5
     CHECK(flags[0].z == 2.0);
@@ -382,7 +382,7 @@ TEST_CASE("world renderer: warehouse flags in the owner's colour") {
     CHECK(s.parts[0].y == 232 - 64 - 1);
     CHECK(s.row == (232 + 40 - 1) / 16);  // sorted by y + Posoffs[1]
 
-    // No display figures on an island the local player has not discovered (0x00486B60).
+    // No display figures on an island the local player has not discovered.
     layers.local_player = 0;
     CHECK(!render::building_figure_sprites(flag, world, *buildings, view, layers, 200, s));
     world.island(0).discover(0);
@@ -567,7 +567,7 @@ TEST_CASE("scenario: high scores and the head of a scenario") {
     CHECK(scores[0].game_id == 713262714U);
     CHECK(scores[1].name.empty());
 
-    // A file without the SZENE_* chunks has the original's defaults (0x0048D7A0).
+    // A file without the SZENE_* chunks has the original's defaults.
     assets::ChunkFile empty;
     const assets::ScenarioHeader h = assets::load_scenario_header(empty);
     CHECK(h.mission_number == assets::ScenarioHeader::kNone);

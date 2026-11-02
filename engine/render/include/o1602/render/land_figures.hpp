@@ -20,19 +20,19 @@
 
 namespace o1602::render {
 
-/// Height per Posoffs pixel of the tile a figure is made on (0x004963E8).
+/// Height per Posoffs pixel of the tile a figure is made on.
 inline constexpr double kHeightPerPosoffs = 0.028;
 /// Height of a figure made on land (Posoffs 20, HIGHBODEN): drawn 17 px higher at full zoom.
 inline constexpr double kLandHeight = 0.56;
 
-/// Height of a land figure made on world point (x, y): 0.028 * Posoffs of what stands on that tile
-/// (callers of 0x00446CA0), 0.56 on land, 0 on beach, harbour tiles and sea. With `piers_as_land`
-/// the rule for soldiers (0x00451180): piers and beach ruins count as land.
+/// Height of a land figure made on world point (x, y): 0.028 * Posoffs of what stands on that tile,
+/// 0.56 on land, 0 on beach, harbour tiles and sea. With `piers_as_land`
+/// the rule for soldiers: piers and beach ruins count as land.
 [[nodiscard]] double spawn_height(const sim::World& world, const assets::BuildingTable& buildings, double x, double y,
                                   bool piers_as_land = false);
 
 /// How much of a worker or animal standing on world point (x, y) its tile hides, in 1/256 of the
-/// figure's height, kCropHidden: all of it (Figure_CropCut, 0x00451250). Roads, ground, squares,
+/// figure's height, kCropHidden: all of it. Roads, ground, squares,
 /// beach and the like hide nothing; crops hide the legs by growth stage and crop, ripe and tall
 /// young trees the whole figure, so a woodcutter vanishes into the tree he fells; quarries hide
 /// nothing, every other building all. Workers, hunters, grazing animals and deer only (kinds
@@ -41,7 +41,7 @@ inline constexpr double kLandHeight = 0.56;
                                      double y);
 
 /// Whether a townsman, carrier, cart, doctor, fireman or robber is drawn on a tile of building
-/// type `b` (0x00451590): on roads, ground, ruins, squares, river corners, bridges, beach ruins
+/// type `b`: on roads, ground, ruins, squares, river corners, bridges, beach ruins
 /// and piers. On the tiles of a building (leaving home, at the target) it is hidden.
 [[nodiscard]] bool walker_visible_on(const assets::BuildingType* b) noexcept;
 

@@ -43,15 +43,15 @@ enum class PlayerStatus : std::uint8_t {
     Absent,    ///< nobody plays the slot: it had no city and no ship when the game started
 };
 
-/// The switches a scenario sets for a computer player (PLAYER4 +0x1C, runtime +0x70;
-/// docs/re/ai.md and docs/re/diplomacy.md). New games and the endless game have none.
+/// The switches a scenario sets for a computer player (PLAYER4 +0x1C).
+/// New games and the endless game have none.
 namespace scenario_flag {
-inline constexpr std::uint32_t kNoColonies = 0x002;      ///< founds no further cities (0x00426290)
-inline constexpr std::uint32_t kNoTrader = 0x004;        ///< the free trader passes its Kontors by (0x004547E0)
-inline constexpr std::uint32_t kPassive = 0x008;         ///< no building while at peace with every human (0x0040EEF0)
+inline constexpr std::uint32_t kNoColonies = 0x002;      ///< founds no further cities
+inline constexpr std::uint32_t kNoTrader = 0x004;        ///< the free trader passes its Kontors by
+inline constexpr std::uint32_t kPassive = 0x008;         ///< no building while at peace with every human
 inline constexpr std::uint32_t kRivalSize = 0x010;       ///< minds humans with more inhabitants than rival_inhabitants
-inline constexpr std::uint32_t kFixedArmy = 0x020;       ///< recruits up to a fixed strength (0x00425580)
-inline constexpr std::uint32_t kNoFleet = 0x040;         ///< no supply and patrol ships (0x00424BF0)
+inline constexpr std::uint32_t kFixedArmy = 0x020;       ///< recruits up to a fixed strength
+inline constexpr std::uint32_t kNoFleet = 0x040;         ///< no supply and patrol ships
 inline constexpr std::uint32_t kOwnSize = 0x080;         ///< sulks at humans while below own_inhabitants
 inline constexpr std::uint32_t kOwnDevelopment = 0x100;  ///< sulks at everyone while below own_development
 inline constexpr std::uint32_t kRivalDevelopment = 0x200;  ///< minds humans beyond rival_development
@@ -59,7 +59,7 @@ inline constexpr std::uint32_t kRivalDevelopment = 0x200;  ///< minds humans bey
 
 /// A scenario's switches for a player and the thresholds of its attitude (PLAYER4 +0x1C .. +0x25).
 /// Inhabitants are those of all the player's cities; a development is the best city's, 32 per class
-/// reached plus the share of its highest class (0x0047F220, 0 .. 159).
+/// reached plus the share of its highest class (0 .. 159).
 struct ScenarioSwitches {
     std::uint32_t flags = 0;              ///< scenario_flag bits (+0x1C)
     std::uint16_t rival_inhabitants = 0;  ///< +0x20, for kRivalSize
@@ -83,7 +83,7 @@ struct Player {
     /// Index into World::factions(): the settlers unless the slot is one of a neutral faction.
     FactionId faction = faction::kSettlers;
     /// Unlocked build levels: bit n - 1 = INFRA number n (BuildingTable::infra_levels()). A level
-    /// stays unlocked once one city of the player reached it (0x0047F8A0).
+    /// stays unlocked once one city of the player reached it.
     std::uint32_t infra_mask = 0;
     static_assert(infra::kMaxLevel <= 32, "infra_mask holds one bit per level");
     /// Unlocked levels a package added after the original's (33 to 255, levels.toml): bit
@@ -98,16 +98,16 @@ struct Player {
     std::uint16_t monuments_allowed = 0;
     std::uint16_t monuments_built = 0;
 
-    /// The player's mission (scenarios; docs/re/missions.md), kNoMission for none.
+    /// The player's mission (scenarios), kNoMission for none.
     MissionId mission = kNoMission;
     PlayerStatus status = PlayerStatus::Playing;
     /// Accomplished the mission (or met it when someone else did); doubles the score.
     bool won = false;
     /// Opponents this player defeated (goal 0x200). The original counts the triumphal arch
-    /// allowances (player + 0x8E) instead, which a scenario may preset; loading such a file takes
+    /// allowances instead, which a scenario may preset; loading such a file takes
     /// that value.
     std::uint16_t opponents_defeated = 0;
-    /// Fights for the score (PLAYER4 +0x14 .. +0x1A, runtime +0x92 ..): soldiers this player killed
+    /// Fights for the score (PLAYER4 +0x14 .. +0x1A): soldiers this player killed
     /// and lost, ships it sank and lost. A sunk ship counts its soldiers aboard as killed and lost
     /// too. Kills count only for humans and computers (the pirates earn nothing).
     /// 32 bits (the original's 16 stop at 65 535, below the kills of a game with 100 000 soldiers);
@@ -121,7 +121,7 @@ struct Player {
     /// counter for both and never resets it (S-107).
     std::uint8_t bankrupt_checks = 0;
     std::uint8_t empty_checks = 0;
-    /// Trade statistics (player + 0x74, + 0x78): every purchase and sale with a Kontor adds 32
+    /// Trade statistics: every purchase and sale with a Kontor adds 32
     /// times its value, every 5 s they shrink by 1/180. Divided by 480 they are a moving
     /// average per minute (the trade balance of missions and of the status bar).
     std::int64_t purchases = 0;
@@ -243,7 +243,7 @@ constexpr void make_neutral(Player& player, FactionId faction) noexcept {
                                                 : PlayerStatus::Playing;
 }
 
-/// Money a player gets from or pays for a trade with a Kontor (0x00475AB0, 0x00475A20): it
+/// Money a player gets from or pays for a trade with a Kontor: it
 /// counts in the trade statistics, unlike taxes, costs or tributes.
 /// Money after adding `value`, held within the range of the original's 32-bit field.
 [[nodiscard]] inline std::int32_t money_plus(std::int32_t money, std::int64_t value) noexcept {

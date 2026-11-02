@@ -535,7 +535,7 @@ void SdlUiRenderer::draw(const std::vector<ui::DrawItem>& items, std::int32_t ox
     const auto even_place = [&](std::int32_t x, std::int32_t y) {
         return ((std::lround((ox + x) / scale) + std::lround((oy + y) / scale)) & 1) == 0;
     };
-    // 0x00404CD0: every second pixel of (x, y, w, h) in `c`; row r starts at (h - r) & 1, so the
+    // Every second pixel of (x, y, w, h) in `c`; row r starts at (h - r) & 1, so the
     // pixels where x + r + h is even.
     const auto checkerboard = [&](const ui::DrawItem& d, const assets::Rgba& c) {
         if (m_checker.texture == nullptr) {
@@ -561,7 +561,7 @@ void SdlUiRenderer::draw(const std::vector<ui::DrawItem>& items, std::int32_t ox
     for (const ui::DrawItem& d : items) {
         switch (d.kind) {
             case ui::DrawItem::Kind::Sprite: {
-                // Faded (0x004048E0): only its pixels on the screen's even x + y.
+                // Faded: only its pixels on the screen's even x + y.
                 const int mode = !d.faded ? kModeSprite : even_place(d.x, d.y) ? kModeFaded : kModeFadedOdd;
                 const Texture t = sprite(d.block, d.gfx, mode, 0, d.tint);
                 if (d.w > 0 && d.h > 0 && t.texture != nullptr && t.w > 0 && t.h > 0) {
@@ -601,7 +601,7 @@ void SdlUiRenderer::draw(const std::vector<ui::DrawItem>& items, std::int32_t ox
                      d.x, d.y, d.half, kMaskAlpha);
                 break;
             case ui::DrawItem::Kind::SpriteRaster: {
-                // 0x00404740: on the pixels where x + y of the screen is even (the 1024 layout's).
+                // On the pixels where x + y of the screen is even (the 1024 layout's).
                 blit(sprite(d.block, d.gfx, even_place(d.x, d.y) ? kModeRaster : kModeRasterOdd, d.colour), d.x, d.y,
                      false);
                 break;

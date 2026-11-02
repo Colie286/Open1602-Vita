@@ -23,7 +23,7 @@ constexpr std::array<std::int32_t, Tutorial::kChapters> kLastPage{8, 18, 27, 35,
 constexpr std::array<std::uint16_t, Tutorial::kChapters> kSpeech{1023, 1046, 1073, 1114, 1098};
 
 // Chapter 1: the buildings by HAUS Id and the build menu's categories they are in (the original's
-// table in 0x00431500, docs/re/tutorial.md).
+// Docs/re/tutorial.md).
 constexpr std::uint32_t kForester = sim::id::kForester;
 constexpr std::uint32_t kFisher = sim::id::kFisher;
 constexpr std::uint32_t kSheepFarm = sim::id::kSheepFarm;
@@ -47,7 +47,7 @@ constexpr std::int32_t kStepMarket = 17;
 constexpr std::int32_t kStepDone = 18;
 constexpr std::uint32_t kHousesWanted = 4;
 
-constexpr std::uint8_t kRoadRadius = 70;  // the flood from the Kontor (0x004310C0)
+constexpr std::uint8_t kRoadRadius = 70;  // the flood from the Kontor
 constexpr std::uint32_t kTon = sim::kStockUnitsPerTon;
 constexpr std::uint32_t kBricksLeft = 5 * kTon;
 constexpr std::uint32_t kHalfHealth = 64;   // of 128
@@ -70,7 +70,7 @@ bool has_city_on(const sim::World& world, std::uint16_t island, sim::PlayerId pl
                        [&](const sim::City& c) { return c.island == island && c.owner == player; });
 }
 
-/// Ship_ContextActions (0x0044E630) for a ship of the human that lies still.
+/// The actions the ship's window offers for a ship of the human that lies still.
 std::uint8_t ship_actions(const sim::Simulation& simulation, const assets::BuildingTable& buildings,
                           const sim::Ship& ship) {
     const sim::World& w = simulation.world();
@@ -93,7 +93,7 @@ std::uint8_t ship_actions(const sim::Simulation& simulation, const assets::Build
             }
         }
     } else if (const auto site = sim::kontor_site_near(w, buildings, ship.x, ship.y)) {
-        // Land within 4 tiles of a ship in an island's rectangle (0x00448EF0): an island without a
+        // Land within 4 tiles of a ship in an island's rectangle: an island without a
         // city of the owner can take a Kontor; otherwise the coast may be the owner's own.
         if (!has_city_on(w, site->island, ship.owner)) {
             m |= ship_action::kFound;
@@ -143,7 +143,7 @@ Facts::ShipState ship_state(const sim::Simulation& simulation, const assets::Bui
     return s;
 }
 
-/// The largest city of a player (0x00480580): island and number.
+/// The largest city of a player: island and number.
 std::optional<std::pair<std::uint16_t, std::uint8_t>> largest_city(const sim::World& world, sim::PlayerId player) {
     std::optional<std::pair<std::uint16_t, std::uint8_t>> best;
     std::uint64_t most = 0;

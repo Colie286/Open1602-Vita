@@ -17,26 +17,26 @@ namespace {
 /// Time units of a tick: a step of `need` units at `speed` units per tick takes
 /// need * kTimeUnits / speed of them.
 constexpr std::uint64_t kTimeUnits = 65536;
-/// A cart only sets out for at least a ton (0x0047D810 with min 32).
+/// A cart only sets out for at least a ton (with min 32).
 constexpr std::uint16_t kMinCartLoad = 32;
 /// Carriers want at least half a load, at most 2 t (min(Maxtrag / 2, 64)).
 constexpr std::uint16_t kMaxCarrierMinimum = 64;
-/// Room of every further market or warehouse of a city (0x0047AB00: 0x140 = 10 t).
+/// Room of every further market or warehouse of a city (0x140 = 10 t).
 constexpr std::uint32_t kStorehouseRoom = 320;
-/// Producers a market cart collects from: HAUS_PRODTYP kinds 1..6 (0x004706E0).
+/// Producers a market cart collects from: HAUS_PRODTYP kinds 1..6.
 constexpr std::int32_t kLastProducerKind = 6;
-/// Buildings a carrier fetches from: kinds 1..8, producers, markets and warehouses (0x004704D0).
+/// Buildings a carrier fetches from: kinds 1..8, producers, markets and warehouses.
 constexpr std::int32_t kLastSourceKind = 8;
 /// HAUPT (0x1E): handled like a warehouse; no building of the original uses it.
 /// Statistics value of a market is at most this (u16 in the original).
 constexpr std::uint32_t kMaxU16 = std::numeric_limits<std::uint16_t>::max();
 
-/// Deposits (0x0046BFF0): small veins serve every mine, big ones every mine down to 120 t.
+/// Deposits: small veins serve every mine, big ones every mine down to 120 t.
 constexpr std::uint8_t kSmallVein = 1;
 constexpr std::uint32_t kBigVeinShared = 0xF00;
 /// Below 40 t computer players stop exhausting small veins.
 constexpr std::uint32_t kComputerKeeps = 0x500;
-// Deer and hunters (docs/re/deer.md).
+// Deer and hunters.
 constexpr std::uint8_t kDeerRange = 6;            // 13 x 13 square around the spot
 constexpr std::uint32_t kDeerFallMs = 5'000;      // falls when it finds no way
 constexpr std::uint32_t kDeerShotMs = 10'000;     // lies after the shot
@@ -63,7 +63,7 @@ bool is_storehouse(std::int32_t prod_kind) noexcept {
 }
 
 /// Finished goods (Schwerter 11 .. Ziegel 24, and the goods of packages) are always collected; raw
-/// material and intermediate goods (Erz 2 .. Eisen 10) only from a full store (0x004717B0).
+/// material and intermediate goods (Erz 2 .. Eisen 10) only from a full store.
 bool cart_collects_always(std::uint8_t ware) noexcept {
     return (ware >= ware::kSwords && ware <= ware::kLastTrade) || ware >= assets::ware::kFirstOwn;
 }
@@ -147,7 +147,7 @@ Logistics::Logistics(World& world, const assets::BuildingTable& buildings, const
 }
 
 std::uint32_t Logistics::step_speed(const assets::FigureType& figure, std::uint8_t walk_speed) noexcept {
-    // 0x0044A690: Speed * 1e-4 * 32 / Wegspeed tiles per 20 ms, i.e. 0.008 * Speed / Wegspeed
+    // Speed * 1e-4 * 32 / Wegspeed tiles per 20 ms, i.e. 0.008 * Speed / Wegspeed
     // tiles per 50 ms tick.
     const std::uint64_t w = std::max<std::uint8_t>(walk_speed, 1);
     const std::uint64_t units = std::uint64_t{figure.speed} * kTileUnits * 8U / (1000U * w);
@@ -189,8 +189,8 @@ void Logistics::update_storage() {
             continue;
         }
         Storage& s = storage[city];
-        // Only standing markets and Kontors add room (0x0047AB00, 0x00481170); a destroyed Kontor
-        // still gives its own (small) base, as the original's city +0x20.
+        // Only standing markets and Kontors add room; a destroyed Kontor
+        // still gives its own (small) base.
         if (!b->type->destroyed) {
             ++s.count;
         }
@@ -240,7 +240,7 @@ void Logistics::handle(const ProductionEvent& event) {
     }
     const bool workshop = type.prod_kind == static_cast<std::int32_t>(ProductionKind::Handwerk);
     if (second) {
-        // The second raw material always comes by carrier (0x0047E22C).
+        // The second raw material always comes by carrier.
         send_carrier(event.production, event.ware, workshop ? type.worker_figure : kCarrierFigure);
         return;
     }
@@ -258,7 +258,7 @@ void Logistics::handle(const ProductionEvent& event) {
             send_worker(event.production, event.ware, WalkerKind::Fisher);
             break;
         default:
-            // Hunters are called by the deer (0x0047D0E0), not by the production cycle.
+            // Hunters are called by the deer, not by the production cycle.
             break;
     }
 }
@@ -320,7 +320,7 @@ void Logistics::mark_goals(const IslandMap& map, std::uint8_t city, std::int32_t
 }
 
 void Logistics::send_carrier(std::uint32_t home, std::uint8_t ware, std::uint16_t figure) {
-    // One carrier per building at a time (0x00443080), also for the two raw materials.
+    // One carrier per building at a time, also for the two raw materials.
     if (jobs(home) != 0) {
         return;
     }
@@ -487,7 +487,7 @@ void Logistics::begin_step(Walker& w) {
     const bool diagonal = next.x != w.tile.x && next.y != w.tile.y;
     w.length = diagonal ? kDiagonalUnits : kTileUnits;
     w.progress = 0;
-    // The pace is set by the tile the step starts on (0x00458EC0 sets +0x0F at every run).
+    // The pace is set by the tile the step starts on (sets +0x0F at every run).
     const assets::FigureType* fig = m_figures->get(w.figure);
     std::uint8_t ws = 32;
     const IslandMap& map = m_world->islands()[w.island].map;
@@ -622,7 +622,7 @@ void Logistics::pick_up(Walker& w) {
             city->ensure_ware(w.ware);
             city->reserved[w.ware] -= std::min<std::uint32_t>(w.reserved, city->reserved[w.ware]);
             w.reserved = 0;
-            // The reserved part plus what else is free (0x0047D640).
+            // The reserved part plus what else is free.
             const std::uint32_t take = std::min(space, city->available(w.ware));
             city->goods[w.ware] -= take;
             w.load = clamp_u16(w.load + take);
@@ -774,7 +774,7 @@ void Logistics::prepare_area(const Walker& w, const BuildingAt& hb, const assets
     const std::uint8_t type = std::min<std::uint8_t>(fig.speed_type, 3);
     WalkClass walk = WalkClass::Land;
     if (w.kind == WalkerKind::Cart || w.kind == WalkerKind::Firefighter) {
-        walk = WalkClass::Roads;  // the fire brigade only on roads (0x00470B60)
+        walk = WalkClass::Roads;  // the fire brigade only on roads
     } else if (w.kind == WalkerKind::Fisher) {
         walk = WalkClass::Water;
     }
@@ -801,7 +801,7 @@ void Logistics::prepare_area(const Walker& w, const BuildingAt& hb, const assets
                 const bool target = targets && (b->prod_kind == prod::kRipe || quarry) && b->ware == w.ware &&
                                     !m_reserved_tiles.contains(tile_key(w.island, t));
                 if (w.kind == WalkerKind::Fisher) {
-                    // 0x0046FB50: shoals of any owner; surf and river mouths facing the hut's
+                    // Shoals of any owner; surf and river mouths facing the hut's
                     // side are closed.
                     if ((b->kind == building_kind::kSurf || b->kind == building_kind::kRiverMouth) &&
                         cell.rotation == ((hut_rotation + 1) & 3U)) {
@@ -811,7 +811,7 @@ void Logistics::prepare_area(const Walker& w, const BuildingAt& hb, const assets
                     }
                     continue;
                 }
-                // 0x0046F920: the worker's own crop is walkable in its city, ripe tiles are goals.
+                // The worker's own crop is walkable in its city, ripe tiles are goals.
                 if (cell.city == w.city && (quarry || crop_ware(*m_buildings, *b) == w.ware)) {
                     m_finder.set(t, target ? PathFinder::Cell::Goal : PathFinder::Cell::Walkable, b->walk_speed[type]);
                 }
@@ -848,8 +848,8 @@ void Logistics::send_worker(std::uint32_t home, std::uint8_t ware, WalkerKind ki
     if (!hb) {
         return;
     }
-    // One worker per farm or fishing hut (Figuranz ignored, 0x00443080); cattle farms keep up
-    // to Figuranz animals out (0x0044AF10).
+    // One worker per farm or fishing hut (Figuranz ignored); cattle farms keep up
+    // to Figuranz animals out.
     const std::uint8_t limit = kind == WalkerKind::Grazer ? std::max<std::uint8_t>(hb->type->worker_count, 1) : 1;
     if (jobs(home) >= limit) {
         return;
@@ -936,7 +936,7 @@ void Logistics::mine_ore(std::uint32_t home) {
     }
     Production& p = m_world->productions()[home];
     const assets::BuildingType& mine = *hb->type;
-    // 0x0046C010: the mountain lies one tile from the mine's origin, on the side its rotation
+    // The mountain lies one tile from the mine's origin, on the side its rotation
     // faces.
     static constexpr std::array<TilePos, 4> kSide = {{{-1, 0}, {0, -1}, {1, 0}, {0, 1}}};
     const TilePos side{hb->origin.x + kSide[hb->rotation & 3U].x, hb->origin.y + kSide[hb->rotation & 3U].y};
@@ -960,7 +960,7 @@ void Logistics::mine_ore(std::uint32_t home) {
     m_stats.ore_mined += amount;
     const bool game_endless = (m_world->game_settings().flags & World::GameSettings::kEndlessVeins) != 0;
     if (!any_mine && m_rules != nullptr && m_rules->endless_veins(game_endless)) {
-        return;  // the deep mine's part of a big vein never runs out (0x0047E0A5)
+        return;  // the deep mine's part of a big vein never runs out
     }
     if (any_mine) {
         if (mine.ware == ware::kGold) {
@@ -975,7 +975,7 @@ void Logistics::mine_ore(std::uint32_t home) {
     }
     it->amount = static_cast<std::uint16_t>(it->amount - amount);
     if (it->amount < kStockUnitsPerTon) {
-        deposits.erase(it);  // 0x0046BDD0
+        deposits.erase(it);
     }
 }
 
@@ -1009,7 +1009,7 @@ void Logistics::deliver(Walker& w) {
         city->goods[w.ware] += added;
         city->book(w.ware, GoodsFlow::Lost, w.load - added);
         if (hb->type->prod_kind == static_cast<std::int32_t>(ProductionKind::Markt)) {
-            // The market counts deliveries for its stalls (0x0047D940 -> +0x10).
+            // The market counts deliveries for its stalls (-> +0x10).
             home.produced = clamp_u16(home.produced + added);
         }
         m_stats.goods_collected += added;
@@ -1018,7 +1018,7 @@ void Logistics::deliver(Walker& w) {
         std::uint16_t& slot = second ? home.raw2 : home.raw;
         slot = clamp_u16(std::uint32_t{slot} + w.load);
         if (home.rate == 0) {
-            // 0x0047D940: an idle building starts in the next second; the statistics window drops
+            // An idle building starts in the next second; the statistics window drops
             // the part of the wait that is left.
             home.elapsed =
                 static_cast<std::uint16_t>(home.elapsed > home.countdown ? home.elapsed - home.countdown : 0);
@@ -1115,7 +1115,7 @@ void Logistics::finish(Handle h, Walker& w) {
 
 namespace {
 
-/// Whether a tile carries trees for the deer (ripe or growing: 0x0046B920 looks at the ripe
+/// Whether a tile carries trees for the deer (ripe or growing: looks at the ripe
 /// record of a growing one).
 bool tree_tile(const World& world, const assets::BuildingTable& buildings, std::uint16_t island, std::int32_t x,
                std::int32_t y) {
@@ -1141,7 +1141,7 @@ const assets::BuildingType* record_at(const World& world, const assets::Building
 }  // namespace
 
 bool Logistics::deer_at(std::uint16_t island, TilePos spot) const {
-    // 0x0044BD00 finds the job of the spot: a deer, living or falling, keeps it until it is gone.
+    // The original finds the job of the spot: a deer, living or falling, keeps it until it is gone.
     bool taken = false;
     m_walkers.for_each([&](Handle, const Walker& w) {
         taken |= w.kind == WalkerKind::Deer && w.island == island && w.home_tile == spot;
@@ -1150,7 +1150,7 @@ bool Logistics::deer_at(std::uint16_t island, TilePos spot) const {
 }
 
 void Logistics::touch_spot(std::uint16_t island, TilePos spot) {
-    // 0x0046B2A0: the first slot of the place waits a minute for its next deer. A slot given up
+    // The first slot of the place waits a minute for its next deer. A slot given up
     // meanwhile is not found: its deer does not come back.
     for (DeerSpot& s : m_world->island(island).deer_spots) {
         if (s.used && s.x == spot.x && s.y == spot.y) {
@@ -1161,7 +1161,7 @@ void Logistics::touch_spot(std::uint16_t island, TilePos spot) {
 }
 
 void Logistics::remove_spot(std::uint16_t island, TilePos spot) {
-    // 0x0046B310: the slot is freed and the last used slot behind it moves into the hole.
+    // The slot is freed and the last used slot behind it moves into the hole.
     auto& slots = m_world->island(island).deer_spots;
     for (std::size_t i = 0; i < slots.size(); ++i) {
         if (!slots[i].used || slots[i].x != spot.x || slots[i].y != spot.y) {
@@ -1205,7 +1205,7 @@ bool Logistics::spawn_deer(std::uint16_t island, TilePos spot) {
 }
 
 void Logistics::fall(Walker& w) {
-    // 0x0045BFC0: no way to a place of its ware in the square. The deer falls for 5 s; its slot
+    // No way to a place of its ware in the square. The deer falls for 5 s; its slot
     // is given up at once.
     w.path.clear();
     w.step = 0;
@@ -1220,7 +1220,7 @@ bool Logistics::plan_deer(Walker& w) {
         m_reserved_tiles.erase(tile_key(w.island, *w.field));
         w.field.reset();
     }
-    // 0x004702B0: the 13 x 13 square around the spot, clipped to the island; open land, roads,
+    // The 13 x 13 square around the spot, clipped to the island; open land, roads,
     // ruins and ripe trees, all at the same cost; goals are ripe tiles of the ware nobody reserved,
     // of any owner.
     const IslandMap& map = m_world->islands()[w.island].map;
@@ -1235,7 +1235,7 @@ bool Logistics::plan_deer(Walker& w) {
         w.tile.y >= corner.y + height) {
         return false;
     }
-    // The original's wavefront (0x00471C50 with extra 0xC0) decides where the deer goes, so it
+    // The original's wavefront (with extra 0xC0) decides where the deer goes, so it
     // goes where the original's deer goes: cells are claimed by the first neighbour that reaches
     // them, the frontier is worked from its end, in rounds of 64 (one straight step). The first
     // goal from round 5 on (cost above 192, about 4 steps) is taken at once; else the last goal of
@@ -1345,7 +1345,7 @@ bool Logistics::plan_deer(Walker& w) {
     if (!found) {
         return false;
     }
-    // The way back along the codes (0x00472B60 builds the path from them).
+    // The way back along the codes (builds the path from them).
     w.path.clear();
     TilePos p = *found;
     while (state[at(p.x, p.y)] != kStart) {
@@ -1412,7 +1412,7 @@ void Logistics::deer_done(Handle h, Walker& w) {
 }
 
 void Logistics::remove_deer(Handle h, Walker& w) {
-    // 0x0045BFC0 state 2: the grass under it is eaten, its place waits a minute for the next
+    // The original state 2: the grass under it is eaten, its place waits a minute for the next
     // deer (if the place still has a slot), the figure is freed.
     harvest_tile(*m_world, *m_buildings, w.island, to_u16(w.tile.x), to_u16(w.tile.y), ware::kGrass);
     touch_spot(w.island, w.home_tile);
@@ -1433,10 +1433,10 @@ void Logistics::call_hunter(Handle deer_handle) {
     if (city == MapCell::kNoCity) {
         return;  // only on the territory of a city
     }
-    // 0x0047D0E0: the nearest switched-on hunting lodge within 8 tiles. Open1602 asks only the
+    // The nearest switched-on hunting lodge within 8 tiles. Open1602 asks only the
     // lodges of the city the deer stands in, skips busy ones and lodges whose circle the deer is
     // outside of, and then tries the next one (S-031). Like the original, a full lodge hunts on:
-    // the meat waits as raw material (0x0047D940 checks no room).
+    // the meat waits as raw material.
     struct Candidate {
         std::uint32_t production;
         std::int32_t distance;
@@ -1559,7 +1559,7 @@ void Logistics::hunter_arrive(Handle h, Walker& w) {
 }
 
 void Logistics::spawn_deer_at_spots() {
-    // 0x0046A100: every saved slot gets its deer at once, without looking at the trees.
+    // Every saved slot gets its deer at once, without looking at the trees.
     for (std::uint16_t i = 0; i < m_world->islands().size(); ++i) {
         const auto slots = m_world->islands()[i].deer_spots;
         for (const DeerSpot& s : slots) {
@@ -1612,7 +1612,7 @@ void Logistics::advance_islands(const std::vector<bool>* due) {
 
 std::vector<TilePos> deer_census_spots(const World& world, const assets::BuildingTable& buildings,
                                        std::uint16_t island) {
-    // 0x0046B920: spots where at least 4 of a tile and its 4 neighbours carry trees, scanned in
+    // Spots where at least 4 of a tile and its 4 neighbours carry trees, scanned in
     // rows y = 1, 3, ... and from the right. The original stops at 500 spots, so big islands only
     // got deer in the north (S-031); Open1602 takes all.
     const IslandMap& map = world.islands()[island].map;
@@ -1637,7 +1637,7 @@ std::uint32_t deer_allowed(std::size_t spots) noexcept {
 }
 
 void Logistics::census(std::uint16_t island) {
-    // 0x0046B920: `allowed` draws among the forest places. A place already held by one of the
+    // `allowed` draws among the forest places. A place already held by one of the
     // first `allowed` slots is skipped; otherwise it takes the highest free slot below `allowed`
     // and waits a minute, and a deer appears at once unless the middle is a young tree.
     const std::vector<TilePos> spots = deer_census_spots(*m_world, *m_buildings, island);
@@ -1679,9 +1679,9 @@ Disaster::Kind disaster_of(WalkerKind kind) noexcept {
 void Logistics::send_responder(std::uint32_t home, WalkerKind kind) {
     const auto hb = building_of(home);
     if (!hb || jobs(home) != 0) {
-        return;  // one figure per building (0x00443080)
+        return;  // one figure per building
     }
-    // The original sends both for any disaster of the city (city + 0x1FE); the figure of the other
+    // The original sends both for any disaster of the city; the figure of the other
     // kind finds nothing and is gone at once. Open1602 only sends it when there is work.
     const std::uint16_t island = m_world->productions()[home].island;
     const Disaster::Kind wanted = disaster_of(kind);
@@ -1765,8 +1765,8 @@ bool Logistics::find_disaster(Walker& w, const BuildingAt& hb, const assets::Fig
         return false;
     }
     if (w.kind == WalkerKind::Firefighter && !w.path.empty()) {
-        // The fireman stops on the road in front of the fire and puts it out from there (0x0045A490
-        // walks to the tile it reached the building from, 0x00473650); the doctor goes in.
+        // The fireman stops on the road in front of the fire and puts it out from there
+        // (the tile it reached the building from); the doctor goes in.
         w.path.pop_back();
     }
     w.target = at->origin;
@@ -1989,7 +1989,7 @@ void Logistics::robber_flee(Handle h, Walker& r) {
         finish(h, r);
         return;
     }
-    // Into the nearest house of his city (0x00470EA0), the whole way at once (the original
+    // Into the nearest house of his city, the whole way at once (the original
     // re-plans after 12 tiles and is gone on the street, B7).
     prepare_robber_area(r, *fig);
     const IslandMap& map = m_world->islands()[r.island].map;

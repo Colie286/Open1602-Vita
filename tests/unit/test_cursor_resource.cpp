@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The original's mouse cursors from a PE file's resources (docs/re/ui.md "Mouse cursors").
+// The original's mouse cursors from a PE file's resources.
 
 #include <cstdint>
 #include <vector>

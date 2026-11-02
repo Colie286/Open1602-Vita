@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Events of the islands, every 30 s per island (0x0046B3E0, docs/re/growth.md#dürre): droughts.
+// Events of the islands, every 30 s per island: droughts.
 //
 // A drought lowers the fertility of an island. While it lasts, ripe fields that are not fertile at
 // its strength wither, also when they are harvested. When it ends, its strength halves every
@@ -51,7 +51,7 @@ void advance_island_events(World& world, const assets::BuildingTable& buildings,
                            const FieldReserved& reserved, std::vector<IslandEvent>* events,
                            const std::vector<bool>* due = nullptr);
 
-/// Starts a drought on an island (0x0046B3A0): `duration_ms` from now, replacing one that runs.
+/// Starts a drought on an island: `duration_ms` from now, replacing one that runs.
 void start_drought(World& world, std::uint16_t island, std::uint8_t strength, std::uint64_t duration_ms,
                    std::vector<IslandEvent>* events);
 

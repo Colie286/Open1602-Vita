@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Courses of ships: SeaMap and SeaPlanner (docs/re/ships.md, "Pathfinding at sea").
+// Courses of ships: SeaMap and SeaPlanner.
 
 #include <algorithm>
 #include <cstdint>

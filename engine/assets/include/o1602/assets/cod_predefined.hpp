@@ -13,10 +13,10 @@ struct CodPredefinedSymbol {
     std::int32_t value;
 };
 
-/// Symbols predefined by Cod_LoadHaeuser (1602.exe @ 0x00460750) for haeuser.cod.
+/// Symbols the original predefines for haeuser.cod.
 std::span<const CodPredefinedSymbol> cod_predefined_haeuser() noexcept;
 
-/// Symbols predefined by Cod_LoadFiguren (1602.exe @ 0x00441210) for figuren.cod.
+/// Symbols the original predefines for figuren.cod.
 std::span<const CodPredefinedSymbol> cod_predefined_figuren() noexcept;
 
 }  // namespace o1602::assets

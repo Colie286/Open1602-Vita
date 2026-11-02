@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Scores and the end of a game (docs/re/missions.md): the points of a player
-// (Player_ComputeScore 0x00474F90), what identifies a game for its high score list, and the
+// Scores and the end of a game: the points of a player,
+// what identifies a game for its high score list, and the
 // figures the end screen shows.
 #pragma once
 
@@ -17,7 +17,7 @@ namespace o1602::sim {
 
 class World;
 
-/// A player's score sheet as the original computes it (S[0..21] of 0x00474F90) and the end screen
+/// A player's score sheet as the original computes it (S[0..21]) and the end screen
 /// shows it: a figure per line of the status column and the points it gives. `total` goes into the
 /// high score list.
 struct ScoreSheet {
@@ -54,7 +54,7 @@ struct ScoreSheet {
     return score_sheet(world, buildings, player).total;
 }
 
-/// The curves of the score (0x00474F90's tables): city points per Einwohner / 20 (0..1000), and
+/// The curves of the score: city points per Einwohner / 20 (0..1000), and
 /// points of soldiers and ships by their number of kills (0..200).
 [[nodiscard]] std::uint8_t city_curve(std::size_t index) noexcept;
 [[nodiscard]] std::int32_t fight_curve(std::size_t index) noexcept;

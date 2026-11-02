@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Consumption of the inhabitants (docs/re/consumption.md).
+// Consumption of the inhabitants.
 
 #include "../test_framework.hpp"
 

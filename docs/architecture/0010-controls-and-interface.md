@@ -5,7 +5,7 @@ Status: accepted · 2026-10-18 (key bindings confirmed as the default by the pro
 ## Context
 The interface of the original has been rebuilt: side panel, build menu, the selection windows. Its
 controls date from 1998: the left button gives commands, the right one cancels
-(report on selection, to be moved into [ui.md](../re/ui.md)); many functions have no key, some keys no
+(report on selection, to be moved into); many functions have no key, some keys no
 function; sinking ships and declaring war happen without confirmation; some things the simulation could do
 are not offered by the interface (exploring at the shipyard and the pirate warehouse, U-013).
 

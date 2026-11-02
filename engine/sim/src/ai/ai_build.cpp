@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The building tasks of the computer players (docs/re/ai.md, "Stages"): each runs its site
+// The building tasks of the computer players: each runs its site
 // search step by step and builds the best site through the normal build order; roads, fields,
 // the survey of a city (task 8) and the maintenance sweep.
 #include <algorithm>
@@ -60,7 +60,7 @@ bool is_farm_task(std::uint8_t task) {
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------
-// Slot bookkeeping (0x0040FB20, 0x0040F560, 0x0040FAD0, 0x0040FB50)
+// Slot bookkeeping
 
 void Engine::slot_built(AiPlayer& p, std::uint8_t slot) {
     if (CityPlan* r = current_plan(p)) {
@@ -125,7 +125,7 @@ std::size_t Engine::demolish_tile(AiPlayer& p, std::int32_t x, std::int32_t y) {
 
 std::int32_t Engine::road_line(AiPlayer& p, std::int32_t x, std::int32_t y, std::int32_t len, std::uint8_t dir,
                                bool force) {
-    // 0x00411450: a straight dirt road with wooden bridges, at most 13 tiles (the original makes
+    // A straight dirt road with wooden bridges, at most 13 tiles (the original makes
     // 6 of a longer one). A line that runs into a road ends there.
     (void)force;
     len = std::clamp(len, 0, 13);
@@ -181,7 +181,7 @@ std::int32_t Engine::road_line(AiPlayer& p, std::int32_t x, std::int32_t y, std:
 
 std::int32_t Engine::road_three(AiPlayer& p, std::int32_t x, std::int32_t y, std::uint8_t dir, std::int32_t right,
                                 std::int32_t left, std::int32_t back, bool force) {
-    // 0x004118A0: three straight roads from one point; seven or more tiles open new sites.
+    // Three straight roads from one point; seven or more tiles open new sites.
     std::int32_t placed = road_line(p, x, y, back, static_cast<std::uint8_t>((dir + 2U) & 3U), true);
     placed += road_line(p, x, y, right, static_cast<std::uint8_t>((dir + 1U) & 3U), force);
     placed += road_line(p, x, y, left, static_cast<std::uint8_t>((dir + 3U) & 3U), force);
@@ -198,7 +198,7 @@ std::int32_t Engine::road_three(AiPlayer& p, std::int32_t x, std::int32_t y, std
 }
 
 void Engine::plaza_ring(AiPlayer& p) {
-    // 0x00418940: a square around the Kontor.
+    // A square around the Kontor.
     const City* c = current_city(p);
     const assets::BuildingType* square = by_id(id::kSquare);
     if (c == nullptr || square == nullptr || !c->warehouse_x || !c->warehouse_y) {
@@ -262,7 +262,7 @@ std::vector<WoodReach> Engine::woodcutters_near(AiPlayer& p, std::int32_t x0, st
 
 void Engine::fill_fields(AiPlayer& p, std::int32_t x0, std::int32_t y0, std::int32_t x1, std::int32_t y1,
                          std::int32_t rings_n, std::uint8_t field_ware, std::uint8_t radius) {
-    // 0x00411B50: fields in rings around the farm, inside its reach, on ruins, meadows and trees.
+    // Fields in rings around the farm, inside its reach, on ruins, meadows and trees.
     // Fix S-122: other crops leave the trees in reach of the city's own woodcutters standing; the
     // original plants over them, and the woodcutter replants and is torn down in turn.
     const assets::BuildingType* ripe = producer(field_ware, 0);
@@ -473,7 +473,7 @@ void Engine::task_houses(AiPlayer& p) {
         slot_built(p, kSlotHouses);
         slot_ok(p, kSlotHouses);
         slot_ok(p, kSlotMarket);
-        // 0x0047B200: what the new house lacks opens the public building again.
+        // What the new house lacks opens the public building again.
         if (CityPlan* r = current_plan(p)) {
             const std::uint16_t sv = house_services(p.island, s.best_x0, s.best_y0);
             if ((sv & (hs::kKapelle | hs::kKirche)) == 0) {
@@ -698,7 +698,7 @@ void Engine::task_shipyard(AiPlayer& p) {
 }
 
 void Engine::task_shipyard_upgrade(AiPlayer& p) {
-    // 0x00419C00: the big yard where the small one stands (it is demolished first).
+    // The big yard where the small one stands (it is demolished first).
     pop(p);
     refund(p);
     CityPlan* r = current_plan(p);
@@ -794,7 +794,7 @@ void Engine::task_pirate_houses(AiPlayer& p) {
 }
 
 void Engine::task_kontor_upgrade(AiPlayer& p) {
-    // 0x0041CDD0: the next Kontor in place of the old one.
+    // The next Kontor in place of the old one.
     pop(p);
     refund(p);
     City* c = current_city(p);
@@ -815,7 +815,7 @@ void Engine::task_kontor_upgrade(AiPlayer& p) {
 }
 
 void Engine::task_paving(AiPlayer& p) {
-    // 0x00418D80: dirt roads and wooden bridges around the Kontor become stone, ring by ring.
+    // Dirt roads and wooden bridges around the Kontor become stone, ring by ring.
     pop(p);
     City* c = current_city(p);
     CityPlan* r = current_plan(p);
@@ -863,7 +863,7 @@ void Engine::task_paving(AiPlayer& p) {
 }
 
 void Engine::task_towers(AiPlayer& p) {
-    // 0x00418300: towers on the coast around the Kontor, apart from each other, near fish.
+    // Towers on the coast around the Kontor, apart from each other, near fish.
     pop(p);
     City* c = current_city(p);
     CityPlan* r = current_plan(p);
@@ -943,7 +943,6 @@ void Engine::task_towers(AiPlayer& p) {
 // Roads (task 6) and the layout of the runs (task 7)
 
 void Engine::task_roads(AiPlayer& p) {
-    // 0x00419210
     pop(p);
     City* c = current_city(p);
     if (c == nullptr || !c->warehouse_x || !c->warehouse_y) {
@@ -1025,7 +1024,7 @@ void Engine::task_layout(AiPlayer& p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Survey (task 8, 0x0041E100)
+// Survey (task 8)
 
 void Engine::task_survey(AiPlayer& p) {
     pop(p);
@@ -1067,7 +1066,7 @@ void Engine::task_survey(AiPlayer& p) {
         }
     }
     r->slots[kSlotKontor].count = static_cast<std::uint16_t>(kontor_level(*c));
-    // Cleanup (docs/re/demolish.md): exhausted mines; sheep and small weavers where cotton grows.
+    // Cleanup: exhausted mines; sheep and small weavers where cotton grows.
     for (const auto& [x, y] : finds.starved_mines) {
         demolish_tile(p, x, y);
     }
@@ -1216,7 +1215,7 @@ bool Engine::survey_tile(AiPlayer& p, const City& c, CityPlan& r, std::uint32_t 
 }
 
 // ---------------------------------------------------------------------------------------------
-// Maintenance sweep (0x0041F550) and the Kontor after a fire (0x0041D1F0)
+// Maintenance sweep and the Kontor after a fire
 
 void Engine::sweep(AiPlayer& p) {
     CityPlan* r = current_plan(p);
@@ -1469,7 +1468,7 @@ bool Engine::inner_wall(AiPlayer& p, std::int32_t x, std::int32_t y) {
 }
 
 void Engine::kontor_restore(AiPlayer& p) {
-    // 0x0041D1F0: a destroyed Kontor is built again at its level (the original always builds
+    // A destroyed Kontor is built again at its level (the original always builds
     // Kontor I, because it compares the intact Ids).
     City* c = current_city(p);
     CityPlan* r = current_plan(p);

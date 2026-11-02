@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Raw material: growth of crops, farm workers, cattle, fishing boats and mines
-// (docs/re/growth.md, docs/re/logistics.md).
+// Raw material: growth of crops, farm workers, cattle, fishing boats and mines.
 
 #include "../test_framework.hpp"
 

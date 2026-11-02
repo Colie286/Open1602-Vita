@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The ship's window (docs/re/ui.md#auswahlfenster): the ship, transfer with the own Kontor, trade
+// The ship's window: the ship, transfer with the own Kontor, trade
 // with a foreign one.
 #include <algorithm>
 #include <array>
@@ -214,9 +214,7 @@ assets::GadgetLayout with_route_row(assets::GadgetLayout route, const std::optio
 }
 
 /// SHIP (the ship), TRANSFER (with the own Kontor), TRADE (with a foreign one), ROUTE (the trade
-/// route, with LAGER and HANDEL as ware pickers) and PIRAT/PIRATORD (dealing with the pirates)
-/// (ShipPanel_Refresh 0x00436170, TransferPanel_Refresh 0x004372C0, TradePanel_Refresh 0x004377F0,
-/// RoutePanel_Refresh 0x00436E60, PiratePanel_Refresh 0x00436C10).
+/// route, with LAGER and HANDEL as ware pickers) and PIRAT/PIRATORD (dealing with the pirates).
 class ShipPanel final : public SelectionPanel {
 public:
     explicit ShipPanel(ShipLayouts l)
@@ -325,7 +323,7 @@ public:
             }
             return;
         }
-        // Route_PickStopAt 0x00440B30: the city of the tile, any owner; no city ends the pick.
+        // The city of the tile, any owner; no city ends the pick.
         const sim::World& w = c.world();
         if (x >= w.width() || y >= w.height()) {
             return;
@@ -362,7 +360,7 @@ public:
         }
         m_is_cart = ship->cart();
         const Context k = context(*ship, c);
-        // Transfer, trade and the pirates end when the ship sails off (0x0043AA00); the route
+        // Transfer, trade and the pirates end when the ship sails off; the route
         // editor stays. With S-012 brought back (OriginalBugs::remote_trade) transfer and trade
         // stay open and go on with the Kontor they were opened at.
         const bool remote = c.world().original_bugs().remote_trade && m_city.has_value();
@@ -719,7 +717,7 @@ private:
     static constexpr std::int32_t kCostLabel = 55005;
     static constexpr std::int32_t kCost = 55006;
 
-    /// What the ship can do where it lies (Ship_ContextActions 0x0044E630).
+    /// What the ship can do where it lies.
     struct Context {
         bool foreign = true;  ///< not the local player's ship
         bool moving = false;
@@ -798,7 +796,7 @@ private:
                       sim::city_defenceless(w, c.buildings, city.island, city.index);
         } else if (const auto site = sim::kontor_site_near(w, c.buildings, ship.x, ship.y)) {
             // Land within 4 tiles of a ship in an island's rectangle where the player has no city
-            // yet (0x00448EF0).
+            // yet.
             k.found = std::none_of(w.cities().begin(), w.cities().end(), [&](const sim::City& ct) {
                 return ct.island == site->island && ct.owner == ship.owner;
             });
@@ -861,7 +859,7 @@ private:
     }
 
     void refresh_root(const sim::Ship& ship, const Context& k, const PanelContext& c) {
-        // The name: a click on it types a new one (own ships that are not sinking, 0x00436170).
+        // The name: a click on it types a new one (own ships that are not sinking).
         m_ship.set_text(kName, c.shown_name(NameTarget::of(ship), ship_name(ship)));
         m_ship.set_no_select(kName, !can_rename(c.world(), c.local, NameTarget::of(ship)));
         const bool own = !k.foreign;
@@ -904,7 +902,7 @@ private:
         m_ship.set_slider(kHealth, 0, static_cast<std::int32_t>(std::uint64_t{health} * 1000 / max_health), 1000);
         m_ship.set_text(kCannons, std::to_string(ship.cannons));
         m_ship.set_disabled(kCannonsDown, ship.cannons == 0);
-        m_ship.set_visible(kRoute, own && !ship.for_sale);  // also without stops (0x00436887)
+        m_ship.set_visible(kRoute, own && !ship.for_sale);  // also without stops
         m_ship.set_visible(kRouteEditor, own && !ship.for_sale);
         m_ship.set_visible(kScuttle, own && !ship.for_sale);
         m_ship.set_visible(kPirates, idle && k.pirates);
@@ -1073,7 +1071,7 @@ private:
                 break;
             case kFound: {
                 m_request = Request{Request::Kind::FoundKontor, ship.id};
-                // The island is asked at the same time: a computer with a city there answers (0x0043CE00).
+                // The island is asked at the same time: a computer with a city there answers.
                 sim::DiplomacyOrder ask;
                 ask.player = c.local;
                 ask.kind = sim::DiplomacyOrder::Kind::AskFounding;
@@ -1091,7 +1089,7 @@ private:
                 }
                 break;
             case kRouteEditor:
-                // 0x0044EEC0: opening the editor drops the stops that are no city (patrol points).
+                // Opening the editor drops the stops that are no city (patrol points).
                 for (std::uint8_t stop = 0; stop < sim::TradeRoute::kStops; ++stop) {
                     const sim::Target& t = ship.route.stops[stop].target;
                     if (!t.empty() && t.kind != sim::Target::Kind::City) {
@@ -1116,7 +1114,7 @@ private:
                     }
                     const sim::CargoSlot& slot = ship.cargo[h];
                     if (sim::is_soldier_ware(slot.ware) && slot.amount != 0) {
-                        // Soldiers in the hold go ashore (0x00448F90).
+                        // Soldiers in the hold go ashore.
                         sim::UnloadOrder o;
                         o.player = c.local;
                         o.ship = ship.id;
@@ -1840,7 +1838,7 @@ private:
             if (entry.ware == 0) {
                 return std::nullopt;
             }
-            // RoutePanel_EntryText 0x00430B80: own city load/unload, another's buy/sell.
+            // Own city load/unload, another's buy/sell.
             const bool own = city->owner == c.local;
             const std::size_t line = own ? (entry.unload ? 53 : 51) : (entry.unload ? 55 : 54);
             return ui::format_text(c.text("GAME", line),
@@ -1874,7 +1872,7 @@ private:
             if (!w) {
                 return;  // the original ignores clicks beside the list
             }
-            // 50 t; delivered if the own Kontor buys the ware, taken if it sells it (0x0043C600).
+            // 50 t; delivered if the own Kontor buys the ware, taken if it sells it.
             v.ware = *w;
             v.amount = *w != 0 ? sim::hold_capacity(ship) : 0;
             if (const sim::City::Trade* t = city->trade_of(*w); t != nullptr && *w != 0) {
@@ -1936,7 +1934,7 @@ private:
     }
 
     void refresh_pirates(const PanelContext& c) {
-        // The other human and computer players still in the game (0x00436C70).
+        // The other human and computer players still in the game.
         m_opponents.clear();
         const auto& players = c.world().players();
         for (std::size_t p = 0; p < players.size(); ++p) {
@@ -1947,7 +1945,7 @@ private:
             }
         }
         if (m_page == Page::Pirates) {
-            // Hiring them needs at least two players beside the pirates (0x00474D40).
+            // Hiring them needs at least two players beside the pirates.
             m_pirat.set_visible(kHire, m_opponents.size() + 1 >= 2);
             return;
         }

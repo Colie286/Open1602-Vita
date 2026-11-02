@@ -4,7 +4,7 @@
 // times, once per player colour (red, blue, yellow, white). Banners with one of these colours use
 // the drawn images; every other banner gets a template made from the four variants and tinted
 // like the generic flag (flag_tint.hpp). The variants are drawn separately, not recoloured, so a
-// tinted unit is similar to the originals but not identical (docs/re/figures.md).
+// tinted unit is similar to the originals but not identical.
 #pragma once
 
 #include <cstdint>

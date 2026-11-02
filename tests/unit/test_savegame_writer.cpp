@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The .GAM writer (savegame_writer.hpp, docs/re/savegame-writer.md) on a small synthetic world,
+// The .GAM writer (savegame_writer.hpp) on a small synthetic world,
 // without the original data: a world written and loaded again is the same world, written again it
 // gives the same bytes, and the original's chunks alone (what the original keeps when it saves the
 // game again) hold what the original knows.
@@ -569,7 +569,7 @@ TEST_CASE("save game: a satisfaction, tax rate or food supply of 0 loads as 128,
     cities[0].tax_rate = {0, 0, 0, 0, 0};
     cities[0].food_ratio = 0;
     world.set_cities(std::move(cities));
-    // The original's loader (0x00484C6C, 0x00484C13) makes 128 of each stored 0.
+    // The original's loader makes 128 of each stored 0.
     const core::Bytes bytes = original_chunks_only(world, buildings);
     const sim::World loaded = load(bytes, buildings);
     const sim::City& c = loaded.cities().at(0);

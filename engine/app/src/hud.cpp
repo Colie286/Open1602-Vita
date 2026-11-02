@@ -55,7 +55,7 @@ constexpr std::int32_t kLeistTextX = 750;    // its line ends here, 18 before th
 constexpr std::int32_t kTutorArt = 111001;   // the mission window's art (drawn widened instead)
 constexpr std::int32_t kTutorText = 110002;  // its flowing text
 constexpr std::int32_t kDesignViewW = 768;   // game view, status bar and mission window at 1024 x 768
-constexpr std::uint64_t kEventMs = 45'000;   // an icon stays this long (449 time units of 0x00430F20)
+constexpr std::uint64_t kEventMs = 45'000;   // an icon stays this long (449 time units)
 constexpr std::uint64_t kMinimapMs = 500;    // the minimap texture is uploaded at most this often
 // TUTOR.GAD in the tutorial: six lines of text, the arrows back and forward, each a picture and
 // five parts to click.
@@ -131,7 +131,7 @@ std::optional<std::size_t> help_line(std::int32_t id) {
     return std::nullopt;
 }
 
-/// The icon of a message (Event_UpdateStatusIcons 0x0043AFA0): types 0..3 by colour (! event,
+/// The icon of a message: types 0..3 by colour (! event,
 /// scroll treaty or trade, swords attack, lips other players), 4..7 plague, fire, drought, volcano.
 /// Which message has which type is not documented; this follows the icons.
 /// The message icons of the four types drawn per colour: red, blue, yellow, white, (military
@@ -693,7 +693,7 @@ bool Hud::back() {
     if (m_mode == kModeInfo &&
         (m_selection.kind == Selection::Kind::ShipList || m_selection.kind == Selection::Kind::CityList ||
          m_selection.kind == Selection::Kind::Diplomacy)) {
-        // A page back (tribute -> treaties), else back to the player status (0x0040A0D6).
+        // A page back (tribute -> treaties), else back to the player status.
         std::optional<PanelContext> context;
         if (SelectionPanel* p = selection_panel(context); p != nullptr && p->back()) {
             return true;
@@ -751,7 +751,7 @@ std::optional<Hud::Action> Hud::set_mode(std::int32_t mode) {
     if (m_build) {
         m_build->close_popup();
     }
-    // Hud_SetMode 0x0043B660: the build mode arms the remembered building again, the others put
+    // The build mode arms the remembered building again, the others put
     // the tool away.
     return mode == kModeBuild ? build_tool_action() : std::optional<Action>(Action{Action::Kind::ToolOff});
 }
@@ -797,7 +797,7 @@ ui::Rect Hud::layout(std::int32_t width, std::int32_t height, double ui_scale) {
 }
 
 bool Hud::covers(std::int32_t x, std::int32_t y) const noexcept {
-    // The mission's window takes the clicks inside it (0x0042D1C0); the menu and the window
+    // The mission's window takes the clicks inside it; the menu and the window
     // "Anzeige" all of them.
     // A question takes all of them: nothing behind it answers the mouse.
     return m_menu_active || m_question.has_value() || m_display_open || m_goods_open ||
@@ -817,7 +817,7 @@ ui::Rect Hud::minimap_rect() const {
 }
 
 ui::Rect Hud::minimap_image() const {
-    // As in the original (0x0042D5E0, 0x0043B0E0) the world always fills the whole parchment,
+    // As in the original the world always fills the whole parchment,
     // stretched as it comes (500 x 350 on 186 x 160).
     return m_world_w == 0 || m_world_h == 0 ? ui::Rect{} : minimap_rect();
 }
@@ -1044,7 +1044,7 @@ void Hud::draw_mission(const sim::World& world) {
     if (mission == nullptr && !world.missions().empty()) {
         mission = &world.missions().front();  // the endless game: one mission without owner, only its text
     }
-    // The window of the original (region above the status bar, 0x0043B53F): its art, the text
+    // The window of the original (region above the status bar): its art, the text
     // flowing in 110002; the lines and buttons of the tutorial stay hidden.
     m_tutor->set_scale(m_regions.scale);
     // As wide as the game view (the original's art is 768 wide): the art widened, the text wider,
@@ -1057,7 +1057,7 @@ void Hud::draw_mission(const sim::World& world) {
     m_tutor->set_size(kTutorText, m_tutor_text_size[0] + extra, m_tutor_text_size[1]);
     m_renderer->draw_widened(0, m_gfx_tutor, window, m_regions.scale);
     if (m_tutorial) {
-        // The tutorial (0x00430FF0): six lines of its page instead of the mission's text, „weiter“
+        // The tutorial: six lines of its page instead of the mission's text, „weiter“
         // only where the chapter pages forward by hand, never "back".
         m_tutor->set_visible(kTutorText, false);
         const auto first = static_cast<std::size_t>(m_tutorial->page()) * Tutorial::kLinesPerPage;
@@ -1437,7 +1437,7 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
     }
     if (!m_menu_active && m_options_model.mission_window && m_tutor && m_regions.tutor.contains(x, y)) {
         // The mission's window: X closes it, the arrows scroll its text. In the tutorial X ends the
-        // chapter and „weiter“ turns the page (0x004326E0).
+        // chapter and „weiter“ turns the page.
         for (const ui::PanelEvent& e : m_tutor->mouse(x - m_regions.tutor.x, y - m_regions.tutor.y, down)) {
             if (e.kind != ui::PanelEvent::Kind::Clicked) {
                 continue;
@@ -1634,7 +1634,7 @@ void Hud::message(MessageId id, sim::BannerId banner, std::optional<std::pair<do
                   std::uint64_t now_ms, std::string_view text) {
     // A text of the message's own (a mod's) in the language of the game, else the original's.
     std::string shown = text.empty() ? m_messages->text(id, ui::current_language()) : std::string(text);
-    // Event_Post 0x00430D50: the same message at the same place only refreshes its time; a new one
+    // The same message at the same place only refreshes its time; a new one
     // pushes the oldest out.
     for (Event& e : m_events) {
         if (e.id == id && e.tile == tile && e.text == shown) {
@@ -1651,7 +1651,7 @@ void Hud::message(MessageId id, sim::BannerId banner, std::optional<std::pair<do
 namespace {
 
 /// The colour of a world tile on the minimap. An island `local` has not discovered shows its ground
-/// without owners, like the map (0x00489C90). The sea is left out (alpha 0): the parchment shows
+/// without owners, like the map. The sea is left out (alpha 0): the parchment shows
 /// there, as in the original.
 std::array<std::uint8_t, 4> minimap_colour(const sim::World& world, const assets::BuildingTable& buildings,
                                            const render::BannerTable& banners, const sim::World::Cell& c,
@@ -1667,7 +1667,7 @@ std::array<std::uint8_t, 4> minimap_colour(const sim::World& world, const assets
     const assets::BuildingType* b = top.empty() ? nullptr : buildings.by_sprite(top.sprite);
     const std::int32_t kind = b != nullptr ? b->kind : sim::building_kind::kSea;
     namespace bk = sim::building_kind;
-    // Ground kinds 19 to 22 are water to the original's minimap (0x0042D5E0), the river mouth too:
+    // Ground kinds 19 to 22 are water to the original's minimap, the river mouth too:
     // alpha 1 marks an island's water, which counts against its land when the picture is shrunk.
     if (kind == bk::kSea || kind == bk::kSurf || kind == bk::kSurfCorner || kind == bk::kRiverMouth) {
         rgb[3] = 1;
@@ -1750,7 +1750,7 @@ void Hud::shrink_minimap(std::int32_t w, std::int32_t h) {
     m_minimap_h = h;
     const auto pixels = static_cast<std::size_t>(w) * static_cast<std::size_t>(h);
     m_minimap_small.assign(pixels * 4, 0);
-    // As the original (0x0042D5E0): a tile lands on pixel (x * step) >> 8 with the step in 8.8
+    // As the original: a tile lands on pixel (x * step) >> 8 with the step in 8.8
     // fixed point, cut off; a pixel shows land when more of its island tiles are land than water
     // (the open sea does not count), in the colour of its last land tile. A world smaller than the
     // parchment spreads each tile over the pixels up to the next one's.
@@ -1930,7 +1930,7 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
     }
     if (const ui::Rect at = minimap_image(); at.w > 0) {
         // Each pixel of the parchment shows land when more of its tiles are land than sea, the sea
-        // not at all (0x0042D5E0).
+        // not at all.
         if (m_minimap_upload || at.w != m_minimap_w || at.h != m_minimap_h) {
             shrink_minimap(at.w, at.h);
             m_minimap_upload = true;
@@ -1978,8 +1978,8 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
         SDL_RenderFillRects(m_sdl, border.data(), static_cast<int>(border.size()));
         SDL_SetRenderDrawColor(m_sdl, 255, 255, 255, 255);
         SDL_RenderFillRects(m_sdl, marks.data(), static_cast<int>(marks.size()));
-        // The own ships, and in military mode the own land units, as blue squares of 2 x 2 pixels
-        // (0x0045D1E0, 0x0045D2B0); nothing of the other players.
+        // The own ships, and in military mode the own land units, as blue squares of 2 x 2 pixels;
+        // nothing of the other players.
         SDL_SetRenderDrawColor(m_sdl, 0, 0, 255, 255);
         const auto unit_square = [&](double tx, double ty) {
             const SDL_FRect r{static_cast<float>(at.x + std::floor(tx * fx)),

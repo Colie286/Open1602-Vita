@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The computers' soldiers on an island (BT-1, the island controller of docs/re/ai.md): at peace
+// The computers' soldiers on an island (BT-1, the island controller): at peace
 // they gather at their Kontor or, without a city there, are disbanded; at war they go for the
 // enemy's soldiers, or for the markets, Kontor and houses of an enemy city on the island. Every
 // 6 s a colony sends the soldiers beside its Kontor to guard a market, and a city with a castle

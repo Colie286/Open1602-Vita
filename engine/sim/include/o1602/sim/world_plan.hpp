@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Island worlds beyond the original's three fixed plans (Weltengenerator Stufe 1, docs/re/worldgen.md
+// Island worlds beyond the original's three fixed plans (Weltengenerator Stufe 1
 // "Eigene Welten"). The original has no generator for the layout: each endless game file carries a
 // plan with every island's place and size class, and only the contents are drawn when the game
 // starts. Open1602 makes such a plan itself for any map size and number of players - how many

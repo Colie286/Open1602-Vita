@@ -109,7 +109,7 @@ TEST_CASE("tile status: the crops of grass and trees only once the island is exp
     Island i;
     CHECK(i.at(3).empty());
     i.island.explore(kMe);
-    // The original names tobacco, grapes and sugar cane in this order (0x0040A4D9).
+    // The original names tobacco, grapes and sugar cane in this order.
     CHECK(i.at(3) == "Geeignet für: Tabak: 50% - Weintrauben: 50% - Zuckerrohr: 100%");
 }
 

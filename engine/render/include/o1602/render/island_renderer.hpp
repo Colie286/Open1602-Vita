@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Isometric island rendering following the original renderer (1602.exe, row routine 0x00489C90).
-// Specification: docs/re/rendering.md.
+// Isometric island rendering that matches the original game.
 //
 // Rendering is split into two steps so the same logic can drive the software rasterizer used by
 // tools and tests and, later, the GPU renderer:
@@ -51,13 +50,12 @@ struct RenderOptions {
     /// Global animation step added to every animated tile (the original advances a frame counter
     /// per building type every AnimTime; for still images a single global step is sufficient).
     std::uint32_t anim_step = 0;
-    /// View rotation 0..3, in the original's order (compared with the running game,
-    /// docs/original-comparison.md section 4).
+    /// View rotation 0..3, in the original's order (compared with the running game).
     std::uint8_t view_rotation = 0;
 };
 
 /// One sprite to draw. (x, y) is the left/bottom anchor of the sprite, as in the original blit
-/// routine (0x0048A140), relative to the island's top tile corner.
+/// routine, relative to the island's top tile corner.
 struct DrawCommand {
     /// Not a sprite but a translucent tile diamond (tile width x tile height, given by `tint_size`)
     /// in the colour `tint` (alpha = opacity), e.g. for the ownership view. (x, y) is its
@@ -81,15 +79,15 @@ struct DrawCommand {
     enum class Mode : std::uint8_t {
         Normal,
         /// Only the sprite's shape, filled with `tint` (alpha = opacity): figure shadows. The
-        /// original dithers them (every second pixel black, 0x00401D10); the classic graphics
+        /// original dithers them (every second pixel black); the classic graphics
         /// draw them so (dither.hpp), otherwise a translucent fill of about the same darkness.
         Shadow,
         /// The sprite with opacity `tint.a`: chimney smoke. The original dithers it like the
-        /// shadows (0x004048E0), as the classic graphics do.
+        /// shadows, as the classic graphics do.
         Translucent,
         /// The sprite darkened: its colours times `tint` (r, g, b / 255). The original dims the
         /// tiles the player cannot build on through a shading table of its palette (tables 1 and 2
-        /// of 0x005B6360, docs/re/rendering.md#shading-tables).
+        /// Docs/re/rendering.md#shading-tables).
         Dimmed,
     };
 
@@ -100,7 +98,7 @@ struct DrawCommand {
     std::uint8_t tint_size = 0;     ///< tile width of an overlay diamond (64 / 32 / 16)
     Mode mode = Mode::Normal;
     /// Rows at the bottom of the sprite left out: workers and animals standing in crops and young
-    /// trees (0x00401B70 with 0x00451250).
+    /// trees.
     std::uint16_t cut_bottom = 0;
     std::uint8_t edges = 0;  ///< edges of an outline (kTopLeft ...)
 
@@ -141,12 +139,12 @@ void for_each_outline_step(const DrawCommand& c, F&& f) {
 }
 
 /// Sprite of a building tile showing animation frame `frame`: base sprite + frame * AnimAdd +
-/// rotation step (0x00489C90).
+/// rotation step.
 [[nodiscard]] std::uint32_t building_sprite(const sim::MapCell& cell, const assets::BuildingType& building,
                                             std::uint32_t frame, std::uint8_t view_rotation);
 
 /// Animation frame of a tile without production state: (tile phase + global frame) % AnimAnz
-/// (default case of 0x00489C90).
+/// (default case).
 [[nodiscard]] std::uint32_t default_frame(const sim::MapCell& cell, const assets::BuildingType& building,
                                           std::uint32_t global_frame);
 
@@ -154,7 +152,7 @@ void for_each_outline_step(const DrawCommand& c, F&& f) {
 /// (HAUS_PRODTYP Kind 1..7 with at least two frames).
 [[nodiscard]] bool has_production_animation(const assets::BuildingType& building);
 
-/// Animation frame of a production building (0x00489C90 with 0x0047CC80, 0x0047CCD0, 0x0047CD10).
+/// Animation frame of a production building.
 /// `production` is the state of the building, nullptr if it has none (the original then treats
 /// the stock and progress as 0 and the phase as the global frame):
 /// - LagAniFlg: the frame shows how full the store is, (AnimAnz - 1) * stock / Maxlager, rounded.
@@ -167,7 +165,7 @@ void for_each_outline_step(const DrawCommand& c, F&& f) {
                                              const sim::Production* production,
                                              std::optional<std::uint8_t> phase = std::nullopt);
 
-/// New animation phase of a production building whose work starts or stops (0x004638C0), so the
+/// New animation phase of a production building whose work starts or stops, so the
 /// picture continues smoothly: starting keeps the current frame ((phase + frame) = old phase);
 /// stopping freezes the current frame with Anicontflg, otherwise the animation returns to frame 0.
 [[nodiscard]] std::uint8_t phase_after_change(const assets::BuildingType& building, std::uint8_t phase,

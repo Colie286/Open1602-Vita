@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The windows of what the player clicked on the map (docs/re/ui.md#auswahlfenster): production
+// The windows of what the player clicked on the map: production
 // buildings, public buildings, houses, the own Kontor, shipyards and castles, ships. Each window
 // reads the game every frame and turns clicks into commands; it changes nothing itself.
 #pragma once
@@ -147,7 +147,7 @@ public:
     /// The window for a selection, nothing if it has none (the info mode then shows the player
     /// status).
     [[nodiscard]] SelectionPanel* panel_for(const Selection& selection, const PanelContext& context);
-    /// The window of the military mode for the selected units (Panel_UpdateSelection 0x0043AA00):
+    /// The window of the military mode for the selected units:
     /// one ship, one land unit, a group of ships or of land units; nothing without a selection.
     [[nodiscard]] SelectionPanel* military_panel_for(const PanelContext& context);
     void set_scale(double scale);

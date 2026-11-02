@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The diplomacy window (VERTRAG.GAD with its tribute page TRIBUT.GAD; Diplo_Refresh 0x00433C00,
-// Tribut_Refresh 0x00433E70, clicks in 0x0043CE00; docs/re/ui.md): opened from the player status or
+// The diplomacy window (VERTRAG.GAD with its tribute page TRIBUT.GAD,
+// Clicks: opened from the player status or
 // with V. One row per other human or computer player: trade and peace treaty (offer, withdraw,
 // accept, break) and, for computers, a hand that shows the mood; the hand opens the tribute page.
 //
@@ -27,7 +27,7 @@ namespace {
 constexpr std::uint32_t kMaxTribute = sim::DiplomacyOrder::kMaxTribute;
 constexpr std::uint32_t kTributeStep = 100;
 
-/// The next value of a treaty button (0x0043FC83): none -> offer, offered or signed -> none
+/// The next value of a treaty button: none -> offer, offered or signed -> none
 /// (withdraw, break), received -> accept.
 sim::Treaty next_step(sim::Treaty now) {
     switch (now) {
@@ -58,7 +58,7 @@ class DiplomacyPanel final : public SelectionPanel {
 public:
     DiplomacyPanel(assets::GadgetLayout vertrag, assets::GadgetLayout tribut)
         : m_vertrag(std::move(vertrag), 1.0), m_tribut(tribut, 1.0), m_strip(strip_layout(std::move(tribut)), 1.0) {
-        // The code adds the state to the sprites the layout gives (0x0042C2D5).
+        // The code adds the state to the sprites the layout gives.
         const assets::GadgetLayout& l = m_vertrag.layout();
         const auto gfx = [&](std::int32_t id, std::int32_t fallback) {
             const auto i = l.index_of(id);
@@ -95,7 +95,7 @@ public:
     }
     bool back() override {
         if (m_tribute && !m_strip_shown) {
-            m_tribute = false;  // right mouse / Escape: back to the treaties (0x0040A0D6)
+            m_tribute = false;  // right mouse / Escape: back to the treaties
             return true;
         }
         return false;
@@ -309,7 +309,7 @@ private:
         return layout;
     }
 
-    /// The other humans and computers, by player number (0x00433C1C).
+    /// The other humans and computers, by player number.
     static std::vector<sim::PlayerId> partners_of(const PanelContext& c) {
         return diplomacy::partners(c.world(), c.local);
     }

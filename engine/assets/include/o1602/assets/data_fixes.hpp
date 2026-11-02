@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Corrections of the original's data (ADR 0006, the D entries of docs/re/bugs.md). The .cod
+// Corrections of the original's data (ADR 0006, the D entries of the bug list). The .cod
 // interpreter stays faithful to the original; these are applied to the tables after loading and
 // can be switched off (settings.cfg `data_fixes = off`, `--original-data`). Each one only replaces
 // the value the original files have, so data a mod has changed stays as it is. They can differ

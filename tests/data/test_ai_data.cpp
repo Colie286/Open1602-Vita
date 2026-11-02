@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The computer players (docs/re/ai.md) in a new endless game with the original data: they found
+// The computer players in a new endless game with the original data: they found
 // their cities and build them up, and a game saved in between goes on exactly the same.
 
 #include <algorithm>
@@ -335,7 +335,7 @@ TEST_CASE("data: the computers of a new endless game stay sound over three game 
         CHECK(view[i].cities >= 1);
         CHECK(houses_of(view[i].player) >= early[i]);  // the cities grew, or at least kept their houses
     }
-    // A computer that wants more ships plans a shipyard whatever its stage (0x0042233E), so after
+    // A computer that wants more ships plans a shipyard whatever its stage, so after
     // three hours at least one of them has more than the ship it started with (the original's
     // computers had warships after about two hours).
     std::size_t yards = 0;
@@ -365,7 +365,7 @@ TEST_CASE("data: the computers of a new endless game stay sound over three game 
 TEST_CASE("data: the computer of the tutorial stays as it is; the flag survives saving") {
     const Setup s = setup_or_skip();
     // "Diplomatie & Handel" has a computer opponent; TIMERS +0xA5 marks the tutorial. The original's
-    // computer there builds nothing (0x00429AFA): its money only grows by taxes.
+    // computer there builds nothing: its money only grows by taxes.
     const auto path = s.game.resolve("Szenes/Einführungsspiel2.szs");
     if (!path) {
         SKIP("no tutorial scenario");

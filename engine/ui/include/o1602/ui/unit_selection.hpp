@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The ships and land units the player has selected, their groups and the orders a click gives them
-// (docs/re/ui.md#auswahl-von-einheiten, ADR 0010). Interface state only: nothing here changes the
+// (ADR 0010). Interface state only: nothing here changes the
 // game, the orders are commands for the simulation.
 #pragma once
 
@@ -32,7 +32,7 @@ struct UnitCandidate {
 
 class UnitSelection {
 public:
-    /// The places of a formation of figuren.cod (the original's list, 0x004E878C). The original
+    /// The places of a formation of figuren.cod (the original's list). The original
     /// selects no more; Open1602 takes any number (LC-3) and puts the others into further rows of
     /// the same shape behind them.
     static constexpr std::size_t kFormationPlaces = 21;
@@ -59,7 +59,7 @@ public:
     /// Shift + click: a selected unit leaves the selection, another of the same owner and kind joins
     /// it (otherwise it is selected alone).
     void toggle(const sim::World& world, const UnitRef& ref);
-    /// The rectangle (Selection_Box 0x0044CA30): the player's own units if there are any (else the
+    /// The rectangle: the player's own units if there are any (else the
     /// foreign one with the largest part inside, alone); of the kind of the one with the largest part
     /// inside. `additive` (Shift) adds them to a selection of the same owner and kind.
     void box(const sim::World& world, std::vector<UnitCandidate> candidates, sim::PlayerId local, bool additive);
@@ -71,26 +71,26 @@ public:
 
     /// Mean position of the units, in tiles.
     [[nodiscard]] std::optional<std::pair<double, double>> centre(const sim::World& world) const;
-    /// Whether any own unit is moving (the stop buttons, 0x0044D450).
+    /// Whether any own unit is moving (the stop buttons).
     [[nodiscard]] bool any_moving(const sim::World& world) const;
-    /// Whether any selected ship shows the white flag (0x0044D3A0).
+    /// Whether any selected ship shows the white flag.
     [[nodiscard]] bool any_white_flag(const sim::World& world) const;
-    /// Bit k set: a unit of FIGUR Kind k is selected (0 ships, 1 infantry .. 4 cannoneers; 0x0044C9B0).
+    /// Bit k set: a unit of FIGUR Kind k is selected (0 ships, 1 infantry .. 4 cannoneers).
     [[nodiscard]] std::uint32_t kind_mask(const sim::World& world, const assets::FigureTable& figures) const;
     /// Alt+1 .. Alt+4 (History Edition): all of `local`'s land units among `candidates` (the units on
     /// screen) of FIGUR Kind `kind` (1 infantry, 2 cavalry, 3 musketeers, 4 cannoneers) become the
     /// selection; false (and the selection unchanged) if there is none.
     bool select_kind(const sim::World& world, const assets::FigureTable& figures,
                      const std::vector<UnitCandidate>& candidates, sim::PlayerId local, std::int32_t kind);
-    /// Keeps (or removes) the units whose FIGUR Kind is in `mask` (0x0044C3D0).
+    /// Keeps (or removes) the units whose FIGUR Kind is in `mask`.
     void filter_kinds(const sim::World& world, const assets::FigureTable& figures, std::uint32_t mask, bool keep);
-    /// Keeps the units at half health or less (`keep_wounded`), or the others (0x0044C510).
+    /// Keeps the units at half health or less (`keep_wounded`), or the others.
     void filter_wounded(const sim::World& world, const assets::FigureTable& figures, bool keep_wounded);
     /// Formation `n` of figuren.cod (0 line, 1 column, 2 block) around the centre: new offsets, each
-    /// unit in order to the nearest free place (0x0044C6D0); scale 3.5 tiles for ships, 1 for units.
+    /// unit in order to the nearest free place; scale 3.5 tiles for ships, 1 for units.
     /// More units than places fill copies of the formation behind it, front to back.
     void formation(const sim::World& world, const assets::FigureTable& figures, std::size_t n);
-    /// The group spreads out to 1.67 times its size (0x0044C8B0).
+    /// The group spreads out to 1.67 times its size.
     void scatter(const sim::World& world);
     /// Tab (Open1602): narrows the selection to one type of unit after the other (FIGUR: infantry,
     /// cavalry, ...; kinds of ship), in the order of their numbers, then back to all of them. False

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Writes a world as a savegame (.GAM) the original can load (docs/re/savegame-writer.md). Open1602
+// Writes a world as a savegame (.GAM) the original can load. Open1602
 // saves its own games in its own format (save_game.hpp); this writer exports a game for the original
 // as long as it fits the original's limits.
 //

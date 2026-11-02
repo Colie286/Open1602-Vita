@@ -470,7 +470,7 @@ TEST_CASE("main menu: the screen \"Mods\" turns packages on and off and takes in
     CHECK(menu.screen() == MainMenu::Screen::Base);
 }
 
-TEST_CASE("main menu: campaigns by stars then number, each by the header of its last file (0x0048E710)") {
+TEST_CASE("main menu: campaigns by stars then number, each by the header of its last file") {
     const std::filesystem::path folder = test::temp_path("o1602-test-menu-order");
     std::filesystem::remove_all(folder);
     const auto scenario = [&](const std::string& file, std::uint32_t campaign, std::uint32_t ranking) {

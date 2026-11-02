@@ -27,7 +27,7 @@ for `BSH`). Compare only up to the first NUL.
 | `INSELHAUS` | ditto | tiles/buildings of an island, 8 bytes per entry |
 | `HIRSCH2`, `PRODLIST2`, `WERFT`, `MILITAR`, `SIEDLER`, `ROHWACHS2`, `STADT4`, `KONTOR2`, `MARKT2` | scenarios, savegames | island-related game state (one set per island) |
 | `SZENE_PLAYERMIN`, `SZENE_PLAYERMAX`, `SZENE_GAMEID`, `SZENE_MISSNR`, `SZENE_KAMPAGNE`, `SZENE_RANKING` | scenarios | 4 bytes each (u32); `SZENE_KAMPAGNE` is the campaign of a mission |
-| `RANDTAB` | scenarios | 512 random numbers (u16) from which the world plan draws → [worldgen.md](../re/worldgen.md) |
+| `RANDTAB` | scenarios | 512 random numbers (u16) from which the world plan draws |
 | `AUFTRAG4` | scenarios | 2244 bytes – mission goals |
 | `SZENE`, `PLAYER4`, `HANDLER`, `SHIP4`, `SOLDAT3`, `TURM`, `TIMERS` | scenarios, savegames | global game state |
 

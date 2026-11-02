@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Ships of the original savegames (docs/re/ships.md): what SHIP4 and HANDLER hold, and twenty
+// Ships of the original savegames: what SHIP4 and HANDLER hold, and twenty
 // minutes at sea with the free traders, the computer players' routes and the pirates' orders.
 
 #include <cstdio>

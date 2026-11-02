@@ -6,7 +6,7 @@ size memory and refuse or cut what lies outside. These are the limits.
 
 | File | Value | Limit | Outside the limit |
 |---|---|---|---|
-| `haeuser.cod` | `Id` | 20000 to 23500 (as `Haus_GetById` of the original) | the file is refused |
+| `haeuser.cod` | `Id` | 20000 to 23500 (as in the original) | the file is refused |
 | `haeuser.cod` | `Nummer` | 0 to 65535 | the file is refused |
 | `haeuser.cod` | `Size` | 1 to 255 tiles each way (an island of the original is at most 255 wide) | above: the file is refused; 0 or less is read as 1 |
 | `haeuser.cod` | `Ware`, `Rohstoff`, `Workstoff`, `BGruppe`, `Erzbergnr`, `Ruinenr` | 0 to 255 (a negative `Ruinenr` is no ruin) | the file is refused |

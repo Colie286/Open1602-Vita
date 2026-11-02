@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Logistics: paths, carriers, market carts and the city warehouse (docs/re/logistics.md).
+// Logistics: paths, carriers, market carts and the city warehouse.
 
 #include "../test_framework.hpp"
 
@@ -452,7 +452,7 @@ TEST_CASE("logistics: carts respect reservations and warehouse room (S-023, S-02
     CHECK(logistics.walkers().size() == 0);
 }
 
-TEST_CASE("logistics: a destroyed Kontor gives its own room and no market bonus (0x0047AB00)") {
+TEST_CASE("logistics: a destroyed Kontor gives its own room and no market bonus") {
     Town town;
     town.place(kMarket, 2, 2);
     town.place(kDestroyedKontor, 24, 3);
@@ -475,7 +475,7 @@ TEST_CASE("logistics: after loading a city holds no more than its warehouse take
     CHECK(town.city().goods[kFlour] == 10 * 32);
 }
 
-TEST_CASE("logistics: carts are not drawn on the tiles of buildings (0x00451590)") {
+TEST_CASE("logistics: carts are not drawn on the tiles of buildings") {
     // Ticks a cart of the market to the weaver and back; returns how many ticks it was drawn.
     const auto drawn_ticks = [](std::int32_t weaver_x, std::int32_t weaver_y) {
         Town town;

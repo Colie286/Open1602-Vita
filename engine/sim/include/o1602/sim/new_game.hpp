@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// A new endless game as the original starts it (docs/re/newgame.md): the mission screen picks the
+// A new endless game as the original starts it: the mission screen picks the
 // difficulty, the scenario list one of three map layouts; the game loads Endlosspiel<D><V>.szs,
 // which carries the world plan, four start ships, the money and the settings of that difficulty,
 // makes the islands (world_generator.hpp) and resets what it does not take from the file: the
@@ -52,7 +52,7 @@ struct NewGameOptions {
     std::optional<WorldSettings> custom;
 };
 
-/// The original's game id (0x00469410): year % 8, month, day, hour, minute and 8 random bits.
+/// The original's game id: year % 8, month, day, hour, minute and 8 random bits.
 [[nodiscard]] std::uint32_t new_game_id(std::uint32_t year, std::uint32_t month, std::uint32_t day, std::uint32_t hour,
                                         std::uint32_t minute, std::uint32_t random) noexcept;
 

@@ -98,7 +98,7 @@ core::Status IslandMap::write(const assets::BuildingType& b, std::int32_t x, std
         ++sprite;
     };
 
-    // Traversal order per rotation as in the original placement routine (0x00463B10).
+    // Traversal order per rotation as in the original placement routine.
     switch (rotation) {
         case 0:
             for (std::int32_t j = 0; j < h; ++j) {
@@ -194,8 +194,8 @@ IslandMap IslandMap::from_island(const assets::Island& island, const assets::Bui
                      std::to_string(tile.y));
                 continue;
             }
-            // The original's loader (0x00468550): every tile goes on top; terrain of no city also
-            // becomes the ground (not ruins, 0x00463E10).
+            // The original's loader: every tile goes on top; terrain of no city also
+            // becomes the ground (not ruins).
             constexpr std::uint8_t kNoCityBits = 7;
             const bool ground = tile.city() == kNoCityBits && b->kind != kind::kRuin && b->kind != kind::kBeachRuin &&
                                 !territory_building(buildings, *b);
@@ -210,7 +210,7 @@ IslandMap IslandMap::from_island(const assets::Island& island, const assets::Bui
 }
 
 bool territory_building(const assets::BuildingTable& buildings, const assets::BuildingType& b) noexcept {
-    // HAUS_PRODTYP Kind (0x00480B70 -> 0x00480B40 -> 0x00480AF0).
+    // HAUS_PRODTYP Kind.
     const auto crop = [](const assets::BuildingType* t) {
         return t != nullptr && t->ware != ware::kGrass && t->ware != ware::kTree && t->ware != ware::kFish;
     };

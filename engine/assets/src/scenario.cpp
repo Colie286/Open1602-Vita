@@ -59,7 +59,7 @@ core::Result<std::vector<PlayerRecord>> load_players(const ChunkFile& file) {
         p.slot = data[o + 5];
         p.colour = static_cast<PlayerColour>(std::min<std::uint8_t>(data[o + 7], kPlayerColourCount - 1));
         p.name = read_string(data, o + 0x3C0, 0x40);
-        // Saver 0x00478160: the build unlocks and limits of the player record.
+        // Saver: the build unlocks and limits of the player record.
         p.infra_mask = read_u32(data, o + 0x34);
         p.castles_built = data[o + 0x0E];
         p.cathedrals_built = data[o + 0x0F];

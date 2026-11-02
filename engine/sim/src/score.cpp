@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Scores and the figures of the end screen (docs/re/missions.md).
+// Scores and the figures of the end screen.
 #include "o1602/sim/score.hpp"
 
 #include <algorithm>
@@ -25,7 +25,7 @@ constexpr std::size_t kTimersRanking = 0xBC;  // TIMERS: SZENE_RANKING of the sc
 constexpr std::size_t kCityCurve = scoring::kCityCurveLast;
 constexpr std::size_t kFightCurve = scoring::kFightCurveLast;
 
-/// Fills a table with a straight segment as 0x00474F90 builds them: from a to b in steps of 1/256,
+/// Fills a table with a straight segment as the original builds them: from a to b in steps of 1/256,
 /// truncated, the end value exactly.
 void fill(std::span<std::int32_t> table, const scoring::Segment& s) {
     const std::int32_t step = (s.to * 256 - s.from * 256) / (s.b - s.a);
@@ -146,7 +146,7 @@ ScoreSheet score_sheet(const World& world, const assets::BuildingTable& building
     s.monuments = p->monuments_allowed;
     s.monument_points = t <= scoring::kMonumentStart ? 0 : s.monuments * scoring::kMonumentFactor / t;
 
-    // Opponents defeated: the original counts the triumphal arch allowances (player + 0x8E).
+    // Opponents defeated: the original counts the triumphal arch allowances.
     s.opponents_defeated = p->arches_allowed;
     s.defeat_points = s.opponents_defeated * scoring::kDefeatPoints;
 
@@ -159,7 +159,7 @@ ScoreSheet score_sheet(const World& world, const assets::BuildingTable& building
 
     const std::int64_t sum = s.ship_points + s.city_points + s.money_points + s.monument_points + s.land_points +
                              s.soldier_points + s.defeat_points + s.subjects_points;
-    // A winner's points count twice (HighScore_UpdateAllHumans 0x00475990).
+    // A winner's points count twice.
     s.won = p->won;
     s.bonus_percent = s.won ? 100 : 0;
     s.bonus = s.won ? sum : 0;

@@ -26,7 +26,7 @@ constexpr double kPosUnit = sim::kPosUnit;
 constexpr audio::SampleId kWavBirds = 27;  // WAV_VOGEL1 .. 6
 constexpr audio::SampleId kWavSurf = 33;   // WAV_WELLEN
 
-// Messages (MELDUNG numbers, docs/re/audio.md).
+// Messages (MELDUNG numbers).
 constexpr std::uint16_t kMsgCurse = 0x04;
 constexpr std::uint16_t kMsgPiratesAttack = 0x05;
 constexpr std::uint16_t kMsgShipLaunched = 0x06;
@@ -282,7 +282,7 @@ void GameSound::stop_voices() {
 }
 
 void GameSound::construction(const sim::World& world, const std::vector<sim::ConstructionEvent>& events) {
-    // One sound per batch, the first building that has one (Build_PlaceBuildings 0x004090E2): a
+    // One sound per batch, the first building that has one: a
     // dragged road or a row of houses sounds once.
     for (const sim::ConstructionEvent& e : events) {
         if (e.kind == sim::ConstructionEvent::Kind::Placed && e.type != nullptr && e.type->build_sound != 0 &&
@@ -311,7 +311,7 @@ void GameSound::combat(const sim::World& world, const assets::FigureTable& figur
                 }
                 break;
             case sim::MilitaryEvent::Kind::Hit: {
-                // The shooter's Hitsample, else the effect's (Projectile_Hit 0x00445EEE).
+                // The shooter's Hitsample, else the effect's.
                 const assets::FigureType* f = figures.get(unit_figure(world, e.unit));
                 if (f == nullptr || f->hit_sound.sample == 0) {
                     f = figures.get(e.figure);
@@ -405,7 +405,7 @@ void GameSound::ships(const sim::World& world, const assets::FigureTable& figure
                 break;
             case sim::ShipEvent::Kind::Attacked:
                 if (e.player == local) {
-                    // The icon in the attacker's colour, the pirates' for pirates (0x00445CB6).
+                    // The icon in the attacker's colour, the pirates' for pirates.
                     message(e.amount == 1 ? kMsgPiratesAttack : kMsgShipAttacked, ship_tile, attacker(e.city));
                 }
                 break;
@@ -421,7 +421,7 @@ void GameSound::ships(const sim::World& world, const assets::FigureTable& figure
                 break;
             case sim::ShipEvent::Kind::OfferedForSale:
                 if (e.player != local) {
-                    message(kMsgShipForSale, ship_tile, e.player);  // the seller's colour (0x0045EAEB)
+                    message(kMsgShipForSale, ship_tile, e.player);  // the seller's colour
                 }
                 break;
             case sim::ShipEvent::Kind::CropsExplored:
@@ -525,7 +525,7 @@ void GameSound::figures(const std::vector<const std::vector<render::FigureInstan
 }
 
 void GameSound::order(bool ship, bool attack, double tile_x, double tile_y) {
-    // Order_Move 0x0044D540: a voice of the unit; ships attacking ships have four, others two.
+    // A voice of the unit; ships attacking ships have four, others two.
     if (ship) {
         attack ? at(audio::kWavShipAttack, 4, tile_x, tile_y) : at(audio::kWavShipMove, 5, tile_x, tile_y);
     } else {
@@ -539,7 +539,7 @@ void GameSound::start_video(const std::vector<std::shared_ptr<const audio::Pcm>>
     if (m_output == nullptr) {
         return;
     }
-    // Video_Request 0x00488C00 stops the music; a voice already speaking goes on.
+    // The original stops the music; a voice already speaking goes on.
     if (m_music) {
         m_music->stop();
     }
@@ -565,7 +565,7 @@ void GameSound::frame(std::uint64_t game_ms, std::uint32_t real_ms) {
         return;
     }
     m_effects.flush();
-    // While a video plays, the voices and the music wait (Game_FrameEnd 0x004899F5).
+    // While a video plays, the voices and the music wait.
     if (!m_video) {
         m_voices.update();
         if (m_music) {

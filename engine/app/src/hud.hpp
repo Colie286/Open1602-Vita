@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The original's frame around the map (docs/re/ui.md): the panel on the right with the minimap,
+// The original's frame around the map: the panel on the right with the minimap,
 // compass, rotate and zoom buttons and the four modes (CTRL.GAD), and the status bar below the map
 // with the status line and the icons of the last three messages (LEIST.GAD). Below the head the
 // mode's panel: the build menu or the player status (side_panels.hpp); the windows of the
@@ -110,7 +110,7 @@ public:
     void set_messages(const MessageTable* messages) noexcept {
         m_messages = messages != nullptr ? messages : &MessageTable::original();
     }
-    /// What the resource bar at the top of the map shows (Hud_DrawResourceBar 0x0040D160): the
+    /// What the resource bar at the top of the map shows: the
     /// player's money, and of the city under the mouse its tools, wood and bricks (own city) and
     /// inhabitants with the owner's shield. Costs of a pending build order in brackets.
     struct Resources {
@@ -142,7 +142,7 @@ public:
         m_tool_holding = holding;
         m_tool_short_of_wood = short_of_wood;
     }
-    /// The tutorial's chapter runs in this game, nothing: no tutorial (docs/re/tutorial.md). Its pages
+    /// The tutorial's chapter runs in this game, nothing: no tutorial. Its pages
     /// show in the mission's window and its help bubbles over the frame. After set_game().
     void set_tutorial(std::optional<std::uint8_t> chapter);
     [[nodiscard]] const Tutorial* tutorial() const noexcept { return m_tutorial ? &*m_tutorial : nullptr; }
@@ -176,7 +176,7 @@ public:
         m_selection = stamped_selection(m_selection, selection, m_selection_serial);
     }
     /// The build menu opens next with this building picked in its category (a farm's field after
-    /// looking at the farm, 0x004331B0). False if the menu has no such building.
+    /// looking at the farm). False if the menu has no such building.
     bool show_in_build_menu(std::uint32_t id) { return m_build && m_build->show(id); }
     /// The build menu shows a tool a key started (its title names it).
     void show_tool_in_build_menu(BuildPanel::Tool tool) {
@@ -500,7 +500,7 @@ private:
     std::string m_status;
     std::uint8_t m_rotation = 0;
     std::uint8_t m_building_rotation = 0;
-    std::int32_t m_mode = kModeInfo;  ///< the original starts in the info mode (0x0042BEF7)
+    std::int32_t m_mode = kModeInfo;  ///< the original starts in the info mode
     std::unique_ptr<BuildPanel> m_build;
     std::unique_ptr<InfoPanel> m_info;
     BuildPanel::Available m_available;

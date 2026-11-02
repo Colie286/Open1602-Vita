@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The original's mouse cursors: resources of Language.dll (docs/re/ui.md "Mouse cursors"), 32 x 32
+// The original's mouse cursors: resources of Language.dll, 32 x 32
 // black-and-white Windows cursors with a hot spot. The reader takes the cursor group of a resource
 // id from a PE file and turns the first image into RGBA for the platform.
 #pragma once
@@ -13,7 +13,7 @@
 
 namespace o1602::assets {
 
-/// Resource ids of the cursors in Language.dll (LoadCursor in 0x004948E1).
+/// Resource ids of the cursors in Language.dll (LoadCursor).
 inline constexpr std::uint16_t kArrowCursor = 122;
 /// The "double triangle" while a window waits for a click on the map.
 inline constexpr std::uint16_t kTargetCursor = 125;

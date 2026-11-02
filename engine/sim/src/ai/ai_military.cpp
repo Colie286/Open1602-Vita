@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Military, diplomacy and the pirates' nest of the computer players (docs/re/ai.md, "Military and diplomacy"):
+// Military, diplomacy and the pirates' nest of the computer players:
 // recruiting and guards every 6 s, ship missions with the logistics every 10 s, a look at one
 // foreign city after every step, the soldiers on one island per tick, the treaties every 30 s.
 #include <algorithm>
@@ -20,10 +20,10 @@ namespace o1602::sim::ai {
 
 namespace {
 
-/// Guard posts kept per city (the original's list at R+0x188).
+/// Guard posts kept per city.
 constexpr std::size_t kMaxPosts = 64;
 
-/// The pirate nest's offer comes again after more than 42 s (0x1A4 tenths, task 5 at 0x00429DF0).
+/// The pirate nest's offer comes again after more than 42 s (0x1A4 tenths, task 5).
 constexpr std::uint64_t kNestOfferMs = 42'000;
 
 std::uint32_t family_index(std::uint32_t figure) {
@@ -44,7 +44,7 @@ std::uint32_t city_param(const City& c) {
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------
-// Armies (0x0040EAE0, 0x0040ED50)
+// Armies
 
 const Engine::Census* Engine::census() const {
     if (!m_in_tick) {
@@ -179,8 +179,8 @@ std::uint32_t Engine::weighted_army(PlayerId owner) const {
 }
 
 std::uint32_t Engine::army_target(const AiPlayer& p) const {
-    // A scenario can ask for a fixed strength instead: a hundred cannons' worth (player +0x70
-    // bit 5, 0x004257BF), on every level.
+    // A scenario can ask for a fixed strength instead: a hundred cannons' worth,
+    // on every level.
     if (player(p).scenario.has(scenario_flag::kFixedArmy)) {
         return unit_weights()[3] * 100;
     }
@@ -211,7 +211,7 @@ std::uint32_t Engine::army_target(const AiPlayer& p) const {
 }
 
 bool Engine::stronger(PlayerId a, PlayerId b) const {
-    // 0x0040ED50 compares the armies and the cannons of the fleets. The original takes b's fleet
+    // The original compares the armies and the cannons of the fleets. The original takes b's fleet
     // on both sides, so only the armies count (S-102).
     const auto w = unit_weights();
     const auto fleet = [&](PlayerId q) {
@@ -277,10 +277,10 @@ std::uint32_t Engine::free_holds(const Ship& s) const {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Recruiting and guards (0x00425580, every 6 s)
+// Recruiting and guards (every 6 s)
 
 void Engine::queue_unit(AiPlayer& p, const CastleEntry& castle, std::uint32_t family) {
-    // 0x00424E20: swordsmen and cavalry one at a time per castle, the others may stack.
+    // Swordsmen and cavalry one at a time per castle, the others may stack.
     const CostBuilding* b = nullptr;
     const std::uint16_t island = p.castle_island.value_or(0);
     for (const CostBuilding& c : m_world.cost_buildings()) {
@@ -308,7 +308,7 @@ void Engine::queue_unit(AiPlayer& p, const CastleEntry& castle, std::uint32_t fa
 }
 
 bool Engine::guard_post(AiPlayer& p, City& c, CityPlan& r, std::int32_t& x, std::int32_t& y, bool& at_yard) {
-    // 0x00425460: the markets of the city in turn, then the own shipyard.
+    // The markets of the city in turn, then the own shipyard.
     const auto market_at = [&](std::int32_t mx, std::int32_t my) {
         const Tile t = tile(c.island, mx, my);
         return t.valid() && t.city == c.index && t.prod == prod::kMarket && !t.type->destroyed;
@@ -358,7 +358,7 @@ bool Engine::guard_post(AiPlayer& p, City& c, CityPlan& r, std::int32_t& x, std:
 }
 
 void Engine::guard(AiPlayer& p, City& c, std::int32_t x, std::int32_t y, std::uint32_t n, bool castle_island) {
-    // 0x004251A0: soldiers beyond the reserve at the Kontor go to the post.
+    // Soldiers beyond the reserve at the Kontor go to the post.
     std::vector<Soldier*> near = soldiers_near(p.player, c, 8, 16);
     const std::size_t reserve = castle_island ? 8 : 0;
     if (near.size() <= reserve) {
@@ -390,7 +390,7 @@ void Engine::guard(AiPlayer& p, City& c, std::int32_t x, std::int32_t y, std::ui
 }
 
 bool Engine::market_tower(AiPlayer& p, City& c, std::int32_t mx, std::int32_t my) {
-    // 0x00425030: one stone tower beside each market, on a wall or the beach if there is one.
+    // One stone tower beside each market, on a wall or the beach if there is one.
     const Tile m = tile(c.island, mx, my);
     const assets::BuildingType* tower = by_id(id::kStoneTower);
     if (!m.valid() || tower == nullptr) {
@@ -434,7 +434,7 @@ bool Engine::market_tower(AiPlayer& p, City& c, std::int32_t mx, std::int32_t my
 }
 
 void Engine::recruit(AiPlayer& p) {
-    // 0x00425580: one own city per call.
+    // One own city per call.
     const auto& cities = m_world.cities();
     if (cities.empty()) {
         return;
@@ -597,7 +597,7 @@ void Engine::recruit(AiPlayer& p) {
 }
 
 void Engine::buy_pirate_peace(AiPlayer& p) {
-    // 0x00428AF0: with more than 10,000 gold and a price above 1000.
+    // With more than 10,000 gold and a price above 1000.
     PlayerId pirates = kNoPlayer;
     for (std::size_t i = 0; i < m_world.players().size(); ++i) {
         if (m_world.behaviour(m_world.players()[i]) == FactionBehaviour::Pirates) {
@@ -616,10 +616,9 @@ void Engine::buy_pirate_peace(AiPlayer& p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Ships on missions (0x004238F0, with the logistics every 10 s)
+// Ships on missions (with the logistics every 10 s)
 
 void Engine::ship_send(AiPlayer& p, Ship& s, const Target& t, std::uint8_t mission, std::uint32_t param) {
-    // 0x0040F070
     ShipOrder order;
     order.player = p.player;
     order.ship = s.id;
@@ -634,7 +633,7 @@ void Engine::ship_send(AiPlayer& p, Ship& s, const Target& t, std::uint8_t missi
 }
 
 void Engine::mission_end(AiPlayer& p, Ship& s, ShipNote& n) {
-    // 0x0040F250: home with the troops, or stop.
+    // Home with the troops, or stop.
     if (n.mission == 3 || n.mission == 4) {
         ShipOrder stop;
         stop.player = p.player;
@@ -781,7 +780,7 @@ void Engine::missions(AiPlayer& p) {
 }
 
 void Engine::plan_landing(AiPlayer& p, Ship& s, ShipNote& n) {
-    // 0x00422EC0: a beach near the target's markets, away from its towers and soldiers.
+    // A beach near the target's markets, away from its towers and soldiers.
     const City* t = city(static_cast<std::uint16_t>(n.param >> 8), static_cast<std::uint8_t>(n.param & 0xFF));
     if (t == nullptr || t->owner == p.player || building_count(*t) <= 3 ||
         m_world.diplomacy().relation(p.player, t->owner).peace == Treaty::Signed ||
@@ -882,7 +881,7 @@ void Engine::plan_landing(AiPlayer& p, Ship& s, ShipNote& n) {
 }
 
 Ship* Engine::best_armed_ship(AiPlayer& p, const Target& ref, std::uint32_t max_same) {
-    // 0x00424260: an armed ship with room, healthy and well armed.
+    // An armed ship with room, healthy and well armed.
     (void)max_same;
     for (const ShipNote& n : p.ships) {
         const Ship* s = m_world.ship(n.id);
@@ -910,10 +909,10 @@ Ship* Engine::best_armed_ship(AiPlayer& p, const Target& ref, std::uint32_t max_
 }
 
 // ---------------------------------------------------------------------------------------------
-// Looking for a target (0x004298F0, after every step)
+// Looking for a target (after every step)
 
 bool Engine::defenceless(std::uint16_t island, std::uint8_t city) {
-    // The same as city_defenceless (0x0047F1B0), whose scan of the island answers for all its cities
+    // The same as city_defenceless, whose scan of the island answers for all its cities
     // as long as its tiles stay the same.
     if (island >= m_world.islands().size()) {
         return false;
@@ -947,7 +946,7 @@ bool Engine::defenceless(std::uint16_t island, std::uint8_t city) {
 }
 
 bool Engine::attack_ok(AiPlayer& p, const City& t) {
-    // 0x00429810. The original's conditions, the cheap ones first: none has a side effect, so the
+    // The original's conditions, the cheap ones first: none has a side effect, so the
     // answer is the same, but most targets fail before the island or the world is walked (TB-9).
     for (const ShipNote& n : p.ships) {
         if (n.mission >= 5 && n.mission <= 9) {
@@ -969,7 +968,6 @@ bool Engine::attack_ok(AiPlayer& p, const City& t) {
 }
 
 void Engine::start_attack(AiPlayer& p, const City& t) {
-    // 0x00429770
     if (m_world.diplomacy().relation(p.player, t.owner).peace == Treaty::Signed) {
         return;
     }
@@ -988,7 +986,7 @@ void Engine::start_attack(AiPlayer& p, const City& t) {
 }
 
 void Engine::raid_outpost(AiPlayer& p, const City& t) {
-    // 0x004296B0 / 0x00429640: a warship shells the Kontor of a tiny outpost.
+    // A warship shells the Kontor of a tiny outpost.
     if (m_world.diplomacy().relation(p.player, t.owner).peace == Treaty::Signed || !t.warehouse_x || !t.warehouse_y) {
         return;
     }
@@ -1056,7 +1054,7 @@ void Engine::target_scan(AiPlayer& p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The soldiers on one island per tick (0x0042B430)
+// The soldiers on one island per tick
 
 std::vector<PlayerId> Engine::island_enemies(const AiPlayer& a, std::uint16_t island) const {
     // Hostile humans or natives here: soldiers of theirs or a city.
@@ -1562,7 +1560,7 @@ void Engine::island_controller() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Diplomacy (0x00428B50, every 30 s or after a change)
+// Diplomacy (every 30 s or after a change)
 
 void Engine::diplomacy(AiPlayer& p) {
     if (p.cities < 1) {
@@ -1636,7 +1634,7 @@ void Engine::diplomacy(AiPlayer& p) {
             case Treaty::Received:
                 if (m > -20) {
                     order(DiplomacyOrder::Kind::Peace, Treaty::Signed);
-                    // Ships on missions against b come home (0x00423830).
+                    // Ships on missions against b come home.
                     for (ShipNote& n : p.ships) {
                         if (n.mission == 0) {
                             continue;
@@ -1680,7 +1678,7 @@ void Engine::diplomacy(AiPlayer& p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The pirates' nest (0x00429FD0, every 10 s; task 5 = 0x00429DF0)
+// The pirates' nest (every 10 s; task 5 =)
 
 void Engine::pirate_step(AiPlayer& p) {
     if (!pirates_enabled(m_world, m_sim.rules())) {
@@ -1710,7 +1708,7 @@ void Engine::pirate_step(AiPlayer& p) {
 }
 
 void Engine::pirate_develop(AiPlayer& p) {
-    // Pirate task 5 (0x00429DF0): every 42 s the nest offers its most valuable goods, and only then
+    // Pirate task 5: every 42 s the nest offers its most valuable goods, and only then
     // the pirates build: houses, a hunter, a fisher and four towers.
     pop(p);
     if (now_ms() - p.refresh_ms <= kNestOfferMs) {

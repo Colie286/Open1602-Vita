@@ -2,7 +2,7 @@
 //
 // Building and demolishing with the mouse: holds the building the build menu (or the keys) picked
 // and its rotation, and turns a click or a drag into a build or demolish order of the local
-// player (docs/re/construction.md). Roads and walls are dragged along a line, fields and squares
+// player. Roads and walls are dragged along a line, fields and squares
 // over a rectangle, houses in rows and blocks and piers along a line (the History
 // Edition's „Mehrfachplatzierung“), everything else is placed where the mouse is let go.
 //

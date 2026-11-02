@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Islands of their own shape (world generator stage 2, docs/re/worldgen.md "Island shapes"). The
+// Islands of their own shape (world generator stage 2). The
 // original only ever loads its 114 island templates; Open1602 can also draw an island's coast
 // itself. The land is grown from 2 x 2 blocks (noise and a falloff towards the edge), smoothed until
 // every tile of the coast is one the templates use, and then dressed with the templates' tiles:

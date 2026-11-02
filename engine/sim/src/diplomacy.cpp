@@ -13,7 +13,7 @@ namespace o1602::sim {
 
 namespace {
 
-/// Piecewise linear table of the original (Table_InterpByte 0x00403370): knots (x, value); 0 past
+/// Piecewise linear table of the original: knots (x, value); 0 past
 /// the last knot unless it says otherwise.
 struct Knot {
     std::int32_t x;
@@ -49,7 +49,7 @@ FactionBehaviour behaviour_of(const World& world, PlayerId p) noexcept {
     return player != nullptr ? world.behaviour(*player) : FactionBehaviour::Settlers;
 }
 
-/// A byte table of the original filled piece by piece (Table_InterpByte 0x00403370, exactly: 8.8
+/// A byte table of the original filled piece by piece (exactly: 8.8
 /// fixed point, the step rounded towards zero, the last value of a piece set at its end).
 struct Piece {
     std::int32_t a;
@@ -72,14 +72,13 @@ constexpr std::array<std::uint8_t, 129> byte_table(const std::array<Piece, N>& p
     return t;
 }
 
-/// The scenario attitude's penalties (Dipl_InitTables 0x00474600): by the share of its target a
-/// computer's own inhabitants reach (0x00548E38), and by how far a development misses its threshold
-/// (0x00549044).
+/// The scenario attitude's penalties: by the share of its target a
+/// computer's own inhabitants reach, and by how far a development misses its threshold.
 constexpr auto kOwnSizePenalty =
     byte_table(std::array<Piece, 3>{{{0, 64, 170, 130}, {64, 102, 130, 80}, {102, 128, 80, 0}}});
 constexpr auto kDevelopmentPenalty =
     byte_table(std::array<Piece, 3>{{{0, 25, 0, 70}, {25, 42, 70, 130}, {42, 128, 130, 170}}});
-/// A human beyond the rival threshold: the table 0x00548FC0 at its end. The original computes the share
+/// A human beyond the rival threshold: the end of the table. The original computes the share
 /// (at least 128 when the threshold is passed) and then always takes 128.
 constexpr std::int32_t kRivalSizePenalty = 170;
 
@@ -392,7 +391,7 @@ void Diplomacy::decay(PlayerId a) noexcept {
 }
 
 std::uint32_t city_development(const City& city) noexcept {
-    // 0x0047F220 with the scale 0x80: 32 per class above the first, plus the share of the highest
+    // With the scale 0x80: 32 per class above the first, plus the share of the highest
     // class in 32nds, which counts as full (31) from two thirds on.
     constexpr std::uint32_t kStep = 32;
     const std::size_t classes = std::min<std::size_t>(city.inhabitants.size(), 5);
@@ -494,7 +493,7 @@ std::int32_t Diplomacy::mood(const World& world, PlayerId a, PlayerId b, std::ui
                 empty = empty && i == 0;
             }
             // A city of b only counts on a small island of a; troops of b on any island of a, as
-            // in the original and the History Edition (0x00475C60).
+            // in the original and the History Edition.
             if (b_city && small(c) && (cities_a <= 2 || empty)) {
                 settle_penalty = 200;
             }
@@ -507,7 +506,7 @@ std::int32_t Diplomacy::mood(const World& world, PlayerId a, PlayerId b, std::ui
         m -= settle_penalty + troop_penalty;
     }
 
-    // The scenario's attitude of a (player +0x70 with its thresholds, only set by scenarios).
+    // The scenario's attitude of a (its switches and thresholds, only set by scenarios).
     if (const Player* pa = world.player(a); pa != nullptr) {
         const ScenarioSwitches& s = pa->scenario;
         const bool human_b = role_of(world, b) == PlayerRole::Human;
@@ -537,7 +536,7 @@ std::int32_t Diplomacy::mood(const World& world, PlayerId a, PlayerId b, std::ui
 
 namespace {
 
-/// Money steps of the pirates' prices (0x00428970, 0x00428A30). The original takes the payer's slot
+/// Money steps of the pirates' prices. The original takes the payer's slot
 /// number at exactly 5000 gold (S-090); Open1602 counts 5000 with the next step.
 std::uint32_t price_base(std::int64_t money, const std::array<std::uint32_t, 7>& steps) noexcept {
     if (money > 70'000) {
@@ -566,7 +565,7 @@ PlayerId pirate_player(const World& world) noexcept {
 
 bool apply_diplomacy(World& world, const DiplomacyOrder& order) {
     if (order.kind == DiplomacyOrder::Kind::BuyPeace || order.kind == DiplomacyOrder::Kind::Bribe) {
-        // The pirate Kontor's window (0x0043CE00): a ship of the payer lies at a pirate Kontor.
+        // The pirate Kontor's window: a ship of the payer lies at a pirate Kontor.
         const PlayerId pirates = pirate_player(world);
         Player* payer = world.player(order.player);
         const Ship* ship = world.ship(order.ship);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The windows of the military mode (docs/re/ui.md#kampfmodus, MilitaryPanel_Refresh 0x00439BA0): one
+// The windows of the military mode: one
 // ship (SKSHIP), one land unit (SKSOLDAT), a group of ships (MKSHIP) or of land units (MKSOLDAT).
 // They work on the selection (filters, formations) and give orders; scuttling and disbanding are
 // asked about by the map view (ADR 0010).
@@ -234,7 +234,7 @@ public:
         }
         const bool own = s->owner == c.local;
         const assets::FigureType* t = c.figures.get(s->figure);
-        // The kind of unit (FIGKIND); the natives' warriors have none there (LEISTE 227, 0x0040A3D0).
+        // The kind of unit (FIGKIND); the natives' warriors have none there (LEISTE 227).
         const std::int32_t kind = t != nullptr ? t->kind : 0;
         m_panel.set_text(
             kName, kind >= 1 && kind <= 4 ? c.text("FIGKIND", static_cast<std::size_t>(kind)) : help_line(c, 227));
@@ -285,7 +285,7 @@ public:
         if (s == nullptr || s->owner != c.local) {
             return;
         }
-        // Two waypoints, where it stands and the click, and back and forth (0x00440BD0).
+        // Two waypoints, where it stands and the click, and back and forth.
         sim::SoldierCommand o;
         o.player = c.local;
         o.soldier = s->id;
@@ -360,7 +360,7 @@ public:
         }
         ui::UnitSelection& units = *c.units;
         const auto form_up = [&] {
-            // Around where the group stands (0x0044C6D0).
+            // Around where the group stands.
             if (const auto centre = units.centre(c.world())) {
                 for (sim::Command& o : units.move_orders(c.world(), c.local, centre->first, centre->second, false)) {
                     out.push_back(std::move(o));
@@ -389,7 +389,7 @@ public:
                 out.emplace_back(o);
             }
         } else if (!m_ships && id >= 31 && id <= 34) {
-            // Keep only this kind, with Ctrl remove it (0x0044C3D0).
+            // Keep only this kind, with Ctrl remove it.
             units.filter_kinds(c.world(), c.figures, 1U << static_cast<std::uint32_t>(id - 30), !c.ctrl);
         } else if (!m_ships && id == 35) {
             units.filter_wounded(c.world(), c.figures, !c.ctrl);

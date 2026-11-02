@@ -21,14 +21,14 @@ constexpr std::uint8_t kInfraCastle = infra::kCastle;
 constexpr std::uint8_t kInfraCathedral = infra::kCathedral;
 constexpr std::uint8_t kInfraArch = infra::kArch;
 constexpr std::uint8_t kInfraMonument = infra::kMonument;
-/// A castle or cathedral makes its city proud: city + 0x200 += 25 * 32 (command 0x4B of 0x004084D0).
+/// A castle or cathedral makes its city proud: 25 * 32 more pride.
 constexpr std::uint32_t kPrideBonus = 25 * 32;
 
 constexpr std::int32_t kShipRange = 16;       // founding from a ship: circle of radius 16
 constexpr std::int32_t kRoadSearch = 4;       // doors turn to roads within 4 tiles
 constexpr std::uint8_t kMinKontorRadius = 8;  // territory of a Kontor
 constexpr std::uint8_t kTowerRadius = 8;      // towers protect the land within 8 tiles
-/// Real buildings, which a demolition rectangle leaves standing (0x00464AE0): not roads, walls,
+/// Real buildings, which a demolition rectangle leaves standing: not roads, walls,
 /// fields, trees or ruins.
 constexpr std::array<std::int32_t, 8> kRealBuildings = {kind::kTower,      kind::kTowerBeach, kind::kBuilding,
                                                         kind::kBeachHouse, kind::kMine,       kind::kHq,
@@ -39,11 +39,11 @@ bool is_beach(std::int32_t k) noexcept {
     return k >= kind::kBeach && k <= kind::kBeachVariant;
 }
 
-/// Coast a Kontor stands at (0x00467E10).
+/// Coast a Kontor stands at.
 bool kontor_coast(std::int32_t k) noexcept {
     return is_beach(k) || k == kind::kBeachRuin || k == kind::kPier;
 }
-/// Coast inside a shipyard (0x00468090).
+/// Coast inside a shipyard.
 bool shipyard_coast(std::int32_t k) noexcept {
     return k == kind::kWallBeach || kontor_coast(k);
 }
@@ -117,7 +117,7 @@ std::int32_t wall_family_cost(const assets::BuildingTable& buildings, const asse
     return (head != nullptr ? head : land)->build_cost.money;
 }
 
-/// Whether a tile carrying `old` takes the new building (0x00464660).
+/// Whether a tile carrying `old` takes the new building.
 bool tile_accepts(const assets::BuildingTable& buildings, const assets::BuildingType& b,
                   const assets::BuildingType& old) {
     const std::int32_t o = old.kind;
@@ -127,7 +127,7 @@ bool tile_accepts(const assets::BuildingTable& buildings, const assets::Building
         case kind::kRoad:
             return open || (o == kind::kRoad && old.kreuz_base != b.kreuz_base);
         case kind::kGate:
-            // Only on roads, walls, towers and open land; never on the beach (table 0x004649A0).
+            // Only on roads, walls, towers and open land; never on the beach.
             return o == kind::kRoad || o == kind::kWall || o == kind::kTower || open;
         case kind::kWall:
         case kind::kWallBeach:
@@ -184,9 +184,9 @@ bool tile_accepts(const assets::BuildingTable& buildings, const assets::Building
 }
 
 /// Coast or river rotation of a building whose long side lies along a line of tiles.
-/// `outside`: the line next to the footprint (Kontor, 0x00467AF0), else its own edge line
-/// (shipyard 0x00467E60, water mill 0x004680F0). Order: left (2), right (0), top (3), bottom (1);
-/// `turn` is added to the rotation: the water mill's wheel faces the other way (0x004680F0 returns
+/// `outside`: the line next to the footprint (Kontor), else its own edge line
+/// (shipyard, water mill). Order: left (2), right (0), top (3), bottom (1);
+/// `turn` is added to the rotation: the water mill's wheel faces the other way (returns
 /// left 0, right 2, top 1, bottom 3).
 template <class Test, class Accept>
 std::uint8_t edge_rotation(const IslandMap& map, const assets::BuildingTable& buildings, const assets::BuildingType& b,
@@ -224,7 +224,7 @@ std::uint8_t edge_rotation(const IslandMap& map, const assets::BuildingTable& bu
     return 0xF;
 }
 
-/// Ore of the mine's kind in the mountain on the side the mine faces (0x0046C010).
+/// Ore of the mine's kind in the mountain on the side the mine faces.
 bool mine_has_deposit(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
                       const assets::BuildingType& mine, std::int32_t x, std::int32_t y, std::uint8_t rotation) {
     static constexpr std::array<TilePos, 4> kSide = {{{-1, 0}, {0, -1}, {1, 0}, {0, 1}}};
@@ -241,7 +241,7 @@ bool mine_has_deposit(const World& world, const assets::BuildingTable& buildings
     return false;
 }
 
-/// City an order belongs to (0x0046AEC0): a tile of another owner's city makes it foreign;
+/// City an order belongs to: a tile of another owner's city makes it foreign;
 /// otherwise the player's city with the most tiles under the footprint; none outside.
 struct OrderCity {
     std::uint8_t city = MapCell::kNoCity;
@@ -297,7 +297,7 @@ bool player_has_city(const World& world, std::uint16_t island, PlayerId player) 
 /// placed item (TB-7). Built when the first item asks.
 class UnitsOnIsland {
 public:
-    /// A soldier stands on the footprint (0x00442980). Open1602 also counts a soldier that is just
+    /// A soldier stands on the footprint. Open1602 also counts a soldier that is just
     /// stepping on (S-015).
     bool in_the_way(const World& world, const WorldIsland& island, const Footprint& f) {
         // Half a tile around the footprint, in the soldiers' fixed point units (ADR 0004).
@@ -345,7 +345,7 @@ struct Planner {
     std::set<std::pair<std::int32_t, std::int32_t>> taken;  // tiles of accepted items
     mutable UnitsOnIsland units;
 
-    /// Whether the footprint fits (0x00464450 with the fixes of Open1602).
+    /// Whether the footprint fits (with the fixes of Open1602).
     BuildRefusal can_place(const assets::BuildingType& b, std::uint8_t city_of_tiles, std::uint8_t rotation,
                            std::int32_t x, std::int32_t y) const {
         const Footprint f = footprint_of(b, x, y, rotation);
@@ -396,7 +396,7 @@ struct Planner {
         return BuildRefusal::None;
     }
 
-    /// Whether one side of the footprint lies completely in the city (0x00464450).
+    /// Whether one side of the footprint lies completely in the city.
     bool full_edge_in_city(const Footprint& f, std::uint8_t city_of_tiles) const {
         const auto in_city = [&](std::int32_t tx, std::int32_t ty) {
             return map.top(static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(ty)).city == city_of_tiles;
@@ -418,7 +418,7 @@ struct Planner {
         return top || bottom || left || right;
     }
 
-    /// Rotation by Kind (0x00468300); 0xF = impossible.
+    /// Rotation by Kind; 0xF = impossible.
     std::uint8_t rotate(const assets::BuildingType& b, std::uint8_t rotation, std::int32_t x, std::int32_t y) const {
         if ((b.kind == kind::kBuilding || b.kind == kind::kHq) && b.coastal) {
             return edge_rotation(map, buildings, b, x, y, true, kontor_coast, [&](std::uint8_t r, TilePos coast) {
@@ -449,7 +449,7 @@ struct Planner {
         return static_cast<std::uint8_t>(rotation & 3U);
     }
 
-    /// Mines face the one rock next to their origin (0x004671B0).
+    /// Mines face the one rock next to their origin.
     std::uint8_t mine_rotation(std::int32_t x, std::int32_t y) const {
         std::uint32_t mask = 0;
         mask |= kind_at(map, buildings, x, y - 1) == kind::kRock ? 1U : 0U;
@@ -478,12 +478,12 @@ struct Planner {
         if (b->kind == kind::kRoad || b->kind == kind::kBridge) {
             return true;
         }
-        // A gate counts with its centre tile (0x00466B40).
+        // A gate counts with its centre tile.
         const MapCell& cell = map.top(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
         return b->kind == kind::kGate && cell.sprite == b->gfx + (b->size_x * b->size_y) / 2;
     }
 
-    /// Buildings with a door turn to the nearest road within 4 tiles (0x004674B0); otherwise the
+    /// Buildings with a door turn to the nearest road within 4 tiles; otherwise the
     /// player's rotation, turned by a quarter if only the other orientation fits.
     std::uint8_t road_rotation(const assets::BuildingType& b, std::uint8_t rotation, std::int32_t x,
                                std::int32_t y) const {
@@ -571,7 +571,7 @@ const assets::BuildingType* palm_or_self(const assets::BuildingTable& buildings,
     return palm != nullptr ? palm : &b;
 }
 
-/// Ground under a wall or tower that makes it a beach variant (0x00466A80): beach walls and
+/// Ground under a wall or tower that makes it a beach variant: beach walls and
 /// towers, beach, fisher huts, beach ruins, piers, shipyards.
 bool beach_for_variant(std::int32_t k) noexcept {
     return k == kind::kWallBeach || k == kind::kTowerBeach || (k >= kind::kBeach && k <= kind::kPier) ||
@@ -583,7 +583,7 @@ struct Variant {
     std::uint8_t rotation;
 };
 
-/// Walls and towers built on the beach (0x004653A0): the record Strandoff further on, turned like
+/// Walls and towers built on the beach: the record Strandoff further on, turned like
 /// the beach tile (taken from the ground layer under beach terrain and ruins), and at a river mouth
 /// another Mundoff further on.
 Variant beach_variant(const assets::BuildingTable& buildings, const IslandMap& map, const assets::BuildingType& b,
@@ -625,7 +625,7 @@ const assets::BuildingType::BuildCost& ordered_cost(const assets::BuildingTable&
     return b.build_cost;
 }
 
-/// Goods a city or ship can pay: less than a ton counts as none (0x0047AA30).
+/// Goods a city or ship can pay: less than a ton counts as none.
 std::uint32_t usable(std::uint32_t stock) noexcept {
     return stock < assets::kStockUnitsPerTon ? 0 : stock;
 }
@@ -743,7 +743,7 @@ bool tile_fertile(const World& world, const assets::BuildingTable& buildings, st
 
 bool tile_fertile_at(const World& world, const assets::BuildingTable& buildings, std::uint16_t island_index,
                      std::uint8_t ware, std::int32_t x, std::int32_t y, std::uint8_t drought) {
-    // The five patterns (table 0x00499B98): 2, 10, 16, 23 and 32 of 32 tiles carry.
+    // The five patterns: 2, 10, 16, 23 and 32 of 32 tiles carry.
     static constexpr std::array<std::array<std::uint8_t, 32>, 5> kPatterns = {{
         {0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0},
@@ -759,7 +759,7 @@ bool tile_fertile_at(const World& world, const assets::BuildingTable& buildings,
     if (!map.contains(x, y)) {
         return false;
     }
-    // Weighted with the Randwachs of the original ground (island + 0xAFC).
+    // Weighted with the Randwachs of the original ground.
     const MapCell& ground = map.ground(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
     const assets::BuildingType* g = ground.empty() ? nullptr : buildings.by_sprite(ground.sprite);
     // Rules::fertile_fields: poor ground takes nothing from a crop, it grows as the island has it.
@@ -770,7 +770,7 @@ bool tile_fertile_at(const World& world, const assets::BuildingTable& buildings,
     if (drought != 0 && ware != ware::kGrass && ware != ware::kTree && ware != ware::kFish) {
         f -= drought * f / 128;
     }
-    // Pattern by value (table 0x0054697C): 0..18, 19..41, 42..75, 76..107, 108..128.
+    // Pattern by value: 0..18, 19..41, 42..75, 76..107, 108..128.
     const std::size_t pattern = f >= 108 ? 4 : f >= 76 ? 3 : f >= 42 ? 2 : f >= 19 ? 1 : 0;
     const auto at = static_cast<std::size_t>((static_cast<std::uint32_t>(x) & 3U) + static_cast<std::uint32_t>(y) * 4U +
                                              island.header.number + ware) &
@@ -906,7 +906,7 @@ void plan_build(const World& world, const assets::BuildingTable& buildings, cons
             continue;
         }
         out.type = type;
-        // Castle, cathedral: one each; monuments and arches by allowance (0x004084D0). Counted per
+        // Castle, cathedral: one each; monuments and arches by allowance. Counted per
         // kind over the whole order, whatever else it holds.
         const std::size_t limit = limit_of(type->infra);
         if (planner.foreign) {
@@ -1055,7 +1055,7 @@ void plan_build(const World& world, const assets::BuildingTable& buildings, cons
 
 namespace {
 
-/// Which cities' land reaches each tile of an island (0x00482120): a bit per city number, from the
+/// Which cities' land reaches each tile of an island: a bit per city number, from the
 /// circles of the markets and Kontors of the city and within 8 tiles of the towers of its owner.
 /// Buildings with their origin in `gone` count as removed.
 std::vector<std::uint8_t> territory_coverage(const World& world, const assets::BuildingTable& buildings,
@@ -1128,7 +1128,7 @@ std::uint8_t covering_city(const World& world, std::uint16_t island, std::uint8_
     return MapCell::kNoCity;
 }
 
-/// Changes of one island in the order of the original (0x00481450, 0x004653A0, 0x00482120).
+/// Changes of one island in the order of the original.
 class Builder {
 public:
     Builder(World& world, const assets::BuildingTable& buildings, std::uint16_t island,
@@ -1148,7 +1148,7 @@ public:
         }
     }
 
-    /// Unregisters every building whose origin lies inside the footprint (0x00481450 phase 1).
+    /// Unregisters every building whose origin lies inside the footprint (phase 1).
     /// Returns the production state of a replaced building (for upgrades).
     std::optional<Production> unregister(const Footprint& f) {
         std::optional<Production> kept;
@@ -1242,7 +1242,7 @@ public:
         return state;
     }
 
-    /// Registers a new building of city `city` (0x00481450 phase 2).
+    /// Registers a new building of city `city` (phase 2).
     void register_building(const assets::BuildingType& b, std::int32_t x, std::int32_t y, std::uint8_t city,
                            std::uint32_t rnd, const std::optional<Production>& kept) {
         City* c = m_world.city(m_island, city);
@@ -1277,7 +1277,7 @@ public:
                     c->warehouse_y = uy;
                 }
                 if (p == prod::kKontor) {
-                    // 0x00481EE0: a Kontor that allows fewer wares than the city trades in
+                    // A Kontor that allows fewer wares than the city trades in
                     // switches all trade settings off (a Kontor rebuilt at a lower level).
                     trim_trade_settings(*c, b);
                 }
@@ -1323,7 +1323,7 @@ public:
         }
     }
 
-    /// Writes the tiles and fits roads and walls to their neighbours (0x004653A0).
+    /// Writes the tiles and fits roads and walls to their neighbours.
     void write(const assets::BuildingType& placed, std::int32_t x, std::int32_t y, std::uint8_t rotation,
                std::uint8_t anim_phase, std::uint8_t city) {
         const City* c = m_world.city(m_island, city);
@@ -1342,7 +1342,7 @@ public:
         const Footprint f = footprint_of(*b, x, y, rotation);
         fit(x, y);
         fit_around(f);
-        // A new Kontor lays a pier along its coast side (Strandflg, record 0x0061FA2C), not an
+        // A new Kontor lays a pier along its coast side (Strandflg, record), not an
         // upgraded one. The piers stay when the Kontor goes, as in the original.
         if (b->coastal && old_kind != b->kind) {
             lay_piers(*b, f, rotation);
@@ -1361,7 +1361,7 @@ public:
     }
 
     /// The line of tiles in front of the long side of a Kontor (the coast its rotation was chosen
-    /// for, 0x00467AF0) becomes pier, turned like the Kontor; the tiles keep their city.
+    /// for) becomes pier, turned like the Kontor; the tiles keep their city.
     void lay_piers(const assets::BuildingType& b, const Footprint& f, std::uint8_t rotation) {
         const assets::BuildingType* pier = first_of_kind(kind::kPier);
         if (pier == nullptr) {
@@ -1399,7 +1399,7 @@ public:
         }
     }
 
-    /// The first record of a Kind, like the special records the original keeps (0x00462D90).
+    /// The first record of a Kind, like the special records the original keeps.
     const assets::BuildingType* first_of_kind(std::int32_t k) const {
         const assets::BuildingType* first = nullptr;
         for (const assets::BuildingType& t : m_buildings.types()) {
@@ -1410,7 +1410,7 @@ public:
         return first;
     }
 
-    /// Walls, gates and towers around a tile (0x00466B10): N 8, E 4, S 2, W 1.
+    /// Walls, gates and towers around a tile: N 8, E 4, S 2, W 1.
     std::uint32_t wall_mask(std::int32_t x, std::int32_t y) const {
         const auto wall_like = [&](std::int32_t tx, std::int32_t ty) {
             const std::int32_t k = kind_at(m_world.islands()[m_island].map, m_buildings, tx, ty);
@@ -1420,7 +1420,7 @@ public:
                (wall_like(x - 1, y) ? 1U : 0U);
     }
 
-    /// Where the sea lies around a beach wall (0x00466E30, then 0x00466C00): 1 N, 2 NE, 3 E, 4 SE,
+    /// Where the sea lies around a beach wall (then): 1 N, 2 NE, 3 E, 4 SE,
     /// 5 S, 6 SW, 7 W, 8 NW, 0 undecided (a straight coast).
     std::uint32_t coast_code(std::int32_t x, std::int32_t y) const {
         const IslandMap& m = m_world.islands()[m_island].map;
@@ -1511,7 +1511,7 @@ public:
                 const MapCell& nc = m.top(static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(ty));
                 return n->kind == kind::kGate && nc.sprite == n->gfx + (n->size_x * n->size_y) / 2;
             }
-            return n->kind >= kind::kGate && n->kind <= kind::kTowerBeach;  // 0x00466B10
+            return n->kind >= kind::kGate && n->kind <= kind::kTowerBeach;
         };
         const std::uint32_t mask = (connects(x, y - 1) ? 8U : 0U) | (connects(x + 1, y) ? 4U : 0U) |
                                    (connects(x, y + 1) ? 2U : 0U) | (connects(x - 1, y) ? 1U : 0U);
@@ -1620,7 +1620,7 @@ public:
         }
     }
 
-    /// Territory of a market or Kontor (0x00465170, 0x0046AC60): free land tiles in the circle.
+    /// Territory of a market or Kontor: free land tiles in the circle.
     void claim(const assets::BuildingType& b, std::int32_t x, std::int32_t y, std::uint8_t rotation,
                std::uint8_t city) {
         std::uint8_t radius = b.radius;
@@ -1656,7 +1656,7 @@ public:
         }
     }
 
-    /// Founds a city (0x00468CE0, 0x00468E10): the first free city number of the island.
+    /// Founds a city: the first free city number of the island.
     std::uint8_t found(PlayerId owner, std::int32_t x, std::int32_t y, const std::vector<std::string>& names,
                        std::size_t classes) {
         std::uint8_t index = 0;
@@ -1684,7 +1684,7 @@ public:
         c.warehouse_x = static_cast<std::uint16_t>(x);
         c.warehouse_y = static_cast<std::uint16_t>(y);
         m_world.add_city(std::move(c));
-        // 0x00468DD2: the city of a human or a computer shows its island to its founder; that the
+        // The city of a human or a computer shows its island to its founder; that the
         // original shows it to every player too (all eight discovery bits) is the game setting
         // Rules::reveal, which the simulation applies (World::reveal_islands). Natives and pirates
         // leave the island as it was.
@@ -1701,7 +1701,7 @@ public:
         return index;
     }
 
-    /// Restores the original ground under a removed building (0x00464B40): the ground layer, or
+    /// Restores the original ground under a removed building: the ground layer, or
     /// meadow where it was forest (the forest ground itself when the data has no meadow).
     void restore_ground(const Footprint& f, std::uint8_t city) {
         IslandMap& m = map();
@@ -1744,7 +1744,7 @@ public:
         }
     }
 
-    /// Destroys a building to ruins (0x00463F40): one ruin of the same size, else 1x1 ruins with
+    /// Destroys a building to ruins: one ruin of the same size, else 1x1 ruins with
     /// a random variant; without a ruin record the ground comes back.
     void destroy(const BuildingAt& b) {
         const Footprint f{b.origin.x, b.origin.y, b.width, b.height};
@@ -1770,7 +1770,7 @@ public:
         };
         if (ruin->size_x == b.type->size_x && ruin->size_y == b.type->size_y) {
             // One ruin over the whole footprint, the beach variant by the origin's ground; it is
-            // registered as a building of the city (0x00463FD0): a destroyed Kontor stays the
+            // registered as a building of the city: a destroyed Kontor stays the
             // city's Kontor and holds its land (S-018), until another player builds over it.
             const assets::BuildingType* r = m_buildings.ruin_record(b.type->ruin, on_beach(b.origin.x, b.origin.y));
             if (r == nullptr || r->size_x != ruin->size_x || r->size_y != ruin->size_y) {
@@ -1800,8 +1800,8 @@ public:
         }
     }
 
-    /// Re-checks the territory of the island after markets, Kontors or towers changed
-    /// (0x00482120): every city tile must lie in a circle of a market or Kontor of its city or
+    /// Re-checks the territory of the island after markets, Kontors or towers changed:
+    /// every city tile must lie in a circle of a market or Kontor of its city or
     /// within 8 tiles of a tower of its owner; otherwise it goes to another covering city of the
     /// same owner or becomes free, and what stands on it falls to ruins. A city without its
     /// Kontor is dissolved.
@@ -1824,7 +1824,7 @@ public:
                 lose_tile(x, y, covering_city(m_world, m_island, cell.city, bits));
             }
         }
-        // Cities without their Kontor are dissolved (0x00468ED0).
+        // Cities without their Kontor are dissolved.
         std::vector<std::uint8_t> dissolve;
         for (const City& c : m_world.cities()) {
             if (c.island == m_island && !c.warehouse_x) {
@@ -1875,7 +1875,7 @@ public:
         h.city = next;
     }
 
-    /// What falls to ruins when its land is lost (0x00480B70): buildings, roads, piers and crop
+    /// What falls to ruins when its land is lost: buildings, roads, piers and crop
     /// fields; not grass, trees, fish or terrain.
     bool ruinable(const assets::BuildingType& b) const { return territory_building(m_buildings, b); }
 
@@ -2021,7 +2021,7 @@ BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, co
                                               static_cast<std::uint16_t>(item.y));
         builder.emit(e);
         if (treasure) {
-            // 0x004084D0 shows "+1000" over the building and posts message 0x2E at the treasure.
+            // The original shows "+1000" over the building and posts message 0x2E at the treasure.
             ConstructionEvent t = e;
             t.kind = ConstructionEvent::Kind::TreasureFound;
             t.production.reset();
@@ -2032,7 +2032,7 @@ BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, co
         }
     }
     if (plan.takeover && city != MapCell::kNoCity) {
-        // City_ChangeOwner: every tile of the city, and the city with its goods, go to the builder.
+        // Every tile of the city, and the city with its goods, go to the builder.
         IslandMap& map = world.island(order.island).map;
         for (std::uint32_t y = 0; y < map.height(); ++y) {
             for (std::uint32_t x = 0; x < map.width(); ++x) {
@@ -2199,7 +2199,7 @@ std::vector<TilePos> plan_demolish(const World& world, const assets::BuildingTab
                 }
             }
             if (drag) {
-                // A rectangle leaves real buildings standing (0x00464AE0).
+                // A rectangle leaves real buildings standing.
                 if (std::find(kRealBuildings.begin(), kRealBuildings.end(), t.kind) != kRealBuildings.end()) {
                     continue;
                 }

@@ -19,7 +19,7 @@ namespace o1602::app {
 
 namespace {
 
-/// The original's messages (table 0x0049B210 has 0x70).
+/// The original's messages (has 0x70).
 constexpr MessageId kOriginalMessages = 0x70;
 
 constexpr std::array<std::pair<std::string_view, MessageIcon>, 8> kIcons{{
@@ -33,12 +33,12 @@ constexpr std::array<std::pair<std::string_view, MessageIcon>, 8> kIcons{{
     {"volcano", MessageIcon::Volcano},
 }};
 
-/// The kinds of voice messages of the options ([SPEECHKIND] in Text.cod, docs/re/audio.md), then
+/// The kinds of voice messages of the options ([SPEECHKIND] in Text.cod), then
 /// Open1602's own (audio::kSpeechRoutes).
 constexpr std::array<std::string_view, audio::kMessageKinds> kKinds{
     "general", "events", "island", "players", "trade", "combat", "orders", "diplomacy", "routes"};
 
-/// Which icon an original message shows: that is not in the data (docs/re/ui.md "Message icons").
+/// Which icon an original message shows: that is not in the data.
 MessageIcon original_icon(std::uint16_t message) {
     switch (message) {
         case 0x01:

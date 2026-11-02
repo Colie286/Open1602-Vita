@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Deer and hunters (docs/re/deer.md).
+// Deer and hunters.
 
 #include "../test_framework.hpp"
 
@@ -117,7 +117,7 @@ TEST_CASE("deer: graze on the meadow, rest under trees, eat the grass") {
     REQUIRE(deer.field.has_value());
     CHECK(deer.ware == 52);  // grass first
     // The place is about 4 steps away: the original's wavefront takes the first goal from round 5
-    // on, here 2 diagonal and 1 straight step (cost 246; an independent model of 0x00471C50
+    // on, here 2 diagonal and 1 straight step (cost 246; an independent model
     // gives the same tile).
     CHECK(*deer.field == (sim::TilePos{12, 5}));
     CHECK(deer.path.size() == 3);
@@ -194,7 +194,7 @@ TEST_CASE("deer: without anything to eat a deer falls and its slot is closed up"
     sim::Logistics logistics(forest.world, forest.buildings, forest.figures);
     logistics.spawn_deer_at_spots();
     CHECK(forest.deer(logistics) == 3);
-    // 0x0046B310: the slot goes at once, the last used slot moves into the hole.
+    // The slot goes at once, the last used slot moves into the hole.
     CHECK(slots[0].used);
     CHECK(slots[0].x == 9);
     CHECK(slots[0].y == 9);

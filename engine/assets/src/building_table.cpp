@@ -105,7 +105,7 @@ core::Result<BuildingTable> BuildingTable::from_cod(const cod::Document& haeuser
             b.ruin = n < 0 ? std::uint8_t{0xFF} : *v;
         }
         for (std::size_t i = 0; i < b.walk_speed.size(); ++i) {
-            // 0x00462834: trunc(value * 32 / 100), at most 126. Zero would mean infinite speed
+            // Trunc(value * 32 / 100), at most 126. Zero would mean infinite speed
             // (a division by zero in the original); Open1602 keeps at least 1.
             // Clamped before the product (HI-17): a large value overflowed int, undefined in C++.
             const std::int32_t percent = std::clamp(r.integer("Wegspeed", i, 100), 0, 400);
@@ -198,8 +198,8 @@ core::Result<BuildingTable> BuildingTable::from_cod(const cod::Document& haeuser
             }
         }
         if (b.prod_kind == prod::kGrowing && b.anim_count > 0) {
-            // 0x00462F1D: the number of k in 1..32 with 40 s + 7 s * k <= Interval / AnimAnz,
-            // clamped to 31 when an entry is added (0x0047C760).
+            // The number of k in 1..32 with 40 s + 7 s * k <= Interval / AnimAnz,
+            // clamped to 31 when an entry is added.
             const std::uint64_t stage_ms = std::uint64_t{b.interval} * 1000U / b.anim_count;
             std::uint32_t cls = 0;
             for (std::uint32_t k = 1; k <= 32; ++k) {
@@ -253,7 +253,7 @@ core::Result<BuildingTable> BuildingTable::from_cod(const cod::Document& haeuser
         }
     }
 
-    // Classes of inhabitants and their needs (0x00460750: k = trunc(v * 8192) / 600).
+    // Classes of inhabitants and their needs (k = trunc(v * 8192) / 600).
     const auto per_tick = [](double v) -> std::uint32_t {
         return core::saturating_cast<std::uint32_t>(
             static_cast<double>(core::saturating_cast<std::int64_t>(v * 8192.0) / 600));
@@ -311,7 +311,7 @@ core::Result<BuildingTable> BuildingTable::from_cod(const cod::Document& haeuser
         }
     }
 
-    // Unlock levels (BAUINFRA, table 0x0061FBC0: {BGruppe, Minwohn} by INFRA number).
+    // Unlock levels (BAUINFRA, {BGruppe, Minwohn} by INFRA number).
     if (const auto* infra = haeuser.root.records("BAUINFRA")) {
         for (const auto& [nummer, level] : *infra) {
             if (nummer < 0 || nummer > 255) {
@@ -361,7 +361,7 @@ const BuildingType* BuildingTable::first_house(std::size_t resident_class) const
 
 const BuildingType* BuildingTable::ruin_record(std::uint8_t ruin, bool beach) const noexcept {
     std::size_t slot = ruin;
-    // The original takes the next slot on beach for every slot (0x00463FE8); only the fisher's
+    // The original takes the next slot on beach for every slot; only the fisher's
     // hut (0) and the pier (2) can stand on beach, and their next slot is their beach ruin. For
     // any other slot the next one would be another building's ruin (or past the table).
     if (beach && (slot == 0 || slot == 2)) {

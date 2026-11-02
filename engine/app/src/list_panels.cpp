@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The ship list and the city list (SHIPLIST.GAD, STADTLST.GAD; ShipList_Refresh 0x00434020,
-// CityList_Refresh 0x00434200; docs/re/ui.md): opened from the player status or with L and
+// The ship list and the city list (SHIPLIST.GAD, STADTLST.GAD): opened from the player status or with L and
 // Shift+L, 13 rows a page; a click on a name goes there (a ship is also selected). Open1602 (FB-6):
 // the mouse wheel scrolls row by row, a click on the heading orders the list (ships by name, idle
 // first or damaged first; cities by name), the city list also shows the pirates' nests the player
@@ -138,7 +137,7 @@ public:
         return std::nullopt;
     }
 
-    /// Every opening starts at the first page (0x0043CE00), with the list as it is now.
+    /// Every opening starts at the first page, with the list as it is now.
     void opened() override {
         m_first = 0;
         m_stale = true;
@@ -200,7 +199,7 @@ private:
         m_rows.clear();
         const sim::World& w = c.world();
         if (m_ships) {
-            // All own ships that are not sinking, in the order of the ship table (0x0044F000).
+            // All own ships that are not sinking, in the order of the ship table.
             for (const sim::Ship& s : w.ships()) {
                 if (s.owner != c.local || s.sinking) {
                     continue;

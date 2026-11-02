@@ -76,7 +76,7 @@ std::vector<std::uint8_t> circle_half_widths(std::uint32_t radius) {
         ++x;
     }
     if (radius == 1) {
-        half[1] = 1;  // the original's table (0x00404D70) has the corners at radius 1
+        half[1] = 1;  // the original's table has the corners at radius 1
     }
     return half;
 }
@@ -153,7 +153,7 @@ void PathFinder::begin(const IslandMap& map, const assets::BuildingTable& buildi
     m_order = 0;
     m_start.reset();
 
-    // The original clips to the circle only from radius 2 on (0x00471280); below the window is
+    // The original clips to the circle only from radius 2 on; below the window is
     // a square.
     std::vector<std::uint8_t>& half = m_half;
     half = circle_table(area.radius);
@@ -240,7 +240,7 @@ void PathFinder::set(TilePos p, Cell cell) {
 }
 
 void PathFinder::open_footprint(TilePos origin, std::uint32_t width, std::uint32_t height) {
-    // 0x004710B0: a building with Grundflg opens only the tiles whose ground (the second layer) is
+    // A building with Grundflg opens only the tiles whose ground (the second layer) is
     // forest, open ground or ruins.
     const assets::BuildingType* building = nullptr;
     if (m_map != nullptr && m_buildings != nullptr && m_map->contains(origin.x, origin.y)) {

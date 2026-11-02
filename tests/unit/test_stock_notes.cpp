@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The texts over production buildings: "Lager: N" and "Lager voll" (docs/re/production.md).
+// The texts over production buildings: "Lager: N" and "Lager voll".
 
 #include "../test_framework.hpp"
 #include "stock_notes.hpp"

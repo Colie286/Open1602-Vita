@@ -36,10 +36,10 @@ using templates::template_path;
 constexpr std::uint8_t kFirstCrop = ware::kCornField;
 constexpr std::uint8_t kLastCrop = ware::kTreasure;
 
-// Every generated island grows grain, grass, trees and fish (0x0048C8F0).
+// Every generated island grows grain, grass, trees and fish.
 constexpr std::uint32_t kBaseFertility = 0x1181;
 
-// Amounts of a new deposit (0x0046BE60), 1/32 t; a treasure is money.
+// Amounts of a new deposit, 1/32 t; a treasure is money.
 constexpr std::uint16_t kBigIron = 0x1E00;     // 240 t
 constexpr std::uint16_t kSmallIron = 0x0A00;   // 80 t
 constexpr std::uint16_t kGoldAmount = 0x0640;  // 50 t
@@ -52,7 +52,7 @@ constexpr std::uint32_t kTilesPerVein = 2000;
 // Islands of their own shape from this shorter side on get lakes, one per so many tiles.
 constexpr std::uint16_t kLakeSide = 48;
 constexpr std::uint32_t kTilesPerLake = 6000;
-constexpr std::uint32_t kMaxCraters = 20;  // in the whole world (0x00609128)
+constexpr std::uint32_t kMaxCraters = 20;  // in the whole world
 
 // Size of the island records in the state chunks, whose first byte is the island number.
 struct StateChunk {
@@ -126,7 +126,7 @@ struct DepositSlots {
         bytes[8 * i + 6] = static_cast<std::uint8_t>(amount);
         bytes[8 * i + 7] = static_cast<std::uint8_t>(amount >> 8);
     }
-    /// 0x0046BE60: the slot of the same mountain, else a new one while there is room.
+    /// The slot of the same mountain, else a new one while there is room.
     bool place(std::uint8_t ware, std::uint16_t px, std::uint16_t py, std::uint8_t kind, std::uint16_t amount) {
         std::size_t i = 0;
         while (i < count && !(x(i) == px && y(i) == py)) {
@@ -326,7 +326,7 @@ private:
 };
 
 void Generator::choose_templates() {
-    // Loop A (0x0048C613): the climate of islands placed by position, then a template of their
+    // Loop A: the climate of islands placed by position, then a template of their
     // climate and size that no other island of the plan has; candidates from the highest number.
     for (ScenarioPlan::Island& e : m_plan.islands) {
         e.size = std::min<std::uint8_t>(e.size, 4);
@@ -448,7 +448,7 @@ bool Generator::load(Slot& slot) {
     }
     slot.loaded_header = slot.village ? slot.village->header.raw : slot.base.header.raw;
     if (slot.loaded_header.size() == kHeaderSize) {
-        // Deposit slots keep the loaded bytes, the count starts at 0 (0x0048C9A0); the treasure
+        // Deposit slots keep the loaded bytes, the count starts at 0; the treasure
         // flag survives (29 native templates carry one, so they never get a treasure).
         std::copy_n(slot.loaded_header.begin() + 0x1C, 16, slot.deposits.bytes.begin());
         slot.treasure = slot.loaded_header[0x18] != 0;
@@ -708,7 +708,7 @@ void Generator::place_village(Slot& slot) {
 }
 
 std::vector<Mountain> Generator::mountains(const Slot& slot, int type, bool free_only) const {
-    // 0x0046C2F0: origins of ore mountains, rows from the top, each row from the right. The
+    // Origins of ore mountains, rows from the top, each row from the right. The
     // original sees the first 40; an island of its own shape, which may have far more, all of
     // them, or its veins would all lie in its north.
     if (!slot.own_shape) {
@@ -758,7 +758,7 @@ std::vector<Mountain> Generator::find_mountains(const Slot& slot, int type, std:
 
 std::vector<Slot*> Generator::crop_candidates(std::uint8_t ware, std::uint8_t min_size, std::uint8_t max_size,
                                               std::uint32_t max_crops) const {
-    // 0x0048D5C0: north islands take tobacco, sugar or wine (not both of the last two), south
+    // North islands take tobacco, sugar or wine (not both of the last two), south
     // islands spices, cotton or cocoa.
     std::vector<Slot*> out;
     for (Slot* s : m_by_number) {
@@ -794,7 +794,7 @@ std::vector<Slot*> Generator::crop_candidates(std::uint8_t ware, std::uint8_t mi
 }
 
 void Generator::hand_out_crops() {
-    // 0x0048C9F1: big islands first, then middle ones, then everyone up to the limit, then one
+    // Big islands first, then middle ones, then everyone up to the limit, then one
     // little island per crop.
     struct Entry {
         std::uint8_t ware;
@@ -856,7 +856,7 @@ void Generator::hand_out_crops() {
 std::vector<Slot*> Generator::ore_candidates(std::uint8_t ware, int type, std::uint32_t min_mountains,
                                              std::uint32_t min_size, std::uint32_t max_size, std::uint32_t max_crops,
                                              std::uint32_t max_same) const {
-    // 0x0048D6B0. The mountain test counts mountains, not free ones; and when "any mountain"
+    // The mountain test counts mountains, not free ones; and when "any mountain"
     // fails, the original compares the ware byte of the first deposit slot instead.
     std::vector<Slot*> out;
     for (Slot* s : m_by_number) {
@@ -913,7 +913,7 @@ Slot* Generator::pick_for_vein(const std::vector<Slot*>& candidates) {
 }
 
 void Generator::place_ores() {
-    // 0x0048CC9D: each unit is one attempt; a unit whose island has no free mountain is lost.
+    // Each unit is one attempt; a unit whose island has no free mountain is lost.
     struct Try {
         std::uint8_t ware;
         int type;
@@ -983,7 +983,7 @@ void Generator::place_ores() {
 }
 
 std::vector<Mountain> Generator::treasure_spots(const Slot& slot) const {
-    // 0x0048D320 with 0x0048D460: every second tile of the 7 tiles wide strips along the left and
+    // Every second tile of the 7 tiles wide strips along the left and
     // right edge (row by row), then along the top and bottom edge (column by column): open
     // ground whose four neighbours are ground or forest. Hits can repeat; after the 41st, each
     // further row or column adds at most one.
@@ -1047,7 +1047,7 @@ std::vector<Mountain> Generator::treasure_spots(const Slot& slot) const {
 }
 
 void Generator::place_treasures() {
-    // 0x0048D116: treasures on middle islands without one, up to 4 tries for a spot. Own worlds
+    // Treasures on middle islands without one, up to 4 tries for a spot. Own worlds
     // have fewer middle islands than the original's plans (every home island is big), so a
     // treasure that finds no place there may go to a big island that is nobody's home.
     constexpr std::uint32_t kTries = 4;
@@ -1383,7 +1383,7 @@ void Generator::top_up_gold() {
 
 std::vector<std::uint8_t> Generator::header(const Slot& slot, const std::vector<Crater>& craters,
                                             const std::array<std::uint8_t, 8>& city_owners) const {
-    // INSEL5 as the original saves a generated island (0x00468740 on a zeroed buffer): the plan's
+    // INSEL5 as the original saves a generated island (on a zeroed buffer): the plan's
     // number, place, template, size class and climate, the crops, deposits and craters, and a few
     // bytes of the loaded header.
     std::vector<std::uint8_t> h(kHeaderSize, 0);
@@ -1431,7 +1431,7 @@ std::vector<std::uint8_t> Generator::header(const Slot& slot, const std::vector<
 }
 
 std::array<bool, 8> Generator::native_cities(const Slot& slot) const {
-    // 0x0046A220 gives a city to the natives when its centre building has Nativflg; the village
+    // The original gives a city to the natives when its centre building has Nativflg; the village
     // templates consist of native buildings, so any of the city's buildings tells.
     std::array<bool, 8> natives{};
     if (!slot.village || slot.village->layers.empty()) {
@@ -1457,8 +1457,8 @@ std::vector<std::uint8_t> Generator::village_tiles(const Slot& slot, const std::
     if (!slot.village || slot.village->layers.empty()) {
         return out;
     }
-    // At the start of the game the original recomputes the territory of every island
-    // (0x0048C0F0 -> 0x00482120): village tiles outside the circle of the Kontor and the markets
+    // At the start of the game the original recomputes the territory of every island:
+    // village tiles outside the circle of the Kontor and the markets
     // (radius at least 8) lose their city. Some older village templates have one such tile.
     struct Anchor {
         Catchment area;
@@ -1530,7 +1530,7 @@ std::vector<std::uint8_t> Generator::village_records(const Slot& slot, const Sta
         if (record.size() < 3) {
             return;
         }
-        record[0] = slot.plan.number;  // the handlers take the island being made (0x0060912C)
+        record[0] = slot.plan.number;  // the handlers take the island being made
         if (!city && std::strcmp(chunk.name, "MARKT2") != 0) {
             // Every other record has its building's x and y in bytes 1 and 2 (gam.md); a village
             // on an island of its own shape moved them.
@@ -1539,8 +1539,8 @@ std::vector<std::uint8_t> Generator::village_records(const Slot& slot, const Sta
         }
         if (city && record[1] < natives.size() && natives[record[1]]) {
             record[2] = kNatives;
-            // 0x0046A220: goodwill 200 towards the four player slots; the loader turns zero
-            // satisfaction, taxes and food into 128 (0x00484910).
+            // Goodwill 200 towards the four player slots; the loader turns zero
+            // satisfaction, taxes and food into 128.
             constexpr std::size_t kPlayers = 4;
             constexpr std::uint8_t kGoodwill = 200;
             for (std::size_t p = 0; p < kPlayers; ++p) {
@@ -1553,7 +1553,7 @@ std::vector<std::uint8_t> Generator::village_records(const Slot& slot, const Sta
             }
             record[0x86] = record[0x86] == 0 ? std::uint8_t{0x80} : record[0x86];
         }
-        // 0x0047F5E0: a native village sells tobacco goods (north) or spices (south) and buys
+        // A native village sells tobacco goods (north) or spices (south) and buys
         // alcohol and cloth up to 10 t, all for nothing. The ware slots (20 bytes each, from +4)
         // must lie within the record.
         constexpr std::uint8_t kTobaccoGoods = 15;
@@ -1593,7 +1593,7 @@ std::vector<std::uint8_t> Generator::village_records(const Slot& slot, const Sta
             }
         } else if (city && c.name == "STADT3") {
             // Ten older village templates have the city in the old format (100 bytes); the same
-            // fields as the loader takes them (0x00484910), in the places of STADT4.
+            // fields as the loader takes them, in the places of STADT4.
             constexpr std::size_t kOld = 100;
             for (std::size_t o = 0; o + kOld <= data.size(); o += kOld) {
                 const auto r = data.subspan(o, kOld);

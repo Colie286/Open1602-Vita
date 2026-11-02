@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// New endless games (docs/re/worldgen.md, docs/re/newgame.md) with the original data: the islands
+// New endless games with the original data: the islands
 // a world plan gets, the start state, and the savegame of a new game.
 
 #include <algorithm>
@@ -98,7 +98,7 @@ TEST_CASE("data: the world plan of an endless game gives the original's islands"
     CHECK((*plan)->ores[2].building == 22405);  // gold mine: 3 units
 
     // Start index 0 of the table: templates, villages, crops and veins as the original's algorithm
-    // gives them (worked example of docs/re/worldgen.md).
+    // gives them.
     sim::WorldStart start;
     start.seed = 0;
     auto world = sim::generate_islands(*file, game, *buildings, start);

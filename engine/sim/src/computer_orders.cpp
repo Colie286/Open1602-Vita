@@ -167,7 +167,7 @@ std::string_view flag_prefix(Kind k) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The original's orders (task 5, docs/re/ai.md)
+// The original's orders (task 5)
 
 constexpr ComputerNeed building(std::uint8_t slot, std::uint32_t n) {
     return {Kind::Building, slot, n};

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Corrections of the original's data (ADR 0006; D-001, D-002, D-012, D-014 of docs/re/bugs.md).
+// Corrections of the original's data (ADR 0006; D-001, D-002, D-012, D-014).
 
 #include <algorithm>
 #include <cstdint>

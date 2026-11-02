@@ -22,7 +22,7 @@ namespace o1602::app {
 /// Whether a ship's right click on the Kontor of `owner` is an attack rather than a visit: with F
 /// first always, otherwise when `local` may not trade there. A trade partner's Kontor (the pirates'
 /// too, whose trade stays open at war) is sailed to for trading. A visit to one's own Kontor is
-/// never an attack. The original attacks any Kontor in its military mode (Haus_IsDestroyable 0x00464A80).
+/// never an attack. The original attacks any Kontor in its military mode.
 [[nodiscard]] bool ship_attacks_kontor(const sim::World& world, sim::PlayerId local, sim::PlayerId owner,
                                        bool attack_pick);
 

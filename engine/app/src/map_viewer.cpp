@@ -528,7 +528,7 @@ core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDir
         viewer->m_sound->set_video_check(
             [self = viewer.get()](std::uint16_t n) { return self->m_video->available(n); });
         if (options.intro) {
-            // The start of the original: the two logos and the intro (0x004959AA, chained 8 -> 9 -> 58).
+            // The start of the original: the two logos and the intro (chained 8 -> 9 -> 58).
             for (const std::uint16_t n : std::array<std::uint16_t, 3>{8, 9, 58}) {
                 viewer->m_video->request(n, 0, false, true);
             }
@@ -897,8 +897,8 @@ int MapViewer::run() {
         update_cursor(video && m_video->full_screen());
         follow_mouse_grab(video && m_video->full_screen());
         if (video && m_video->full_screen()) {
-            // The game stands still while a video fills the screen (the original's main loop
-            // 0x00408293); the time does not reach the simulation afterwards. Not in a multiplayer
+            // The game stands still while a video fills the screen (as in the original);
+            // the time does not reach the simulation afterwards. Not in a multiplayer
             // game: the others would wait (M-018).
             if (m_session) {
                 update(delta);
@@ -1655,8 +1655,8 @@ void MapViewer::render() {
         }
         const sim::Player* local = m_state->world.player(m_local_player);
         m_hud->set_resources(resources());
-        // "Bewertung" would stop the game on one computer only: alone only (Screen_PlayerStatus).
-        // Never in the tutorial (0x0043D76B).
+        // "Bewertung" would stop the game on one computer only: alone only, as in the original.
+        // Never in the tutorial.
         m_hud->set_points(m_player_points, humans() <= 1 && !m_state->world.game_settings().tutorial);
         m_hud->draw(m_state->world, m_buildings, m_banners, corners, now, m_player_figures,
                     static_cast<std::uint8_t>(local != nullptr ? std::min<int>(local->banner, 255) : 0));
@@ -1930,7 +1930,7 @@ void MapViewer::draw_stock_notes() {
     std::vector<ui::DrawItem> items;
     items.reserve(m_stock_notes.notes().size());
     for (const StockNote& n : m_stock_notes.notes()) {
-        // Figures_DrawRow 0x0044FA90, kind 7: centred, white with a black shadow (colour 0), in the
+        // Kind 7: centred, white with a black shadow (colour 0), in the
         // small font (ZEILITTLE) whatever the zoom.
         const auto [px, py] = render::text_figure_point(view, n.x, n.y, n.height(now));
         double sx = 0.0;
@@ -2267,12 +2267,12 @@ Hud::Resources MapViewer::resources() const {
                                                        m_pending_bill->bricks >> 5U};
         }
     }
-    // Einwohner as the original counts them here (0x0040D1C8 calls City_Einwohner 0x0047F790):
+    // Einwohner as the original counts them here:
     // residents plus the workers of the city's buildings, the same figure as the player status,
     // the city window and the population messages.
     r.inhabitants = sim::city_einwohner(*city, sim::city_workers(m_state->world, m_buildings, *city));
-    // The owner's coat of arms for humans and computer opponents alike: 0x0040D22F tests the
-    // player kind (0x005B7680 + 0x280 * owner) for 0 or 0x0C and draws the plain shield only
+    // The owner's coat of arms for humans and computer opponents alike: the original tests the
+    // player kind for 0 or 0x0C and draws the plain shield only
     // for the other factions.
     const sim::Player* owner = m_state->world.player(city->owner);
     if (owner != nullptr && (owner->role == sim::PlayerRole::Human || owner->role == sim::PlayerRole::Computer)) {
@@ -2308,7 +2308,7 @@ void MapViewer::apply_hud(const Hud::Action& action) {
             show_end_screen(local_outcome(), true);
             break;
         case Hud::Action::Kind::SelectShip:
-            // The ship list (0x00434020): look at the ship and select it.
+            // The ship list: look at the ship and select it.
             m_camera.center_on(render::TilePos{static_cast<std::uint32_t>(std::max(0.0, action.tile_x)),
                                                static_cast<std::uint32_t>(std::max(0.0, action.tile_y))});
             if (m_state->world.ship(action.ship) != nullptr) {
@@ -2355,7 +2355,7 @@ void MapViewer::apply_hud(const Hud::Action& action) {
                     m_running = false;
                     break;
                 }
-                // "Ende": the game is kept as lastgame (0x0043BCF0), then back to the main menu
+                // "Ende": the game is kept as lastgame, then back to the main menu
                 // (no score sheet, no high score), or the end without one.
                 const auto status = save_slot(kLastGameSlot, std::string(kLastGameName));
                 if (!status) {
@@ -2380,7 +2380,7 @@ void MapViewer::apply_hud(const Hud::Action& action) {
             m_input->answer(action.step != 0);
             break;
         case Hud::Action::Kind::EndTutorial: {
-            // „Einführungsspiel beenden“ (0x004326E0): the voice stops, the next chapter is kept in
+            // „Einführungsspiel beenden“: the voice stops, the next chapter is kept in
             // the settings and starts at once; after the last one the main menu, at chapter 0 again.
             if (m_sound) {
                 m_sound->stop_voices();
@@ -2879,9 +2879,9 @@ void MapViewer::apply_options() {
                                     "notice.save_failed", platform::ticks_ms());
                     break;
                 }
-                // The voice confirms it (0x0043F71E: Speech_Queue(0x79, 2): files 121 or 123).
+                // The voice confirms it (voice 0x79, 2: files 121 or 123).
                 m_sound->speak(121, 2);
-                // As the original: after saving, the info mode (0x0043F751).
+                // As the original: after saving, the info mode.
                 if (const auto a = m_hud->set_mode(Hud::kModeInfo)) {
                     apply_hud(*a);
                 }
@@ -3458,8 +3458,8 @@ core::Status MapViewer::replace_world(sim::World world, const std::filesystem::p
     if (m_hud) {
         m_hud->set_game(m_state->simulation, m_buildings, m_figures, m_local_player);
         m_hud->reset_game();
-        // The tutorial (docs/re/tutorial.md): the chapter of the settings, its window open
-        // (0x00484EAB), its speech once at the start (0x0043B500). Not saved: a loaded tutorial
+        // The tutorial: the chapter of the settings, its window open,
+        // its speech once at the start. Not saved: a loaded tutorial
         // game starts its chapter again.
         if (m_state->world.game_settings().tutorial && !m_session) {
             const std::uint8_t chapter = m_app_settings.tutorial_chapter;
@@ -3521,7 +3521,7 @@ core::Status MapViewer::start_endless(std::uint8_t level, sim::BannerId banner, 
         return texts.error();
     }
     // What the original rolls with rand() (map layout, start of the island table) and the game id
-    // from the clock (0x0048F5A0, 0x00469410).
+    // from the clock.
     std::random_device device;
     sim::NewGameOptions o;
     o.difficulty = std::min<std::uint8_t>(level, sim::NewGameOptions::kDifficulties - 1);
@@ -3641,7 +3641,7 @@ void MapViewer::apply_menu() {
                     save_settings();
                 }
                 if (started && !e.name.empty()) {
-                    // The stored name goes to the human (0x0048A680).
+                    // The stored name goes to the human.
                     m_command_sink.submit(sim::PlayerRename{m_local_player, e.name});
                 }
                 break;
@@ -3720,7 +3720,7 @@ void MapViewer::load_cursors() {
 
 void MapViewer::update_cursor(bool video_full_screen) {
     using Shape = platform::MouseCursors::Shape;
-    // Cursor_Apply (0x00489460): the arrow, the target in the modes where a window waits for a
+    // The arrow, the target in the modes where a window waits for a
     // click on the map, none while a video plays.
     Shape shape = Shape::Arrow;
     if (video_full_screen) {

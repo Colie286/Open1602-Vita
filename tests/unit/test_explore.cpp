@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// "Insel erkunden" (docs/re/ships.md#exploring).
+// "Insel erkunden".
 
 #include <algorithm>
 #include <memory>

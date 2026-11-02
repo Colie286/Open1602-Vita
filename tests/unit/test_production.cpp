@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Production state: building animation frames, smoke and status icons (docs/re/production.md).
+// Production state: building animation frames, smoke and status icons.
 
 #include <algorithm>
 #include <cmath>
@@ -94,7 +94,7 @@ TEST_CASE("production: HAUS_PRODTYP fields for the production state") {
     CHECK(render::has_production_animation(*buildings.by_id(20809)));
 }
 
-TEST_CASE("production: animation frames follow the building's state (0x00489C90)") {
+TEST_CASE("production: animation frames follow the building's state") {
     const auto buildings = make_buildings();
     const assets::BuildingType& bakery = *buildings.by_id(20503);
     sim::Production p;
@@ -235,7 +235,7 @@ TEST_CASE("production: smoke and status icons on buildings") {
     CHECK(s.parts[0].sprite == atlas->sheet_base(1) + 10);
     CHECK(s.parts[0].mode == render::DrawCommand::Mode::Normal);
     // Point: x = (7 - 7 + 350) * 32 = 11200, y = 14 * 16 = 224; bottom 2.5 * 32 above it and one
-    // pixel up (matches a screenshot of the original, docs/re/figures.md).
+    // pixel up (matches a screenshot of the original).
     CHECK(s.parts[0].x == 11200 - 3);
     CHECK(s.parts[0].y == 224 - 80 - 1);
     world.set_production(make(0, 1, 1, true, 0, 7, 0));
@@ -243,7 +243,7 @@ TEST_CASE("production: smoke and status icons on buildings") {
     CHECK(s.parts[0].sprite == atlas->sheet_base(1) + 10 + 4);
     // Player 1's bakery is short of raw material too, but player 1 is not at this computer.
     CHECK(!render::building_figure_sprites(all[2], world, buildings, view, layers, 0, s));
-    // A shipyard has no production state; its icon (kind 0x19, 0x004790C0) shows while it is
+    // A shipyard has no production state; its icon (kind 0x19) shows while it is
     // switched off, as a screenshot of the original shows.
     render::BuildingFigure yard = icon;
     yard.origin_x = 4;
@@ -255,7 +255,7 @@ TEST_CASE("production: smoke and status icons on buildings") {
     const std::int32_t off_y = s.parts[0].y;
     world.cost_buildings().back().enabled = true;
     CHECK(!render::building_figure_sprites(yard, world, buildings, view, layers, 0, s));
-    // Short of material: ANIM 1 once it has gone Maxnorohst (5) cycles without (0x004790C0).
+    // Short of material: ANIM 1 once it has gone Maxnorohst (5) cycles without.
     world.cost_buildings().back().idle_cycles = 4;
     CHECK(!render::building_figure_sprites(yard, world, buildings, view, layers, 0, s));
     world.cost_buildings().back().idle_cycles = 5;
@@ -299,7 +299,7 @@ std::size_t count(const std::vector<sim::ProductionEvent>& events, sim::Producti
 
 }  // namespace
 
-TEST_CASE("production cycle: raw material in, goods out (0x0047DAF0)") {
+TEST_CASE("production cycle: raw material in, goods out") {
     const assets::BuildingType b = workshop();
     sim::Production p;
     p.raw = 64;  // 2 t
@@ -463,7 +463,7 @@ TEST_CASE("sim: pool with stable handles") {
     CHECK(pool.size() == 2);
 }
 
-TEST_CASE("simulation: the switches of the production window (0x0047CFA0, 0x0047CD90)") {
+TEST_CASE("simulation: the switches of the production window") {
     const auto buildings = make_buildings();
     sim::World world;
     sim::WorldIsland island{assets::IslandHeader{}, sim::IslandMap(8, 8), 5, 5};

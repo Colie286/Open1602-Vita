@@ -65,22 +65,8 @@ __pycache__/
 /export/
 /exports/
 
-# Reverse engineering databases (rebuild from re/symbols)
-*.gpr
-*.rep/
-*.gzf
-*.i64
-*.idb
-*.hop
-
-# Analysis logs may contain decompiled code of the original (ADR 0003)
-re/notes/*.log
 *.mp4
 
-# Inputs and outputs of the analysis (savegames, videos, screenshots): local only, see docs/requests.md
+# Local inputs and outputs (savegames, videos, screenshots), see docs/requests.md
 /inputs/
 /outputs/
-
-# Private analysis of the original, in the separate repository open1602-re (see CONTRIBUTING.md)
-/docs/re
-/re/symbols

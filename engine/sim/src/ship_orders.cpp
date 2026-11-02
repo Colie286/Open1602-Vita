@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Orders of the ship panel beyond sailing and trade (docs/re/ships.md#ship-window): mounting
+// Orders of the ship panel beyond sailing and trade: mounting
 // and taking off cannons, goods overboard, the name, and selling ships between players.
 #include <algorithm>
 #include <span>
@@ -153,7 +153,7 @@ bool Fleet::command(const ShipCommand& c) {
             ship->for_sale = false;
             return true;
         case ShipCommand::Op::Buy: {
-            // 0x0044DF80: the seller earns the price and the ship changes hands. The original takes
+            // The seller earns the price and the ship changes hands. The original takes
             // the money without looking whether the buyer has it; Open1602 checks it, the fleet
             // limit of the buyer, and that no soldiers are on board (they would change sides).
             Player* buyer = m_world->player(c.player);
@@ -186,7 +186,7 @@ bool Fleet::command(const ShipCommand& c) {
                 return false;
             }
             if (c.on) {
-                // Raising it stops the ship like the stop button (0x0044EBA0), then holds it.
+                // Raising it stops the ship like the stop button, then holds it.
                 if (!ship->held) {
                     order(ShipOrder{c.player, ship->id, Target{}});
                     ship->held = true;

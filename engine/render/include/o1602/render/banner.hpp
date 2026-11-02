@@ -102,7 +102,7 @@ class BannerTable {
 public:
     /// The seven banners of the original. Red, blue, yellow and white use the tinted generic flag
     /// in the colours measured from the original flags; pirates keep FAHNEPIRAT; natives and the
-    /// free trader have none. `figures` supplies the flag images (table 0x00498F2C).
+    /// free trader have none. `figures` supplies the flag images.
     [[nodiscard]] static BannerTable original(const assets::FigureTable* figures = nullptr,
                                               const BannerOptions& options = {});
 

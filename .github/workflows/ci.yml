@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Builds and tests on Linux, Windows and macOS. Original Anno 1602 data never reaches CI; the tests
-# that need it skip themselves. The private analysis repository (open1602-re) is not needed here.
+# that need it skip themselves.
 name: CI
 
 on:
@@ -346,6 +346,9 @@ jobs:
         run: |
           clang-format-18 --version
           find engine tools tests \( -name '*.cpp' -o -name '*.hpp' \) -print0 | xargs -0 clang-format-18 --dry-run --Werror
+      - name: Check the repository holds only our own work
+        # No files of the original game and no references into the original program (tools/check_public.py).
+        run: python3 -I tools/check_public.py
       - name: Check the Python scripts compile
         # Syntax only: the tools run on the developer's machine, with the original data (BT-22).
         run: git ls-files -z '*.py' | xargs -0 python3 -c 'import sys; [compile(open(f, encoding="utf-8").read(), f, "exec") for f in sys.argv[1:]]'

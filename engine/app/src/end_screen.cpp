@@ -15,7 +15,7 @@ namespace o1602::app {
 
 namespace {
 
-// ENDE.GAD (docs/re/ui.md "Endbildschirm").
+// ENDE.GAD.
 constexpr std::int32_t kMainMenu = 36001;
 constexpr std::int32_t kNewGame = 36002;
 constexpr std::int32_t kBack = 36003;  // commented out in the shipped file
@@ -138,7 +138,7 @@ void EndScreen::open(sim::EndScreenSummary summary, bool view_only) {
     if (m_strip) {
         update_strip();
     } else {
-        // Screen_PlayerStatus: a coat of arms for every colour somebody plays, with two players or more.
+        // As in the original: a coat of arms for every colour somebody plays, with two players or more.
         for (std::size_t c = 0; c < m_slots; ++c) {
             p.set_graphic(slot_id(c), m_button_arms + static_cast<std::int32_t>(c), m_button_press);
             p.set_visible(slot_id(c),

@@ -109,8 +109,7 @@ inline const sim::City* city_at(const Selection& s, const PanelContext& c) {
     return map.contains(s.x, s.y) ? c.world().city(s.island, map.top(s.x, s.y).city) : nullptr;
 }
 
-/// LAGER: the stock of a city, also the ware picker of the Kontor lists and the route editor
-/// (StockPanel_Refresh 0x00434810).
+/// LAGER: the stock of a city, also the ware picker of the Kontor lists and the route editor.
 class StockList {
 public:
     /// Minutes the goods trend is averaged over (the window "Warenbilanz" opens on the same).
@@ -148,7 +147,7 @@ private:
 };
 
 /// HANDEL: what a foreign Kontor wants (up to its limit) and offers (above what it keeps), also
-/// the ware picker of the route editor at a foreign city (ForeignKontorPanel_Refresh).
+/// the ware picker of the route editor at a foreign city.
 class TradeLists {
 public:
     static constexpr std::int32_t kDemandFrame = 53051;  ///< + row, 11 rows

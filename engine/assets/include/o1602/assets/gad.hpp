@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Layouts of the user interface: GADDATA/*.GAD (docs/formats/gad.md). Plain text in the language of
-// the .cod files (not encoded), one "Objekt: GADGET" block of numbered gadgets; the loader of the
-// original is 0x00405480. Coordinates are design units of a 1024 x 768 screen, relative to the
-// region the layout belongs to.
+// the .cod files (not encoded), one "Objekt: GADGET" block of numbered gadgets. Coordinates are
+// design units of a 1024 x 768 screen, relative to the region the layout belongs to.
 #pragma once
 
 #include <array>

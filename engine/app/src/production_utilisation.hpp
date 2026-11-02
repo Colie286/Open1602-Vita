@@ -13,7 +13,7 @@
 
 namespace o1602::app {
 
-/// Productivity in percent (Prod_Utilisation 0x0047D290): goods made in the statistics window
+/// Productivity in percent: goods made in the statistics window
 /// against what the building makes at full speed, for farms, hunters and fishers with the walk of
 /// their worker; 100 for kinds that have no such figure.
 [[nodiscard]] std::int64_t production_utilisation(const sim::Production& p, const assets::BuildingType& b,

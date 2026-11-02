@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Missions of scenarios, victory and defeat (docs/re/missions.md).
+// Missions of scenarios, victory and defeat.
 
 #include <algorithm>
 

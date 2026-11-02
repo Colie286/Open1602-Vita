@@ -15,7 +15,7 @@ namespace {
 constexpr std::uint32_t kRecordHeaderSize = 16;
 constexpr std::uint8_t kEndOfImage = 0xFF;
 constexpr std::uint8_t kEndOfRow = 0xFE;
-// Record types (the low byte of +8 is what the original's blitters test, 0x00401B10): 1 and 6 are
+// Record types (the low byte of +8 is what the original's blitters test): 1 and 6 are
 // RLE, 2 is width x height raw palette indices with index 0 transparent. Every original record is 1.
 // The History Edition adds 13: the same RLE in 32-bit words, each pixel a word B, G, R, 0 (its menu
 // background and buttons in START.BSH and a few new buttons in TOOLS.BSH; docs/formats/bsh.md).
@@ -198,7 +198,7 @@ core::Result<IndexedImage> SpriteSheet::decode(std::size_t index, std::uint32_t 
 
     const auto type = static_cast<std::uint8_t>(info.type);
     if (type == kTypeRaw) {
-        // Rows of palette indices one after the other; 0 is not drawn (0x00403670).
+        // Rows of palette indices one after the other; 0 is not drawn.
         const auto pixels = data.subspan(std::size_t{info.offset} + kRecordHeaderSize);
         for (std::uint32_t y = 0; y < info.height; ++y) {
             for (std::uint32_t x = 0; x < info.width; ++x) {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Pirates and natives (docs/re/pirates.md).
+// Pirates and natives.
 
 #include <algorithm>
 #include <cstdlib>
@@ -385,7 +385,7 @@ TEST_CASE("pirates: a surrendered ship is plundered and the loot goes to the nes
 }
 
 TEST_CASE("pirates: the nest offers its six most valuable goods it holds at 40 % of the base price") {
-    // 0x0041DD80: base price times stock, the highest first, as many as the Kontor's Maxware (6);
+    // Base price times stock, the highest first, as many as the Kontor's Maxware (6);
     // a ware the nest does not hold is never offered and what is not picked is switched off.
     World w;
     sim::City& nest = *w.world.city(0, 0);
@@ -446,7 +446,7 @@ TEST_CASE("pirates: a surrender without loot pleases them too, so they stay at p
     REQUIRE(m != nullptr);
     CHECK(m->load(8) == 40 * kTon);
     // The pirates' next look keeps the peace with the owner and makes it with every other player
-    // (original 0x00452BE0: event 9 to all, 6 to the owner); the ship is not hunted again.
+    // (event 9 to all, 6 to the owner); the ship is not hunted again.
     sim::pirates_reconsider(w.world);
     CHECK(!w.world.diplomacy().hostile(2, 1));
     CHECK(!w.world.diplomacy().hostile(2, 0));
@@ -481,7 +481,7 @@ TEST_CASE("pirates: at war from the start, they go after a human's ship on their
 }
 
 TEST_CASE("pirates: a ship under the white flag is no prey, and a player with no other is left alone") {
-    // 0x004488D0 counts only ships that have not surrendered (0x0044F000), as the History Edition.
+    // The original counts only ships that have not surrendered, as the History Edition.
     for (const bool white_flag : {false, true}) {
         World w;
         w.world.set_game_settings(sim::World::GameSettings{1, 0, 1500});
@@ -608,7 +608,7 @@ TEST_CASE("natives: goodwill fades towards 49; warriors come out of their huts")
 }
 
 TEST_CASE("natives: a warrior goes to the first road of the natives a search within 7 reaches") {
-    // 0x00467820: from the hut at (5, 4), over open ground; the road of another player next to the
+    // From the hut at (5, 4), over open ground; the road of another player next to the
     // hut is walked on but is no goal, the far road of the natives is reached after the near one.
     const auto targets = [] {
         World w(false);
@@ -676,9 +676,9 @@ TEST_CASE("natives: the empty huts of a new game recruit warriors, who then come
     }
 }
 
-TEST_CASE("pirates: random places at sea are clamped to the map, as Pirate_RandomSeaPos") {
+TEST_CASE("pirates: random places at sea are clamped to the map, as in the original") {
     // 90 tiles around a ship on a map 60 tiles high: most draws fall outside and are clamped to
-    // the first or last row (0x004432F0) instead of being thrown away.
+    // the first or last row instead of being thrown away.
     World w;
     w.world.set_game_settings(sim::World::GameSettings{2, 0, 1500});
     w.world.player(0)->infra_mask |= 1U << 24;
@@ -863,7 +863,7 @@ TEST_CASE("factions: blocked slots of a multiplayer game still count for the pir
     CHECK(sim::pirate_nests(*back, w.rules) == 2);
 }
 
-TEST_CASE("natives: warriors roam around the place they went to, on road and ground (0x00456D00)") {
+TEST_CASE("natives: warriors roam around the place they went to, on road and ground") {
     // A wander target is a tile of road or ground, which is no building: as a building target it had
     // no cells, every way failed and the warriors stood in a heap on their road (Windows feedback).
     World w(false);

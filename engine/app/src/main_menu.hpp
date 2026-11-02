@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The main menu and the screens before a game (docs/re/ui.md "Main menu"; Menu_OnClick 0x0048B590,
-// Menu_Redraw 0x0048ABD0): BASE (main menu), HOST (list of scenarios or savegames), MISSION
+// The main menu and the screens before a game: BASE (main menu), HOST (list of scenarios or savegames), MISSION
 // (briefing, choice of level or part, high scores) and FARBWAHL (name and banner), and for the
 // endless game Open1602's own start dialog with the game's settings (ADR 0008). The button
 // "Mehrspieler" opens Open1602's own multiplayer menu instead of the original's screens. The menu shows the screens and
@@ -35,7 +34,7 @@
 
 namespace o1602::app {
 
-/// One entry of the scenario list (0x0048E710): the files of one name without trailing digits.
+/// One entry of the scenario list: the files of one name without trailing digits.
 struct MenuScenario {
     std::string name;            ///< base name in Windows-1252 (the fonts')
     std::filesystem::path base;  ///< the same as a file name without folder (for the .hss beside it)
@@ -204,7 +203,7 @@ public:
     /// mission's briefing a line per notch, the mods a row per notch (Open1602; the original has
     /// only the arrows). False on a screen without a list.
     bool wheel(std::int32_t notches);
-    /// Escape (0x00409D70): one screen back; false in the main menu.
+    /// Escape: one screen back; false in the main menu.
     bool back();
     /// Where the credits play: the picture frame of the main menu, design units.
     [[nodiscard]] static ui::Rect video_frame() noexcept { return {500, 359, 453, 367}; }
@@ -257,7 +256,7 @@ private:
     std::int32_t m_briefing_line = 0;
     std::int32_t m_briefing_last = 0;  ///< the briefing's last first line, 0 while it fits
     std::int32_t m_briefing_rows = 0;  ///< lines its box shows
-    /// The briefing slider's range while it scrolls: lines + rows - 1 (0x0048B195).
+    /// The briefing slider's range while it scrolls: lines + rows - 1.
     [[nodiscard]] std::int32_t briefing_slider_range() const noexcept {
         return m_briefing_last + 2 * m_briefing_rows - 1;
     }

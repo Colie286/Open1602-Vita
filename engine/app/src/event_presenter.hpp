@@ -43,8 +43,8 @@ struct DirectVideo {
     std::uint16_t number = 0;
 };
 
-/// The high score list takes every human still playing and `defeated`, who is out at this moment
-/// (HighScore_UpdateAllHumans 0x00475990); `progress`: a won single player game opens the next
+/// The high score list takes every human still playing and `defeated`, who is out at this moment;
+/// `progress`: a won single player game opens the next
 /// mission.
 struct ScoreUpdate {
     sim::PlayerId defeated = sim::kNoPlayer;
@@ -53,7 +53,7 @@ struct ScoreUpdate {
 
 using Notice = std::variant<Announcement, DirectVideo, ScoreUpdate>;
 
-/// The help bar of the original over grass and trees of an explored island (0x0040A3D0): the
+/// The help bar of the original over grass and trees of an explored island: the
 /// three crops of the climate (north sugar cane, grapes, tobacco; south spices, cotton, cocoa)
 /// with their fertility in percent.
 [[nodiscard]] std::array<std::pair<std::uint8_t, std::uint32_t>, 3> island_crops(const sim::WorldIsland& island);
@@ -83,7 +83,7 @@ public:
     void set_rival_wars(bool on) noexcept { m_rival_wars = on; }
 
     /// The end screen comes this long after the message of a decided game when it has no video,
-    /// after an own defeat without one the shorter time (docs/re/missions.md "Sieg"; with a video
+    /// after an own defeat without one the shorter time (with a video
     /// it comes when the video ends).
     static constexpr std::uint64_t kEndScreenDelayMs = 5000;
     static constexpr std::uint64_t kDefeatDelayMs = 500;
@@ -130,8 +130,8 @@ public:
     // The end screen of a decided game.
 
     /// The end screen follows a decided game when the videos of its messages are over (`videos`:
-    /// one plays or waits) and the delay ran out while the game was not paused (docs/re/missions.md
-    /// "Sieg"). Called every frame the game runs; returns the outcome once it is due.
+    /// one plays or waits) and the delay ran out while the game was not paused.
+    /// Called every frame the game runs; returns the outcome once it is due.
     [[nodiscard]] std::optional<sim::GameOutcome> end_screen_due(std::uint64_t now_ms, bool videos, bool game_paused);
     /// The final end screen was shown: once per game (a won game may go on).
     void end_screen_shown() noexcept { m_end_shown = true; }

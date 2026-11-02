@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Houses: coverage by public buildings, growth, upgrade, downgrade, ruins (docs/re/houses.md).
+// Houses: coverage by public buildings, growth, upgrade, downgrade, ruins.
 
 #include <array>
 #include <cstdint>
@@ -157,7 +157,7 @@ TEST_CASE("houses: the panel's icons translate the coverage bits") {
     h.market = true;
     h.services = hs::kKapelle;
     CHECK(sim::panel_services(h) == (ps::kMarkt | ps::kKapelle));
-    // A church stands in for a chapel, a college for a school (0x0047B200).
+    // A church stands in for a chapel, a college for a school.
     h.market = false;
     h.services = hs::kKirche | hs::kHochschule;
     CHECK(sim::panel_services(h) == (ps::kKirche | ps::kKapelle | ps::kHochschule | ps::kSchule));
@@ -189,7 +189,7 @@ TEST_CASE("houses: growth rates like the original's tables") {
     h.market = false;
     h.services_complete = false;
     h.services = sim::house_service::kKontor;  // the Kontor still brings food
-    CHECK(sim::growth_rate(city, h) == -226);  // 11 % per visit, docs/re/houses.md
+    CHECK(sim::growth_rate(city, h) == -226);  // 11 % per visit
     h.services = 0;                            // nothing at all
     CHECK(sim::growth_rate(city, h) == -514);
 }
@@ -283,7 +283,7 @@ TEST_CASE("houses: settlers without a chapel fall back to pioneers") {
 
 TEST_CASE("einwohner: residents plus the workers of the city's buildings, for one city as for all") {
     // The top bar counted the residents only and showed 150 where the player status, the city
-    // window and the population message (0x0047F790) counted 210 (0x0040D1C8 calls the same).
+    // window and the population message counted 210 (calls the same).
     Town town;
     town.place(kMarket, 10, 11);
     town.place(kChapel, 16, 11);
@@ -360,7 +360,7 @@ TEST_CASE("world: cities are found by island and number after adding, removing a
 }
 
 TEST_CASE("houses: the panel's required buildings come from the needs of each class (MD-2)") {
-    // Class_RequiredServices 0x0047F320 of the original.
+    // The original of the original.
     constexpr std::array<std::uint32_t, 5> kOriginal{0x01, 0x03, 0x0F, 0x3D, 0xF9};
     static_assert(kOriginal.size() == sim::kResidentClasses);
     for (std::uint8_t c = 0; c < kOriginal.size(); ++c) {
@@ -381,7 +381,7 @@ TEST_CASE("game data: ware groups and unlock levels are tables (MD-3, MD-8)") {
     CHECK(sim::ware_group(59) == sim::WareGroup::None);
     CHECK(sim::ware_group(1000) == sim::WareGroup::None);
 
-    // Levels by bit n - 1; the fleets grow at 2D, 3C, 4B and 5A as Pirates_MaxShips does.
+    // Levels by bit n - 1; the fleets grow at 2D, 3C, 4B and 5A as in the original.
     sim::Player p;
     CHECK(p.unlocked(sim::infra::kNone));
     CHECK(!p.unlocked(sim::infra::kLevel2A));

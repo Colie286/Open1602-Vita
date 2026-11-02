@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Placement, tile attributes and sprite selection (docs/re/rendering.md).
+// Placement, tile attributes and sprite selection.
 
 #include <functional>
 #include <set>

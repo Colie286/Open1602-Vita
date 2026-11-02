@@ -20,8 +20,7 @@ if they change during a game, then only via a command
    (ADR 0004), so that all machines compute the same thing.
 4. The simulation reads settings only from `Rules`. The interface, the game start dialog and the
    command line fill in `Rules` and do not know the rules themselves.
-5. New settings are documented in the code at the place that evaluates them, and in the
-   behaviour description (`docs/re/*.md`) in the section "Open1602 and the original".
+5. New settings are documented in the code at the place that evaluates them.
 
 ## First settings
 | Setting | Values | Original | Default |
@@ -43,7 +42,7 @@ if they change during a game, then only via a command
 | Trade carts per island (`more_carts`) | one per player and island, as the original; one for each Kontor and market of the player on the island, the further ones asked for with Shift on the city window's cart button | one | one per Kontor and market |
 | Barren patches (`fertile_fields`) | as the original: the ground under a tile weighs the island's fertility for a crop, so that single tiles stay barren even where the island grows it fully; fertile: every tile has the island's fertility (a crop the island grows partly still carries on as many tiles, one it does not grow still does not, droughts still wither) | as the original | as the original |
 | Bread production (`revised_bread`) | as the original; revised: the grain farm makes 2 t of grain per field and the bakery 2 t of bread from 2 t of flour for 15 gold a minute instead of 5, so a bread chain makes about as much food as meat at the same running cost ([balance.md](../modding/balance.md#revised-bread-production)); a savegame without the setting plays the original's chain | as the original | revised |
-| Towns known from the start (`reveal`) | nothing (every island is discovered by a ship coming near, also one where another player founded a town); as in the original (by ship, but a town a human or computer player founds shows its island to everyone at once, `0x00468DD2`; native villages and pirate nests are found by ship); all settlements (every island with a town of a human or computer player, a native village or a pirate nest is discovered for everyone from the start, also when the town is founded later). An island counts as a whole, so a native village on an island with a player's town shows with it | as in the original | as in the original |
+| Towns known from the start (`reveal`) | nothing (every island is discovered by a ship coming near, also one where another player founded a town); as in the original (by ship, but a town a human or computer player founds shows its island to everyone at once, native villages and pirate nests are found by ship); all settlements (every island with a town of a human or computer player, a native village or a pirate nest is discovered for everyone from the start, also when the town is founded later). An island counts as a whole, so a native village on an island with a player's town shows with it | as in the original | as in the original |
 | Bugs of the original (`bugs`, `OriginalBugs`), see "Original settings" below | each fixed or as the original | as the original | fixed |
 | Victory conditions of the endless game (`victory`, `VictoryConditions`) | inhabitants, residents of a level or higher, treasury, balance per minute, share of settled islands, defeat all opponents, score, prestige buildings (castle, cathedral, both), time limit (then the most points win); all or any one; computers can win or not | none (the endless game never ends) | none |
 | Custom world (`WorldSettings`, new game) | size 200–4000 per side or automatic by the players (as multiplayer: 500 × 350 up to four, both sides growing with the square root of the players beyond), 2–12 players, number of islands, island sizes, villages, volcano islands, gold islands (automatic by level, islands and players, or a fixed 1–40 for very large maps; settings.cfg up to 250), starting areas separate/shared, island shapes (the original's templates, mixed, own); with own shapes, on the page "Island world" (presets and a preview of the world the game gets, which keeps its world number; in a multiplayer game the world of the host's world number, which "Another world" changes while the game is created, and in the lobby everyone sees it): share of land 10–45 %, smallest island 16–200 and largest 40–1000 tiles (the map grows on its own where the largest finds no room), spread of sizes, gaps, coast, outline, forest, ore mountains | the three fixed maps | off; on: automatic size (500 × 350 for 4 players), 4 players, normal, mixed, automatic gold, separate, templates; own shapes: 15 % land, 30–100 tiles, many small ones, normal gaps, natural coast, compact, normal forest and mountains |
@@ -54,15 +53,14 @@ What two of the choices mean for the player (shown in the start dialog as "Trade
 - **Free trader's prices** (`trader_prices`): what the free trader pays for the player's goods. "As usual" is about half
   the base price, as players know the original. The original means him to follow the market, but it
   gathers the statistics for that in a way that depends on the frame rate, so they are almost always
-  empty (S-077, [ships.md](../re/ships.md)).
+  empty (S-077).
   "By the market" does what it intends: he pays up to three quarters of the average price at which
   the Kontors buy the ware, and stops buying a ware once all traders together hold half again as much
   of it as the Kontors want.
 - **Every raw material** (`guarantee_resources`): a randomly generated world has at least one deposit
   of every raw material a building needs: every crop, iron and gold, gold if need be instead of a
   second iron vein. The original can generate endless games without any gold (S-019, in 31 % of the
-  512 worlds of `Endlosspiel00`;
-  [worldgen.md](../re/worldgen.md)).
+  512 worlds of `Endlosspiel00`).
 
 ## Consequences
 The Open1602 savegame has its own section for the settings (`RULE` in the chunk

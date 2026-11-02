@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Shipyards (docs/re/ships.md, "Shipyard"): a switched-on yard with an order or a ship to repair runs
+// Shipyards: a switched-on yard with an order or a ship to repair runs
 // production-like cycles of wood and cloth its pack donkey brings; the points of each cycle build
 // the ship or become its health.
 #include <algorithm>
@@ -17,7 +17,7 @@ constexpr std::uint16_t kIdleSeconds = 11;        // a cycle that could not star
 constexpr std::uint32_t kFetchThreshold = 0x180;  // material for three cycles or less: fetch more
 
 constexpr std::uint8_t kLaunchesToComplain = 100;  // failed launches before a computer complains
-constexpr std::int32_t kYardComplaint = 8;         // reach of the count round the shipyard (0x004287B0)
+constexpr std::int32_t kYardComplaint = 8;         // reach of the count round the shipyard
 constexpr std::uint8_t kMaxIdle = 15;
 constexpr std::uint8_t kSmallYardSize = 3;
 constexpr auto kShipTypes = static_cast<std::uint8_t>(figure::kShips.size());
@@ -47,7 +47,7 @@ void Fleet::yard_delivery(std::uint16_t island, std::uint16_t x, std::uint16_t y
     const WorldIsland& isl = m_world->islands()[island];
     const MapCell& cell = isl.map.top(x, y);
     const assets::BuildingType* b = cell.empty() ? nullptr : m_buildings->by_sprite(cell.sprite);
-    // 0x0047D940: the Workstoff to the cloth, everything else to the wood; a waiting yard starts.
+    // The Workstoff to the cloth, everything else to the wood; a waiting yard starts.
     if (b != nullptr && ware == b->raw2_ware && ware != b->raw_ware) {
         yard->cloth += amount;
     } else {
@@ -177,7 +177,6 @@ void Fleet::yards_tick(std::uint32_t dt_ms) {
 }
 
 void Fleet::yard_cycle(CostBuilding& yard) {
-    // 0x004791B0.
     if (yard.island >= m_world->islands().size()) {
         return;
     }
@@ -242,8 +241,8 @@ void Fleet::yard_cycle(CostBuilding& yard) {
                 yard.progress = 0;
                 yard.enabled = false;
             } else if (++yard.failed_launches >= kLaunchesToComplain) {
-                // 0x00479508: after 100 tries (about 18 minutes) a computer owner looks for the
-                // ships in the way (0x00428920 with 2). The original measures from the shipyard
+                // After 100 tries (about 18 minutes) a computer owner looks for the
+                // ships in the way. The original measures from the shipyard
                 // its computer has noted, Open1602 from this one; a computer builds only one.
                 yard.failed_launches = 0;
                 const WorldIsland& home = m_world->islands()[yard.island];
@@ -304,7 +303,7 @@ void Fleet::yard_cycle(CostBuilding& yard) {
 }
 
 bool Fleet::launch(CostBuilding& yard) {
-    // 0x004796A0: the nearest free sea tile within the yard's Radius.
+    // The nearest free sea tile within the yard's Radius.
     const WorldIsland& isl = m_world->islands()[yard.island];
     const MapCell& cell = isl.map.top(yard.x, yard.y);
     const assets::BuildingType* b = m_buildings->by_sprite(cell.sprite);

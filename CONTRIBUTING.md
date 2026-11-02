@@ -4,8 +4,8 @@
 
 1. **No original data** in the repository – neither game files nor exports generated from them
    (PNGs, decoded `.cod` texts, memory dumps with game content).
-2. **No decompiled code** in `engine/`. Findings are described as a specification in `docs/`
-   and reimplemented from it (see ADR 0003).
+2. **No code of the original program**. Behaviour is described as a specification in `docs/` and
+   implemented from it (see ADR 0003).
 3. Contributions are licensed under GPL-3.0-or-later. Third-party code only with a compatible licence,
    documented in `third_party/README.md`.
 
@@ -44,31 +44,16 @@ chat, lobby) all look and behave alike. This is binding for every new window and
 - Windows that keep the original game's look (the parchment of the goods balance) use the same
   form with their own `FormStyle`, not code of their own.
 
-## Reverse engineering
+## Documentation
 
-- Enter new function/variable names in `re/symbols/*.csv` with confidence and evidence.
-- Document confirmed formats/structures in `docs/formats/` or `docs/re/`.
-- Collect bugs of the original you find in `docs/re/bugs.md`.
-
-The symbol tables (`re/symbols/`) and the analysis of the original (`docs/re/`) are not in
-this repository (https://github.com/x4rd4s/open1602) but in the private companion repository
-`open1602-re`. Links into `docs/re/` from the public documents only work with it in place. Maintainers
-set it up next to this folder:
-
-```sh
-git clone <url-of-open1602-re> ../open1602-re
-ln -s ../../open1602-re/docs/re docs/re
-ln -s ../../open1602-re/re/symbols re/symbols
-```
-
-Both paths are in `.gitignore`; changes to them are committed in `open1602-re`. With them in place,
-`re/scripts/check_bug_refs.py` checks the bug ids the code cites and `re/scripts/check_symbol_refs.py`
-lists the addresses of `1602.exe` the code cites that neither the symbol tables nor `docs/re` name.
+- Document file formats and structures in `docs/formats/`.
+- Describe behaviour that matches the original game as such ("as in the original"); bugs of the
+  original that Open1602 fixes are named by their id (`// Fix S-002: …`).
 
 ## Commits
 
 - Small, self-contained commits; prefix by area, e.g. `assets: decode ZEI glyph overhang`,
-  `re: name Cod_LoadHaeuser`, `docs: describe INSELHAUS bits`.
+  `sim: market carts skip full stores`, `docs: describe INSELHAUS bits`.
 - Before committing: `cmake --build --preset debug && ctest --preset debug`, and clang-format 18 over
   the changed files. How to run single tests and the tests against the original data:
   [tests/README.md](tests/README.md).

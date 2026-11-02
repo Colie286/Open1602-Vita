@@ -78,7 +78,7 @@ constexpr std::uint32_t kQueues = tag("QUEU");
 constexpr std::uint32_t kStances = tag("STNC");
 /// The tutorial flag of the world (TIMERS +0xA5), only written when set.
 constexpr std::uint32_t kTutorial = tag("TUTR");
-/// The ships that gave up their way to each Kontor (city + 0x252), only written when one did.
+/// The ships that gave up their way to each Kontor, only written when one did.
 constexpr std::uint32_t kGiveUps = tag("CGUP");
 /// The goods statistics of the cities (City::ledger), only written when one has any.
 constexpr std::uint32_t kLedgers = tag("GLDG");

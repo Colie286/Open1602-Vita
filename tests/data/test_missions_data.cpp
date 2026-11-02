@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Missions of the shipped scenarios (docs/re/missions.md).
+// Missions of the shipped scenarios.
 
 #include <algorithm>
 #include <cstdio>

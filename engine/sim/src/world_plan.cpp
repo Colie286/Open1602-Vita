@@ -338,8 +338,8 @@ std::optional<Dims> Planner::smaller(const Dims& d) const {
 }
 
 std::uint8_t Planner::band(const Rect& r) const {
-    // The original: the north is the top third of the map, the south the bottom third
-    // (0x0048C613); in between either.
+    // The original: the north is the top third of the map, the south the bottom third;
+    // in between either.
     const auto cy = static_cast<std::uint32_t>(r.cy());
     if (cy <= m_s.height / 3) {
         return 0;

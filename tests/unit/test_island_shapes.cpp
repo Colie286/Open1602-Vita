@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Islands of their own shape (world generator stage 2, docs/re/worldgen.md "Island shapes").
+// Islands of their own shape (world generator stage 2).
 
 #include <algorithm>
 #include <array>

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The production chains of the packages' goods for the computer players (MD-4, docs/re/ai.md and
+// The production chains of the packages' goods for the computer players (MD-4.md and
 // docs/modding/computer-players.md): derived from the building table, not compiled in. A good of a
 // package that a class of inhabitants needs gets its producer, the producer's raw material its own,
 // and so on down to a farm or a raw material of the original. Each producer counts in a slot of its

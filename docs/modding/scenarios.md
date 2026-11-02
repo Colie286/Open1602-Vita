@@ -50,8 +50,8 @@ read, is left out; the game's log names the file, the line and the key.
 ## Goals
 
 The goals become the mission of every human player; the computers keep the missions the map gives
-them. All goals given must hold at the same time, as in the original's missions
-([missions.md](../re/missions.md)). Without any goal the map's own missions stay.
+them. All goals given must hold at the same time, as in the original's missions.
+Without any goal the map's own missions stay.
 
 | Key | Goal |
 |---|---|

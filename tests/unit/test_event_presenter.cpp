@@ -260,7 +260,7 @@ TEST_CASE("event presenter: a rival's defeat announces the culprit's triumphal a
     const auto plain = g.presenter.game_events(g.world, kMe, {defeated}, 1000);
     REQUIRE(plain.size() == 2);
     CHECK(announcement(plain[1])->message == 0x5A);
-    CHECK(announcement(plain[1])->about == kRival);  // in the colour of the defeated (0x0047684B)
+    CHECK(announcement(plain[1])->about == kRival);  // in the colour of the defeated
     // With the arch: only its message.
     sim::GameEvent arch;
     arch.kind = sim::GameEvent::Kind::ArchAllowed;

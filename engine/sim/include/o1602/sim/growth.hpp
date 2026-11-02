@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Growth of fields, plantations, trees, meadows and fish shoals (docs/re/growth.md).
+// Growth of fields, plantations, trees, meadows and fish shoals.
 //
 // Every crop is three consecutive records of haeuser.cod: growing (HAUS_PRODTYP Kind ROHSTWACHS),
 // ripe (ROHSTOFF, with the ware a worker harvests) and, for fields, withered. A growing tile has
 // a growth entry; 32 global clocks, one per growth class, tick every 40 s + 7 s * class, and each
 // tick moves the entries of that class one stage on (the tile's animation phase shows the stage).
 // After AnimAnz stages the tile becomes its ripe record. Harvesting turns it back into the
-// growing record with a new entry (0x0047CA80, 0x0047C830).
+// growing record with a new entry.
 #pragma once
 
 #include <cstdint>
@@ -60,11 +60,11 @@ void add_missing_growth(World& world, const assets::BuildingTable& buildings);
 
 /// Harvests the ripe tile (x, y) of island `island` if it carries `ware`: it becomes the growing
 /// record again and starts growing; during a drought a field that is not fertile at its strength
-/// withers instead (0x0047C830). False if there is nothing to harvest.
+/// withers instead. False if there is nothing to harvest.
 bool harvest_tile(World& world, const assets::BuildingTable& buildings, std::uint16_t island, std::uint16_t x,
                   std::uint16_t y, std::uint8_t ware);
 
-/// A ripe field withers (0x0047C920): it becomes its withered record. False if the tile is no ripe
+/// A ripe field withers: it becomes its withered record. False if the tile is no ripe
 /// crop with a withered record.
 /// With `forgotten`, the tile's old growth entries are not looked for here: the tile goes into the
 /// list, and forget_growth removes the entries of all of them in one pass (a drought withers
@@ -72,7 +72,7 @@ bool harvest_tile(World& world, const assets::BuildingTable& buildings, std::uin
 bool wither_tile(World& world, const assets::BuildingTable& buildings, std::uint16_t island, std::uint16_t x,
                  std::uint16_t y, std::vector<TilePos>* forgotten = nullptr);
 
-/// A withered field comes back (0x0047C920): it becomes the growing record and starts growing.
+/// A withered field comes back: it becomes the growing record and starts growing.
 /// Unlike the original, which adds a second growth entry, the tile keeps only the new one.
 bool recover_tile(World& world, const assets::BuildingTable& buildings, std::uint16_t island, std::uint16_t x,
                   std::uint16_t y, std::vector<TilePos>* forgotten = nullptr);

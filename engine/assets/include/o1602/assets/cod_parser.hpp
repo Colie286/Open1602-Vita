@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Interpreter for the .cod description language (haeuser.cod, figuren.cod).
-// Behaviour follows the original interpreter in 1602.exe - see docs/formats/cod.md for the
-// specification and the addresses it was derived from.
+// Behaviour matches the original game; see docs/formats/cod.md for the specification.
 #pragma once
 
 #include <array>
@@ -50,7 +49,7 @@ class SymbolTable {
 public:
     [[nodiscard]] const Symbol* find(std::string_view name) const;
     Symbol& get_or_create(std::string_view name);
-    /// Equivalent of Cod_DefineSymbol(name, value, slot) @ 0x004020D0.
+    /// Equivalent.
     void define(std::string_view name, std::int32_t value, std::size_t slot = 0);
     [[nodiscard]] std::size_t size() const noexcept { return m_symbols.size(); }
     [[nodiscard]] const std::unordered_map<std::string, Symbol>& all() const noexcept { return m_symbols; }

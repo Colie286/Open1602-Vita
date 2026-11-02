@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Ships in a fight (docs/re/military.md, "Naval combat"): target choice, the broadside and firing.
+// Ships in a fight: target choice, the broadside and firing.
 #include <algorithm>
 
 #include "o1602/sim/combat.hpp"
@@ -9,7 +9,7 @@ namespace o1602::sim {
 
 namespace {
 
-constexpr std::int32_t kOrderRange = 15;  // tiles: an ordered target this near is fought (0x00445320)
+constexpr std::int32_t kOrderRange = 15;  // tiles: an ordered target this near is fought
 constexpr std::uint32_t kStandMs = 1000;  // a ship fighting stands a second between looks
 constexpr std::uint32_t kDefaultTurnMs = 200;
 
@@ -20,7 +20,7 @@ bool computer_controlled(const Player* p) noexcept {
 }  // namespace
 
 std::optional<std::uint8_t> Fleet::bearing_to(const Ship& ship, const Target& target) const {
-    // Ship_FireDirection 0x00453E50: half tiles from the ship's centre to the nearest point of the
+    // Half tiles from the ship's centre to the nearest point of the
     // target, within Shotradius; no line of sight at sea.
     const auto me = m_combat->fighter(Target::other_ship(ship.id));
     const auto other = m_combat->fighter(target);
@@ -37,7 +37,7 @@ std::optional<std::uint8_t> Fleet::bearing_to(const Ship& ship, const Target& ta
 }
 
 bool Fleet::naval_combat(Ship& ship) {
-    // The combat block of Ship_OnStepDone 0x00452370: only armed ships fight.
+    // The combat block: only armed ships fight.
     if (m_combat == nullptr || ship.cannons == 0 || ship.held || ship.sinking) {
         return false;
     }
@@ -110,7 +110,7 @@ bool Fleet::naval_combat(Ship& ship) {
     if (fight.empty()) {
         return false;
     }
-    // A pirate meeting a ship with the white flag plunders it instead of shooting (0x00455840).
+    // A pirate meeting a ship with the white flag plunders it instead of shooting.
     if (pirate && fight.kind == Target::Kind::Ship) {
         if (Ship* victim = m_world->ship(fight.ship); victim != nullptr && victim->held) {
             if (!victim->plundered) {
@@ -150,7 +150,7 @@ bool Fleet::naval_combat(Ship& ship) {
         if (moving_past) {
             return false;  // not broadside while passing: sail on (the original fires only when aligned)
         }
-        // Stop and turn one step per Drehtime (Ship_PostTurn 0x00454760).
+        // Stop and turn one step per Drehtime.
         m.path.clear();
         m.path_index = 0;
         const assets::FigureType* t = type_of(ship);
@@ -168,7 +168,7 @@ bool Fleet::naval_combat(Ship& ship) {
         const assets::FigureType* t = type_of(ship);
         if (target && t != nullptr) {
             m_combat->shoot(*me, *target, t->combat.hit_delay_ms);
-            // Reload: Worktime * k / cannons (0x00447880).
+            // Reload: Worktime * k / cannons.
             const std::uint32_t k = Combat::cannon_factor(ship.cannons);
             ship.next_shot_ms = now + std::uint64_t{t->work_time_ms} * k / ship.cannons;
             m_events.push_back(ShipEvent{ShipEvent::Kind::Fired, ship.id, ship.owner, 0, 0, *bearing});

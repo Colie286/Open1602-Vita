@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Paths of carriers, market carts and workers on an island (docs/re/logistics.md).
+// Paths of carriers, market carts and workers on an island.
 //
 // Like the original, a search never covers the whole island: it runs in the catchment of the
-// figure's home building, the circle of the building's Radius around its centre tile
-// (0x00471280), so a figure never leaves it. Each tile of that window is blocked, walkable or a
+// figure's home building, the circle of the building's Radius around its centre tile,
+// so a figure never leaves it. Each tile of that window is blocked, walkable or a
 // goal; walking off a tile costs 2 * Wegspeed straight and 91/32 * Wegspeed diagonally (64 and
-// 91 on a road, 0x0046F8A0), corners are never cut, and goal tiles (the buildings a figure walks
+// 91 on a road), corners are never cut, and goal tiles (the buildings a figure walks
 // to) are entered but not crossed.
 //
 // The original runs the search in rounds of 64 cost units and assigns each tile to the neighbour
@@ -33,12 +33,12 @@ struct TilePos {
     friend constexpr bool operator==(const TilePos&, const TilePos&) = default;
 };
 
-/// Directions as the original numbers them (figure +0x03): 0 = -y, 1 = +x-y, 2 = +x, 3 = +x+y,
+/// Directions as the original numbers them: 0 = -y, 1 = +x-y, 2 = +x, 3 = +x+y,
 /// 4 = +y, 5 = -x+y, 6 = -x, 7 = -x-y (island tile axes).
 [[nodiscard]] std::uint8_t direction_between(TilePos from, TilePos to) noexcept;
 
 /// Half widths of the integer circle of radius `radius` for the row offsets 0..radius, built with
-/// the midpoint circle algorithm like the original's table at 0x005B7460 (0x00404D70).
+/// the midpoint circle algorithm.
 /// Radius 10: 10, 10, 10, 10, 9, 9, 8, 7, 6, 5, 3.
 [[nodiscard]] std::vector<std::uint8_t> circle_half_widths(std::uint32_t radius);
 /// The same for radius 0..255 from a table built once: no allocation in the tick.
@@ -66,10 +66,10 @@ struct Catchment {
 /// there, and towers, which shoot at ships. Its circle is shown lit on the sea as well.
 [[nodiscard]] bool catchment_covers_water(const assets::BuildingType& building) noexcept;
 
-/// What figures walk on besides the buildings they enter (grid builders 0x004706E0, 0x004704D0):
+/// What figures walk on besides the buildings they enter (grid builders):
 /// - Roads: roads, squares, bridges, piers and the centre of gates (market carts);
 /// - Land: also open ground and ruins (carriers, farmers), at their slower Wegspeed;
-/// - Water: the sea, surf and river mouths (fishing boats, 0x0046FB50), also beyond the island.
+/// - Water: the sea, surf and river mouths (fishing boats), also beyond the island.
 enum class WalkClass : std::uint8_t { Roads, Land, Water };
 
 /// HAUS Kind values under the name the walking code, the renderer and the interface use.
@@ -95,7 +95,7 @@ public:
                std::uint8_t speed_type, bool circle = true);
 
     /// Makes the footprint of a building walkable (the one a figure stands in, or the one it
-    /// returns to), as 0x004710B0 does: cost class 40 (125 %). Of a building drawn over its ground
+    /// returns to), as the original does: cost class 40 (125 %). Of a building drawn over its ground
     /// (`Grundflg`) only the tiles whose ground is forest, open ground or ruins.
     void open_footprint(TilePos origin, std::uint32_t width, std::uint32_t height);
 
@@ -198,7 +198,7 @@ inline constexpr std::uint32_t kStepDiagonal = 91;
 /// Wegspeed[3]: the same cost everywhere (fire, plague and the houses' market search).
 inline constexpr std::uint8_t kUniformSpeed = 3;
 
-/// Cost of leaving a tile of Wegspeed class `cost` (0x0046F8A0): straight 2 * cost, diagonal
+/// Cost of leaving a tile of Wegspeed class `cost`: straight 2 * cost, diagonal
 /// 91 * cost / 32, never less than a road (64 / 91).
 [[nodiscard]] constexpr std::uint32_t straight_cost(std::uint8_t cost) noexcept {
     return cost < 32 ? kStepStraight : 2U * cost;

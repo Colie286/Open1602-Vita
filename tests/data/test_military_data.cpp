@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Military and diplomacy of the original savegames (docs/re/military.md, docs/re/diplomacy.md):
+// Military and diplomacy of the original savegames:
 // what SOLDAT3, TURM, MILITAR and the diplomacy part of PLAYER4 hold, and that they come back.
 
 #include <cstdio>

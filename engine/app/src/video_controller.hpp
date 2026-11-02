@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The videos of the running program (docs/re/videos.md): the logos and the intro at the start,
+// The videos of the running program: the logos and the intro at the start,
 // the videos of messages, victory and defeat, the credits and the pause. Decides with VideoQueue
 // which one plays and where (the whole window, the minimap's window, the main menu's picture
 // frame), plays it with VideoPlayer and its sound with GameSound, and takes the input while one

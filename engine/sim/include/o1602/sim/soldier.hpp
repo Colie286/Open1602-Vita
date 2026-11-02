@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Land units, cannon towers and what combat leaves behind (docs/re/military.md). The rules that
+// Land units, cannon towers and what combat leaves behind. The rules that
 // move them and let them fight are in military.hpp.
 #pragma once
 
@@ -13,7 +13,7 @@
 
 namespace o1602::sim {
 
-/// Soldiers walk on a grid of half tiles: every island tile is 2 x 2 cells (docs/re/military.md).
+/// Soldiers walk on a grid of half tiles: every island tile is 2 x 2 cells.
 inline constexpr std::int32_t kCellUnit = kPosUnit / 2;
 
 /// How a soldier is moving right now. Like ships, soldiers walk from cell centre to cell centre in
@@ -38,7 +38,7 @@ struct SoldierMotion {
     std::uint8_t path_index = 0;
 };
 
-/// Patrol between two points (soldier +0x126 .. +0x12F).
+/// Patrol between two points.
 struct Patrol {
     bool active = false;
     bool one_way = false;  ///< stop after the last point
@@ -47,7 +47,7 @@ struct Patrol {
     friend bool operator==(const Patrol&, const Patrol&) = default;
 };
 
-/// A land unit (soldier table 0x0051C678 and SOLDAT3 in the original).
+/// A land unit (soldier and SOLDAT3 in the original).
 struct Soldier {
     /// Stable number for commands and references; never reused within a game.
     std::uint32_t id = 0;
@@ -112,7 +112,7 @@ struct Soldier {
     return s;
 }
 
-/// A cannon tower: the gun of a Wachturm building (tower table 0x004EDE60, TURM in the files).
+/// A cannon tower: the gun of a Wachturm building (tower, TURM in the files).
 /// It belongs to the owner of the city it stands in and fires at hostile ships and soldiers.
 struct Tower {
     std::uint16_t island = 0;  ///< index into World::islands()
@@ -126,7 +126,7 @@ struct Tower {
     std::uint16_t source_slot = 0xFFFF;
 };
 
-/// Damage a building took (table 0x005624A8). It heals by 1 HP every 10 s; at the building's
+/// Damage a building took. It heals by 1 HP every 10 s; at the building's
 /// Maxenergy it falls to ruins. The original does not save it (S-087); Open1602 does.
 struct BuildingDamage {
     std::uint16_t island = 0;
@@ -136,7 +136,7 @@ struct BuildingDamage {
 };
 
 /// A shot on its way: the hit lands `Shottime` after the shot, on the target if it still exists
-/// (event type 1 of the queue 0x005A5A00). There is no projectile that could miss.
+/// (event type 1 of the queue). There is no projectile that could miss.
 struct PendingHit {
     std::uint64_t due_ms = 0;
     Target shooter;  ///< ship, soldier or the tower's building

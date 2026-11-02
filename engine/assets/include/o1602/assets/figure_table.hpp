@@ -18,8 +18,8 @@ namespace o1602::assets {
 
 class GameDirectory;
 
-/// Sprite sheets of a zoom level in the order the original loads them (file names at 0x0049C4C0 ..
-/// 0x0049C6F4). Values 0..6 are the figure Blocknr; shadows always come from SCHATTEN.BSH.
+/// Sprite sheets of a zoom level in the order the original loads them. Values 0..6 are the figure
+/// Blocknr; shadows always come from SCHATTEN.BSH.
 enum class FigureSheet : std::uint8_t {
     Stadtfld = 0,
     Soldat = 1,
@@ -43,7 +43,7 @@ inline constexpr std::size_t kFigureSheetCount = 11;
     return kFiles[static_cast<std::size_t>(sheet) % kFigureSheetCount];
 }
 
-/// Kind of an animation (ANIM Kind): what happens after it ran AnimRept times (0x0045D0B0).
+/// Kind of an animation (ANIM Kind): what happens after it ran AnimRept times.
 enum class AnimKind : std::uint8_t {
     None = 0,
     Endless = 1,  ///< start over
@@ -55,7 +55,7 @@ enum class AnimKind : std::uint8_t {
 struct FigureAnim {
     AnimKind kind = AnimKind::None;
     std::uint32_t offset = 0;        ///< AnimOffs: first sprite relative to the figure's Gfx
-    std::uint32_t add = 0;           ///< AnimAdd: sprite step per frame (none given: 0, 0x004413A9)
+    std::uint32_t add = 0;           ///< AnimAdd: sprite step per frame (none given: 0)
     std::uint32_t count = 1;         ///< AnimAnz: frames (1 to 255)
     std::uint32_t repeat = 1;        ///< AnimRept: runs before `kind` applies (1 to 255)
     std::uint32_t speed_ms = 100;    ///< AnimSpeed: duration of one frame
@@ -79,7 +79,7 @@ struct FigureSound {
 inline constexpr std::uint32_t kMaxFigures = 1024;
 
 struct FigureType {
-    std::uint32_t number = 0;  ///< Nummer (index into the original table at 0x0061FCC0)
+    std::uint32_t number = 0;  ///< Nummer (index into)
     std::int32_t kind = 0;
     std::uint32_t gfx = 0;  ///< first sprite in its sheet
     FigureSheet sheet = FigureSheet::Stadtfld;
@@ -93,7 +93,7 @@ struct FigureType {
     FigureSound shot_sound;      ///< Shotsample (+0x4C, +0x2F): when it fires
     FigureSound hit_sound;       ///< Hitsample (+0x42, +0x2E): where its shot or blow lands
     /// Speed (record +0x10, the original stores Speed * 0.0001): walking speed. On a tile with
-    /// Wegspeed w (32 = road) a figure covers 0.16 * speed / w tiles per second (0x0044A690).
+    /// Wegspeed w (32 = road) a figure covers 0.16 * speed / w tiles per second.
     std::uint32_t speed = 0;
     /// Speedtyp (record +0x2C): which of the four Wegspeed values of a tile applies.
     std::uint8_t speed_type = 0;
@@ -101,7 +101,7 @@ struct FigureType {
     std::uint32_t max_carry = 0;
     /// Worktime (record +0x14): game milliseconds of one work step (harvesting a field, ...).
     std::uint32_t work_time_ms = 0;
-    /// Ship data (docs/re/ships.md), zero for other figures.
+    /// Ship data, zero for other figures.
     struct ShipData {
         std::uint8_t cargo_slots = 0;    ///< Maxware (+0x38): holds of 50 t each
         std::uint8_t max_cannons = 0;    ///< Maxkanon (+0x3A)
@@ -116,7 +116,7 @@ struct FigureType {
         std::uint32_t build_amount = 0;  ///< Rohmenge (+0x32): that material in 1/32 t
     };
     ShipData ship;
-    /// Fighting values of soldiers, towers and ships (docs/re/military.md).
+    /// Fighting values of soldiers, towers and ships.
     struct Combat {
         std::uint32_t max_health = 0;     ///< Maxenergy (+0x3C), 1/32 HP
         std::uint32_t hit = 0;            ///< Hitpoint (+0x3E): damage at full health, 1/32 HP (truncated)
@@ -138,7 +138,7 @@ struct FigureType {
     }
 };
 
-/// Sprite of a figure within its sheet, as 0x0044F8F0 computes it:
+/// Sprite of a figure within its sheet computes it:
 /// Gfx + AnimOffs + AnimAdd * frame + ((direction + 2 * view rotation) & 7) * Rotate. Without the
 /// animation (or for an undefined one) only Gfx + direction * the figure's Rotate.
 [[nodiscard]] std::uint32_t figure_sprite(const FigureType& type, std::size_t anim, std::uint32_t frame,
@@ -158,7 +158,7 @@ public:
     static constexpr std::array<std::uint32_t, 4> kUnitFamilies = figure::kUnitFamilies;
     static constexpr std::uint8_t kUnitVariants = 4;
 
-    /// Ship flags by player colour (table at 0x00498F2C): FAHNE1..4, FAHNEPIRAT.
+    /// Ship flags by player colour: FAHNE1..4, FAHNEPIRAT.
     static constexpr std::array<std::uint32_t, 5> kFlagFigures = figure::kFlags;
 
     static core::Result<FigureTable> from_cod(const cod::Document& figuren);
@@ -172,7 +172,7 @@ public:
                    : 0;
     }
     [[nodiscard]] std::uint32_t tower_upkeep() const noexcept { return m_tower_upkeep; }
-    /// Third value of the `Soldat:` lines (0x0062BD20): what disbanding a unit of the type costs.
+    /// Third value of the `Soldat:` lines: what disbanding a unit of the type costs.
     [[nodiscard]] std::uint32_t unit_cost(std::int32_t unit_type) const noexcept {
         return unit_type >= 0 && static_cast<std::size_t>(unit_type) < m_unit_cost.size()
                    ? m_unit_cost[static_cast<std::size_t>(unit_type)]

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The computer players and the pirates' nest building (docs/re/ai.md).
+// The computer players and the pirates' nest building.
 //
-// The original runs its AI only on the host and sends what it does over the network (AI_Tick
-// 0x0042B4B0); its pace follows the frame rate, it draws from the shared C library rand() and seeds
+// The original runs its AI only on the host and sends what it does over the network;
+// its pace follows the frame rate, it draws from the shared C library rand() and seeds
 // the island search with the clock (S-095). Open1602 runs the AI on every computer as part of the
 // simulation: at a fixed pace, with its own random numbers and through the same build, ship and
 // soldier orders a player gives. Its state is saved with the game; for games of the original it is
@@ -39,20 +39,20 @@ public:
     /// One tick of game time (Simulation::kTickMs).
     void tick(std::uint32_t dt_ms);
 
-    /// Rebuilds the state of every computer player from the world (AI_Init 0x0042B710).
+    /// Rebuilds the state of every computer player from the world (AI_Init).
     void reset();
 
     /// A ship a computer player or the pirates direct themselves (a nest founding): the pirates'
     /// own wandering leaves it alone.
     [[nodiscard]] bool directs(std::uint32_t ship) const;
-    /// A city was founded (0x004294C0, event 0x0E): a computer at peace with the founder that has
+    /// A city was founded (event 0x0E): a computer at peace with the founder that has
     /// a young colony (fewer than 10 inhabitants) on that island, its home city elsewhere, remembers
     /// it against him (diplomacy event 5).
     void city_founded(std::uint16_t island, std::uint8_t city);
     /// Land on `island` became free (a city dissolved, a native village gone): the computers'
     /// cities there search their sites anew (Open1602; not with Rules::bugs.classic_ai).
     void land_freed(std::uint16_t island);
-    /// `asker` is about to found a city on `island` (0x004294C0 with island order 0x4C): the first
+    /// `asker` is about to found a city on `island` (with island order 0x4C): the first
     /// computer with a city there answers if it is at peace with him and the island is not a large
     /// one (DiplomacyNotice::Kind::FoundingProtest, FoundingRefused, FoundingTolerated).
     void founding_query(PlayerId asker, std::uint16_t island);

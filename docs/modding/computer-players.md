@@ -44,7 +44,7 @@ the class's `need` ([classes.md](classes.md)).
 
 ## When
 
-A city asks for these producers after each list of its stage ([ai.md](../re/ai.md)), once the
+A city asks for these producers after each list of its stage, once the
 original's buildings of the list are there or cannot be built: a producer is planned when the city
 can pay for it (a farm also for its fields) and has unlocked it. As with the original's buildings, a
 site that cannot be found is tried again a few times, then the city waits until land on its island
@@ -72,7 +72,7 @@ A game keeps them (savegame `BALA` version 3).
 
 ## In which order
 
-Each stage of a city ([ai.md](../re/ai.md), task 5) goes through its lists of what it needs, in
+Each stage of a city (task 5) goes through its lists of what it needs, in
 order, and stops at the first entry that finds something to do. A package's `computers.toml` gives
 a list anew (`order`) or adds entries after it (`append`); a list it does not name stays the
 original's, and a later package changes what an earlier one gave:

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// "Insel erkunden": a ship explores the crops and deposits of the island it stands in
-// (docs/re/ships.md#exploring). Part of sim::Fleet.
+// "Insel erkunden": a ship explores the crops and deposits of the island it stands in.
+// Part of sim::Fleet.
 
 #include "o1602/sim/game_data.hpp"
 #include "o1602/sim/ships.hpp"
@@ -9,7 +9,7 @@ namespace o1602::sim {
 
 namespace {
 
-constexpr std::uint8_t kExploreSteps = 11;      // ship + 0x1A4 after the click
+constexpr std::uint8_t kExploreSteps = 11;      // steps after the click
 constexpr std::uint32_t kExploreStepMs = 1500;  // timer type 2, 15 tenths
 constexpr std::uint8_t kCropsStep = 10;         // 3.0 s after the click
 constexpr std::uint8_t kFirstOreStep = 7;       // 7.5 s
@@ -23,7 +23,7 @@ bool moving(const Ship& ship) noexcept {
 }  // namespace
 
 std::optional<std::uint16_t> Fleet::island_at_ship(const Ship& ship) const {
-    // 0x0046A570: the rectangle itself, without the margin of 5 tiles that discovering uses.
+    // The rectangle itself, without the margin of 5 tiles that discovering uses.
     for (std::size_t i = 0; i < m_world->islands().size(); ++i) {
         const WorldIsland& isl = m_world->islands()[i];
         if (ship.x >= isl.x && ship.x < isl.x + isl.map.width() && ship.y >= isl.y &&
@@ -48,7 +48,7 @@ ExploreState Fleet::explore_state(const Ship& ship, PlayerId player) const {
     if (!island) {
         return ExploreState::NoIsland;
     }
-    // 0x0046B260: done when the crops are known and no ore or gold deposit is unknown. Unlike the
+    // Done when the crops are known and no ore or gold deposit is unknown. Unlike the
     // original, a shipyard in reach or a pirate Kontor does not hide the button (U-013).
     const WorldIsland& isl = m_world->islands()[*island];
     if (!isl.explored_by(ship.owner)) {
@@ -87,7 +87,7 @@ void Fleet::explore_tick() {
             continue;
         }
         if (moving(ship) || ship.sinking) {
-            stop_exploring(ship);  // under way again (0x00452370)
+            stop_exploring(ship);  // under way again
             continue;
         }
         while (ship.explore_steps != 0 && m_world->time_ms() >= ship.explore_next_ms) {
@@ -106,14 +106,14 @@ void Fleet::explore_step(Ship& ship) {
     const PlayerId p = ship.owner;
     const std::uint8_t n = ship.explore_steps;
     if (n == kCropsStep && !isl.explored_by(p)) {
-        // 0x0046ABF0: message 0x2A at the centre of the island.
+        // Message 0x2A at the centre of the island.
         isl.explore(p);
         ShipEvent e{ShipEvent::Kind::CropsExplored, ship.id, p, *found};
         e.x = static_cast<std::uint16_t>(isl.map.width() / 2);
         e.y = static_cast<std::uint16_t>(isl.map.height() / 2);
         m_events.push_back(e);
     } else if (n == kFirstOreStep || n == kSecondOreStep || n == kGoldStep) {
-        // 0x0046C100: deposits from the end of the list; one ore deposit, or up to two gold veins.
+        // Deposits from the end of the list; one ore deposit, or up to two gold veins.
         const std::uint8_t ware = n == kGoldStep ? ware::kGold : ware::kOre;
         std::uint32_t left = n == kGoldStep ? 2U : 1U;
         auto& deposits = isl.header.deposits;

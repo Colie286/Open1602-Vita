@@ -181,7 +181,7 @@ TEST_CASE("balance: the computers' cheats are values of [computers], saved in BA
 
 TEST_CASE("balance: when the computers' cities move on is [computer_stages], saved in BALA version 3") {
     sim::Balance balance;
-    // The original's numbers (0x004265A0..0x00428150).
+    // The original's numbers.
     CHECK(balance.ai_pioneers_inhabitants == 2);
     CHECK(balance.ai_settlers_inhabitants == 22);
     CHECK(balance.ai_grown_houses == 24);

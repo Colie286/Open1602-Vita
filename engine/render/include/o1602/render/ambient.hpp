@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Life in the picture that the game does not depend on (docs/re/flavor.md): townsfolk walking from
+// Life in the picture that the game does not depend on: townsfolk walking from
 // their houses to taverns, churches, schools and markets, whales, dolphins and krakens in the sea,
 // jugglers on the markets of bigger cities, birds in the forests and surf at the beaches.
 //
@@ -46,8 +46,8 @@ struct TileBox {
 
 struct AmbientView {
     std::vector<bool> islands;  ///< on screen, by index into World::islands(); only for the sounds
-    /// Townsfolk and jugglers show only on islands this player has discovered, as in the original
-    /// (docs/re/flavor.md); kNoPlayer shows every island.
+    /// Townsfolk and jugglers show only on islands this player has discovered, as in the original;
+    /// kNoPlayer shows every island.
     sim::PlayerId local_player = sim::kNoPlayer;
     std::uint32_t game_speed = 1;  ///< sounds play only at normal speed, as in the original
     /// Share of the next tick that has passed (Simulation::tick_fraction): townsfolk and sea
@@ -74,11 +74,11 @@ inline constexpr std::uint16_t kFigureWhale = assets::figure::kWhale;
 inline constexpr std::uint16_t kFigureDolphin = assets::figure::kDolphin;
 inline constexpr std::uint16_t kFigureKraken = assets::figure::kKraken;
 
-/// The townsfolk a walker going to a building of HAUS_PRODTYP Kind `kind` can be (0x004E857C),
+/// The townsfolk a walker going to a building of HAUS_PRODTYP Kind `kind` can be,
 /// four choices; FRAU for every other kind.
 [[nodiscard]] std::array<std::uint16_t, 4> townsfolk_for(std::int32_t kind) noexcept;
 
-/// HAUS_PRODTYP Kinds a walker may go to, by the roll 0..3 (0x00480370).
+/// HAUS_PRODTYP Kinds a walker may go to, by the roll 0..3.
 [[nodiscard]] std::vector<std::int32_t> walker_targets(std::uint32_t roll);
 
 /// How often the scenery shows itself; a setting of the player, not of the game.

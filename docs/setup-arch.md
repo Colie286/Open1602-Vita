@@ -55,94 +55,21 @@ the mouse with its island, city and owner, the selection, the frame rate and the
 drawn. With `--frames N --screenshot image.png` the program runs for N frames, saves the last one and
 reports the frame rate (for tests without user input).
 
-## 2. Reverse engineering tools
-
-### Node.js + rea
-
-rea needs Node.js 22.19+ / 24.11+ / 26+ (the Arch packages are recent enough).
-
-```sh
-sudo pacman -S --needed nodejs npm
-# global npm packages without sudo:
-npm config set prefix "$HOME/.local"
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc   # or ~/.zshrc
-source ~/.bashrc
-
-npm install --global rea-agents
-rea --help
-```
-
-Run `rea setup` only **after** the Ghidra installation (next section), so that it
-puts `GHIDRA_INSTALL_DIR` and the JDK into the MCP registration.
-
-### Ghidra 12.1.x + JDK
-
-rea requires **Ghidra 12.1.x** and the matching 64-bit JDK (according to the Ghidra release notes, currently JDK 21).
-
-```sh
-sudo pacman -S --needed jdk21-openjdk
-sudo archlinux-java set java-21-openjdk
-
-# Option A: Arch package (check that the version is 12.1.x!)
-pacman -Si ghidra | grep '^Version'
-sudo pacman -S ghidra                # installs to /opt/ghidra
-
-# Option B: official release from GitHub (NationalSecurityAgency/ghidra), e.g. to ~/opt
-#   unzip ghidra_12.1.x_PUBLIC_*.zip -d ~/opt
-
-export GHIDRA_INSTALL_DIR=/opt/ghidra   # or ~/opt/ghidra_12.1.x_PUBLIC
-echo "export GHIDRA_INSTALL_DIR=$GHIDRA_INSTALL_DIR" >> ~/.bashrc
-```
-
-Check the Ghidra version (must be 12.1.x): `grep application.version "$GHIDRA_INSTALL_DIR/Ghidra/application.properties"`.
-The JDK must be complete (`javac` present) – `jdk21-openjdk`, not just `jre21-openjdk`.
-
-### Setting up rea
-
-**Quit Claude Desktop completely** beforehand (not just close the window), otherwise it overwrites the configuration.
-
-```sh
-source ~/.bashrc                  # GHIDRA_INSTALL_DIR must be set in this shell
-npx rea-agents setup              # answer the question "Install Hopper?" with **No**
-npx rea-agents doctor             # checks Ghidra version, analyzeHeadless, Java/javac
-```
-
-Hopper is not needed (we use Ghidra). Its Arch package also conflicts with `zlib-ng-compat`.
-
-### Feasibility test
-
-```sh
-export ANNO1602_DIR="$HOME/Games/Heroic/Anno 1602"
-re/scripts/rea-smoke-test.sh
-```
-
-The log ends up in `re/notes/rea-smoke-test-*.log`. It is not committed (`.gitignore`), because analysis
-logs may contain decompiled code of the original ([ADR 0003](architecture/0003-reimplementation.md));
-summarise the result by hand, as in
-[re/notes/rea-smoke-test-result.md](../re/notes/rea-smoke-test-result.md). It decides whether rea is used directly or Ghidra
-headless with the scripts from `re/scripts/ghidra/`.
-
-### More tools
-
-```sh
-sudo pacman -S --needed imhex rizin binutils    # hex editor with pattern language, disassembler, objdump
-```
-
-## 3. The original under Wine (reference for parity tests)
+## 2. The original under Wine (for side-by-side comparisons)
 
 ```sh
 sudo pacman -S --needed wine winetricks
 # If pacman does not find 'wine': enable [multilib] in /etc/pacman.conf, then pacman -Syu
 ```
 
-A separate prefix just for the analysis (the Heroic installation stays untouched):
+A separate prefix just for the comparisons (the Heroic installation stays untouched):
 
 ```sh
+export ANNO1602_DIR="$HOME/Games/Heroic/Anno 1602"
 export WINEPREFIX="$HOME/.wine-anno1602"
 WINEARCH=win32 wineboot -i 2>/dev/null || wineboot -i
 cd "$ANNO1602_DIR" && wine 1602.exe
 ```
 
-Debugger: `winedbg --gdb 1602.exe` (GDB protocol, can be connected to e.g. `gdb` or the Ghidra debugger).
 If DirectDraw acts up under Wine: put [cnc-ddraw](https://github.com/FunkyFr3sh/cnc-ddraw) as `ddraw.dll`
 into a *copy* of the game folder.

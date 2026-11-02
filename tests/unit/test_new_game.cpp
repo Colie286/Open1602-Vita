@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// New games (new_game.hpp, docs/re/newgame.md) without the original data: the reset of a synthetic
+// New games (new_game.hpp) without the original data: the reset of a synthetic
 // endless file, the scenario of an own world, and whole new games started from a small synthetic
 // installation, with the computer players running on them.
 

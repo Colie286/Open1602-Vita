@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Diplomacy (docs/re/diplomacy.md): treaties, events and the mood that follows from them.
+// Diplomacy: treaties, events and the mood that follows from them.
 
 #include "../test_framework.hpp"
 
@@ -33,7 +33,7 @@ std::vector<sim::Player> original_players() {
 TEST_CASE("diplomacy: a new game starts with the original's table") {
     sim::Diplomacy d;
     d.reset(original_players(), sim::base_factions());
-    // Rows as the original's reset (0x00474380) and the Endlosspiel files have them.
+    // Rows as the original's reset and the Endlosspiel files have them.
     const int peace[7][7] = {{3, 3, 3, 3, 3, 0, 3}, {3, 3, 3, 3, 3, 0, 3}, {3, 3, 3, 3, 3, 0, 3}, {3, 3, 3, 3, 3, 0, 3},
                              {3, 3, 3, 3, 3, 3, 3}, {0, 0, 0, 0, 3, 3, 0}, {3, 3, 3, 3, 3, 0, 3}};
     const int trade[7][7] = {{0, 0, 0, 0, 3, 3, 3}, {0, 0, 0, 0, 3, 3, 3}, {0, 0, 0, 0, 3, 3, 3}, {0, 0, 0, 0, 3, 3, 3},
@@ -204,7 +204,7 @@ void add_city(sim::World& world, std::uint8_t index, sim::PlayerId owner, std::v
 
 }  // namespace
 
-TEST_CASE("diplomacy: how far a city has come (0x0047F220)") {
+TEST_CASE("diplomacy: how far a city has come") {
     const auto development = [](std::vector<std::uint32_t> inhabitants) {
         sim::City c;
         c.inhabitants = std::move(inhabitants);
@@ -219,7 +219,7 @@ TEST_CASE("diplomacy: how far a city has come (0x0047F220)") {
     CHECK(development({0, 0, 0, 0, 10, 99}) == 4 * 32 + 31);  // five classes, as the original
 }
 
-TEST_CASE("diplomacy: the attitude a scenario gives a computer (player +0x70)") {
+TEST_CASE("diplomacy: the attitude a scenario gives a computer") {
     namespace flag = sim::scenario_flag;
     sim::World world(64, 64);
     auto players = original_players();
@@ -232,21 +232,21 @@ TEST_CASE("diplomacy: the attitude a scenario gives a computer (player +0x70)") 
     };
     CHECK(mood({}) == 0);
 
-    // A human beyond 500 inhabitants: always the table's end (0x00548FC0[128]).
+    // A human beyond 500 inhabitants: always the table's end.
     CHECK(mood({flag::kRivalSize, 500, 0, 0, 0}) == -170);
     CHECK(mood({flag::kRivalSize, 600, 0, 0, 0}) == 0);
     CHECK(mood({flag::kRivalSize, 0, 0, 0, 0}, 2) == 0);  // only towards humans
 
-    // Below its own target of 1000: 250 is a quarter, 0x00548E38[32] = 150.
+    // Below its own target of 1000: 250 is a quarter = 150.
     CHECK(mood({flag::kOwnSize, 0, 1000, 0, 0}) == -150);
-    CHECK(mood({flag::kOwnSize, 0, 250, 0, 0}) == 0);  // reached: 0x00548E38[128]
+    CHECK(mood({flag::kOwnSize, 0, 250, 0, 0}) == 0);  // reached:
     CHECK(mood({flag::kOwnSize, 0, 200, 0, 0}) == 0);  // beyond
     CHECK(mood({flag::kOwnSize, 0, 0, 0, 0}) == 0);    // no target (the original divides by 0, S-118)
 
-    // A human's city beyond development 40 by 8: 0x00549044[8] = 22.
+    // A human's city beyond development 40 by 8: = 22.
     CHECK(mood({flag::kRivalDevelopment, 0, 0, 0, 40}) == -22);
     CHECK(mood({flag::kRivalDevelopment, 0, 0, 0, 48}) == 0);
-    // Its own best city 33 short of 64: 0x00549044[33] = 98; towards anyone.
+    // Its own best city 33 short of 64: = 98; towards anyone.
     CHECK(mood({flag::kOwnDevelopment, 0, 0, 64, 0}) == -98);
     CHECK(mood({flag::kOwnDevelopment, 0, 0, 64, 0}, 2) == -98);
     CHECK(mood({flag::kOwnDevelopment, 0, 0, 31, 0}) == 0);
@@ -298,7 +298,7 @@ TEST_CASE("diplomacy: a computer minds others' cities on its small islands and t
     CHECK(mood() == -400);
     unit(2, 1);
     CHECK(mood() == -260);
-    // Troops count on every island of the computer, the large one too (0x00475C60, as the History
+    // Troops count on every island of the computer, the large one too (as the History
     // Edition): there the computer has none, so 200.
     unit(1, 0);
     CHECK(mood() == -400);

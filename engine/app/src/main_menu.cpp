@@ -172,7 +172,7 @@ std::optional<ui::Panel> load_colour_panel(const assets::GameDirectory& game) {
 
 std::vector<MenuScenario> scenario_list(const std::filesystem::path& folder, const std::array<std::string, 4>& headings,
                                         const assets::GameDirectory* game) {
-    // One entry per name without the extension and the digits at its end (0x0048E710).
+    // One entry per name without the extension and the digits at its end.
     std::map<std::string, MenuScenario> by_name;
     std::error_code ec;
     for (const auto& entry : std::filesystem::directory_iterator(folder, ec)) {
@@ -210,7 +210,7 @@ std::vector<MenuScenario> scenario_list(const std::filesystem::path& folder, con
     }
     std::array<std::vector<MenuScenario>, 3> groups;
     for (auto& [key, s] : by_name) {
-        // Every file of a name writes its header over the one before (0x0048E8F3), in the order
+        // Every file of a name writes its header over the one before, in the order
         // FindFirstFile gives them (alphabetical): the last file's header counts. Pirata1 has no
         // campaign of its own, Pirata3 has it.
         const auto last = std::max_element(s.files.begin(), s.files.end(), [](const auto& a, const auto& b) {
@@ -230,7 +230,7 @@ std::vector<MenuScenario> scenario_list(const std::filesystem::path& folder, con
     std::stable_sort(groups[0].begin(), groups[0].end(), [](const MenuScenario& a, const MenuScenario& b) {
         return a.header.mission_number < b.header.mission_number;
     });
-    // Campaigns by their stars, then their number (0x0048EAF9); equal ones stay in name order.
+    // Campaigns by their stars, then their number; equal ones stay in name order.
     std::stable_sort(groups[1].begin(), groups[1].end(), [](const MenuScenario& a, const MenuScenario& b) {
         return std::pair{a.header.ranking, a.header.campaign} < std::pair{b.header.ranking, b.header.campaign};
     });
@@ -457,7 +457,7 @@ ui::Panel* MainMenu::panel() {
 void MainMenu::refresh_host() {
     ui::Panel& p = *m_host;
     if (m_mode == ListMode::Load) {
-        // The savegames without stars (0x0048AC70: the original's twelve fit without arrows; Open1602
+        // The savegames without stars (the original's twelve fit without arrows; Open1602
         // keeps any number, so the list scrolls like the scenarios).
         const std::size_t count = m_slots.size();
         m_first = std::min(m_first, count > kRows ? count - kRows : 0);
@@ -529,7 +529,7 @@ void MainMenu::load_scenarios() {
     if (const auto folder = m_game->resolve("Szenes")) {
         m_scenarios = scenario_list(*folder, headings, m_game);
     }
-    // The numbered missions above the progress are not offered (0x0048DC90).
+    // The numbered missions above the progress are not offered.
     std::erase_if(m_scenarios, [&](const MenuScenario& s) {
         const std::uint32_t n = s.header.mission_number;
         return !s.separator && n >= assets::CampaignProgress::kFirstNumbered &&
@@ -647,7 +647,7 @@ void MainMenu::load_details() {
     append_level_notes();
     m_scores.clear();
     if (!s.files.empty()) {
-        // A campaign part has a list of its own, named by its label (HighScore_Insert 0x0048E540).
+        // A campaign part has a list of its own, named by its label.
         std::filesystem::path name = s.base;
         name += ".hss";
         if (s.header.campaign != assets::ScenarioHeader::kNone && m_texts != nullptr) {
@@ -734,7 +734,7 @@ void MainMenu::refresh_mission() {
     }
     p.set_text(kBriefing, m_briefing);
     p.set_visible(kBriefing2, false);
-    // The high scores, four at a time; not for the tutorial (0x0048B0E0).
+    // The high scores, four at a time; not for the tutorial.
     const bool scores = s.header.mission_number != kTutorial;
     for (const std::int32_t id : {kScoresHeading, kScoresFrame, kScoresUp, kScoresDown}) {
         p.set_visible(id, scores);
@@ -746,7 +746,7 @@ void MainMenu::refresh_mission() {
         for (const std::int32_t id : {kScoreName, kScorePoints, kScoreRank}) {
             p.set_visible(id + k, shown);
         }
-        // The level of an endless game as stars: sprite 21 + level, one star for "Einfach" (0x0048B0E0).
+        // The level of an endless game as stars: sprite 21 + level, one star for "Einfach".
         const bool stars = shown && s.header.mission_number == kEndless;
         p.set_visible(kScoreStars + k, stars);
         if (!shown) {
@@ -835,12 +835,12 @@ std::vector<ui::DrawItem> MainMenu::draw(const std::array<const ui::Font*, ui::k
         p->set_scroll(kBriefing, m_briefing_line);
         m_briefing_last = last;
         m_briefing_rows = p->flow_rows(kBriefing);
-        // Its arrows and slider are faded while the whole briefing fits (0x0048B195); then they
-        // scroll nothing and the knob rests in the middle (0x00407600 with 50 of 100).
+        // Its arrows and slider are faded while the whole briefing fits; then they
+        // scroll nothing and the knob rests in the middle (with 50 of 100).
         for (const std::int32_t id : {kBriefingUp, kBriefingDown, kBriefingSlider}) {
             p->set_faded(id, last == 0);
         }
-        // 0x0048B195: the knob at (first line + rows / 2) of (lines + rows - 1), counted from the
+        // The knob at (first line + rows / 2) of (lines + rows - 1), counted from the
         // bottom.
         if (last > 0) {
             p->set_slider(kBriefingSlider, 1, briefing_slider_range() - m_briefing_rows / 2 - m_briefing_line,
@@ -1015,10 +1015,10 @@ std::vector<MenuEvent> MainMenu::mouse(std::int32_t x, std::int32_t y, bool down
                 } else if (e.id == kStart) {
                     const MenuScenario& s = m_scenarios[m_chosen];
                     if (s.header.mission_number == kEndless && m_colour) {
-                        m_screen = Screen::Colour;  // name and banner first (0x0048A680)
+                        m_screen = Screen::Colour;  // name and banner first
                         // Each visit shows the further colours in other patterns (two runs of four).
                         m_banners.shuffle_art_patterns(sim::kFirstExtraBanner, kMoreBanners, std::random_device{}());
-                        // The name can be typed at once (as the original, mode 5 of 0x00409910);
+                        // The name can be typed at once (as the original, mode 5);
                         // the last one, or "Namenlos", stands there until the first key.
                         if (m_name.empty()) {
                             m_name = default_name();
@@ -1132,7 +1132,7 @@ void MainMenu::type(std::string_view text) {
     if (!m_typing) {
         return;
     }
-    constexpr std::size_t kMaxName = 19;  // 0x0048A680
+    constexpr std::size_t kMaxName = 19;
     if (std::exchange(m_name_fresh, false) && !text.empty()) {
         m_name.clear();
     }

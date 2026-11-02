@@ -32,7 +32,7 @@ namespace o1602::app {
 /// A message's index in its MessageTable; the original's messages keep their MELDUNG numbers.
 using MessageId = std::uint32_t;
 
-/// The icons of the status bar (LEIST.GAD, docs/re/ui.md "Message icons"). The first four are
+/// The icons of the status bar (LEIST.GAD). The first four are
 /// drawn in the colour of the player the message is about.
 enum class MessageIcon : std::uint8_t {
     Notice,  ///< the exclamation mark

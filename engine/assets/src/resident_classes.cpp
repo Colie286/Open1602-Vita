@@ -31,7 +31,7 @@ constexpr std::int64_t kMaxNeed = 100000;  // kg per 100 inhabitants and minute
 constexpr std::int64_t kMaxHiscore = 10000;
 
 /// What `need` gives a class per inhabitant and 10 s, from kg per 100 inhabitants and minute: as
-/// haeuser.cod's `Ware: W, t` (BuildingTable::from_cod, 0x00460750: trunc(t * 8192) / 600).
+/// haeuser.cod's `Ware: W, t` (BuildingTable::from_cod: trunc(t * 8192) / 600).
 std::uint32_t need_amount(std::int64_t kg) noexcept {
     return static_cast<std::uint32_t>(kg * 8192 / 1000 / 600);
 }

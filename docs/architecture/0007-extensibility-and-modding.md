@@ -55,7 +55,7 @@ a clear message.
 | Climate zones, landscapes | `NORD`, `SUED`, `*NAT`, island templates | custom climate zones, ground and vegetation sets |
 | Islands | 677 templates (`.scp`) in fixed sizes | any size, custom templates, generator rules (section 5) |
 | Music, sounds | `MUSIC8`, `SAMPLES`, `Speech8` | custom tracks, sounds per building/figure/event |
-| Messages | `[MELDUNG]` in `Text.cod`, table `0x0049B210`, icons hard-coded | custom messages and changes to the original's: text per language, icon, sound, video (`messages.toml`, [messages.md](../modding/messages.md)) |
+| Messages | `[MELDUNG]` in `Text.cod`, icons hard-coded | custom messages and changes to the original's: text per language, icon, sound, video (`messages.toml`, [messages.md](../modding/messages.md)) |
 | Scenarios, campaigns | `.szs`/`.szm`, hard-wired goals | section 6 |
 
 ### 3. Players and factions
@@ -93,8 +93,7 @@ a clear message.
   the colours determined from the original images; anyone who wants the original images switches
   them on (`BannerOptions::original_player_flags`, `--original-flags`).
 - **Units in player colour** (soldiers, cavalry, cannoneers) follow the same rule. Because the four
-  original versions are drawn individually and are not recolourings (measurement in
-  [figures.md](../re/figures.md#soldiers-and-player-colours)), red, blue, yellow and white keep the
+  original versions are drawn individually and are not recolourings, red, blue, yellow and white keep the
   original images (`Banner::unit_variant`); every further colour tints a template generated at load time
   (`render::TintedUnitSource`). Soldiers only store their unit type, not the colour.
 - Banners with their own motif keep finished images (`FlagStyle::Sprites`, e.g. the pirates'
@@ -161,7 +160,7 @@ The open items of this ADR, in the order to work on them, are in
 | Goods | fixed list of the original | ✅ a package adds goods after the original's 58 (`goods.toml`, [goods.md](../modding/goods.md)), classes and unlock levels likewise ([classes.md](../modding/classes.md), [levels.md](../modding/levels.md)) |
 | Factions, scaling of neutral players | – | ✅ factions as data in the world with their numbers (`factions.toml`, [factions.md](../modding/factions.md)); factions of a package's own take the base game's slots, and settlers or pirates can be left wholly to a script |
 | Player count at game start, saving | 4 players at start, 7 players, 150 ships, 400 soldiers, 350 towers in the savegame | ⬜ the game supports 12 players (`sim::kMaxPlayers`); saving beyond the original limits is done with the own format `.o1602` ([ADR 0009](0009-own-save-format.md)) |
-| Island generator | – | 🟡 stage 1: custom worlds from the original templates (200–4000 tiles, [worldgen.md](../re/worldgen.md)); stage 2: islands of their own shape and size with slopes, rivers with bends, lakes, veins by their size, volcanoes and native villages, kinds of island world as data (`landscapes.toml`, [landscapes.md](../modding/landscapes.md)); climates of a package's own open |
+| Island generator | – | 🟡 stage 1: custom worlds from the original templates (200–4000 tiles); stage 2: islands of their own shape and size with slopes, rivers with bends, lakes, veins by their size, volcanoes and native villages, kinds of island world as data (`landscapes.toml`, [landscapes.md](../modding/landscapes.md)); climates of a package's own open |
 | Messages of the status bar | MELDUNG numbers 0–0x6F, texts only from `Text.cod` | ✅ `app::MessageTable`: the original's at their numbers, packages' after them, from `mods/<package>/messages.toml` ([messages.md](../modding/messages.md)); a package's id is its folder's name until manifests come |
 | Numbers of the balance in the code | trader, castles, disasters as constants | ✅ `sim::Balance` in the world, changed by `balance.toml` ([balance.md](../modding/balance.md)) |
 | Lua, campaigns, content packages | – | ✅ packages with a manifest, load order and the packages of each game, also as zip archives ([packages.md](../modding/packages.md)); Lua scripts ([scripts.md](../modding/scripts.md)); scenarios and campaigns ([scenarios.md](../modding/scenarios.md)) |

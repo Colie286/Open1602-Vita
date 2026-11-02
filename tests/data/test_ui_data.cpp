@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The original's layouts and fonts (docs/formats/gad.md, docs/re/ui.md).
+// The original's layouts and fonts (docs/formats/gad.md).
 
 #include <array>
 #include <cstdio>
@@ -118,7 +118,7 @@ TEST_CASE("data: the military button switches the mode once its duplicate is hid
     };
     ui::Panel as_loaded(*ctrl, 1.0);
     CHECK(click(as_loaded) == app::side_mode::kMilitaryDuplicate);
-    // As the Hud sets it up, as the original does at the start of a game (0x0042BF22).
+    // As the Hud sets it up, as the original does at the start of a game.
     ui::Panel panel(std::move(ctrl).value(), 1.0);
     panel.set_visible(app::side_mode::kMilitaryDuplicate, false);
     CHECK(click(panel) == app::side_mode::kMilitary);

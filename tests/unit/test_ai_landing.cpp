@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// A computer's attack from the sea (BT-1, docs/re/ai.md): at war, it picks an enemy city with a
+// A computer's attack from the sea (BT-1): at war, it picks an enemy city with a
 // market or Kontor, sends an armed ship home for the soldiers beside its Kontor, plans a landing on
 // a beach near the target's market and puts the troops ashore there.
 

@@ -4,8 +4,8 @@ Status: accepted · 2026-10-16
 
 ## Context
 Anno 1602 has technical problems on today's systems, gameplay bugs and exploits, as well as
-fixed limits whose overflow leads to misbehaviour. They are collected in
-[docs/re/bugs.md](../re/bugs.md). Open1602 should not carry them over, but it should be able to load
+fixed limits whose overflow leads to misbehaviour. They are collected in a bug catalogue with ids
+such as S-002. Open1602 should not carry them over, but it should be able to load
 savegames of the original and preserve the feel of the game.
 
 ## Decision
@@ -40,9 +40,7 @@ savegames of the original and preserve the feel of the game.
    may differ between the computers of a game (picture, sound, the places of a formation, which the
    interface sends with the order); one the simulation itself depends on would belong in `sim::Rules`.
 6. **Traceability:** Code that fixes an entry names its id (`// Fix S-002: …`).
-   Every correction gets a test. `re/scripts/check_bug_refs.py` checks that every id mentioned in the code
-   exists in the catalogue. The catalogue lives in the private repository `open1602-re`, so the check
-   runs locally (with a linked `docs/re`) and not in the public CI.
+   Every correction gets a test.
 
 ## Savegames of the original
 Original `.GAM` files can contain states that only arose through a bug,
@@ -51,5 +49,5 @@ Impossible states are repaired or reported, never silently adopted.
 
 ## Consequences
 - Some speedrun tricks and exploits do not work in Open1602. That is intended.
-- Parity tests against the original (plan, section 3.3) must avoid scenarios that trigger a
+- Parity tests against the original (plan, section 3) must avoid scenarios that trigger a
   fixed bug, or use `Rules::original()` where possible.

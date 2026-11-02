@@ -17,7 +17,7 @@
 namespace o1602::app {
 
 /// The left button pressed on the map: a click, or a selection rectangle once the mouse moved
-/// 5 pixels (0x0040BA70).
+/// 5 pixels.
 class LeftPress {
 public:
     void press(double x, double y) {

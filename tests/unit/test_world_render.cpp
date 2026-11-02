@@ -222,7 +222,7 @@ TEST_CASE("world renderer: islands replace the sea, buildings use their elevatio
 }
 
 TEST_CASE("world renderer: an island the local player has not discovered shows only its ground") {
-    // The original draws such an island from its ground grid (island + 0xAFC, 0x00489C90): a native
+    // The original draws such an island from its ground grid: a native
     // village or a foreign city on it stays unseen until a ship of the player comes near.
     const auto table = make_table();
     sim::World world;

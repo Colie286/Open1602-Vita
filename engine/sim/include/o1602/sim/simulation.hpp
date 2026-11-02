@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The running game: advances the world in fixed ticks of game time (ADR 0004). The original
-// advances its subsystems with the frame time times the game speed in steps of at most 200 ms
-// (0x00489670): production (0x0047DAF0) once per game second, then settlers, figures, ships ...
+// advances its subsystems with the frame time times the game speed in steps of at most 200 ms:
+// production once per game second, then settlers, figures, ships ...
 // Open1602 uses fixed ticks so that every computer of a multiplayer game computes the same.
 #pragma once
 
@@ -41,9 +41,9 @@ namespace ai {
 class Engine;
 }
 
-/// The two switches of the production windows (docs/re/production.md, docs/re/ui.md): working on
-/// or off (Prod_SetEnabled 0x0047CFA0, also building op 0x26), and whether market carts may collect
-/// the goods (Prod_SetNoPickup 0x0047CD90). The original's windows change both only on the
+/// The two switches of the production windows: working on
+/// or off (also building op 0x26), and whether market carts may collect
+/// the goods. The original's windows change both only on the
 /// clicking computer; here they are commands like everything else.
 struct ProductionSwitch {
     enum class Op : std::uint8_t {
@@ -58,7 +58,7 @@ struct ProductionSwitch {
     Op op = Op::Enable;
 };
 
-/// Settings of the city window (docs/re/consumption.md): the tax of a class of inhabitants, the
+/// Settings of the city window: the tax of a class of inhabitants, the
 /// name, and keeping the building material from the people (no house upgrades).
 struct CityOrder {
     enum class Op : std::uint8_t {
@@ -92,7 +92,7 @@ struct GameSpeedOrder {
     std::uint32_t speed = 1;
 };
 
-/// The name of a player (the original asks for it when a game starts, 0x0048A680).
+/// The name of a player (the original asks for it when a game starts).
 struct PlayerRename {
     static constexpr std::size_t kMaxNameLength = 40;
     PlayerId player = kNoPlayer;
@@ -330,7 +330,7 @@ private:
     [[nodiscard]] std::uint64_t upper_inhabitants_of_largest_city(PlayerId player) const;
     bool switch_production(const ProductionSwitch& s);
     bool city_order(const CityOrder& order);
-    /// „Kontor gründen“ (0x0043CE00 button 0x9481): the island by the ship is asked (island order 0x4C).
+    /// „Kontor gründen“ (button 0x9481): the island by the ship is asked (island order 0x4C).
     bool ask_founding(const DiplomacyOrder& order);
     bool game_speed(const GameSpeedOrder& order);
     bool rename_player(const PlayerRename& order);

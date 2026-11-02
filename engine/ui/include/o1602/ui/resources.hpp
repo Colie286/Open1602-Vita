@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The interface's sprite sheets and fonts per screen size (Gfx_LoadResolutionAssets 0x00492960):
+// The interface's sprite sheets and fonts per screen size:
 // the original has art for 640, 800 and 1024 pixels wide screens, the same indices in each.
 #pragma once
 
@@ -11,7 +11,7 @@ namespace o1602::ui {
 
 enum class ArtSize : std::uint8_t { Small, Medium, Large };  ///< 640, 800, 1024 pixels wide
 
-/// The original's choice: 640 and 1024 by name, every other width 800 (0x00492979).
+/// The original's choice: 640 and 1024 by name, every other width 800.
 [[nodiscard]] constexpr ArtSize original_art_size(std::int32_t width) noexcept {
     return width == 640 ? ArtSize::Small : width == 1024 ? ArtSize::Large : ArtSize::Medium;
 }

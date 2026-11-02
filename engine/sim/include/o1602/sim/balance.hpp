@@ -84,21 +84,21 @@ struct BuildingValue {
 };
 
 struct Balance {
-    std::uint32_t trader_max_held = 50;     ///< t of a ware the free trader holds at most (0x00454B80)
+    std::uint32_t trader_max_held = 50;     ///< t of a ware the free trader holds at most
     std::uint32_t trader_max_buy = 10;      ///< t of a ware he buys at most in one visit
     std::uint32_t trader_restock_s = 60;    ///< seconds until he takes on tools or ore again (S-078)
     std::uint32_t castle_interval_s = 10;   ///< seconds of a castle's training step (11 when idle)
-    std::uint32_t castle_unload_range = 6;  ///< tiles from a ship where soldiers land (0x00448D90)
+    std::uint32_t castle_unload_range = 6;  ///< tiles from a ship where soldiers land
     std::uint32_t fire_spread = 19;         ///< chance of 128 per epoch that a fire spreads
     std::uint32_t plague_radius = 4;        ///< tiles a plague reaches to infect a neighbour
-    /// What the computer players get from nowhere, on every difficulty (the original's cheats,
-    /// docs/re/ai.md). Money below the first value of a pair gets the second; goods in tons.
-    std::uint32_t ai_steady_below = 3791;  ///< task 5's steady money (0x00428E30)
+    /// What the computer players get from nowhere, on every difficulty (the original's
+    /// cheats). Money below the first value of a pair gets the second; goods in tons.
+    std::uint32_t ai_steady_below = 3791;  ///< task 5's steady money
     std::uint32_t ai_steady_money = 379;
     std::uint32_t ai_founding_below = 500;  ///< a founding
     std::uint32_t ai_founding_money = 799;
     std::uint32_t ai_founding_bricks = 8;        ///< t of bricks into a new city
-    std::uint32_t ai_subsidy_poor_below = 4733;  ///< a computer that is behind (0x00428370)
+    std::uint32_t ai_subsidy_poor_below = 4733;  ///< a computer that is behind
     std::uint32_t ai_subsidy_poor_money = 797;
     std::uint32_t ai_subsidy_below = 9376;  ///< from the settlers on
     std::uint32_t ai_subsidy_money = 1793;
@@ -112,7 +112,7 @@ struct Balance {
     std::uint32_t ai_colony_food = 9;
     std::uint32_t ai_colony_bricks_below = 19;
     std::uint32_t ai_colony_bricks = 9;
-    /// When a computer's city moves on to its next stage ([computer_stages], docs/re/ai.md task 5):
+    /// When a computer's city moves on to its next stage ([computer_stages].md task 5):
     /// inhabitants of a class and the classes above it, gold, tiles of free land, houses, seconds.
     std::uint32_t ai_pioneers_inhabitants = 2;   ///< a city founded moves on to the pioneers with this many inhabitants
     std::uint32_t ai_colony_below_land = 600;    ///< ... or becomes a colony with less free land than this (tiles)

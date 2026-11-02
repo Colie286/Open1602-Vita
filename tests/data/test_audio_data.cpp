@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Sounds of the original data (docs/re/audio.md).
+// Sounds of the original data.
 
 #include <algorithm>
 #include <cstdio>
@@ -61,7 +61,7 @@ TEST_CASE("data: the sounds the .cod files name (Bausample, Shotsample, Hitsampl
             }
         }
     }
-    // The music: the theme decodes without drifting (the reference IMA code would, docs/re/audio.md).
+    // The music: the theme decodes without drifting (the reference IMA code would).
     if (game->resolve("MUSIC8/ANNO1602 Theme.wav")) {
         audio::SoundBank bank(*game);
         const auto theme = bank.load("MUSIC8/ANNO1602 Theme.wav");

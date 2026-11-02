@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The original's look of shadows and chimney smoke. The original cannot blend: it draws a figure's
-// shadow as every second pixel black (0x00401D10) and smoke as every second pixel of its picture
-// (0x00401D50 -> 0x004048E0), a checkerboard on the screen's pixels. Open1602 blends them by
+// shadow as every second pixel black and smoke as every second pixel of its picture,
+// a checkerboard on the screen's pixels. Open1602 blends them by
 // default (DrawCommand::Mode::Shadow, Mode::Translucent); with the classic graphics it draws them
 // from copies of their sheets that keep only every second pixel, one copy for each of the two
 // ways the checkerboard can lie on a sprite, so the pattern stays fixed to the world's pixels as
-// a figure moves (docs/re/figures.md#drawing).
+// a figure moves.
 #pragma once
 
 #include <cstdint>

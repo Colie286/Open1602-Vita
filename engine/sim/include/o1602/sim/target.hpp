@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // References to objects of the world: what a ship sails to, what a soldier attacks, a route stop
-// (the original's 4-byte object references, docs/re/ships.md and docs/re/military.md).
+// (the original's 4-byte object references).
 #pragma once
 
 #include <cstddef>

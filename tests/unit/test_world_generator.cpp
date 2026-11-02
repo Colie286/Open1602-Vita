@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The islands of a world plan (world_generator.hpp, docs/re/worldgen.md) on a synthetic game
+// The islands of a world plan (world_generator.hpp) on a synthetic game
 // directory: island templates of every climate and size class, small enough to write in a moment.
 
 #include <algorithm>

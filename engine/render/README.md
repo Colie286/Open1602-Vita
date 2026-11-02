@@ -1,6 +1,6 @@
 # engine/render
 
-Isometric rendering following the original's method ([docs/re/rendering.md](../../docs/re/rendering.md)).
+Isometric rendering following the original's method.
 Builds draw lists from the simulation state and only reads it. Depends on `sim` and `assets`, not on
 SDL, so the tools and tests draw with the software rasteriser.
 

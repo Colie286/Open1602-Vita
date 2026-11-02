@@ -3,8 +3,7 @@
 The game's videos are Smacker files (RAD Game Tools); the original plays them with
 `smackw32.dll`. Open1602 has its own decoder, written from the public
 format description ([MultimediaWiki: Smacker](https://wiki.multimedia.cx/index.php/Smacker)), without
-third-party code and without a library: `video::Smacker` (`engine/video/src/smacker.cpp`). What the game shows
-and when is described in [videos.md](../re/videos.md).
+third-party code and without a library: `video::Smacker` (`engine/video/src/smacker.cpp`).
 
 ## The game's files
 
@@ -115,7 +114,7 @@ Unpacked: PCM (8 bit unsigned or 16 bit). Packed (Huffman DPCM), one bit stream 
    length is reached.
 
 The game's tracks cover their videos to the tenth of a second (checked: 911, 282). Open1602 passes
-a track as a whole to the mixer ([audio.md](../re/audio.md)).
+a track as a whole to the mixer.
 
 ## Verification
 

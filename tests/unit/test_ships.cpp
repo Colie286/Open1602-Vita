@@ -646,7 +646,7 @@ TEST_CASE("ships: a ship waits for another one to leave a narrow inlet instead o
     CHECK(sea.world.ship(coming)->x <= 52);
     CHECK(sea.world.ship(coming)->y == 24);
 
-    // A ship that stays in the way is still given up, later: the Kontor counts it (0x00454F50).
+    // A ship that stays in the way is still given up, later: the Kontor counts it.
     Sea blocked;
     add_inlet_island(blocked);
     blocked.add(54, 24);
@@ -689,7 +689,7 @@ TEST_CASE("ships: a computer's shipyard that cannot launch its ship 100 times bl
     CHECK(sea.world.ships().size() == 1);  // still no new ship
 }
 
-TEST_CASE("ships: a scenario can keep the free trader away from a player (player +0x70 bit 2)") {
+TEST_CASE("ships: a scenario can keep the free trader away from a player") {
     Sea sea(true);
     sea.world.player(0)->scenario.flags = sim::scenario_flag::kNoTrader;
     sim::City& city = *sea.world.city(0, 0);
@@ -1232,7 +1232,7 @@ TEST_CASE("ships: a Kontor can be founded only from within an island's rectangle
     REQUIRE(map.place(*sea.buildings.by_id(20103), 2, 4, 0, 0, 0, 0).ok());  // a Kontor on the west coast
     REQUIRE(sea.world.add_island(sim::WorldIsland{assets::IslandHeader{}, std::move(map), 40, 20}).ok());
 
-    // Outside the rectangle nothing is offered, though land lies three tiles away (0x00448EF0).
+    // Outside the rectangle nothing is offered, though land lies three tiles away.
     CHECK(!sim::kontor_site_near(sea.world, sea.buildings, 39, 25));
     // Inside it, the west coast is the Kontor's land (radius 8 at least): nothing either.
     CHECK(!sim::kontor_site_near(sea.world, sea.buildings, 40, 25));
