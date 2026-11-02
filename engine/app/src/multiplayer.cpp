@@ -406,6 +406,10 @@ void MapViewer::open_multiplayer_menu() {
         if (const auto folder = m_game.resolve("Szenes")) {
             model.scenarios = scenario_list(*folder, headings, &m_game);
         }
+        std::vector<MenuScenario> own =
+            own_scenario_list(own_scenario_folder(), ui::tr("menu.own_scenarios"), model.scenarios);
+        model.scenarios.insert(model.scenarios.end(), std::make_move_iterator(own.begin()),
+                               std::make_move_iterator(own.end()));
     }
     // Before the menu first draws and takes them: the click that opened it ends the frame's menu
     // work, so apply_multiplayer_menu() would only fill them after that first drawing, and the

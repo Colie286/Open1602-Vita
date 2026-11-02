@@ -73,6 +73,19 @@ struct MenuScenario {
                                                       const std::array<std::string, 4>& headings,
                                                       const assets::GameDirectory* game = nullptr);
 
+/// The folder of the user data folder that holds the player's own scenarios, beside "mods"
+/// (docs/modding/scenarios.md, "Own scenarios").
+inline constexpr std::string_view kOwnScenariosFolder = "scenarios";
+
+/// The scenarios of Open1602's own scenario folder under one heading (`heading`, Windows-1252),
+/// in name order: scenarios of the original's format (.szs, files whose names differ only in their
+/// last digits make one entry as in the game folder) and games saved by Open1602 (.o1602). An entry
+/// whose name is one of `taken` (the game folder's list) is left out and its name added to
+/// `skipped`, as is a .o1602 file named like a .szs entry; nothing at all without any.
+[[nodiscard]] std::vector<MenuScenario> own_scenario_list(const std::filesystem::path& folder, std::string heading,
+                                                          std::span<const MenuScenario> taken,
+                                                          std::vector<std::string>* skipped = nullptr);
+
 /// A campaign part as the original records its win: the campaign of the menu's entry for the file
 /// (scenario_list) and the part, the digit of its name. Not the file's own header: Pirata1 and
 /// Feindliche Nachbarn1 say campaign 0 (D-015), and SZENE_RANKING is a part's stars, not its number.
@@ -148,6 +161,8 @@ public:
         m_package_scenarios = std::move(scenarios);
         m_package_campaigns = std::move(campaigns);
     }
+    /// Open1602's own scenario folder (own_scenario_list), listed after the game folder's.
+    void set_own_scenario_folder(std::filesystem::path folder) { m_own_scenario_folder = std::move(folder); }
     [[nodiscard]] const EndlessSetup& scenario_setup() const noexcept { return m_scenario; }
     /// Colours of Open1602's own screens (the start dialog).
     /// The preview of the world on the start dialog's page of the islands.
@@ -249,6 +264,9 @@ private:
     SaveSlots m_slots;
     std::filesystem::path m_score_folder;
     std::filesystem::path m_progress_file;
+    std::filesystem::path m_own_scenario_folder;
+    /// The names of own scenarios left out the last time, to tell of each only once.
+    std::vector<std::string> m_own_skipped;
     assets::CampaignProgress m_progress;
     std::string m_name;
     GameSettingsMenu m_settings;

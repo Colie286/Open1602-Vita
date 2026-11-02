@@ -906,6 +906,7 @@ list.order.help.cities = Click: order the cities by name or as the original
 # The screen "Mods" of the main menu (mods_menu.cpp)
 menu.mods = Mods
 menu.package_scenarios = ----Mods----
+menu.own_scenarios = ----Own scenarios----
 mods.title = Mods
 mods.hint = New games use the mods turned on here; a savegame keeps its own. Mods received from a host serve only the games that need them.
 mods.col_name = Mod

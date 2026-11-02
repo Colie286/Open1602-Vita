@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <iterator>
 #include <map>
 #include <random>
@@ -14,6 +15,7 @@
 
 #include "o1602/assets/chunk_file.hpp"
 #include "o1602/core/file.hpp"
+#include "o1602/core/text.hpp"
 #include "o1602/ui/list_scroll.hpp"
 #include "o1602/ui/localization.hpp"
 
@@ -296,6 +298,66 @@ std::vector<MenuScenario> package_scenario_list(std::span<const assets::PackageS
     return out;
 }
 
+std::vector<MenuScenario> own_scenario_list(const std::filesystem::path& folder, std::string heading,
+                                            std::span<const MenuScenario> taken, std::vector<std::string>* skipped) {
+    std::vector<MenuScenario> own;
+    std::error_code ec;
+    if (folder.empty() || !std::filesystem::is_directory(folder, ec)) {
+        return own;
+    }
+    const std::array<std::string, 4> no_headings{};
+    for (MenuScenario& s : scenario_list(folder, no_headings, nullptr)) {
+        if (!s.separator) {
+            own.push_back(std::move(s));
+        }
+    }
+    // Games saved by Open1602 (and, later, maps of its own editor): one entry per file.
+    for (const auto& entry : std::filesystem::directory_iterator(folder, ec)) {
+        if (!entry.is_regular_file(ec) || lower(core::path_to_utf8(entry.path().extension())) != ".o1602") {
+            continue;
+        }
+        const std::u8string u8 = entry.path().stem().u8string();
+        MenuScenario s;
+        s.name = utf8_to_cp1252(std::string_view(reinterpret_cast<const char*>(u8.data()), u8.size()));
+        if (s.name.empty()) {
+            continue;
+        }
+        s.base = entry.path().stem();
+        s.files.emplace_back(std::uint8_t{0xFF}, entry.path());
+        own.push_back(std::move(s));
+    }
+    // A name the list has already would make two entries of one name, which share their high score
+    // list and of which opening by name finds only the first: the game folder's (or the .szs) wins.
+    std::vector<std::string> names;
+    for (const MenuScenario& s : taken) {
+        if (!s.separator) {
+            names.push_back(lower(s.name));
+        }
+    }
+    std::vector<MenuScenario> out;
+    for (MenuScenario& s : own) {
+        const std::string key = lower(s.name);
+        if (std::find(names.begin(), names.end(), key) != names.end()) {
+            if (skipped != nullptr) {
+                skipped->push_back(s.name);
+            }
+            continue;
+        }
+        names.push_back(key);
+        out.push_back(std::move(s));
+    }
+    if (out.empty()) {
+        return out;
+    }
+    std::stable_sort(out.begin(), out.end(),
+                     [](const MenuScenario& a, const MenuScenario& b) { return lower(a.name) < lower(b.name); });
+    MenuScenario head;
+    head.name = std::move(heading);
+    head.separator = true;
+    out.insert(out.begin(), std::move(head));
+    return out;
+}
+
 std::optional<CampaignPart> campaign_part_of(const std::filesystem::path& file) {
     const std::array<std::string, 4> headings{};
     for (const MenuScenario& s : scenario_list(file.parent_path(), headings, nullptr)) {
@@ -467,15 +529,28 @@ void MainMenu::load_scenarios() {
     if (const auto folder = m_game->resolve("Szenes")) {
         m_scenarios = scenario_list(*folder, headings, m_game);
     }
-    std::vector<MenuScenario> own = package_scenario_list(m_package_scenarios, m_package_campaigns,
-                                                          ui::current_language(), ui::tr("menu.package_scenarios"));
-    m_scenarios.insert(m_scenarios.end(), std::make_move_iterator(own.begin()), std::make_move_iterator(own.end()));
     // The numbered missions above the progress are not offered (0x0048DC90).
     std::erase_if(m_scenarios, [&](const MenuScenario& s) {
         const std::uint32_t n = s.header.mission_number;
         return !s.separator && n >= assets::CampaignProgress::kFirstNumbered &&
                n <= assets::CampaignProgress::kLastNumbered && n > m_progress.numbered;
     });
+    const auto append = [&](std::vector<MenuScenario> more) {
+        m_scenarios.insert(m_scenarios.end(), std::make_move_iterator(more.begin()),
+                           std::make_move_iterator(more.end()));
+    };
+    std::vector<std::string> skipped;
+    append(own_scenario_list(m_own_scenario_folder, ui::tr("menu.own_scenarios"), m_scenarios, &skipped));
+    if (skipped != m_own_skipped) {
+        for (const std::string& name : skipped) {
+            std::fprintf(stderr,
+                         "warning: own scenario \"%s\" left out: the list has a scenario of that name already\n",
+                         core::cp1252_to_utf8(name).c_str());
+        }
+        m_own_skipped = std::move(skipped);
+    }
+    append(package_scenario_list(m_package_scenarios, m_package_campaigns, ui::current_language(),
+                                 ui::tr("menu.package_scenarios")));
 }
 
 std::size_t MainMenu::campaign_parts_open(const MenuScenario& s) const {

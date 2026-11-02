@@ -842,6 +842,7 @@ list.order.help.cities = Klick: Städte nach Name oder wie im Original ordnen
 # Der Bildschirm „Mods“ des Hauptmenüs (mods_menu.cpp)
 menu.mods = Mods
 menu.package_scenarios = ----Mods----
+menu.own_scenarios = ----Eigene Szenarien----
 mods.title = Mods
 mods.hint = Neue Spiele nutzen die hier eingeschalteten Mods, ein Spielstand behält seine eigenen. Von einem Gastgeber empfangene Mods gelten nur für Spiele, die sie brauchen.
 mods.col_name = Mod

@@ -2655,6 +2655,14 @@ std::filesystem::path MapViewer::data_folder() {
     return folder;
 }
 
+std::filesystem::path MapViewer::own_scenario_folder() {
+    const std::filesystem::path folder = data_folder() / kOwnScenariosFolder;
+    // Made empty at once, so that players find where their scenarios go.
+    std::error_code ec;
+    std::filesystem::create_directories(folder, ec);
+    return folder;
+}
+
 namespace {
 
 /// Whether `path` lies in the folder `root`: by name, and by identity for the folders on the way
@@ -2787,6 +2795,7 @@ void MapViewer::load_options() {
         menu->set_slots(m_slots);
         menu->set_score_folder(data_folder() / "scores");
         menu->set_progress_file(data_folder() / "progress.cfg");
+        menu->set_own_scenario_folder(own_scenario_folder());
         menu->set_name(m_app_settings.player_name);
         menu->set_endless_setup(m_app_settings.endless);
         menu->set_scenario_setup(m_app_settings.scenario);

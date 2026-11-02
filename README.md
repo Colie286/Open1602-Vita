@@ -203,6 +203,10 @@ folder, never in the installation:
 | macOS | `~/Library/Application Support/Open1602/` |
 | Windows | `%APPDATA%\Open1602\` |
 
+Scenarios of your own, for example maps shared by other players, go into `scenarios/` of the data
+folder (or, as before, into `Szenes` of the installation); the main menu lists them under "Own
+scenarios" ([docs/modding/scenarios.md](docs/modding/scenarios.md#own-scenarios)).
+
 Started from a desktop launcher, the Finder or by a double click, the game writes its messages to
 `open1602.log` in the data folder; the log of the run before is kept as `open1602.previous.log`, so
 it survives starting the game again after a crash. A crash writes what happened (and on Linux and

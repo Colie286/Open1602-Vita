@@ -89,6 +89,9 @@ public:
 
     /// The user's data folder of Open1602 (settings; the savegames in "saves" below it).
     [[nodiscard]] static std::filesystem::path data_folder();
+    /// The player's own scenarios (<data folder>/scenarios), listed after the game folder's;
+    /// made if it is missing.
+    [[nodiscard]] static std::filesystem::path own_scenario_folder();
 
 private:
     MapViewer(assets::GameDirectory game, assets::BuildingTable buildings, sim::World world, assets::Palette palette,

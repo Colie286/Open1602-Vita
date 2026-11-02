@@ -500,6 +500,50 @@ TEST_CASE("main menu: campaigns by stars then number, each by the header of its 
     std::filesystem::remove_all(folder);
 }
 
+TEST_CASE("main menu: the own scenario folder under its heading, in name order, without names listed already") {
+    CHECK(app::own_scenario_list({}, "Own", {}).empty());
+    const std::filesystem::path folder = test::temp_path("o1602-test-menu-own");
+    std::filesystem::remove_all(folder);
+    CHECK(app::own_scenario_list(folder, "Own", {}).empty());  // a missing folder lists nothing
+    const auto scenario = [&](const std::string& file, std::uint32_t ranking) {
+        assets::ChunkWriter w;
+        const std::array<std::uint8_t, 4> r = {static_cast<std::uint8_t>(ranking), 0, 0, 0};
+        w.add("SZENE_RANKING", r);
+        const core::Bytes& b = w.bytes();
+        write(folder / file, std::string(b.begin(), b.end()));
+    };
+    scenario("Zwei Inseln0.szs", 1);
+    scenario("Zwei Inseln1.szs", 3);
+    scenario("Grand Sandbox.szs", 4);
+    scenario("Das Atoll.szs", 2);  // the game folder has it: left out
+    write(folder / "Eigene Karte.o1602", "O1602");
+    write(folder / "Grand Sandbox.o1602", "O1602");  // named like the .szs: left out
+    write(folder / "notes.txt", "not a scenario");
+    std::vector<app::MenuScenario> taken(2);
+    taken[0].name = "Original";
+    taken[0].separator = true;
+    taken[1].name = "Das Atoll";
+    std::vector<std::string> skipped;
+    const auto list = app::own_scenario_list(folder, "Own", taken, &skipped);
+    std::vector<std::string> names;
+    for (const app::MenuScenario& s : list) {
+        names.push_back(s.name);
+    }
+    CHECK((names == std::vector<std::string>{"Own", "Eigene Karte", "Grand Sandbox", "Zwei Inseln"}));
+    REQUIRE(list.size() == 4);
+    CHECK(list[0].separator);
+    CHECK(list[1].files.size() == 1);
+    CHECK(list[1].files[0].first == 0xFF);
+    CHECK(list[1].files[0].second.extension() == ".o1602");
+    CHECK(list[2].header.ranking == 4);
+    CHECK(list[2].files[0].second.extension() == ".szs");
+    CHECK(list[3].files.size() == 2);  // the parts of one name make one entry, as in the game folder
+    CHECK(list[3].header.ranking == 3);
+    std::sort(skipped.begin(), skipped.end());
+    CHECK((skipped == std::vector<std::string>{"Das Atoll", "Grand Sandbox"}));
+    std::filesystem::remove_all(folder);
+}
+
 TEST_CASE("main menu: the packages' scenarios under their own heading, with stars and briefing") {
     CHECK(app::package_scenario_list({}, {}, "en", "----Mods----").empty());
     std::vector<assets::PackageScenario> scenarios(1);
