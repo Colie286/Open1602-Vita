@@ -380,6 +380,36 @@ TEST_CASE("ai military: a computer with a castle and a sword smith trains swords
     }
 }
 
+TEST_CASE("ai military: a computer trains soldiers of a package of the kind it wants too") {
+    Island a;
+    // Pikemen of a package: swordsmen by their kind, with more health.
+    assets::FigureType pike = *a.figures.get(kSword);
+    pike.combat.max_health += 32;
+    const auto family = a.figures.add_unit_family(std::vector<assets::FigureType>(4, pike));
+    REQUIRE(family.ok());
+    a.build(kKontor, 10, 8, kComputer, 0);
+    a.build(kMarket, 30, 8, kComputer, 0);
+    a.build(kCastle, 40, 8, kComputer, 0);
+    a.build(kSwordsmith, 46, 8, kComputer, 0);
+    a.world.city(0, 0)->inhabitants = {160};  // room for 10 units
+    for (int i = 0; i < 4; ++i) {
+        a.add(kHuman, 2 * (100 + 1 + i), 2 * (10 + 4), 1);  // four swordsmen to outdo
+    }
+    sim::Simulation s(a.world, a.buildings, a.figures);
+    run(s, 6 * 60'000);
+    const auto mine = a.soldiers(kComputer);
+    REQUIRE(mine.size() >= 2);
+    std::size_t pikemen = 0;
+    for (const sim::Soldier* soldier : mine) {
+        CHECK((soldier->figure == kSword || soldier->figure == *family));
+        pikemen += soldier->figure == *family ? 1U : 0U;
+    }
+    CHECK(pikemen > 0);
+    CHECK(pikemen < mine.size());
+    // Counted as swordsmen: the army stops at one and a half times the human one.
+    CHECK(mine.size() <= 7);
+}
+
 TEST_CASE("ai military: soldiers pass over an enemy city with nothing left to attack for the next one") {
     // The first city of the enemy on the island has nothing to attack any more (its Kontor was
     // destroyed and kept the city, its houses are gone). The original takes it and its soldiers

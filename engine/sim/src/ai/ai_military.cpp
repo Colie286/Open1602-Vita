@@ -26,8 +26,17 @@ constexpr std::size_t kMaxPosts = 64;
 /// The pirate nest's offer comes again after more than 42 s (0x1A4 tenths, task 5).
 constexpr std::uint64_t kNestOfferMs = 42'000;
 
-std::uint32_t family_index(std::uint32_t figure) {
+/// The index in figure::kUnitFamilies of a unit's family, for a unit of a package that of the
+/// original's unit of its kind (Kind, as its hold shows it); 0 for other figures.
+std::uint32_t family_index(const assets::FigureTable* figures, std::uint32_t figure) {
     const auto v = assets::FigureTable::unit_variant(figure);
+    if (!v && figures != nullptr) {
+        if (const auto own = figures->unit_of(figure)) {
+            if (const assets::FigureType* t = figures->get(own->family)) {
+                return static_cast<std::uint32_t>(std::clamp<std::int32_t>(t->kind, 1, 4) - 1);
+            }
+        }
+    }
     const std::uint32_t family = v ? v->family : figure;
     for (std::uint32_t i = 0; i < figure::kUnitFamilies.size(); ++i) {
         if (figure::kUnitFamilies[i] == family) {
@@ -72,7 +81,7 @@ const Engine::Census* Engine::census() const {
             ++c.on_island[std::size_t{s.owner} * c.islands + s.island];
         }
         if (!s.dying()) {
-            ++c.army[s.owner][family_index(s.figure)];
+            ++c.army[s.owner][family_index(m_sim.m_figures, s.figure)];
         }
     }
     const auto& ships = m_world.ships();
@@ -83,7 +92,7 @@ const Engine::Census* Engine::census() const {
         }
         for (const CargoSlot& slot : s.cargo) {
             if (is_soldier_ware(slot.ware)) {
-                ++c.aboard[s.owner][family_index(unit_of_ware(slot.ware))];
+                ++c.aboard[s.owner][family_index(m_sim.m_figures, unit_of_ware(slot.ware))];
             }
         }
         if (!s.sinking) {
@@ -122,7 +131,7 @@ std::array<std::uint32_t, 4> Engine::army_counts(PlayerId owner) const {
     } else {
         for (const Soldier& s : m_world.soldiers()) {
             if (s.owner == owner && !s.dying()) {
-                ++n[family_index(s.figure)];
+                ++n[family_index(m_sim.m_figures, s.figure)];
             }
         }
     }
@@ -133,7 +142,7 @@ std::array<std::uint32_t, 4> Engine::army_counts(PlayerId owner) const {
         }
         for (const CastleSlot& slot : b.slots) {
             if (slot.figure != 0) {
-                ++n[family_index(slot.figure)];
+                ++n[family_index(m_sim.m_figures, slot.figure)];
             }
         }
     }
@@ -149,7 +158,7 @@ std::array<std::uint32_t, 4> Engine::army_counts(PlayerId owner) const {
         }
         for (const CargoSlot& c : s.cargo) {
             if (is_soldier_ware(c.ware)) {
-                ++n[family_index(unit_of_ware(c.ware))];
+                ++n[family_index(m_sim.m_figures, unit_of_ware(c.ware))];
             }
         }
     }
@@ -291,9 +300,23 @@ void Engine::queue_unit(AiPlayer& p, const CastleEntry& castle, std::uint32_t fa
     if (b == nullptr) {
         return;
     }
-    const std::uint32_t t = family_index(family);
+    // Open1602: a soldier of a package of the same kind is trained as often as the original's
+    // (docs/modding/own-figures.md#soldiers); the original's computers know only theirs.
+    if (!classic() && m_sim.m_figures != nullptr) {
+        const std::uint32_t kind = family_index(m_sim.m_figures, family);
+        std::vector<std::uint32_t> choice;
+        for (const std::uint32_t f : m_sim.m_figures->unit_families()) {
+            if (family_index(m_sim.m_figures, f) == kind) {
+                choice.push_back(f);
+            }
+        }
+        if (choice.size() > 1) {
+            family = choice[rng().next() % choice.size()];
+        }
+    }
+    const std::uint32_t t = family_index(m_sim.m_figures, family);
     for (const CastleSlot& slot : b->slots) {
-        if (slot.figure != 0 && family_index(slot.figure) == t && t < 2) {
+        if (slot.figure != 0 && family_index(m_sim.m_figures, slot.figure) == t && t < 2) {
             return;
         }
     }
@@ -472,7 +495,8 @@ void Engine::recruit(AiPlayer& p) {
         // Room for better units: a swordsman goes when muskets are there (op 5 value 7).
         if (r.slots[kSlotMuskets].count != 0 && c->stock(ware::kMuskets) != 0) {
             for (const Soldier& s : m_world.soldiers()) {
-                if (s.owner == p.player && s.island == c->island && family_index(s.figure) == 0 && !s.away()) {
+                if (s.owner == p.player && s.island == c->island && family_index(m_sim.m_figures, s.figure) == 0 &&
+                    !s.away()) {
                     SoldierCommand cmd;
                     cmd.player = p.player;
                     cmd.soldier = s.id;

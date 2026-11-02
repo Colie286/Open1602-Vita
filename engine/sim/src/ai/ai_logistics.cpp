@@ -677,7 +677,22 @@ void Engine::order_ship(AiPlayer& p) {
         const Tile t = tile(p.yard_island, p.yard_x, p.yard_y);
         const bool small = !t.valid() || t.type->size_x <= 3;
         const auto type = static_cast<std::uint8_t>((rng().next() & 1U) * 2U + (small ? 0U : 1U));
-        const assets::FigureType* f = m_sim.m_figures->get(figure::ship_figure(type));
+        // Open1602: a ship of a package of that type is built as often as the original's
+        // (docs/modding/own-figures.md#ships); the original's computers know only theirs.
+        std::uint32_t package_ship = 0;
+        if (!classic()) {
+            std::vector<std::uint32_t> choice{0};
+            for (const auto& [number, ship_type] : m_sim.m_figures->package_ships()) {
+                if (ship_type == type) {
+                    choice.push_back(number);
+                }
+            }
+            if (choice.size() > 1) {
+                package_ship = choice[rng().next() % choice.size()];
+            }
+        }
+        const assets::FigureType* f =
+            m_sim.m_figures->get(package_ship != 0 ? package_ship : figure::ship_figure(type));
         const std::int64_t price = f != nullptr ? f->ship.price : 0;
         if (std::int64_t{player(p).money} > price / 2) {
             ShipyardOrder order;
@@ -687,6 +702,7 @@ void Engine::order_ship(AiPlayer& p) {
             order.y = p.yard_y;
             order.op = ShipyardOrder::Op::Build;
             order.ship_type = type;
+            order.figure = package_ship;
             execute(order);
             return;
         }
