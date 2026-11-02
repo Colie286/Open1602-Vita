@@ -74,6 +74,7 @@ add_library(o1602_sim
     src/soldiers.cpp
     src/volcanoes.cpp
     src/world.cpp
+    src/world_islands.cpp
 )
 add_library(o1602::sim ALIAS o1602_sim)
 

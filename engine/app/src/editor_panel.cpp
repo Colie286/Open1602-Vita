@@ -38,6 +38,17 @@ constexpr Id kStore = 17;
 constexpr Id kPrevious = 18;
 constexpr Id kNext = 19;
 constexpr Id kBack = 20;
+constexpr Id kIslandPage = 21;
+constexpr Id kShape = 22;
+constexpr Id kClimate = 23;
+constexpr Id kIslandSize = 24;
+constexpr Id kOtherIsland = 25;
+constexpr Id kPlace = 26;
+constexpr Id kMove = 40;
+constexpr Id kRotate = 41;
+constexpr Id kCopy = 42;
+constexpr Id kRemove = 43;
+constexpr Id kStopPlacing = 44;
 constexpr Id kFirstOverlay = 30;  ///< + EditorOverlay
 constexpr Id kFirstRow = 100;     ///< + the row on the page
 
@@ -54,6 +65,15 @@ constexpr std::array<const char*, kEditorOverlays> kOverlayTexts = {"editor.view
 
 constexpr std::array<const char*, 4> kIslandTexts = {"editor.new.islands.none", "editor.new.islands.few",
                                                      "editor.new.islands.normal", "editor.new.islands.many"};
+
+constexpr std::array<const char*, 5> kIslandSizeTexts = {"editor.islands.size.0", "editor.islands.size.1",
+                                                         "editor.islands.size.2", "editor.islands.size.3",
+                                                         "editor.islands.size.4"};
+
+/// The next number of a simple generator (Knuth's MMIX constants): another world, another island.
+std::uint64_t next_seed(std::uint64_t seed) {
+    return seed * 6364136223846793005ULL + 1442695040888963407ULL;
+}
 
 std::string count(std::size_t n) {
     return std::to_string(n);
@@ -161,6 +181,9 @@ void EditorPanel::layout(const EditorModel& model) {
         case Page::Check:
             layout_check(model);
             break;
+        case Page::Islands:
+            layout_islands(model);
+            break;
     }
 }
 
@@ -189,7 +212,7 @@ void EditorPanel::layout_document(const EditorModel& model) {
     y += kLine + 4;
     // The buttons share what is left above two lines of the notice: as high as the game's in a
     // large window, lower in a small one, so that the last stays in the panel.
-    constexpr std::int32_t kButtons = 9;
+    constexpr std::int32_t kButtons = 10;
     constexpr std::int32_t kNoticeRoom = 2 * 20 + 6;
     const std::int32_t bottom = m_top + m_height - 4;
     const std::int32_t pitch = std::clamp((bottom - kNoticeRoom - y) / kButtons, 22, kButtonH + kGap);
@@ -204,6 +227,7 @@ void EditorPanel::layout_document(const EditorModel& model) {
     full(kSaveAs, "editor.save_as");
     full(kUndo, "editor.undo", model.can_undo);
     full(kRedo, "editor.redo", model.can_redo);
+    full(kIslandPage, "editor.islands.edit");
     full(kView, "editor.view");
     full(kCheck, "editor.check");
     full(kClose, "editor.close");
@@ -310,7 +334,9 @@ void EditorPanel::layout_selection(const EditorModel& model) {
     } else {
         f.paragraph(Rect{kX, y, kW, 2 * kLine}, model.selection, Tone::Normal, kLine);
         y += 2 * kLine + 4;
-        const std::int32_t bottom = m_top + m_height - kButtonH - 2 * kGap;
+        // Room for the buttons below: back, and an island's two rows.
+        const std::int32_t rows = model.island ? 3 : 1;
+        const std::int32_t bottom = m_top + m_height - rows * (kButtonH + kGap) - kGap;
         for (const EditorProperty& p : model.properties) {
             if (y + kLine > bottom) {
                 break;
@@ -319,6 +345,57 @@ void EditorPanel::layout_selection(const EditorModel& model) {
             y += kLine;
         }
         y += kGap;
+        if (model.island) {
+            layout_island_actions(model, y);
+        }
+    }
+    f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+}
+
+void EditorPanel::layout_island_actions(const EditorModel& model, std::int32_t& y) {
+    ui::Form& f = m_form;
+    const std::int32_t half = (kW - kGap) / 2;
+    if (model.placing) {
+        f.paragraph(Rect{kX, y, kW, 3 * 20}, ui::tr("editor.islands.placing"), Tone::Dim, 20);
+        y += 3 * 20 + 4;
+        f.button(kStopPlacing, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
+        y += kButtonH + kGap;
+        return;
+    }
+    f.button(kMove, Rect{kX, y, half, kButtonH}, ui::tr("editor.islands.move"));
+    f.button(kRotate, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.islands.rotate"), model.island_free);
+    y += kButtonH + kGap;
+    f.button(kCopy, Rect{kX, y, half, kButtonH}, ui::tr("editor.islands.copy"), model.island_free);
+    f.button(kRemove, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.islands.remove"), model.island_free);
+    y += kButtonH + kGap;
+}
+
+void EditorPanel::layout_islands(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.islands.title"), Align::Left, Tone::Heading);
+    y += 28;
+    const auto value = [&](Id id, const char* label, std::string text) {
+        f.label(Rect{kX, y, kW, kLine}, ui::tr(label));
+        y += kLine;
+        f.cycle_button(id, Rect{kX, y, kW, kButtonH}, std::move(text));
+        y += kButtonH + kGap;
+    };
+    value(kShape, "editor.islands.shape",
+          ui::tr(m_island.own_shape ? "editor.islands.shape.own" : "editor.islands.shape.template"));
+    value(kClimate, "editor.islands.climate",
+          ui::tr(m_island.climate == 0 ? "editor.prop.north" : "editor.prop.south"));
+    value(kIslandSize, "editor.islands.size", ui::tr(kIslandSizeTexts[m_island.size % kIslandSizeTexts.size()]));
+    const std::int32_t half = (kW - kGap) / 2;
+    f.button(kOtherIsland, Rect{kX, y, half, kButtonH}, ui::tr("editor.islands.other"), !model.placing);
+    f.button(kPlace, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.islands.place"), !model.placing);
+    y += kButtonH + kGap;
+    f.paragraph(Rect{kX, y, kW, kNote}, ui::tr(model.placing ? "editor.islands.placing" : "editor.islands.note"),
+                Tone::Dim, 20);
+    y += kNote + 4;
+    if (model.placing) {
+        f.button(kStopPlacing, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
+        y += kButtonH + kGap;
     }
     f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
 }
@@ -446,9 +523,45 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
             m_new.players = static_cast<std::uint8_t>(step(m_new.players - 1U, sim::kMaxPlayers, forward) + 1U);
             return std::nullopt;
         case kReroll:
-            // Another world: the next number of a simple generator (Knuth's MMIX constants).
-            m_new.seed = m_new.seed * 6364136223846793005ULL + 1442695040888963407ULL;
+            m_new.seed = next_seed(m_new.seed);
             return std::nullopt;
+        case kIslandPage:
+            m_page = Page::Islands;
+            return std::nullopt;
+        case kShape:
+            m_island.own_shape = !m_island.own_shape;
+            return std::nullopt;
+        case kClimate:
+            m_island.climate = static_cast<std::uint8_t>(m_island.climate == 0 ? 1 : 0);
+            return std::nullopt;
+        case kIslandSize:
+            m_island.size = static_cast<std::uint8_t>(step(m_island.size, kIslandSizeTexts.size(), forward));
+            return std::nullopt;
+        case kOtherIsland:
+            m_island.seed = next_seed(m_island.seed);
+            return std::nullopt;
+        case kPlace: {
+            EditorRequest r{EditorRequest::Kind::PlaceIsland};
+            r.island = m_island;
+            return r;
+        }
+        case kMove:
+        case kRotate:
+        case kCopy:
+        case kRemove: {
+            if (!model.island) {
+                return std::nullopt;
+            }
+            using Kind = EditorRequest::Kind;
+            EditorRequest r{*id == kMove     ? Kind::MoveIsland
+                            : *id == kRotate ? Kind::RotateIsland
+                            : *id == kCopy   ? Kind::CopyIsland
+                                             : Kind::RemoveIsland};
+            r.index = *model.island;
+            return r;
+        }
+        case kStopPlacing:
+            return EditorRequest{EditorRequest::Kind::StopPlacing};
         case kCreate: {
             show_document();
             EditorRequest r{EditorRequest::Kind::New};

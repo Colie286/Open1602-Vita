@@ -139,6 +139,8 @@ private:
     void notify(std::string text, std::string_view log) override;
     void editor_key(ui::KeyAction action) override;
     void editor_pick(const EditorPick& pick) override;
+    bool editor_place(const render::TilePos& tile) override;
+    bool editor_cancel_place() override;
 
     /// The window's events; the rest goes to the input.
     void handle_event(const SDL_Event& event);
@@ -316,6 +318,15 @@ private:
     [[nodiscard]] std::vector<EditorCheckLine> editor_check() const;
     /// Over the editor's map: the islands' numbers and the mark of what is picked.
     void draw_editor_marks();
+    /// The requests of the editor's islands: a new one, moved, turned, copied, taken out.
+    void editor_island_request(const EditorRequest& request);
+    /// `op` done as a step of the document; false (and a note why) if it could not be made.
+    bool editor_perform(core::Result<std::unique_ptr<editor::Operation>> op);
+    /// The islands changed: what the viewer keeps of them is made anew (flags, minimap), and what
+    /// the panel shows of an island that is gone goes.
+    void editor_islands_changed();
+    /// Where an island being placed would lie with the mouse on `tile`: its top left.
+    [[nodiscard]] std::pair<std::int64_t, std::int64_t> editor_place_origin(const render::TilePos& tile) const;
     /// An empty sea of `width` x `height` tiles with the mods' content, as behind the menu.
     [[nodiscard]] sim::World sea_world(std::uint32_t width, std::uint32_t height) const;
 
@@ -643,6 +654,17 @@ private:
         bool notice_error = false;
         EditorPick pick{};                     ///< what the panel's page "Selection" shows
         std::vector<EditorCheckLine> check{};  ///< the check list, made when its page opened
+        /// An island being placed: the map's next click puts it down.
+        struct Placing {
+            enum class Kind : std::uint8_t { New, Move, Copy };
+            Kind kind = Kind::New;
+            std::size_t index = 0;                   ///< Move, Copy: the island
+            std::optional<sim::WorldIsland> island;  ///< New: the island made
+            std::uint32_t width = 0;
+            std::uint32_t height = 0;
+            EditorPanel::Page page = EditorPanel::Page::Islands;  ///< leaving it puts the island back
+        };
+        std::optional<Placing> placing{};
     };
     std::optional<EditorSession> m_editor;
     /// A request of the editor waiting for the answer to "discard the changes?".

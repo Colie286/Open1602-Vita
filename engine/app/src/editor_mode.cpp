@@ -4,7 +4,9 @@
 // game's renderer and frame, the simulation never runs on it, and the side panel below the head is
 // the editor's (editor_panel.hpp). The document is always saved as an Open1602 scenario.
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <memory>
 #include <random>
@@ -15,12 +17,14 @@
 #include "o1602/assets/text_table.hpp"
 #include "o1602/core/file.hpp"
 #include "o1602/core/text.hpp"
+#include "o1602/editor/islands.hpp"
 #include "o1602/editor/original_check.hpp"
 #include "o1602/render/world_renderer.hpp"
 #include "o1602/sim/growth.hpp"
 #include "o1602/sim/save_game.hpp"
 #include "o1602/sim/validate.hpp"
 #include "o1602/ui/build_menu.hpp"
+#include "o1602/ui/font.hpp"
 #include "o1602/ui/localization.hpp"
 
 namespace o1602::app {
@@ -353,6 +357,11 @@ EditorModel MapViewer::editor_model() const {
     editor_properties(m);
     m.overlays = {m_show_owners, m_show_island_numbers, m_show_coordinates};
     m.check = m_editor->check;
+    if (m_editor->pick.kind == EditorPick::Kind::Island && m_editor->pick.island < world.islands().size()) {
+        m.island = m_editor->pick.island;
+        m.island_free = world.island_use(m_editor->pick.island) == sim::World::IslandUse::None;
+    }
+    m.placing = m_editor->placing.has_value();
     if (m_hud && m_hud->editor_panel() && m_hud->editor_panel()->page() == EditorPanel::Page::SaveAs) {
         // Only while a name is typed: the folder is read every frame then.
         for (const std::filesystem::path& p : files_in(data_folder() / kOwnScenariosFolder, {kScenarioEnding})) {
@@ -411,6 +420,7 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         case Kind::Undo: {
             const std::string what = ui::tr("editor.step." + std::string(m_editor->document.history().next_undo()));
             if (m_editor->document.undo()) {
+                editor_islands_changed();
                 editor_notice(ui::tr("editor.undone", {what}), false, "undo");
             }
             break;
@@ -418,6 +428,7 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         case Kind::Redo: {
             const std::string what = ui::tr("editor.step." + std::string(m_editor->document.history().next_redo()));
             if (m_editor->document.redo()) {
+                editor_islands_changed();
                 editor_notice(ui::tr("editor.redone", {what}), false, "redo");
             }
             break;
@@ -444,7 +455,208 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         case Kind::Check:
             m_editor->check = editor_check();
             break;
+        case Kind::PlaceIsland:
+        case Kind::MoveIsland:
+        case Kind::RotateIsland:
+        case Kind::CopyIsland:
+        case Kind::RemoveIsland:
+        case Kind::StopPlacing:
+            editor_island_request(request);
+            break;
     }
+}
+
+namespace {
+
+/// The note of why an island cannot be turned, copied or taken out; empty if it can.
+std::string use_note(sim::World::IslandUse use) {
+    using Use = sim::World::IslandUse;
+    switch (use) {
+        case Use::None:
+            return {};
+        case Use::Cities:
+            return ui::tr("editor.islands.in_use.cities");
+        case Use::Buildings:
+            return ui::tr("editor.islands.in_use.buildings");
+        case Use::Units:
+            return ui::tr("editor.islands.in_use.units");
+        case Use::RunningGame:
+            return ui::tr("editor.islands.in_use.game");
+    }
+    return {};
+}
+
+}  // namespace
+
+void MapViewer::editor_island_request(const EditorRequest& request) {
+    using Kind = EditorRequest::Kind;
+    using Placing = EditorSession::Placing;
+    const sim::World& world = m_editor->document.world();
+    if (request.kind == Kind::StopPlacing) {
+        (void)editor_cancel_place();
+        return;
+    }
+    if (request.kind == Kind::PlaceIsland) {
+        const auto number = world.free_island_number();
+        editor::NewIsland wanted;
+        wanted.shape = request.island.own_shape ? editor::NewIsland::Shape::Own : editor::NewIsland::Shape::Template;
+        wanted.climate = request.island.climate;
+        wanted.size = request.island.size;
+        wanted.seed = request.island.seed;
+        std::vector<std::string> warnings;
+        auto made = number ? editor::make_island(wanted, *number, m_buildings, &m_game, &warnings)
+                           : core::Result<sim::WorldIsland>(
+                                 core::make_error(core::ErrorCode::LimitExceeded, "no island number is free"));
+        for (const std::string& w : warnings) {
+            std::fprintf(stderr, "warning: %s\n", w.c_str());
+        }
+        if (!made) {
+            editor_notice(ui::tr("editor.islands.failed", {ui::error_text(made.error(), "editor")}), true,
+                          made.error().message);
+            return;
+        }
+        Placing p;
+        p.kind = Placing::Kind::New;
+        p.width = made->map.width();
+        p.height = made->map.height();
+        p.island = std::move(made).value();
+        p.page = EditorPanel::Page::Islands;
+        m_editor->placing = std::move(p);
+        editor_notice(ui::tr("editor.islands.placing"), false, "placing a new island");
+        return;
+    }
+    if (request.index >= world.islands().size()) {
+        return;
+    }
+    const std::string name = number(request.index + 1);
+    const sim::World::IslandUse use = world.island_use(request.index);
+    const bool moving = request.kind == Kind::MoveIsland;
+    if (use != sim::World::IslandUse::None &&
+        !(moving && use != sim::World::IslandUse::Units && use != sim::World::IslandUse::RunningGame)) {
+        editor_notice(use_note(use), true, "the island is in use");
+        return;
+    }
+    switch (request.kind) {
+        case Kind::MoveIsland:
+        case Kind::CopyIsland: {
+            const sim::WorldIsland& island = world.islands()[request.index];
+            Placing p;
+            p.kind = moving ? Placing::Kind::Move : Placing::Kind::Copy;
+            p.index = request.index;
+            p.width = island.map.width();
+            p.height = island.map.height();
+            p.page = EditorPanel::Page::Selection;
+            m_editor->placing = std::move(p);
+            editor_notice(ui::tr("editor.islands.placing"), false, "placing an island");
+            return;
+        }
+        case Kind::RotateIsland:
+            if (editor_perform(editor::rotate_island(world, request.index, m_buildings))) {
+                editor_notice(ui::tr("editor.islands.rotated", {name}), false, "island turned");
+            }
+            return;
+        case Kind::RemoveIsland:
+            if (editor_perform(editor::remove_island(world, request.index, m_buildings))) {
+                m_editor->pick = EditorPick{};
+                if (m_hud && m_hud->editor_panel() != nullptr) {
+                    m_hud->editor_panel()->show_document();
+                }
+                editor_notice(ui::tr("editor.islands.removed", {name}), false, "island deleted");
+            }
+            return;
+        default:
+            return;
+    }
+}
+
+bool MapViewer::editor_perform(core::Result<std::unique_ptr<editor::Operation>> op) {
+    if (!op) {
+        editor_notice(ui::tr("editor.islands.no_room"), true, op.error().message);
+        return false;
+    }
+    m_editor->document.perform(std::move(op).value());
+    editor_islands_changed();
+    return true;
+}
+
+void MapViewer::editor_islands_changed() {
+    if (!m_editor) {
+        return;
+    }
+    m_building_figures = render::collect_building_figures(m_state->world, m_buildings, m_figures);
+    if (m_hud) {
+        m_hud->rebuild_minimap();
+    }
+    const std::size_t islands = m_state->world.islands().size();
+    EditorPick& pick = m_editor->pick;
+    if ((pick.kind == EditorPick::Kind::Island || pick.kind == EditorPick::Kind::Building) && pick.island >= islands) {
+        pick = EditorPick{};
+    }
+    if (m_editor->placing && m_editor->placing->kind != EditorSession::Placing::Kind::New &&
+        m_editor->placing->index >= islands) {
+        m_editor->placing.reset();
+    }
+}
+
+std::pair<std::int64_t, std::int64_t> MapViewer::editor_place_origin(const render::TilePos& tile) const {
+    const auto& p = *m_editor->placing;
+    return {std::int64_t{tile.x} - p.width / 2, std::int64_t{tile.y} - p.height / 2};
+}
+
+bool MapViewer::editor_place(const render::TilePos& tile) {
+    if (!m_editor || !m_editor->placing) {
+        return false;
+    }
+    using Kind = EditorSession::Placing::Kind;
+    const EditorSession::Placing& p = *m_editor->placing;
+    const sim::World& world = m_editor->document.world();
+    const auto [x, y] = editor_place_origin(tile);
+    const std::optional<std::size_t> except = p.kind == Kind::Move ? std::optional<std::size_t>(p.index) : std::nullopt;
+    if (!editor::free_place(world, x, y, p.width, p.height, except)) {
+        editor_notice(ui::tr("editor.islands.no_room"), true, "no room for the island");
+        return true;
+    }
+    const auto ux = static_cast<std::uint32_t>(x);
+    const auto uy = static_cast<std::uint32_t>(y);
+    const std::size_t index = p.kind == Kind::Move ? p.index : world.islands().size();
+    const bool moved = p.kind == Kind::Move;
+    bool done = false;
+    switch (p.kind) {
+        case Kind::New:
+            done = editor_perform(editor::add_island(world, *p.island, ux, uy, m_buildings));
+            break;
+        case Kind::Move:
+            done = editor_perform(editor::move_island(world, p.index, ux, uy, m_buildings));
+            break;
+        case Kind::Copy:
+            done = editor_perform(editor::copy_island(world, p.index, ux, uy, m_buildings));
+            break;
+    }
+    if (!done) {
+        return true;  // still in hand: another place may do
+    }
+    m_editor->placing.reset();
+    // The island put down is the one the panel shows.
+    EditorPick pick;
+    pick.kind = EditorPick::Kind::Island;
+    pick.island = static_cast<std::uint16_t>(index);
+    pick.x = tile.x;
+    pick.y = tile.y;
+    if (m_hud && m_hud->editor_panel() != nullptr && m_hud->editor_panel()->show_selection()) {
+        m_editor->pick = pick;
+    }
+    editor_notice(ui::tr(moved ? "editor.islands.moved" : "editor.islands.placed", {number(index + 1)}), false,
+                  moved ? "island moved" : "island placed");
+    return true;
+}
+
+bool MapViewer::editor_cancel_place() {
+    if (!m_editor || !m_editor->placing) {
+        return false;
+    }
+    m_editor->placing.reset();
+    m_editor->notice.clear();
+    return true;
 }
 
 void MapViewer::editor_pick(const EditorPick& pick) {
@@ -612,6 +824,55 @@ void MapViewer::draw_editor_marks() {
                     ui::tr("editor.prop.island", {number(i + 1)}));
         }
     }
+    // The island being placed: its outline under the mouse, green where it fits, red where not.
+    if (m_editor->placing) {
+        if (const auto tile = m_input->tile_at_mouse()) {
+            const EditorSession::Placing& p = *m_editor->placing;
+            const auto [x0, y0] = editor_place_origin(*tile);
+            const bool fits = editor::free_place(
+                world, x0, y0, p.width, p.height,
+                p.kind == EditorSession::Placing::Kind::Move ? std::optional<std::size_t>(p.index) : std::nullopt);
+            const std::int32_t ink =
+                ui::rgb_ink(fits ? assets::Rgba{90, 230, 90, 255} : assets::Rgba{235, 70, 60, 255});
+            const auto screen = [&](double x, double y) {
+                const auto [px, py] = render::text_figure_point(view, x, y, 0.0);
+                double sx = 0.0;
+                double sy = 0.0;
+                m_camera.world_to_screen(px, py, sx, sy);
+                return std::pair<double, double>{sx, sy};
+            };
+            const double w = p.width;
+            const double h = p.height;
+            const std::array<std::pair<double, double>, 4> corners = {
+                screen(static_cast<double>(x0), static_cast<double>(y0)),
+                screen(static_cast<double>(x0) + w, static_cast<double>(y0)),
+                screen(static_cast<double>(x0) + w, static_cast<double>(y0) + h),
+                screen(static_cast<double>(x0), static_cast<double>(y0) + h)};
+            // Each side as a dotted line: a dot of 3 x 3 pixels every 6.
+            for (std::size_t i = 0; i < corners.size(); ++i) {
+                const auto [ax, ay] = corners[i];
+                const auto [bx, by] = corners[(i + 1) % corners.size()];
+                const double length = std::hypot(bx - ax, by - ay);
+                const auto dots = static_cast<std::int32_t>(std::min(4000.0, length / 6.0));
+                for (std::int32_t d = 0; d <= dots; ++d) {
+                    const double t = dots == 0 ? 0.0 : static_cast<double>(d) / dots;
+                    const auto dx = static_cast<std::int32_t>(std::floor(ax + (bx - ax) * t)) - 1;
+                    const auto dy = static_cast<std::int32_t>(std::floor(ay + (by - ay) * t)) - 1;
+                    if (dx < v.x || dy < v.y || dx + 3 > v.x + v.w || dy + 3 > v.y + v.h) {
+                        continue;
+                    }
+                    ui::DrawItem dot;
+                    dot.kind = ui::DrawItem::Kind::Fill;
+                    dot.x = dx;
+                    dot.y = dy;
+                    dot.w = 3;
+                    dot.h = 3;
+                    dot.colour = ink;
+                    items.push_back(std::move(dot));
+                }
+            }
+        }
+    }
     // The mark of what the panel shows: a cross on the tile, or over the ship, unit or building.
     const EditorPick& pick = m_editor->pick;
     const bool shown =
@@ -662,6 +923,11 @@ void MapViewer::apply_editor() {
     // The page of the selection left (Escape, Back, another page): nothing is picked any more.
     if (m_hud->editor_panel() != nullptr && m_hud->editor_panel()->page() != EditorPanel::Page::Selection) {
         m_editor->pick = EditorPick{};
+    }
+    // The page an island is placed from left: it goes back.
+    if (m_editor->placing &&
+        (m_hud->editor_panel() == nullptr || m_hud->editor_panel()->page() != m_editor->placing->page)) {
+        m_editor->placing.reset();
     }
     m_hud->set_editor_model(editor_model());
 }

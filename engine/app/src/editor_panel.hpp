@@ -3,8 +3,8 @@
 // The side panel of the editor (ADR 0013): below the head with the minimap, compass, rotation and
 // zoom, where the game shows its modes. Its pages: what the document is (file, size, islands,
 // players) with the buttons for the files and undo; a new map; the files to open; the name to
-// save under; what is selected on the map; what the map shows over it; the check list. The panel only edits what is
-// typed and tells what was clicked; the viewer keeps the document and fills the model every frame.
+// save under; what is selected on the map; what the map shows over it; the check list; new islands. The panel only
+// edits what is typed and tells what was clicked; the viewer keeps the document and fills the model every frame.
 #pragma once
 
 #include <array>
@@ -35,6 +35,15 @@ struct EditorNewMap {
     [[nodiscard]] std::uint32_t width() const noexcept { return kSizes[size % kSizes.size()][0]; }
     [[nodiscard]] std::uint32_t height() const noexcept { return kSizes[size % kSizes.size()][1]; }
     friend bool operator==(const EditorNewMap&, const EditorNewMap&) = default;
+};
+
+/// The settings of a new island (the page "Islands").
+struct EditorNewIsland {
+    bool own_shape = false;    ///< of its own shape, else one of the original's templates
+    std::uint8_t climate = 0;  ///< 0 north, 1 south
+    std::uint8_t size = 2;     ///< size class 0 .. 4
+    std::uint64_t seed = 0;    ///< which template, or the shape
+    friend bool operator==(const EditorNewIsland&, const EditorNewIsland&) = default;
 };
 
 /// What a click on the editor's map picked.
@@ -106,6 +115,12 @@ struct EditorModel {
     std::array<bool, kEditorOverlays> overlays{};
     /// The check list (the page "Check"), as made when the page opened.
     std::vector<EditorCheckLine> check;
+    /// The island selected on the map (the page "Selection"), and whether it may be turned,
+    /// copied and taken out: no city, buildings or units of a game on it.
+    std::optional<std::size_t> island;
+    bool island_free = false;
+    /// An island is being placed (a new one, one moved or copied): the map's next click puts it down.
+    bool placing = false;
 };
 
 /// What a click or a key asked for.
@@ -120,13 +135,20 @@ struct EditorRequest {
         Close,  ///< out of the editor, back to the main menu
         /// The page "Open" opens: the model's list of files is due.
         ListFiles,
-        Overlay,  ///< the overlay `index` (EditorOverlay) on or off
-        Check,    ///< the page "Check" opens: the check list is due
+        Overlay,       ///< the overlay `index` (EditorOverlay) on or off
+        Check,         ///< the page "Check" opens: the check list is due
+        PlaceIsland,   ///< a new island with `island` to place on the map
+        MoveIsland,    ///< the island `index` to place anew
+        RotateIsland,  ///< the island `index` a quarter clockwise
+        CopyIsland,    ///< a copy of the island `index` to place
+        RemoveIsland,  ///< the island `index` taken out
+        StopPlacing,   ///< what is being placed goes back
     };
     Kind kind = Kind::Close;
     std::size_t index = 0;
     std::string name{};  ///< Windows-1252
     EditorNewMap map{};
+    EditorNewIsland island{};
 };
 
 class EditorPanel {
@@ -138,7 +160,7 @@ public:
     /// The longest name a scenario can be saved under.
     static constexpr std::size_t kMaxName = 60;
 
-    enum class Page : std::uint8_t { Document, New, Open, SaveAs, Selection, View, Check };
+    enum class Page : std::uint8_t { Document, New, Open, SaveAs, Selection, View, Check, Islands };
 
     explicit EditorPanel(ui::FormStyle style = {}) : m_form(style) {}
 
@@ -166,6 +188,7 @@ public:
     [[nodiscard]] bool typing() const noexcept { return m_page == Page::SaveAs; }
     [[nodiscard]] const std::string& text() const noexcept { return m_text; }
     [[nodiscard]] const EditorNewMap& new_map() const noexcept { return m_new; }
+    [[nodiscard]] const EditorNewIsland& new_island() const noexcept { return m_island; }
 
     /// Everything to draw, relative to the side panel's top left.
     [[nodiscard]] std::vector<ui::DrawItem> draw(const EditorModel& model,
@@ -199,6 +222,9 @@ private:
     void layout_selection(const EditorModel& model);
     void layout_view(const EditorModel& model);
     void layout_check(const EditorModel& model);
+    void layout_islands(const EditorModel& model);
+    /// The buttons of an island selected: move, turn, copy, take out; or a note while placing.
+    void layout_island_actions(const EditorModel& model, std::int32_t& y);
     std::optional<EditorRequest> commit_name();
 
     ui::Form m_form;
@@ -207,6 +233,7 @@ private:
     std::int32_t m_height = 400;
     std::string m_text;  ///< the name being typed
     EditorNewMap m_new;
+    EditorNewIsland m_island;
     std::size_t m_first = 0;      ///< the first file shown on the page "Open", the first line on "Check"
     std::size_t m_page_rows = 1;  ///< lines of the check list on its page as laid out last
 };
