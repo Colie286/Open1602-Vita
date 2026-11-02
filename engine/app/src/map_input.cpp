@@ -195,6 +195,7 @@ void MapInput::setup_keys() {
     general(chord(SDLK_KP_ENTER), KeyAction::Chat);
     general(chord(SDLK_DELETE), KeyAction::DemolishTool);
     general(chord(SDLK_C, true), KeyAction::CopyTool);
+    general(chord(SDLK_S, true), KeyAction::SaveTemplate);
     general(chord(SDLK_U), KeyAction::BlueprintMode);  // "Umriss"
     general(chord(SDLK_U, false, true), KeyAction::BuildBlueprints);
     general(chord(SDLK_F), KeyAction::PlantFields);  // "Felder"
@@ -234,6 +235,7 @@ void MapInput::setup_keys() {
     building(chord(SDLK_C), KeyAction::PickBuilding);
     building(chord(SDLK_DELETE), KeyAction::DemolishTool);
     building(chord(SDLK_C, true), KeyAction::CopyTool);
+    building(chord(SDLK_S, true), KeyAction::SaveTemplate);
     building(chord(SDLK_U), KeyAction::BlueprintMode);
     building(chord(SDLK_U, false, true), KeyAction::BuildBlueprints);
     building(chord(SDLK_F), KeyAction::PlantFields);
@@ -702,6 +704,10 @@ void MapInput::run_action(const ui::KeyBinding& b) {
             if (m_tool.active()) {
                 drop_units();
             }
+            break;
+        case KeyAction::SaveTemplate:
+            // Templates (Open1602): the piece in hand under a name, else the list of them.
+            m_host.save_template();
             break;
         case KeyAction::BlueprintMode:
             toggle_blueprint();

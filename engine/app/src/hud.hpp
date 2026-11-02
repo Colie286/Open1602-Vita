@@ -33,6 +33,7 @@
 #include "selection.hpp"
 #include "selection_panels.hpp"
 #include "side_panels.hpp"
+#include "template_window.hpp"
 #include "tutorial.hpp"
 
 #include "o1602/assets/game_directory.hpp"
@@ -63,6 +64,7 @@ public:
             Copy,          ///< build mode, the copy tool (Open1602)
             Move,          ///< build mode, the move tool (Open1602)
             Blueprint,     ///< blueprint mode on or off (Open1602)
+            Templates,     ///< build mode, the copy tool, and the templates' list (Open1602)
             TurnBuilding,  ///< the building to place by `step` quarters
             ToolOff,       ///< another mode: no building tool
             OrientToRoad,  ///< buildings with a door turn to the road (`step` 1) or not (0)
@@ -214,6 +216,31 @@ public:
     }
     [[nodiscard]] std::vector<BlueprintWindow::Result> take_blueprint_clicks() {
         return std::exchange(m_blueprint_clicks, {});
+    }
+    /// The window of the templates (template_window.hpp), beside the side panel: their list (the
+    /// tools' pop-up) or the question for a new template's name (Ctrl+S with a piece in hand). The
+    /// viewer fills the model while it is open and takes what was asked.
+    void open_templates() {
+        if (m_templates) {
+            m_templates->open_list();
+        }
+    }
+    void open_template_save(std::string_view name) {
+        if (m_templates) {
+            m_templates->open_save(name);
+        }
+    }
+    void close_templates() noexcept {
+        if (m_templates) {
+            m_templates->close();
+        }
+    }
+    [[nodiscard]] bool templates_open() const noexcept {
+        return !m_menu_active && m_templates && m_templates->is_open();
+    }
+    void set_templates_model(TemplatesModel model) { m_templates_model = std::move(model); }
+    [[nodiscard]] std::vector<TemplateRequest> take_template_requests() {
+        return std::exchange(m_template_requests, {});
     }
     /// The build menu shows a tool a key started (its title names it).
     void show_tool_in_build_menu(BuildPanel::Tool tool) {
@@ -387,6 +414,9 @@ public:
         if (chat_open()) {
             return true;
         }
+        if (templates_open() && m_templates->typing()) {
+            return true;
+        }
         if (naming()) {
             return true;
         }
@@ -399,6 +429,8 @@ public:
             m_menu->type(text);
         } else if (chat_open()) {
             m_chat->type(text);
+        } else if (templates_open() && m_templates->typing()) {
+            m_templates->type(text);
         } else if (naming()) {
             m_names.type(text);
         } else if (m_options) {
@@ -409,6 +441,10 @@ public:
         if (chat_open()) {
             if (auto say = m_chat->key(m_chat_model, key)) {
                 m_chat_says.push_back(std::move(*say));
+            }
+        } else if (templates_open() && m_templates->typing()) {
+            if (auto request = m_templates->key(key)) {
+                m_template_requests.push_back(std::move(*request));
             }
         } else if (naming()) {
             if (auto c = m_names.key(key)) {
@@ -599,6 +635,11 @@ private:
     BlueprintModel m_blueprint_model;
     std::vector<BlueprintWindow::Result> m_blueprint_clicks;
     [[nodiscard]] ui::Rect blueprint_rect() const;
+    std::unique_ptr<TemplateWindow> m_templates;
+    TemplatesModel m_templates_model;
+    std::vector<TemplateRequest> m_template_requests;
+    /// The templates' window on the screen (at the upper right of the map, by the side panel).
+    [[nodiscard]] ui::Rect templates_rect() const;
     ChatModel m_chat_model;
     std::vector<ChatSay> m_chat_says;
     /// The chat window on the screen (at the lower left of the map).

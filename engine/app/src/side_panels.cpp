@@ -133,6 +133,8 @@ ui::BuildCategory BuildPanel::tools_category(std::int32_t button) const {
     tools.rows.push_back({demolish, tool(Tool::Copy, "open1602:copy", "build.tool.copy"),
                           tool(Tool::Blueprint, "open1602:blueprint", "build.tool.blueprint"),
                           tool(Tool::Move, "open1602:move", "build.tool.move")});
+    // A row holds four icons: the templates above the tools.
+    tools.rows.push_back({tool(Tool::Templates, "open1602:templates", "build.tool.templates")});
     return tools;
 }
 
@@ -181,6 +183,7 @@ void BuildPanel::open_popup(const ui::BuildCategory& category, const Available& 
         return;
     }
     m_popup.emplace(ui::build_popup(category, ok, *button, m_gfx_bauhaus, m_menu->locked_icon_offset), m_bau.scale());
+    ui::show_popup_patches(*m_popup);
     m_popup_category = category.button;
     // The button is still held: the pop-up takes over this press, so that dragging onto an icon
     // and letting go there picks it.
@@ -222,6 +225,10 @@ std::optional<BuildPanel::Action> BuildPanel::mouse(std::int32_t x, std::int32_t
                             m_category = m_building_category;
                             m_bau.set_selected(m_category, true);
                         }
+                    } else if (tool && static_cast<Tool>(*tool) == Tool::Templates) {
+                        // The copy tool, waiting for a piece or a template from the list.
+                        m_tool = Tool::Copy;
+                        action = Action{Action::Kind::Templates, 0, 0};
                     } else if (tool && (static_cast<Tool>(*tool) != Tool::Move || m_moving)) {
                         m_tool = static_cast<Tool>(*tool);
                         const auto kind = m_tool == Tool::Copy   ? Action::Kind::Copy

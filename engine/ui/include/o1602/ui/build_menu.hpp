@@ -24,6 +24,8 @@
 
 namespace o1602::ui {
 
+class Panel;
+
 /// One building of a category's pop-up.
 struct BuildButton {
     std::uint32_t id = 0;    ///< HAUS Id
@@ -95,8 +97,15 @@ core::Status apply_build_menu_package(BuildMenuDefinition& menu, std::string_vie
                                                        std::span<const assets::OwnBuilding> own = {});
 
 // Gadget Ids of the pop-up (the original's numbers).
-inline constexpr std::int32_t kPopupSlot = 32001;           ///< + position in the list: the frame to click
-inline constexpr std::int32_t kPopupIcon = 32101;           ///< + position: the icon
+inline constexpr std::int32_t kPopupSlot = 32001;  ///< + position in the list: the frame to click
+inline constexpr std::int32_t kPopupIcon = 32101;  ///< + position: the icon
+/// + row: a strip of the row's own picture over its middle, for a row without a third icon (the
+/// picture has a small mark there that a third icon always hides); see popup_patch().
+inline constexpr std::int32_t kPopupPatch = 32941;
+/// The patches' columns of the row picture (where it is plain) and where they go, in its pixels.
+inline constexpr std::int32_t kPopupPatchFrom = 180;
+inline constexpr std::int32_t kPopupPatchAt = 112;
+inline constexpr std::int32_t kPopupPatchWidth = 20;
 inline constexpr std::int32_t kPopupBackdrop = 1000000000;  ///< the rest of the panel: closes the pop-up
 /// Distance of two rows and of two icons in a row, in design units.
 inline constexpr std::int32_t kPopupRowStep = 59;
@@ -109,5 +118,7 @@ inline constexpr std::int32_t kPopupIconStep = 57;
 [[nodiscard]] assets::GadgetLayout build_popup(const BuildCategory& category, const std::vector<bool>& available,
                                                const assets::Gadget& button, std::int32_t gfx_bauhaus,
                                                std::int32_t locked_icon_offset);
+/// Gives the patches of a pop-up made from build_popup() their band of the row picture.
+void show_popup_patches(Panel& popup);
 
 }  // namespace o1602::ui

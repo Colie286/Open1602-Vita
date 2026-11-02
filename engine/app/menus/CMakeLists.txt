@@ -49,6 +49,8 @@ add_library(o1602_menus
     ../src/ship_panel.cpp
     ../src/side_panels.cpp
     ../src/stock_notes.cpp
+    ../src/template_window.cpp
+    ../src/templates.cpp
     ../src/tile_status.cpp
     ../src/tutorial.cpp
     ../src/unit_panels.cpp

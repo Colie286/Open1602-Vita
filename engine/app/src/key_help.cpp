@@ -90,6 +90,7 @@ KeyHelpPlace key_help_place(KeyAction action) noexcept {
         case KeyAction::CopyTool:
         case KeyAction::BlueprintMode:
         case KeyAction::BuildBlueprints:
+        case KeyAction::SaveTemplate:
         case KeyAction::PlantFields:
         case KeyAction::ToggleGates:
             return {2, 0};

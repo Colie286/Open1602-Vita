@@ -27,6 +27,7 @@
 #include "multiplayer_menu.hpp"
 #include "names.hpp"
 #include "stock_notes.hpp"
+#include "templates.hpp"
 #include "video_controller.hpp"
 #include "viewer_options.hpp"
 #include "zoom_graphics.hpp"
@@ -130,6 +131,7 @@ private:
     void toggle_fertility() override;
     void toggle_fullscreen() override;
     void toggle_pause_video() override;
+    void save_template() override;
     void notify(std::string text, std::string_view log) override;
 
     /// The window's events; the rest goes to the input.
@@ -222,6 +224,15 @@ private:
     void check_end_screen(std::uint64_t now);
     /// The window of a blueprint: what it shows, and its clicks as commands.
     void update_blueprint_window();
+    /// The templates in the user's folder "templates", read on first use.
+    TemplateStore& template_store();
+    /// The templates (templates.hpp): the list read again from the user's folder and shown.
+    void open_templates();
+    /// The templates' list as the window shows it (after a change of the templates).
+    void show_templates();
+    /// The window of the templates: what was asked in it, saved, renamed, deleted or taken into
+    /// the copy tool's hand.
+    void update_template_window();
     /// The move tool at `spot`: the building it would pick up, or the one in hand drawn where it
     /// would go and taken off its old place, with the status line. Every tile changed in the map
     /// goes to `keep` first, which puts it back after drawing.
@@ -569,6 +580,10 @@ private:
     std::size_t m_sprites_drawn = 0;
     std::size_t m_batches_drawn = 0;  ///< draw calls of the map's sprites in the last frame (FB-7)
     BuildTool m_tool;
+    std::optional<TemplateStore> m_templates;  ///< made on first use (template_store)
+    /// Until then a note in the status line goes before what the build tool would do (a template saved).
+    std::uint64_t m_notice_over_tool_until = 0;
+    static constexpr std::uint64_t kNoticeOverToolMs = 3000;
     std::string m_tool_status;          ///< what the build tool would do at the mouse
     bool m_tool_short_of_wood = false;  ///< ... and that it lacks wood for it (the tutorial's bubble)
     std::size_t m_load_problems = 0;    ///< of the game loaded last (report_load_problems)

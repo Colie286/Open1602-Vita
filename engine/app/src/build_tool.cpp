@@ -496,6 +496,18 @@ bool BuildTool::take_layout(const sim::World& world, sim::PlayerId player, const
     return true;
 }
 
+bool BuildTool::hold_layout(Layout layout) {
+    set_mode(Mode::Copy);
+    std::erase_if(layout.items, [&](const Layout::Item& item) {
+        return m_buildings == nullptr || m_buildings->by_id(item.building) == nullptr;
+    });
+    if (layout.items.empty() || layout.width <= 0 || layout.height <= 0) {
+        return false;
+    }
+    m_layout = std::move(layout);
+    return true;
+}
+
 std::vector<sim::TilePos> BuildTool::copy_preview(const sim::World& world, sim::PlayerId player,
                                                   const Spot& spot) const {
     std::vector<sim::TilePos> tiles;

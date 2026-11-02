@@ -959,6 +959,7 @@ int MapViewer::run() {
                     // What the windows of the panel ordered (scuttling and disbanding ask first).
                     m_input->submit_orders(m_hud->take_commands(), false);
                     update_blueprint_window();
+                    update_template_window();
                     m_hud->set_moving_in_build_menu(m_state->simulation.rules().moving != sim::Moving::Off);
                     apply_options();
                 }
@@ -1795,7 +1796,8 @@ void MapViewer::render() {
             corners[i] = m_camera.point_at_screen(screen[i].first, screen[i].second);
         }
         const std::uint64_t now = platform::ticks_ms();
-        if (const std::string* notice = m_events.notice(now); notice != nullptr && !m_tool.active()) {
+        if (const std::string* notice = m_events.notice(now);
+            notice != nullptr && (!m_tool.active() || now < m_notice_over_tool_until)) {
             m_hud->set_status(*notice);
         } else {
             if (m_tool_status.empty() && !m_tool.active()) {
@@ -2515,6 +2517,12 @@ void MapViewer::apply_hud(const Hud::Action& action) {
         case Hud::Action::Kind::Move:
             m_tool.set_mode(BuildTool::Mode::Move);
             m_input->drop_units();
+            break;
+        case Hud::Action::Kind::Templates:
+            // The tools' pop-up: the copy tool, waiting for a piece or a template from the list.
+            m_tool.set_mode(BuildTool::Mode::Copy);
+            m_input->drop_units();
+            open_templates();
             break;
         case Hud::Action::Kind::Blueprint:
             // The switch in the tools' pop-up: the build menu went back to what is in hand.
@@ -4210,6 +4218,98 @@ void MapViewer::update_blueprint_window() {
         m_input->submit_orders(std::move(orders), true);
     }
     m_hud->set_blueprint_model(std::move(model));
+}
+
+TemplateStore& MapViewer::template_store() {
+    if (!m_templates) {
+        m_templates.emplace(data_folder() / "templates");
+        m_templates->load();
+    }
+    return *m_templates;
+}
+
+void MapViewer::show_templates() {
+    TemplatesModel model;
+    for (const BuildTemplate& t : template_store().all()) {
+        model.entries.push_back(template_entry(t.name, t.layout, m_buildings));
+    }
+    if (const auto& layout = m_tool.layout(); layout && m_tool.mode() == BuildTool::Mode::Copy) {
+        model.piece = template_entry({}, *layout, m_buildings);
+    }
+    m_hud->set_templates_model(std::move(model));
+}
+
+void MapViewer::open_templates() {
+    if (!m_hud) {
+        return;
+    }
+    template_store().load();  // another game may have saved some meanwhile
+    show_templates();
+    m_hud->open_templates();
+}
+
+void MapViewer::save_template() {
+    if (!m_hud || m_hud->menu_active()) {
+        return;
+    }
+    if (m_tool.mode() != BuildTool::Mode::Copy || !m_tool.layout()) {
+        open_templates();  // nothing in hand: what there is to take
+        return;
+    }
+    TemplateStore& store = template_store();
+    store.load();
+    show_templates();
+    m_hud->open_template_save(store.next_name());
+}
+
+void MapViewer::update_template_window() {
+    // Saving closes the window before its request comes here: what was asked counts all the same.
+    bool changed = false;
+    for (const TemplateRequest& r : m_hud->take_template_requests()) {
+        TemplateStore& store = template_store();
+        switch (r.kind) {
+            case TemplateRequest::Kind::Save:
+                if (const auto& layout = m_tool.layout(); layout && m_tool.mode() == BuildTool::Mode::Copy) {
+                    if (store.add(r.name, *layout)) {
+                        notify(ui::tr("template.saved", {r.name}), "template saved");
+                        // Said over the copy tool's costs, which the status line shows meanwhile.
+                        m_notice_over_tool_until = platform::ticks_ms() + kNoticeOverToolMs;
+                    } else {
+                        notify(ui::tr("template.failed"), "template not saved");
+                    }
+                }
+                break;
+            case TemplateRequest::Kind::Rename:
+                if (!store.rename(r.index, r.name)) {
+                    notify(ui::tr("template.failed"), "template not renamed");
+                }
+                changed = true;
+                break;
+            case TemplateRequest::Kind::Remove:
+                (void)store.remove(r.index);
+                changed = true;
+                break;
+            case TemplateRequest::Kind::Take:
+                if (r.index < store.all().size()) {
+                    if (m_hud->mode() != Hud::kModeBuild) {
+                        if (const auto rearm = m_hud->set_mode(Hud::kModeBuild)) {
+                            apply_hud(*rearm);
+                        }
+                    }
+                    if (m_tool.hold_layout(store.all()[r.index].layout)) {
+                        m_hud->show_tool_in_build_menu(BuildPanel::Tool::Copy);
+                        m_input->drop_units();
+                        m_hud->close_templates();  // the map is free for placing it
+                    } else {
+                        notify(ui::tr("template.unknown"), "template holds nothing this game knows");
+                    }
+                }
+                break;
+        }
+    }
+    if (changed) {
+        show_templates();
+    }
 }
 
 void MapViewer::check_end_screen(std::uint64_t now) {

@@ -589,16 +589,19 @@ void SdlUiRenderer::draw(const std::vector<ui::DrawItem>& items, std::int32_t ox
                                         static_cast<float>(oy + d.y + std::trunc((d.h - h) / 2)), static_cast<float>(w),
                                         static_cast<float>(h)};
                     SDL_RenderTexture(m_renderer, t.texture, nullptr, &dst);
-                } else if (d.rows > 0 && t.texture != nullptr) {
-                    // A band of the art's rows, at its place.
-                    const double first = std::min<double>(d.first_row * art_scale(), t.h);
-                    const double count = std::min<double>(d.rows * art_scale(), t.h - first);
+                } else if ((d.rows > 0 || d.cols > 0) && t.texture != nullptr) {
+                    // A band of the art's rows or columns (or both), at its place.
+                    const double first = d.rows > 0 ? std::min<double>(d.first_row * art_scale(), t.h) : 0.0;
+                    const double count = d.rows > 0 ? std::min<double>(d.rows * art_scale(), t.h - first) : t.h;
+                    const double left = d.cols > 0 ? std::min<double>(d.first_col * art_scale(), t.w) : 0.0;
+                    const double width = d.cols > 0 ? std::min<double>(d.cols * art_scale(), t.w - left) : t.w;
                     SDL_SetTextureAlphaMod(t.texture, d.half ? 128 : 255);
-                    const SDL_FRect src{0.0F, static_cast<float>(first), static_cast<float>(t.w),
+                    const SDL_FRect src{static_cast<float>(left), static_cast<float>(first), static_cast<float>(width),
                                         static_cast<float>(count)};
-                    const SDL_FRect dst{
-                        static_cast<float>(ox + d.x), static_cast<float>(oy + d.y + std::round(first * stretch)),
-                        static_cast<float>(std::round(t.w * stretch)), static_cast<float>(std::round(count * stretch))};
+                    const SDL_FRect dst{static_cast<float>(ox + d.x + std::round(left * stretch)),
+                                        static_cast<float>(oy + d.y + std::round(first * stretch)),
+                                        static_cast<float>(std::round(width * stretch)),
+                                        static_cast<float>(std::round(count * stretch))};
                     SDL_RenderTexture(m_renderer, t.texture, &src, &dst);
                 } else {
                     blit(t, d.x, d.y, d.half);

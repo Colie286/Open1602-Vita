@@ -143,6 +143,10 @@ public:
     /// Ends the drag of the copy tool: the piece goes into the hand. False (and nothing in hand)
     /// if it holds nothing to copy.
     bool take_layout(const sim::World& world, sim::PlayerId player, const Spot& spot);
+    /// Switches to the copy tool with `layout` (a template, templates.hpp) in hand. Items whose
+    /// building the table does not know (a template of a mod no longer loaded) are left out; false
+    /// (and the copy tool waiting for a piece) if none is left.
+    bool hold_layout(Layout layout);
     /// Puts the layout away: the copy tool waits for a new piece.
     void drop_layout() noexcept { m_layout.reset(); }
     /// Every tile of the buildings the drag of the copy tool covers, for the preview.

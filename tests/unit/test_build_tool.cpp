@@ -398,3 +398,27 @@ TEST_CASE("build tool: the move tool picks up an own building and hangs it at th
     tool.set_mode(app::BuildTool::Mode::Build);
     CHECK(!tool.move_hand().has_value());
 }
+
+TEST_CASE("build tool: a template goes into the copy tool's hand, without buildings the game does not know") {
+    Map m;
+    app::BuildTool tool(m.buildings);
+    tool.set_mode(app::BuildTool::Mode::Demolish);
+    app::BuildTool::Layout layout;
+    layout.width = 4;
+    layout.height = 3;
+    layout.items = {{kRoad, 0, 2, 0, 1, 1}, {kFarm, 0, 0, 0, 2, 2}, {99999, 2, 0, 0, 1, 1}};
+    REQUIRE(tool.hold_layout(layout));
+    CHECK(tool.mode() == app::BuildTool::Mode::Copy);
+    CHECK(tool.places());
+    REQUIRE(tool.layout().has_value());
+    CHECK(tool.layout()->items.size() == 2);  // the unknown one left out
+    CHECK(tool.layout()->width == 4);
+    const auto order = tool.build_order(m.world, 0, {0, 10, 10});
+    REQUIRE(order.has_value());
+    CHECK(order->items.size() == 2);
+
+    // Nothing the game knows: the copy tool waits for a piece.
+    layout.items = {{99999, 0, 0, 0, 1, 1}};
+    CHECK(!tool.hold_layout(layout));
+    CHECK(tool.copy_selecting());
+}

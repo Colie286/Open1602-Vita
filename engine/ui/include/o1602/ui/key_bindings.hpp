@@ -56,6 +56,7 @@ enum class KeyAction : std::uint16_t {
     CopyTool,         ///< a piece of the city to build again elsewhere (Open1602)
     BlueprintMode,    ///< places blueprints instead of buildings, on or off (Open1602)
     BuildBlueprints,  ///< builds all blueprints of the city under the mouse (Open1602)
+    SaveTemplate,     ///< keeps the copy tool's piece in hand as a template (Open1602)
     PlantFields,      ///< the selected farm's field on all open ground in its catchment (History Edition text)
     ToggleGates,      ///< closes or opens all own city gates to foreign soldiers (Open1602)
     // Selection

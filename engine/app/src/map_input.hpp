@@ -71,6 +71,9 @@ public:
         /// Ctrl+F, Ctrl+K: the frame rate, the tile under the mouse in the corner of the map.
         virtual void toggle_fps() = 0;
         virtual void toggle_coordinates() = 0;
+        /// Ctrl+S: asks for a name to keep the copy tool's piece in hand as a template; without
+        /// one, opens the list of the templates.
+        virtual void save_template() = 0;
         virtual void toggle_unit_arms() = 0;
         /// F11, Alt+Enter: window or full screen.
         virtual void toggle_fullscreen() = 0;

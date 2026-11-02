@@ -84,6 +84,7 @@ information fit in and the controls follow today's real-time strategy games (202
 | C | pipette: the building under the mouse as the building order (a grown house as the first house) |
 | Delete | demolish tool |
 | Ctrl+C | copy tool (Open1602): drag over a piece of the own city, or click a building, and it hangs at the mouse to be built again elsewhere; R turns it |
+| Ctrl+S | save the copy tool's piece in hand as a template under a name (Open1602); without one, open the list of templates |
 | U | blueprint mode on or off (Open1602): what the build and copy tools place becomes the player's blueprints, built later |
 | Shift+U | build the player's blueprints of the city under the mouse |
 | Escape | put the tool away (the copy tool: first the piece in hand) |
@@ -110,6 +111,14 @@ own old place. It keeps its level, inhabitants, stock and production; free by de
 a new building with the demolish refund for the old place. Kontors, markets, towers, castles, a
 shipyard at work and burning or plague-struck buildings stay; the status line says why. A right
 click puts the building in hand back.
+
+The fifth entry, in a row above the tools, opens the templates (as later Anno games): pieces the
+copy tool picked up, kept under a name with Ctrl+S to be built again in any game. Their window by
+the side panel lists each with a small view from above, its size, number of buildings and costs;
+"Take" puts it into the copy tool's hand, "Rename" types a new name in its row, "Delete" asks once
+more. Each template is a small text file in the folder "templates" of the user's data folder, so
+players can pass them on; they are never part of a savegame or a multiplayer game. Buildings the
+game does not know (a mod not loaded) are left out when a template is taken.
 
 **Settings dialogs** (start dialog of a game, window „Anzeige“)
 

@@ -31,7 +31,7 @@ class BuildPanel {
 public:
     /// What a click asks for.
     struct Action {
-        enum class Kind : std::uint8_t { Pick, Demolish, Rotate, OrientToRoad, Copy, Blueprint, Move };
+        enum class Kind : std::uint8_t { Pick, Demolish, Rotate, OrientToRoad, Copy, Blueprint, Move, Templates };
         Kind kind = Kind::Pick;
         std::uint32_t building = 0;  ///< Pick: HAUS Id
         int step = 0;                ///< Rotate: -1 left, +1 right; OrientToRoad: 1 on, 0 off
@@ -65,8 +65,9 @@ public:
     /// the demolish tool at once, as later Anno games do. Blueprint is a switch, not a tool: picked,
     /// it turns blueprint mode on or off (Action::Kind::Blueprint) and the menu goes back to the
     /// building (or the copy tool) in hand.
-    /// Move is offered only where the game's settings allow it (set_moving).
-    enum class Tool : std::uint8_t { Demolish, Copy, Blueprint, Move };
+    /// Move is offered only where the game's settings allow it (set_moving). Templates picks the
+    /// copy tool and opens the list of the player's templates (Action::Kind::Templates).
+    enum class Tool : std::uint8_t { Demolish, Copy, Blueprint, Move, Templates };
     /// Shows the tools' category with `tool` picked: a key started the tool (Delete, Ctrl+C).
     void show_tool(Tool tool);
     /// The tools' pop-up as a category of the menu: icons "open1602:<tool>", names in the

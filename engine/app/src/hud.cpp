@@ -313,6 +313,14 @@ Hud::Hud(SDL_Renderer* renderer, const assets::GameDirectory& game, const assets
         m_question_form.set_style(style);
         m_chat = std::make_unique<ChatWindow>(style);
         m_blueprint = std::make_unique<BlueprintWindow>(style);
+        m_templates = std::make_unique<TemplateWindow>(style);
+        // The templates' views from above: land, buildings, houses, roads, fields, forest.
+        TemplateColours colours;
+        colours.ground = ui::nearest_colour(palette, 125, 150, 70);
+        colours.pieces = {ui::nearest_colour(palette, 150, 70, 45), ui::nearest_colour(palette, 215, 175, 110),
+                          ui::nearest_colour(palette, 120, 115, 110), ui::nearest_colour(palette, 230, 205, 90),
+                          ui::nearest_colour(palette, 35, 80, 35)};
+        m_templates->set_colours(colours);
         // The window "Warenbilanz" as a parchment: ink on sandstone, the grounds at half strength.
         GoodsStyle goods;
         goods.form.translucent = true;
@@ -667,6 +675,10 @@ bool Hud::back() {
         m_blueprint_at.reset();
         return true;
     }
+    if (templates_open()) {
+        m_templates->close();
+        return true;
+    }
     if (m_display_open) {
         m_display_open = false;
         return true;
@@ -798,6 +810,9 @@ ui::Rect Hud::layout(std::int32_t width, std::int32_t height, double ui_scale) {
     if (m_blueprint) {
         m_blueprint->set_scale(scale);
     }
+    if (m_templates) {
+        m_templates->set_scale(scale);
+    }
     if (m_goods) {
         m_goods->set_scale(scale);
     }
@@ -814,7 +829,8 @@ bool Hud::covers(std::int32_t x, std::int32_t y) const noexcept {
     // A question takes all of them: nothing behind it answers the mouse.
     return m_menu_active || m_question.has_value() || m_display_open || m_goods_open ||
            (chat_open() && chat_rect().contains(x, y)) || (m_blueprint_at && blueprint_rect().contains(x, y)) ||
-           m_regions.side_panel.contains(x, y) || m_regions.status_bar.contains(x, y) ||
+           (templates_open() && templates_rect().contains(x, y)) || m_regions.side_panel.contains(x, y) ||
+           m_regions.status_bar.contains(x, y) ||
            (m_options_model.mission_window && m_tutor && m_regions.tutor.contains(x, y));
 }
 
@@ -984,6 +1000,16 @@ ui::Rect Hud::blueprint_rect() const {
     const ui::Rect& v = m_regions.game_view;
     return {v.x + gap, v.y + gap, static_cast<std::int32_t>(BlueprintWindow::kWidth * s),
             static_cast<std::int32_t>(BlueprintWindow::kHeight * s)};
+}
+
+ui::Rect Hud::templates_rect() const {
+    // Over the upper right of the map, by the side panel and its tools.
+    const double s = m_templates ? m_templates->scale() : m_regions.scale;
+    const auto gap = static_cast<std::int32_t>(8 * s);
+    const auto w = static_cast<std::int32_t>(TemplateWindow::kWidth * s);
+    const auto h = static_cast<std::int32_t>((m_templates ? m_templates->height(m_templates_model) : 0) * s);
+    const ui::Rect& v = m_regions.game_view;
+    return {std::max(v.x, v.x + v.w - w - gap), v.y + gap, w, h};
 }
 
 bool Hud::open_chat() {
@@ -1450,6 +1476,16 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
             return std::nullopt;
         }
     }
+    if (templates_open() && !m_question && !m_help && button == ui::MouseButton::Left) {
+        // The templates' window takes the clicks on it; the map beside it stays usable.
+        const ui::Rect r = templates_rect();
+        if (auto request = m_templates->mouse(x - r.x, y - r.y, down, m_templates_model)) {
+            m_template_requests.push_back(std::move(*request));
+        }
+        if (r.contains(x, y)) {
+            return std::nullopt;
+        }
+    }
     if (chat_open() && !m_menu_active && !m_question && !m_help && button == ui::MouseButton::Left) {
         // The chat takes the clicks on it; the map beside it stays usable.
         const ui::Rect r = chat_rect();
@@ -1569,6 +1605,9 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
                     break;
                 case BuildPanel::Action::Kind::Blueprint:
                     action = Action{Action::Kind::Blueprint};
+                    break;
+                case BuildPanel::Action::Kind::Templates:
+                    action = Action{Action::Kind::Templates};
                     break;
                 case BuildPanel::Action::Kind::Rotate:
                     action = Action{Action::Kind::TurnBuilding};
@@ -2086,6 +2125,11 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
         const ui::Rect r = blueprint_rect();
         m_renderer->draw(m_blueprint->draw(m_blueprint_model, m_renderer->fonts(m_blueprint->scale())), r.x, r.y,
                          m_blueprint->scale());
+    }
+    if (templates_open()) {
+        const ui::Rect r = templates_rect();
+        m_renderer->draw(m_templates->draw(m_templates_model, m_renderer->fonts(m_templates->scale())), r.x, r.y,
+                         m_templates->scale());
     }
     if (m_display_open && m_display) {
         const ui::Rect r = display_rect();

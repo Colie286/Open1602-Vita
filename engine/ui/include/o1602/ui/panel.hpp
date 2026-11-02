@@ -99,6 +99,9 @@ struct DrawItem {
     /// where it would be; rows 0: all of it.
     std::int32_t first_row = 0;
     std::int32_t rows = 0;
+    /// Sprite: the same for the art's columns; cols 0: all of them.
+    std::int32_t first_col = 0;
+    std::int32_t cols = 0;
 };
 
 /// What the mouse did to a panel.
@@ -157,6 +160,8 @@ public:
     /// Only a band of a graphic's rows (in the layout's pixels), each drawn where it would be; a
     /// picture is cut so into pieces placed apart (the settings' voice page). `count` 0: all rows.
     void set_rows(std::int32_t id, std::int32_t first, std::int32_t count);
+    /// The same for a band of a graphic's columns. `count` 0: all columns.
+    void set_columns(std::int32_t id, std::int32_t first, std::int32_t count);
     /// Another draw offset (Posoffs) for a gadget: art centred in its box, groups moved together.
     void set_offset(std::int32_t id, std::int32_t x, std::int32_t y);
     /// Moves a gadget, click area and picture (Open1602 rearranges a few windows, e.g. U-013).
@@ -192,6 +197,8 @@ private:
         std::optional<ColourTint> tint;
         std::int32_t first_row = 0;
         std::int32_t rows = 0;
+        std::int32_t first_col = 0;
+        std::int32_t cols = 0;
     };
     /// A flowing text's wrapped lines and how many fit its box; nothing if it draws no text.
     [[nodiscard]] std::optional<std::pair<std::vector<std::string>, std::int32_t>> flow_lines(

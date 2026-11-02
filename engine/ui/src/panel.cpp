@@ -81,6 +81,13 @@ void Panel::set_rows(std::int32_t id, std::int32_t first, std::int32_t count) {
     }
 }
 
+void Panel::set_columns(std::int32_t id, std::int32_t first, std::int32_t count) {
+    if (const auto i = m_layout.index_of(id)) {
+        m_state[*i].first_col = std::max(first, 0);
+        m_state[*i].cols = std::max(count, 0);
+    }
+}
+
 void Panel::set_no_select(std::int32_t id, bool on) {
     if (const auto i = m_layout.index_of(id)) {
         m_state[*i].no_select = on;
@@ -334,6 +341,8 @@ void Panel::draw_gadget(std::vector<DrawItem>& out, std::size_t index, std::uint
             item.tint = s.graphic ? s.tint : std::nullopt;
             item.first_row = s.first_row;
             item.rows = s.rows;
+            item.first_col = s.first_col;
+            item.cols = s.cols;
             if (const assets::PackageIcon* icon = assets::package_icon_at(package_icons(), gfx);
                 icon != nullptr && (icon->width > static_cast<std::uint32_t>(std::max(g.size[0], 1)) ||
                                     icon->height > static_cast<std::uint32_t>(std::max(g.size[1], 1)))) {
