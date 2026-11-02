@@ -1633,10 +1633,18 @@ void MapInput::editor_pick_at_mouse() {
         pick.id = unit->id;
     } else if (const auto hit =
                    building_tile_at(m_mouse_x, m_mouse_y, [&](std::uint16_t island, const sim::SubTile& t) {
-                       // What was built, not the ground, a tree or a rock: a click there picks the island.
-                       return t.building != nullptr && t.building->kind != sim::building_kind::kForest &&
-                              sim::destroyable(*t.building, true) &&
-                              w.islands()[island].map.contains(t.origin_x, t.origin_y);
+                       // What was built, not the ground, a wild tree or a rock: a click there picks
+                       // the island. Fields and planted trees are a city's.
+                       if (t.building == nullptr || !sim::destroyable(*t.building, true) ||
+                           !w.islands()[island].map.contains(t.origin_x, t.origin_y)) {
+                           return false;
+                       }
+                       return t.building->kind != sim::building_kind::kForest ||
+                              w.islands()[island]
+                                      .map
+                                      .top(static_cast<std::uint32_t>(t.origin_x),
+                                           static_cast<std::uint32_t>(t.origin_y))
+                                      .city != sim::MapCell::kNoCity;
                    })) {
         const sim::SubTile t = w.islands()[hit->island].map.sub_tile(m_buildings, hit->local_x, hit->local_y);
         pick.kind = EditorPick::Kind::Building;

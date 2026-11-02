@@ -47,7 +47,7 @@ constexpr std::int32_t kButtonH = 30;
 constexpr std::int32_t kGap = 6;
 constexpr std::int32_t kLine = 24;
 constexpr std::int32_t kRowH = 24;
-constexpr std::int32_t kNote = 100;  ///< a note of up to five lines
+constexpr std::int32_t kNote = 80;  ///< a note of up to four lines
 
 constexpr std::array<const char*, kEditorOverlays> kOverlayTexts = {"editor.view.owners", "editor.view.island_numbers",
                                                                     "editor.view.coordinates"};
@@ -217,12 +217,12 @@ void EditorPanel::layout_new() {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
     f.label(Rect{kX, y, kW, 28}, ui::tr("editor.new.title"), Align::Left, Tone::Heading);
-    y += 34;
+    y += 28;
     const auto value = [&](Id id, const char* label, std::string text, bool enabled = true) {
         f.label(Rect{kX, y, kW, kLine}, ui::tr(label), Align::Left, enabled ? Tone::Normal : Tone::Dim);
         y += kLine;
         f.cycle_button(id, Rect{kX, y, kW, kButtonH}, std::move(text), enabled);
-        y += kButtonH + kGap + 2;
+        y += kButtonH + kGap;
     };
     std::string size = ui::tr("editor.size", {count(m_new.width()), count(m_new.height())});
     if (m_new.size == 0) {
