@@ -348,6 +348,60 @@ core::Result<std::optional<ScenarioPlan>> load_scenario_plan(const ChunkFile& fi
     return std::optional<ScenarioPlan>{std::move(plan)};
 }
 
+std::vector<std::uint8_t> write_scenario_plan(std::span<const std::uint8_t> base, const ScenarioPlan& plan) {
+    constexpr std::size_t kIslands = 0x174;
+    constexpr std::size_t kIslandSize = 16;
+    constexpr std::size_t kMaxIslands = 50;
+    std::vector<std::uint8_t> d(base.begin(), base.end());
+    d.resize(std::max(d.size(), kIslands + kMaxIslands * kIslandSize), 0);
+    const auto u16 = [&](std::size_t o, std::uint32_t v) {
+        d[o] = static_cast<std::uint8_t>(v);
+        d[o + 1] = static_cast<std::uint8_t>(v >> 8U);
+    };
+    const auto u32 = [&](std::size_t o, std::uint32_t v) {
+        u16(o, v & 0xFFFFU);
+        u16(o + 2, v >> 16U);
+    };
+    u32(0x40, plan.natives[0]);
+    u32(0x44, plan.natives[1]);
+    u32(0x60, plan.max_crops);
+    u32(0x68, plan.gold_min_size);
+    u32(0x6C, plan.gold_max_size);
+    const auto resource = [&](std::size_t o, const ScenarioPlan::Resource& r, bool typed) {
+        // No building is written as 0, as the loader reads it.
+        u16(o, r.building >= 20000U && r.building < 20000U + 0x10000U ? r.building - 20000U : 0U);
+        u16(o + 2, r.count);
+        if (typed) {
+            u32(o + 4, r.type);
+        }
+    };
+    for (std::size_t k = 0; k < plan.ores.size(); ++k) {
+        resource(0x94 + 8 * k, plan.ores[k], true);
+    }
+    for (std::size_t k = 0; k < plan.crops.size(); ++k) {
+        resource(0xB4 + 8 * k, plan.crops[k], false);
+    }
+    for (std::size_t k = 0; k < plan.treasures.size(); ++k) {
+        resource(0x114 + 8 * k, plan.treasures[k], false);
+    }
+    const std::size_t count = std::min(plan.islands.size(), kMaxIslands);
+    u32(0x64, static_cast<std::uint32_t>(count));
+    std::fill(d.begin() + static_cast<std::ptrdiff_t>(kIslands),
+              d.begin() + static_cast<std::ptrdiff_t>(kIslands + kMaxIslands * kIslandSize), std::uint8_t{0});
+    for (std::size_t i = 0; i < count; ++i) {
+        const ScenarioPlan::Island& island = plan.islands[i];
+        const std::size_t o = kIslands + i * kIslandSize;
+        d[o] = island.climate;
+        d[o + 1] = island.size;
+        d[o + 2] = island.flags;
+        d[o + 3] = island.number;
+        u16(o + 4, island.template_number);
+        u32(o + 8, island.x);
+        u32(o + 12, island.y);
+    }
+    return d;
+}
+
 std::optional<std::array<std::uint16_t, 512>> load_random_table(const ChunkFile& file) {
     const Chunk* chunk = file.find("RANDTAB");
     if (chunk == nullptr || chunk->size < 2) {

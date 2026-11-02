@@ -46,6 +46,7 @@
 #include "o1602/sim/construction.hpp"
 #include "o1602/sim/game_data.hpp"
 #include "o1602/sim/growth.hpp"
+#include "o1602/sim/new_game.hpp"
 #include "o1602/sim/package_landscapes.hpp"
 #include "o1602/ui/build_menu.hpp"
 #include "o1602/ui/localization.hpp"
@@ -432,6 +433,10 @@ core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDir
         }
         if (sim::is_open1602_save(*bytes)) {
             world = sim::read_game(*bytes, *buildings, &warnings, &*figures);
+            if (world && world->planned_islands()) {
+                // A scenario that makes its islands when the game starts (ADR 0013).
+                world = sim::roll_planned_islands(*world, game, *buildings, options.world, &warnings);
+            }
         } else {
             auto file = assets::ChunkFile::from_bytes(std::move(bytes).value());
             if (!file) {
@@ -3665,6 +3670,10 @@ core::Result<sim::World> MapViewer::read_world(const std::filesystem::path& path
     core::Result<sim::World> world = core::make_error(core::ErrorCode::NotFound, "no game");
     if (sim::is_open1602_save(*bytes)) {
         world = sim::read_game(*bytes, m_buildings, &warnings, &m_figures);
+        if (world && world->planned_islands()) {
+            // A scenario that makes its islands when the game starts (ADR 0013).
+            world = sim::roll_planned_islands(*world, m_game, m_buildings, m_options.world, &warnings);
+        }
     } else {
         auto file = assets::ChunkFile::from_bytes(std::move(bytes).value());
         if (!file) {

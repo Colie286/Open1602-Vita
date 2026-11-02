@@ -23,6 +23,7 @@
 #include "o1602/assets/scenario.hpp"
 #include "o1602/sim/island_shapes.hpp"
 #include "o1602/sim/new_game.hpp"
+#include "o1602/sim/save_game.hpp"
 #include "o1602/sim/validate.hpp"
 #include "o1602/sim/world.hpp"
 #include "o1602/sim/world_generator.hpp"
@@ -958,6 +959,114 @@ TEST_CASE("world generator: the islands load with load_world and pass validate")
             CHECK(direct->islands()[i].y == world->islands()[i].y);
         }
     }
+}
+
+TEST_CASE("world generator: a plan written into a SZENE chunk reads back, its other bytes stay") {
+    assets::ScenarioPlan plan = standard_plan();
+    std::vector<std::uint8_t> base = encode_plan(plan);
+    base[0x10] = 0xAB;  // a byte the plan does not hold
+    plan.islands[3].x = 333;
+    plan.islands.pop_back();
+    plan.treasures[1] = {kGoldsmith, 4, 0};
+    const std::vector<std::uint8_t> chunk = assets::write_scenario_plan(base, plan);
+    CHECK(chunk.size() == 0x494);
+    CHECK(chunk[0x10] == 0xAB);
+    CHECK(chunk[0x174 + 16 * 15] == 0);  // the island dropped from the list is gone
+    std::vector<std::uint8_t> bytes;
+    o1602::test::put_chunk(bytes, "SZENE", chunk);
+    auto file = assets::ChunkFile::from_bytes(bytes);
+    REQUIRE(file.ok());
+    auto read = assets::load_scenario_plan(*file);
+    REQUIRE(read.ok());
+    REQUIRE(read->has_value());
+    CHECK(**read == plan);
+    CHECK(assets::write_scenario_plan({}, plan).size() == 0x494);
+}
+
+TEST_CASE("world generator: a plan kept for the editor is saved and its islands are made at the start") {
+    const auto& fake = full_game();
+    const auto file = scenario(standard_plan());
+    auto planned_plan = assets::load_scenario_plan(file);
+    REQUIRE(planned_plan.ok());
+    sim::WorldStart start;
+    start.seed = 77;
+    start.keep_plan = true;
+    std::vector<std::string> warnings;
+    auto kept = sim::load_world(file, buildings(), fake.game, &warnings, start);
+    REQUIRE(kept.ok());
+    CHECK(kept->islands().empty());
+    REQUIRE(kept->planned_islands().has_value());
+    CHECK(kept->planned_islands()->plan == **planned_plan);
+    CHECK(kept->planned_islands()->table == assets::load_random_table(file));
+    CHECK(sim::check_planned_islands(*kept->planned_islands(), kept->width(), kept->height()).empty());
+
+    // PLAN keeps it in the own savegame, the same bytes again after reading.
+    sim::ScenarioInfo info;
+    info.names = {{"en", "Atoll"}};
+    kept->set_scenario_info(info);
+    kept->set_markers({{"south", sim::ScenarioMarker::Shape::Area, 0, 300, 500, 50}});
+    auto bytes = sim::write_game(*kept, buildings());
+    REQUIRE(bytes.ok());
+    auto loaded = sim::read_game(*bytes, buildings());
+    REQUIRE(loaded.ok());
+    CHECK(loaded->planned_islands() == kept->planned_islands());
+    auto again = sim::write_game(*loaded, buildings());
+    REQUIRE(again.ok());
+    CHECK(*again == *bytes);
+
+    // The start makes the islands as the original's file would have them, and keeps the scenario's parts.
+    start.keep_plan = false;
+    auto direct = sim::load_world(file, buildings(), fake.game, nullptr, start);
+    REQUIRE(direct.ok());
+    auto rolled = sim::roll_planned_islands(*loaded, fake.game, buildings(), start);
+    REQUIRE(rolled.ok());
+    CHECK(!rolled->planned_islands().has_value());
+    REQUIRE(rolled->islands().size() == direct->islands().size());
+    for (std::size_t i = 0; i < direct->islands().size(); ++i) {
+        CHECK(rolled->islands()[i].header.raw == direct->islands()[i].header.raw);
+        CHECK(rolled->islands()[i].x == direct->islands()[i].x);
+    }
+    CHECK(rolled->scenario_info() == info);
+    CHECK(rolled->markers() == kept->markers());
+    CHECK(sim::validate(*rolled).ok());
+
+    // A plan changed in the editor: the island lies where the plan now says (open sea there).
+    sim::PlannedIslands moved = *loaded->planned_islands();
+    moved.plan.islands[0].x = 450;
+    moved.plan.islands[0].y = 230;
+    loaded->set_planned_islands(moved);
+    auto changed = sim::roll_planned_islands(*loaded, fake.game, buildings(), start);
+    REQUIRE(changed.ok());
+    const auto at = std::find_if(changed->islands().begin(), changed->islands().end(), [&](const sim::WorldIsland& w) {
+        return w.header.number == moved.plan.islands[0].number;
+    });
+    REQUIRE(at != changed->islands().end());
+    CHECK(at->x == 450);
+    CHECK(at->y == 230);
+
+    // Without a plan, or with an island outside the world, nothing is made.
+    sim::World plain(500, 350);
+    CHECK(!sim::roll_planned_islands(plain, fake.game, buildings(), start).ok());
+    moved.plan.islands[0].x = 500;
+    loaded->set_planned_islands(moved);
+    CHECK(!sim::roll_planned_islands(*loaded, fake.game, buildings(), start).ok());
+}
+
+TEST_CASE("world generator: a world plan names what is wrong with it") {
+    sim::PlannedIslands planned;
+    planned.plan.islands = {island(1, 0, 0, 10, 10), island(1, 3, 5, 600, 10)};
+    const auto problems = sim::check_planned_islands(planned, 500, 350);
+    REQUIRE(problems.size() == 4);
+    CHECK(problems[0] == "island 1 twice");
+    CHECK(problems[1] == "island 1: no climate 3");
+    CHECK(problems[2] == "island 1: no size class 5");
+    CHECK(problems[3] == "island 1: outside the world");
+    planned.plan.islands.assign(51, island(0, 0, 0, 0, 0));
+    for (std::size_t i = 0; i < planned.plan.islands.size(); ++i) {
+        planned.plan.islands[i].number = static_cast<std::uint8_t>(i);
+    }
+    REQUIRE(sim::check_planned_islands(planned, 500, 350).size() == 1);
+    CHECK(sim::check_planned_islands(planned, 500, 350)[0] == "more than 50 islands");
 }
 
 TEST_CASE("world generator: an own world without middle islands puts treasures on big islands, no home") {

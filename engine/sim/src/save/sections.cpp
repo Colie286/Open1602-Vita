@@ -153,6 +153,9 @@ constexpr std::uint32_t kScenarioScript = tag("SLUA");
 /// The editor's own state (World::editor_state()), only written when there is any. Optional: the
 /// game ignores it.
 constexpr std::uint32_t kEditorState = tag("EDIT");
+/// The plan of islands still to be made when the game starts (World::planned_islands()), only
+/// written for such a world. Required: without it the game would have no islands.
+constexpr std::uint32_t kPlannedIslands = tag("PLAN");
 /// SCRP version 2: each script's table `campaign` after its table `state`.
 constexpr std::uint16_t kScriptsWithCampaign = 2;
 
@@ -170,7 +173,8 @@ constexpr std::array kKnownSections = {
     kLedgers,       kBalance,        kBuildingValues,  kPackages,   kFigureValues,   kOwnBuildings,
     kGoods,         kClasses,        kLevels,          kUnlocked,   kGoodPictures,   kScripts,
     kClassPublic,   kUnitGroups,     kScenario,        kCampaign,   kComputerOrders, kOwnFigures,
-    kLevelMessages, kBlueprints,     kScenarioInfo,    kMarkers,    kScenarioScript, kEditorState};
+    kLevelMessages, kBlueprints,     kScenarioInfo,    kMarkers,    kScenarioScript, kEditorState,
+    kPlannedIslands};
 
 /// Section flag (the u16 after the version): the section holds state the game cannot do without, so
 /// a reader that cannot read it (unknown identifier or later version) must not load the file. Other
@@ -350,6 +354,95 @@ void read_markers(Reader& in, std::vector<ScenarioMarker>& markers) {
         in.u32(m.height);
     });
     if (markers.empty() || !check_markers(markers, kMaxWorldSide, kMaxWorldSide).empty()) {
+        in.fail();
+    }
+}
+
+/// PLAN: u8 flags (bit 0: a table follows), the plan's values, its islands, the table.
+void write_planned_islands(Writer& o, const PlannedIslands& planned) {
+    const assets::ScenarioPlan& plan = planned.plan;
+    o.u8(planned.table ? std::uint8_t{1} : std::uint8_t{0});
+    o.u32(plan.natives[0]);
+    o.u32(plan.natives[1]);
+    o.u32(plan.max_crops);
+    o.u32(plan.gold_min_size);
+    o.u32(plan.gold_max_size);
+    for (const auto& r : plan.ores) {
+        o.u32(r.building);
+        o.u16(r.count);
+        o.u32(r.type);
+    }
+    for (const auto& r : plan.crops) {
+        o.u32(r.building);
+        o.u16(r.count);
+        o.u32(r.type);
+    }
+    for (const auto& r : plan.treasures) {
+        o.u32(r.building);
+        o.u16(r.count);
+        o.u32(r.type);
+    }
+    o.list(plan.islands, 14, [&](const assets::ScenarioPlan::Island& e) {
+        o.u8(e.climate);
+        o.u8(e.size);
+        o.u8(e.flags);
+        o.u8(e.number);
+        o.u16(e.template_number);
+        o.u32(e.x);
+        o.u32(e.y);
+    });
+    if (planned.table) {
+        for (const std::uint16_t v : *planned.table) {
+            o.u16(v);
+        }
+    }
+}
+
+/// The islands' places are checked against the world in apply_decoded().
+void read_planned_islands(Reader& in, PlannedIslands& planned) {
+    assets::ScenarioPlan& plan = planned.plan;
+    std::uint8_t flags = 0;
+    in.u8(flags);
+    if ((flags & ~1U) != 0) {
+        in.fail();
+    }
+    in.u32(plan.natives[0]);
+    in.u32(plan.natives[1]);
+    in.u32(plan.max_crops);
+    in.u32(plan.gold_min_size);
+    in.u32(plan.gold_max_size);
+    for (auto& r : plan.ores) {
+        in.u32(r.building);
+        in.u16(r.count);
+        in.u32(r.type);
+    }
+    for (auto& r : plan.crops) {
+        in.u32(r.building);
+        in.u16(r.count);
+        in.u32(r.type);
+    }
+    for (auto& r : plan.treasures) {
+        in.u32(r.building);
+        in.u16(r.count);
+        in.u32(r.type);
+    }
+    in.list(plan.islands, 14, [&](assets::ScenarioPlan::Island& e) {
+        in.u8(e.climate);
+        in.u8(e.size);
+        in.u8(e.flags);
+        in.u8(e.number);
+        in.u16(e.template_number);
+        in.u32(e.x);
+        in.u32(e.y);
+    });
+    if ((flags & 1U) != 0) {
+        std::array<std::uint16_t, 512> table{};
+        for (std::uint16_t& v : table) {
+            in.u16(v);
+        }
+        planned.table = table;
+    }
+    if (!check_planned_islands(planned, kMaxWorldSide, kMaxWorldSide).empty()) {
         in.fail();
     }
 }
@@ -708,6 +801,9 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
     }
     if (!world.editor_state().empty() && tiles == TileMode::Full) {
         section(out, kEditorState, [&](Writer& o) { o.u8s(world.editor_state()); }, Need::Optional);
+    }
+    if (const auto& planned = world.planned_islands()) {
+        section(out, kPlannedIslands, [&](Writer& o) { write_planned_islands(o, *planned); });
     }
     const auto has_groups = [](const UnitGroups& g) {
         return std::any_of(g.begin(), g.end(), [](const auto& members) { return !members.empty(); });
@@ -1192,6 +1288,12 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                     in.fail();
                 }
                 d.editor_state = std::move(editor);
+                break;
+            }
+            case kPlannedIslands: {
+                PlannedIslands planned;
+                read_planned_islands(in, planned);
+                d.planned_islands = std::move(planned);
                 break;
             }
             case kUnitGroups: {

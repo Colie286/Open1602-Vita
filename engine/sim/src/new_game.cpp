@@ -488,4 +488,67 @@ core::Result<assets::ChunkFile> own_world_scenario(const assets::ChunkFile& scen
     return assets::ChunkFile::from_bytes(out.take());
 }
 
+core::Result<World> roll_planned_islands(const World& world, const assets::GameDirectory& game,
+                                         const assets::BuildingTable& buildings, const WorldStart& start,
+                                         std::vector<std::string>* warnings) {
+    const auto& planned = world.planned_islands();
+    if (!planned) {
+        return core::make_error(core::ErrorCode::InvalidFormat, "the world plans no islands");
+    }
+    if (world.source() == nullptr) {
+        return core::make_error(core::ErrorCode::NotFound,
+                                "the islands of the plan need the scenario of the original it came from");
+    }
+    if (const auto problems = check_planned_islands(*planned, world.width(), world.height()); !problems.empty()) {
+        return core::make_error(core::ErrorCode::InvalidFormat, "world plan: " + problems.front());
+    }
+    // The scenario of the original with the plan as it is now: the generator and the loader then
+    // make the world as for the original's file.
+    std::vector<std::uint8_t> table;
+    if (planned->table) {
+        for (const std::uint16_t v : *planned->table) {
+            table.push_back(static_cast<std::uint8_t>(v));
+            table.push_back(static_cast<std::uint8_t>(v >> 8U));
+        }
+    }
+    const assets::ChunkFile& source = *world.source();
+    assets::ChunkWriter out;
+    bool has_plan = false;
+    for (const assets::Chunk& c : source.chunks()) {
+        if (c.name == "SZENE") {
+            out.add(c.name, assets::write_scenario_plan(source.payload(c), planned->plan));
+            has_plan = true;
+        } else if (c.name != "RANDTAB") {
+            out.add(c.name, source.payload(c));
+        }
+    }
+    if (!has_plan) {
+        out.add("SZENE", assets::write_scenario_plan({}, planned->plan));
+    }
+    if (!table.empty()) {
+        out.add("RANDTAB", table);
+    }
+    auto file = assets::ChunkFile::from_bytes(out.take());
+    if (!file) {
+        return file.error();
+    }
+    WorldStart roll = start;
+    roll.keep_plan = false;
+    if (!planned->table) {
+        roll.draws = WorldStart::Draws::Seeded;
+    }
+    auto rolled = load_world(*file, buildings, game, warnings, roll);
+    if (!rolled) {
+        return rolled.error();
+    }
+    // What the editor added, which the original's chunks do not hold.
+    rolled->set_scenario_info(world.scenario_info());
+    rolled->set_markers(world.markers());
+    rolled->set_scenario_script(world.scenario_script());
+    if (const auto problems = check_markers(rolled->markers(), rolled->width(), rolled->height()); !problems.empty()) {
+        return core::make_error(core::ErrorCode::InvalidFormat, "scenario: " + problems.front());
+    }
+    return rolled;
+}
+
 }  // namespace o1602::sim

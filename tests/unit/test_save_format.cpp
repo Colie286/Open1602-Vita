@@ -728,6 +728,30 @@ sim::World make_world(const assets::BuildingTable& buildings, bool wide) {
             v(b);
         }
         world.set_editor_state(editor);
+        // PLAN came later still.
+        sim::PlannedIslands planned;
+        planned.plan.natives = {v.next<std::uint32_t>(), v.next<std::uint32_t>()};
+        v(planned.plan.max_crops);
+        v(planned.plan.gold_min_size);
+        v(planned.plan.gold_max_size);
+        planned.plan.ores[0] = {20101, v.next<std::uint16_t>(), v.next<std::uint32_t>()};
+        planned.plan.crops[11] = {20401, v.next<std::uint16_t>(), 0};
+        planned.plan.treasures[3] = {20501, v.next<std::uint16_t>(), 0};
+        assets::ScenarioPlan::Island planned_island;
+        planned_island.climate = 2;
+        planned_island.size = 4;
+        planned_island.flags = v.next<std::uint8_t>();
+        planned_island.number = 40;
+        planned_island.template_number = v.next<std::uint16_t>();
+        planned_island.x = v.next<std::uint32_t>() % 400;
+        planned_island.y = v.next<std::uint32_t>() % 300;
+        planned.plan.islands.push_back(planned_island);
+        std::array<std::uint16_t, 512> table{};
+        for (std::uint16_t& t : table) {
+            v(t);
+        }
+        planned.table = table;
+        world.set_planned_islands(planned);
     }
     return world;
 }
@@ -863,6 +887,7 @@ constexpr Golden kSaveWide[] = {
     {"MARK", 1, 0, 64, 0xB6F559EA},
     {"SLUA", 1, 1, 45, 0x668C6608},
     {"EDIT", 1, 0, 28, 0xA5E4FCD5},
+    {"PLAN", 1, 1, 1263, 0x36403ECF},
     {"SIMU", 1, 1, 40, 0xFA8DCE43},
 };
 
@@ -929,6 +954,7 @@ constexpr Golden kChunkWide[] = {
     {"STNC", 1, 1, 28, 0x6CE6EFC4},
     {"MARK", 1, 0, 64, 0xB6F559EA},
     {"SLUA", 1, 1, 45, 0x668C6608},
+    {"PLAN", 1, 1, 1263, 0x36403ECF},
     {"SIMU", 1, 1, 40, 0xFA8DCE43},
 };
 // clang-format on

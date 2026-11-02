@@ -731,6 +731,10 @@ public:
     /// starting a game drops it.
     [[nodiscard]] const std::vector<std::uint8_t>& editor_state() const noexcept { return m_editor_state; }
     void set_editor_state(std::vector<std::uint8_t> state) noexcept { m_editor_state = std::move(state); }
+    /// The plan of islands still to be made when the game starts (section PLAN, ADR 0013): a
+    /// scenario of the original that makes its islands at the start, opened in the editor.
+    [[nodiscard]] const std::optional<PlannedIslands>& planned_islands() const noexcept { return m_planned_islands; }
+    void set_planned_islands(std::optional<PlannedIslands> planned) noexcept { m_planned_islands = std::move(planned); }
     /// Game settings saved with the game, which a Simulation of it uses (ADR 0008).
     [[nodiscard]] const std::optional<Rules>& saved_rules() const noexcept { return m_saved_rules; }
     void set_saved_rules(std::optional<Rules> rules) noexcept { m_saved_rules = rules; }
@@ -863,6 +867,7 @@ private:
     std::vector<ScenarioMarker> m_markers;
     std::string m_scenario_script;
     std::vector<std::uint8_t> m_editor_state;
+    std::optional<PlannedIslands> m_planned_islands;
     OriginalBugs m_original_bugs;
     bool m_fertile_fields = false;
     std::vector<CostBuilding> m_cost_buildings;
@@ -908,7 +913,7 @@ void take_player(World& world, PlayerId own, std::uint64_t owner);
 /// placed on the world map, the players and the ships. Problems are collected in `warnings`; islands that cannot be
 /// placed are skipped. A scenario that makes its islands at the start (the endless games) gets
 /// them as `start` says (world_generator.hpp); the world's source is then that scenario with
-/// the islands made.
+/// the islands made. With WorldStart::keep_plan it keeps the plan instead and has no islands.
 core::Result<World> load_world(const assets::ChunkFile& file, const assets::BuildingTable& buildings,
                                const assets::GameDirectory& game, std::vector<std::string>* warnings = nullptr,
                                const WorldStart& start = {});

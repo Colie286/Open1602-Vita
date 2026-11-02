@@ -14,7 +14,9 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -45,7 +47,28 @@ struct WorldStart {
     bool climate_crops = false;
     /// Rules::big_ore_veins: every iron vein of a new endless game is a big one.
     bool big_ore_veins = false;
+    /// load_world keeps a world plan instead of making its islands (the editor, ADR 0013): the
+    /// world has no islands yet and holds the plan (World::planned_islands); roll_planned_islands()
+    /// makes them when a game of it starts.
+    bool keep_plan = false;
 };
+
+/// The plan of a world whose islands are made when its game starts (section PLAN, ADR 0013).
+struct PlannedIslands {
+    static constexpr std::size_t kMaxIslands = 50;  ///< as many as the original's plan holds
+    assets::ScenarioPlan plan;
+    /// The scenario's RANDTAB the islands are drawn from (WorldStart::Draws::Table); none: Open1602's
+    /// generator draws them from the game's seed.
+    std::optional<std::array<std::uint16_t, 512>> table;
+
+    friend bool operator==(const PlannedIslands&, const PlannedIslands&) = default;
+};
+
+/// What is wrong with `planned` in a world of `width` x `height` tiles, one line each: too many
+/// islands, an island number twice, a climate or size class the generator does not know, an island
+/// outside the world.
+[[nodiscard]] std::vector<std::string> check_planned_islands(const PlannedIslands& planned, std::uint32_t width,
+                                                             std::uint32_t height);
 
 /// The draws of the generator: `below(n)` is a number in 0..n-1.
 class PlanRandom {

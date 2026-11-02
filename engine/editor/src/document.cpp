@@ -12,6 +12,17 @@ namespace o1602::editor {
 using core::ErrorCode;
 using core::make_error;
 
+namespace {
+
+/// A scenario that makes its islands at the start keeps its plan in the editor (ADR 0013).
+sim::WorldStart keep_plan() {
+    sim::WorldStart start;
+    start.keep_plan = true;
+    return start;
+}
+
+}  // namespace
+
 Document::Document(sim::World world, std::size_t history_limit) : m_world(std::move(world)), m_history(history_limit) {}
 
 core::Result<Document> Document::open(std::span<const std::uint8_t> bytes, const assets::BuildingTable& buildings,
@@ -31,7 +42,7 @@ core::Result<Document> Document::open(std::span<const std::uint8_t> bytes, const
     if (!file) {
         return file.error();
     }
-    auto world = sim::load_world(*file, buildings, *game, warnings);
+    auto world = sim::load_world(*file, buildings, *game, warnings, keep_plan());
     if (!world) {
         return world.error();
     }

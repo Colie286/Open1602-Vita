@@ -34,8 +34,13 @@ with, and those made for it, must open in the editor too.
      that cannot run it would play another game.
    - `EDIT`, what the editor keeps of its own work (layers shown, tools, views). The game does not
      read it, and the chunk of an exported `.GAM` leaves it out.
-   - `PLAN`, the plan a scenario gives for its world, which is rolled only when a game starts (a
-     later step, see 7).
+   - `PLAN`, the plan of a scenario of the original that makes its islands at the start (the
+     endless games): each island's number, place, size class and climate, the crops, ores and
+     treasures to hand out, and the table the original draws from. The editor opens such a file
+     without making the islands (`WorldStart::keep_plan`), so the plan stays what the scenario is
+     and can be changed. When a game of it starts, `roll_planned_islands` makes the islands from
+     the scenario the world came from (`ORIG`) with the plan as it is now, as the original makes
+     them, and keeps the scenario's description, markers and script.
 5. **Editing steps with undo (`o1602::editor`).** A `Document` holds a `sim::World` and the history
    of the steps done to it. Each step is an `Operation` that applies itself to the world and can take
    itself back. It keeps what it changed, not a copy of the world, so a step on a map of 4000 x 4000
