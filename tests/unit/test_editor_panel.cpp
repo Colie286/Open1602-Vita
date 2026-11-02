@@ -58,6 +58,20 @@ std::optional<EditorRequest> click(EditorPanel& panel, const EditorModel& model,
     return panel.mouse((*at)[0], (*at)[1], false, model, button);
 }
 
+std::optional<EditorRequest> click_id(EditorPanel& panel, const EditorModel& model, ui::Form::Id id) {
+    panel.layout(model);
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        if (w.id == id) {
+            const std::int32_t x = w.rect.x + w.rect.w / 2;
+            const std::int32_t y = w.rect.y + w.rect.h / 2;
+            (void)panel.mouse(x, y, true, model, ui::MouseButton::Left);
+            return panel.mouse(x, y, false, model, ui::MouseButton::Left);
+        }
+    }
+    REQUIRE(false);
+    return std::nullopt;
+}
+
 EditorModel document() {
     EditorModel m;
     m.width = 500;
@@ -348,4 +362,104 @@ TEST_CASE("editor panel: new islands are set up and placed, a selected island mo
     for (const ui::Form::Widget& w : panel.form().widgets()) {
         CHECK(w.rect.y + w.rect.h <= 760);
     }
+}
+
+TEST_CASE("editor panel: the map size page grows and cuts the map, not below what it holds") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(200, 560);
+    EditorModel m = document();
+    m.width = 500;
+    m.height = 350;
+    m.used_width = 112;
+    m.used_height = 330;
+    CHECK(!click(panel, m, "Change map size").has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::WorldSize);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "500 \xD7 350"));
+    CHECK(!click(panel, m, "Apply").has_value());  // nothing changed yet
+    // Width and height have a pair of buttons each: the first pair is the width's.
+    std::vector<ui::Form::Id> more;
+    std::vector<ui::Form::Id> less;
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        if (w.text == "+ 50") {
+            more.push_back(w.id);
+        } else if (w.text == "- 50") {
+            less.push_back(w.id);
+        }
+    }
+    REQUIRE(more.size() == 2);
+    REQUIRE(less.size() == 2);
+    CHECK(!click_id(panel, m, more[0]).has_value());
+    CHECK(!click_id(panel, m, less[1]).has_value());
+    CHECK(!click_id(panel, m, less[1]).has_value());  // not below 330
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "550 \xD7 330"));
+    auto r = click(panel, m, "Apply");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::ResizeWorld);
+    CHECK(r->width == 550);
+    CHECK(r->height == 330);
+    CHECK(!click(panel, m, "Fit to content").has_value());
+    r = click(panel, m, "Apply");
+    REQUIRE(r.has_value());
+    CHECK(r->width == 120);
+    CHECK(r->height == 340);
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        CHECK(w.rect.y + w.rect.h <= 760);
+    }
+    CHECK(!click(panel, m, "Cancel").has_value());
+    CHECK(panel.page() == EditorPanel::Page::Document);
+}
+
+TEST_CASE("editor panel: an island's crops are ticked, it is saved, and saved islands are loaded") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(200, 560);
+    EditorModel m = document();
+    m.selection = "Island 2";
+    m.island = 1;
+    m.island_free = true;
+    m.island_climate = 0;
+    m.island_fertility = 1U << 2U;  // spices
+    CHECK(panel.show_selection());
+    auto r = click(panel, m, "Save");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::SaveIsland);
+    CHECK(r->index == 1);
+    CHECK(!click(panel, m, "Crops").has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::Fertility);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Tobacco (half)"));  // a crop of the north
+    CHECK(says(panel, "Cotton"));
+    CHECK(!says(panel, "Cotton (half)"));
+    r = click(panel, m, "Spices");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::SetFertility);
+    CHECK(r->fertility == 0);
+    r = click(panel, m, "Wine (half)");
+    REQUIRE(r.has_value());
+    CHECK(r->fertility == (1U << 2U | 1U << 5U));
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        CHECK(w.rect.y + w.rect.h <= 760);
+    }
+    CHECK(!click(panel, m, "Back to the selection").has_value());
+    CHECK(panel.page() == EditorPanel::Page::Selection);
+
+    m.selection.clear();
+    m.island.reset();
+    panel.show_document();
+    CHECK(!click(panel, m, "Edit islands").has_value());
+    r = click(panel, m, "Load island");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::ListIslandFiles);
+    REQUIRE(panel.page() == EditorPanel::Page::IslandFiles);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "No islands saved yet"));
+    m.files = {app::EditorFile{"Island 1", "Own islands"}, app::EditorFile{"Reef", "Own islands"}};
+    r = click(panel, m, "Reef");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::LoadIsland);
+    CHECK(r->index == 1);
+    CHECK(panel.page() == EditorPanel::Page::Islands);
 }

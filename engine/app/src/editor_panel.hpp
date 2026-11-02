@@ -119,8 +119,15 @@ struct EditorModel {
     /// copied and taken out: no city, buildings or units of a game on it.
     std::optional<std::size_t> island;
     bool island_free = false;
+    /// The selected island's fertility (assets::IslandHeader::fertility) and climate.
+    std::uint32_t island_fertility = 0;
+    std::uint8_t island_climate = 0;
     /// An island is being placed (a new one, one moved or copied): the map's next click puts it down.
     bool placing = false;
+    /// The smallest map that holds the islands, ships, land units and markers (the page "Map
+    /// size"): the map cannot be cut below.
+    std::uint32_t used_width = 1;
+    std::uint32_t used_height = 1;
 };
 
 /// What a click or a key asked for.
@@ -143,12 +150,21 @@ struct EditorRequest {
         CopyIsland,    ///< a copy of the island `index` to place
         RemoveIsland,  ///< the island `index` taken out
         StopPlacing,   ///< what is being placed goes back
+        ResizeWorld,   ///< the map made `width` x `height` tiles large
+        SetFertility,  ///< the island `index` fertile for the crops of `fertility`
+        SaveIsland,    ///< the island `index` saved alone, in the folder of own islands
+        /// The page "Load island" opens: the model's list of files is due, the island files.
+        ListIslandFiles,
+        LoadIsland,  ///< the island of file `index` of the model's list to place
     };
     Kind kind = Kind::Close;
     std::size_t index = 0;
     std::string name{};  ///< Windows-1252
     EditorNewMap map{};
     EditorNewIsland island{};
+    std::uint32_t width = 0;      ///< ResizeWorld
+    std::uint32_t height = 0;     ///< ResizeWorld
+    std::uint32_t fertility = 0;  ///< SetFertility
 };
 
 class EditorPanel {
@@ -160,7 +176,19 @@ public:
     /// The longest name a scenario can be saved under.
     static constexpr std::size_t kMaxName = 60;
 
-    enum class Page : std::uint8_t { Document, New, Open, SaveAs, Selection, View, Check, Islands };
+    enum class Page : std::uint8_t {
+        Document,
+        New,
+        Open,
+        SaveAs,
+        Selection,
+        View,
+        Check,
+        Islands,
+        WorldSize,
+        Fertility,
+        IslandFiles
+    };
 
     explicit EditorPanel(ui::FormStyle style = {}) : m_form(style) {}
 
@@ -223,6 +251,8 @@ private:
     void layout_view(const EditorModel& model);
     void layout_check(const EditorModel& model);
     void layout_islands(const EditorModel& model);
+    void layout_world_size(const EditorModel& model);
+    void layout_fertility(const EditorModel& model);
     /// The buttons of an island selected: move, turn, copy, take out; or a note while placing.
     void layout_island_actions(const EditorModel& model, std::int32_t& y);
     std::optional<EditorRequest> commit_name();
@@ -234,6 +264,9 @@ private:
     std::string m_text;  ///< the name being typed
     EditorNewMap m_new;
     EditorNewIsland m_island;
+    /// The size the page "Map size" offers.
+    std::uint32_t m_size_width = 0;
+    std::uint32_t m_size_height = 0;
     std::size_t m_first = 0;      ///< the first file shown on the page "Open", the first line on "Check"
     std::size_t m_page_rows = 1;  ///< lines of the check list on its page as laid out last
 };

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 
+#include "o1602/assets/game_data.hpp"
 #include "o1602/sim/limits.hpp"
 #include "o1602/ui/localization.hpp"
 
@@ -49,6 +50,18 @@ constexpr Id kRotate = 41;
 constexpr Id kCopy = 42;
 constexpr Id kRemove = 43;
 constexpr Id kStopPlacing = 44;
+constexpr Id kWorldSizePage = 45;
+constexpr Id kWidthLess = 46;
+constexpr Id kWidthMore = 47;
+constexpr Id kHeightLess = 48;
+constexpr Id kHeightMore = 49;
+constexpr Id kFitSize = 50;
+constexpr Id kApplySize = 51;
+constexpr Id kFertilityPage = 52;
+constexpr Id kSelectionPage = 53;
+constexpr Id kSaveIsland = 54;
+constexpr Id kLoadIsland = 55;
+constexpr Id kFirstCrop = 60;     ///< + the index into kCropWares
 constexpr Id kFirstOverlay = 30;  ///< + EditorOverlay
 constexpr Id kFirstRow = 100;     ///< + the row on the page
 
@@ -66,6 +79,18 @@ constexpr std::array<const char*, kEditorOverlays> kOverlayTexts = {"editor.view
 constexpr std::array<const char*, 4> kIslandTexts = {"editor.new.islands.none", "editor.new.islands.few",
                                                      "editor.new.islands.normal", "editor.new.islands.many"};
 
+/// The crops of an island's fertility, as the page "Fertility" offers them (bit ware - 45).
+constexpr std::array<std::uint8_t, 6> kCropWares = {assets::ware::kTobaccoField, assets::ware::kSpiceField,
+                                                    assets::ware::kSugarField,   assets::ware::kCottonField,
+                                                    assets::ware::kWineField,    assets::ware::kCocoaField};
+
+constexpr std::array<const char*, 6> kCropTexts = {"editor.crop.tobacco", "editor.crop.spices", "editor.crop.sugar",
+                                                   "editor.crop.cotton",  "editor.crop.wine",   "editor.crop.cocoa"};
+
+/// The crops of each climate that grow half without the island's fertility for them.
+constexpr std::array<std::array<bool, 6>, 2> kClimateCrops = {
+    {{true, false, true, false, true, false}, {false, true, false, true, false, true}}};
+
 constexpr std::array<const char*, 5> kIslandSizeTexts = {"editor.islands.size.0", "editor.islands.size.1",
                                                          "editor.islands.size.2", "editor.islands.size.3",
                                                          "editor.islands.size.4"};
@@ -73,6 +98,22 @@ constexpr std::array<const char*, 5> kIslandSizeTexts = {"editor.islands.size.0"
 /// The next number of a simple generator (Knuth's MMIX constants): another world, another island.
 std::uint64_t next_seed(std::uint64_t seed) {
     return seed * 6364136223846793005ULL + 1442695040888963407ULL;
+}
+
+/// The steps of the page "Map size", and the sea it leaves around what the map holds when fitted.
+constexpr std::uint32_t kSizeStep = 50;
+constexpr std::uint32_t kFitMargin = 8;
+
+/// `value` a step larger or smaller, between `least` and the largest map.
+std::uint32_t size_step(std::uint32_t value, std::uint32_t least, bool more) {
+    const std::uint32_t v = more ? value + kSizeStep : (value > kSizeStep ? value - kSizeStep : 0);
+    return std::clamp(v, std::max<std::uint32_t>(least, 1), sim::kMaxWorldSide);
+}
+
+/// A side as large as `used` with some sea, at a round number.
+std::uint32_t fitted(std::uint32_t used) {
+    const std::uint32_t v = (used + kFitMargin + 9) / 10 * 10;
+    return std::min(v, sim::kMaxWorldSide);
 }
 
 std::string count(std::size_t n) {
@@ -184,6 +225,15 @@ void EditorPanel::layout(const EditorModel& model) {
         case Page::Islands:
             layout_islands(model);
             break;
+        case Page::WorldSize:
+            layout_world_size(model);
+            break;
+        case Page::Fertility:
+            layout_fertility(model);
+            break;
+        case Page::IslandFiles:
+            layout_open(model);
+            break;
     }
 }
 
@@ -212,7 +262,7 @@ void EditorPanel::layout_document(const EditorModel& model) {
     y += kLine + 4;
     // The buttons share what is left above two lines of the notice: as high as the game's in a
     // large window, lower in a small one, so that the last stays in the panel.
-    constexpr std::int32_t kButtons = 10;
+    constexpr std::int32_t kButtons = 11;
     constexpr std::int32_t kNoticeRoom = 2 * 20 + 6;
     const std::int32_t bottom = m_top + m_height - 4;
     const std::int32_t pitch = std::clamp((bottom - kNoticeRoom - y) / kButtons, 22, kButtonH + kGap);
@@ -228,6 +278,7 @@ void EditorPanel::layout_document(const EditorModel& model) {
     full(kUndo, "editor.undo", model.can_undo);
     full(kRedo, "editor.redo", model.can_redo);
     full(kIslandPage, "editor.islands.edit");
+    full(kWorldSizePage, "editor.world_size.edit");
     full(kView, "editor.view");
     full(kCheck, "editor.check");
     full(kClose, "editor.close");
@@ -272,10 +323,13 @@ void EditorPanel::layout_new() {
 void EditorPanel::layout_open(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.open.title"), Align::Left, Tone::Heading);
+    const bool islands = m_page == Page::IslandFiles;
+    f.label(Rect{kX, y, kW, 28}, ui::tr(islands ? "editor.islands.load_title" : "editor.open.title"), Align::Left,
+            Tone::Heading);
     y += 32;
     if (model.files.empty()) {
-        f.paragraph(Rect{kX, y, kW, 60}, ui::tr("editor.open.empty"), Tone::Dim, 20);
+        f.paragraph(Rect{kX, y, kW, 60}, ui::tr(islands ? "editor.islands.no_files" : "editor.open.empty"), Tone::Dim,
+                    20);
         y += 64;
     } else {
         const std::size_t n = model.files.size();
@@ -301,7 +355,7 @@ void EditorPanel::layout_open(const EditorModel& model) {
         f.button(kNext, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.next"), m_first + kRows < n);
         y += kButtonH + kGap;
     }
-    f.button(kCancel, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
+    f.button(islands ? kIslandPage : kCancel, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
 }
 
 void EditorPanel::layout_save(const EditorModel& model) {
@@ -334,8 +388,8 @@ void EditorPanel::layout_selection(const EditorModel& model) {
     } else {
         f.paragraph(Rect{kX, y, kW, 2 * kLine}, model.selection, Tone::Normal, kLine);
         y += 2 * kLine + 4;
-        // Room for the buttons below: back, and an island's two rows.
-        const std::int32_t rows = model.island ? 3 : 1;
+        // Room for the buttons below: back, and an island's three rows.
+        const std::int32_t rows = model.island ? 4 : 1;
         const std::int32_t bottom = m_top + m_height - rows * (kButtonH + kGap) - kGap;
         for (const EditorProperty& p : model.properties) {
             if (y + kLine > bottom) {
@@ -368,6 +422,35 @@ void EditorPanel::layout_island_actions(const EditorModel& model, std::int32_t& 
     f.button(kCopy, Rect{kX, y, half, kButtonH}, ui::tr("editor.islands.copy"), model.island_free);
     f.button(kRemove, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.islands.remove"), model.island_free);
     y += kButtonH + kGap;
+    f.button(kFertilityPage, Rect{kX, y, half, kButtonH}, ui::tr("editor.fertility.edit"));
+    f.button(kSaveIsland, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.islands.save"), model.island_free);
+    y += kButtonH + kGap;
+}
+
+void EditorPanel::layout_fertility(const EditorModel& model) {
+    if (!model.island) {
+        layout_selection(model);  // the island is gone (undone, taken out)
+        return;
+    }
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.fertility.title"), Align::Left, Tone::Heading);
+    y += 28;
+    f.label(Rect{kX, y, kW, kLine}, model.selection);
+    y += kLine + 4;
+    for (std::size_t i = 0; i < kCropTexts.size(); ++i) {
+        std::string text = ui::tr(kCropTexts[i]);
+        const bool own = (model.island_fertility >> (kCropWares[i] - assets::ware::kCornField) & 1U) != 0;
+        if (!own && kClimateCrops[model.island_climate & 1U][i]) {
+            text = ui::tr("editor.fertility.half", {text});
+        }
+        f.check(kFirstCrop + static_cast<Id>(i), Rect{kX, y, kW, kButtonH}, std::move(text), own);
+        y += kButtonH + kGap;
+    }
+    constexpr std::int32_t kFertilityNote = 4 * 20;
+    f.paragraph(Rect{kX, y, kW, kFertilityNote}, ui::tr("editor.fertility.note"), Tone::Dim, 20);
+    y += kFertilityNote + 4;
+    f.button(kSelectionPage, Rect{kX, y, kW, kButtonH}, ui::tr("editor.fertility.back"));
 }
 
 void EditorPanel::layout_islands(const EditorModel& model) {
@@ -390,6 +473,8 @@ void EditorPanel::layout_islands(const EditorModel& model) {
     y += kButtonH + kGap;
     f.button(kPlace, Rect{kX, y, kW, kButtonH}, ui::tr("editor.islands.place"), !model.placing);
     y += kButtonH + kGap;
+    f.button(kLoadIsland, Rect{kX, y, kW, kButtonH}, ui::tr("editor.islands.load"), !model.placing);
+    y += kButtonH + kGap;
     constexpr std::int32_t kIslandNote = 3 * 20;
     f.paragraph(Rect{kX, y, kW, kIslandNote}, ui::tr(model.placing ? "editor.islands.placing" : "editor.islands.note"),
                 Tone::Dim, 20);
@@ -399,6 +484,40 @@ void EditorPanel::layout_islands(const EditorModel& model) {
         y += kButtonH + kGap;
     }
     f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+}
+
+void EditorPanel::layout_world_size(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.world_size.title"), Align::Left, Tone::Heading);
+    y += 28;
+    f.entry(Rect{kX, y, kW, kLine}, ui::tr("editor.world_size.now"),
+            ui::tr("editor.size", {count(model.width), count(model.height)}), Tone::Dim);
+    y += kLine;
+    f.entry(Rect{kX, y, kW, kLine}, ui::tr("editor.world_size.new"),
+            ui::tr("editor.size", {count(m_size_width), count(m_size_height)}));
+    y += kLine + 4;
+    const std::int32_t half = (kW - kGap) / 2;
+    const auto side = [&](const char* label, Id less, Id more, std::uint32_t value, std::uint32_t used) {
+        f.label(Rect{kX, y, kW, kLine}, ui::tr(label));
+        y += kLine;
+        f.button(less, Rect{kX, y, half, kButtonH}, ui::tr("editor.world_size.less", {count(kSizeStep)}),
+                 value > std::max<std::uint32_t>(used, 1));
+        f.button(more, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.world_size.more", {count(kSizeStep)}),
+                 value < sim::kMaxWorldSide);
+        y += kButtonH + kGap;
+    };
+    side("editor.world_size.width", kWidthLess, kWidthMore, m_size_width, model.used_width);
+    side("editor.world_size.height", kHeightLess, kHeightMore, m_size_height, model.used_height);
+    f.button(kFitSize, Rect{kX, y, kW, kButtonH}, ui::tr("editor.world_size.fit"));
+    y += kButtonH + kGap;
+    constexpr std::int32_t kSizeNote = 4 * 20;
+    f.paragraph(Rect{kX, y, kW, kSizeNote}, ui::tr("editor.world_size.note"), Tone::Dim, 20);
+    y += kSizeNote + 4;
+    const bool changed = m_size_width != model.width || m_size_height != model.height;
+    f.button(kApplySize, Rect{kX, y, kW, kButtonH}, ui::tr("editor.world_size.apply"), changed);
+    y += kButtonH + kGap;
+    f.button(kCancel, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
 }
 
 void EditorPanel::layout_view(const EditorModel& model) {
@@ -563,6 +682,46 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
         }
         case kStopPlacing:
             return EditorRequest{EditorRequest::Kind::StopPlacing};
+        case kSaveIsland:
+            if (!model.island) {
+                return std::nullopt;
+            }
+            return EditorRequest{EditorRequest::Kind::SaveIsland, *model.island};
+        case kLoadIsland:
+            m_page = Page::IslandFiles;
+            m_first = 0;
+            return EditorRequest{EditorRequest::Kind::ListIslandFiles};
+        case kFertilityPage:
+            if (model.island) {
+                m_page = Page::Fertility;
+            }
+            return std::nullopt;
+        case kSelectionPage:
+            m_page = Page::Selection;
+            return std::nullopt;
+        case kWorldSizePage:
+            m_page = Page::WorldSize;
+            m_size_width = model.width;
+            m_size_height = model.height;
+            return std::nullopt;
+        case kWidthLess:
+        case kWidthMore:
+            m_size_width = size_step(m_size_width, model.used_width, *id == kWidthMore);
+            return std::nullopt;
+        case kHeightLess:
+        case kHeightMore:
+            m_size_height = size_step(m_size_height, model.used_height, *id == kHeightMore);
+            return std::nullopt;
+        case kFitSize:
+            m_size_width = fitted(model.used_width);
+            m_size_height = fitted(model.used_height);
+            return std::nullopt;
+        case kApplySize: {
+            EditorRequest r{EditorRequest::Kind::ResizeWorld};
+            r.width = m_size_width;
+            r.height = m_size_height;
+            return r;
+        }
         case kCreate: {
             show_document();
             EditorRequest r{EditorRequest::Kind::New};
@@ -583,10 +742,29 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
         default:
             break;
     }
+    if (*id >= kFirstCrop && *id < kFirstCrop + static_cast<Id>(kCropTexts.size())) {
+        if (!model.island) {
+            return std::nullopt;
+        }
+        const auto i = static_cast<std::size_t>(*id - kFirstCrop);
+        EditorRequest r{EditorRequest::Kind::SetFertility};
+        r.index = *model.island;
+        r.fertility = model.island_fertility ^ (1U << (kCropWares[i] - assets::ware::kCornField));
+        return r;
+    }
     if (*id >= kFirstOverlay && *id < kFirstOverlay + static_cast<Id>(kEditorOverlays)) {
         EditorRequest r{EditorRequest::Kind::Overlay};
         r.index = static_cast<std::size_t>(*id - kFirstOverlay);
         return r;
+    }
+    if (*id >= kFirstRow && m_page == Page::IslandFiles) {
+        const std::size_t index = m_first + static_cast<std::size_t>(*id - kFirstRow);
+        if (index < model.files.size()) {
+            m_page = Page::Islands;
+            EditorRequest r{EditorRequest::Kind::LoadIsland, index};
+            r.island = m_island;  // its climate, for an island file of the original
+            return r;
+        }
     }
     if (*id >= kFirstRow && m_page == Page::Open) {
         const std::size_t index = m_first + static_cast<std::size_t>(*id - kFirstRow);

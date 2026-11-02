@@ -6,8 +6,11 @@
 
 #include "o1602/assets/chunk_file.hpp"
 #include "o1602/assets/island.hpp"
+#include "o1602/editor/document.hpp"
 #include "o1602/sim/island_shapes.hpp"
 #include "o1602/sim/island_templates.hpp"
+#include "o1602/sim/save_game.hpp"
+#include "o1602/sim/validate.hpp"
 
 namespace o1602::editor {
 
@@ -19,6 +22,32 @@ using core::make_error;
 /// Every new island grows grain, grass, trees and fish, as the world generator's (bits from the
 /// first crop on).
 constexpr std::uint32_t kNewFertility = 0x1181;
+
+/// The first island of an island file of the original (a template, an .scp file).
+core::Result<assets::Island> first_island(const assets::ChunkFile& file, const std::string& name) {
+    auto islands = assets::load_islands(file);
+    if (!islands) {
+        return islands.error();
+    }
+    if (islands->empty() || islands->front().layers.empty()) {
+        return make_error(ErrorCode::InvalidFormat, "island file without tiles: " + name);
+    }
+    return std::move(islands->front());
+}
+
+/// What a game has made of an island goes: who knows it, a drought, its place.
+void clear_game_state(assets::IslandHeader& header) {
+    header.pos_x = 0;
+    header.pos_y = 0;
+    header.explored = 0;
+    header.discovered = 0;
+    header.drought_strength = 0;
+    header.drought_end = 0;
+    header.curse_pending = false;
+    for (auto& deposit : header.deposits) {
+        deposit.mask = 0;
+    }
+}
 
 core::Result<std::unique_ptr<Operation>> edit(sim::World after, std::string_view kind) {
     return std::unique_ptr<Operation>(std::make_unique<WorldEdit>(std::move(after), kind));
@@ -35,6 +64,30 @@ void WorldEdit::apply(sim::World& world) {
 
 void WorldEdit::revert(sim::World& world) {
     std::swap(world, m_other);
+}
+
+void FertilityEdit::apply(sim::World& world) {
+    if (m_island < world.islands().size()) {
+        world.island(m_island).header.fertility = m_after;
+    }
+}
+
+void FertilityEdit::revert(sim::World& world) {
+    if (m_island < world.islands().size()) {
+        world.island(m_island).header.fertility = m_before;
+    }
+}
+
+core::Result<std::unique_ptr<Operation>> set_fertility(const sim::World& world, std::size_t index,
+                                                       std::uint32_t fertility) {
+    if (index >= world.islands().size()) {
+        return make_error(ErrorCode::NotFound, "no island " + std::to_string(index + 1));
+    }
+    const std::uint32_t before = world.islands()[index].header.fertility;
+    if (before == fertility) {
+        return make_error(ErrorCode::InvalidFormat, "the island grows these crops already");
+    }
+    return std::unique_ptr<Operation>(std::make_unique<FertilityEdit>(index, before, fertility));
 }
 
 std::size_t world_memory(const sim::World& world) noexcept {
@@ -82,14 +135,11 @@ core::Result<sim::WorldIsland> make_island(const NewIsland& request, std::uint16
         if (!file) {
             return file.error();
         }
-        auto islands = assets::load_islands(*file);
-        if (!islands) {
-            return islands.error();
+        auto first = first_island(*file, path);
+        if (!first) {
+            return first.error();
         }
-        if (islands->empty() || islands->front().layers.empty()) {
-            return make_error(ErrorCode::InvalidFormat, "island template without tiles: " + path);
-        }
-        made = std::move(islands->front());
+        made = std::move(first).value();
         made.header.template_number = template_number;
         made.header.template_size = size;
     }
@@ -206,6 +256,101 @@ core::Result<std::unique_ptr<Operation>> remove_island(const sim::World& world, 
         return status.error();
     }
     return edit(std::move(after), "island_remove");
+}
+
+std::pair<std::uint32_t, std::uint32_t> used_size(const sim::World& world) noexcept {
+    std::uint64_t w = 1;
+    std::uint64_t h = 1;
+    const auto take = [&](std::uint64_t x, std::uint64_t y, std::uint64_t width, std::uint64_t height) {
+        w = std::max(w, x + width);
+        h = std::max(h, y + height);
+    };
+    for (const sim::WorldIsland& island : world.islands()) {
+        take(island.x, island.y, island.map.width(), island.map.height());
+    }
+    for (const sim::Ship& ship : world.ships()) {
+        take(ship.x, ship.y, 1, 1);
+    }
+    for (const sim::Soldier& soldier : world.soldiers()) {
+        take(static_cast<std::uint64_t>(std::max<std::int64_t>(soldier.pos_x, 0)) / 4096,
+             static_cast<std::uint64_t>(std::max<std::int64_t>(soldier.pos_y, 0)) / 4096, 1, 1);
+    }
+    for (const sim::ScenarioMarker& marker : world.markers()) {
+        take(marker.x, marker.y, marker.width, marker.height);
+    }
+    return {static_cast<std::uint32_t>(std::min<std::uint64_t>(w, sim::World::kMaxSide)),
+            static_cast<std::uint32_t>(std::min<std::uint64_t>(h, sim::World::kMaxSide))};
+}
+
+core::Result<core::Bytes> save_island(const sim::World& world, std::size_t index,
+                                      const assets::BuildingTable& buildings) {
+    if (index >= world.islands().size()) {
+        return make_error(ErrorCode::NotFound, "no island " + std::to_string(index + 1));
+    }
+    if (world.island_use(index) != sim::World::IslandUse::None) {
+        return make_error(ErrorCode::InvalidFormat, "the island is in use");
+    }
+    sim::WorldIsland island = world.islands()[index];
+    clear_game_state(island.header);
+    island.x = 0;
+    island.y = 0;
+    sim::World alone(island.map.width(), island.map.height());
+    if (auto status = alone.add_island(std::move(island), &buildings); !status) {
+        return status.error();
+    }
+    if (auto valid = sim::validate(alone); !valid) {
+        return valid.error();
+    }
+    return sim::write_game(alone, buildings);
+}
+
+core::Result<sim::WorldIsland> load_island(std::span<const std::uint8_t> bytes, const assets::BuildingTable& buildings,
+                                           const assets::GameDirectory* game, std::vector<std::string>* warnings,
+                                           std::uint8_t climate) {
+    const auto placed = [](sim::WorldIsland island) {
+        clear_game_state(island.header);
+        island.x = 0;
+        island.y = 0;
+        return island;
+    };
+    if (sim::is_open1602_save(bytes)) {
+        auto world = Document::read(bytes, buildings, game, warnings);
+        if (!world) {
+            return world.error();
+        }
+        if (world->islands().empty()) {
+            return make_error(ErrorCode::InvalidFormat, "the file holds no island");
+        }
+        return placed(world->islands().front());
+    }
+    auto file = assets::ChunkFile::from_bytes(core::Bytes(bytes.begin(), bytes.end()));
+    if (!file) {
+        return file.error();
+    }
+    auto made = first_island(*file, "island file");
+    if (!made) {
+        return made.error();
+    }
+    made->header.stored_complete = true;
+    made->header.climate = static_cast<std::uint8_t>(climate & 1U);
+    sim::WorldIsland island{made->header, sim::IslandMap::from_island(*made, buildings, warnings, nullptr), 0, 0};
+    island.header.width = static_cast<std::uint16_t>(island.map.width());
+    island.header.height = static_cast<std::uint16_t>(island.map.height());
+    island.deer_phase = made->header.deer_phase;
+    island.last_phase = made->header.last_phase;
+    return placed(std::move(island));
+}
+
+core::Result<std::unique_ptr<Operation>> resize_world(const sim::World& world, std::uint32_t width,
+                                                      std::uint32_t height, const assets::BuildingTable& buildings) {
+    if (width == world.width() && height == world.height()) {
+        return make_error(ErrorCode::InvalidFormat, "the map has this size already");
+    }
+    sim::World after = world;
+    if (auto status = after.resize(width, height, &buildings); !status) {
+        return status.error();
+    }
+    return edit(std::move(after), "world_size");
 }
 
 }  // namespace o1602::editor
