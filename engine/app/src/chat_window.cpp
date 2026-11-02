@@ -224,6 +224,9 @@ ChatWindow::Result ChatWindow::mouse(std::int32_t x, std::int32_t y, bool down, 
 }
 
 void ChatWindow::type(std::string_view text) {
+    if (!text.empty() && m_form.take_all_selected()) {
+        m_text.clear();  // typed over the whole line (Ctrl+A)
+    }
     for (const char c : text) {
         if (static_cast<unsigned char>(c) >= 0x20 && m_text.size() < net::kMaxChatLength) {
             m_text.push_back(c);
@@ -233,9 +236,16 @@ void ChatWindow::type(std::string_view text) {
 
 std::optional<ChatSay> ChatWindow::key(const ChatModel& model, int key) {
     prune(model);
+    if (key == 1) {
+        m_form.select_all();  // Ctrl+A
+        return std::nullopt;
+    }
+    const bool all = m_form.take_all_selected();
     switch (key) {
         case 8:
-            if (!m_text.empty()) {
+            if (all) {
+                m_text.clear();
+            } else if (!m_text.empty()) {
                 m_text.pop_back();
             }
             break;

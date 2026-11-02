@@ -542,6 +542,9 @@ core::Result<CommandLine> parse_command_line(int argc, const char* const* argv) 
         }
         out.new_game = new_game_options;
     }
+    if (name_given) {
+        options.player_name = new_game_options.name;
+    }
     if (multiplayer_given) {
         if (name_given) {
             multiplayer.name = new_game_options.name;

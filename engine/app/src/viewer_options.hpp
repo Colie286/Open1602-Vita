@@ -63,6 +63,9 @@ struct ViewerOptions {
     std::string language;
     /// Start in the main menu instead of a game (no game was named on the command line).
     bool menu = false;
+    /// The player's name given on the command line (--name, Windows-1252): the multiplayer menu
+    /// starts with it for this run, until the person types another; empty: the name in the settings.
+    std::string player_name;
     /// Mouse input played at given frames (smoke tests of the interface without a person).
     struct ScriptedInput {
         enum class Kind : std::uint8_t { Move, Down, Up, Key, Wheel, Text };

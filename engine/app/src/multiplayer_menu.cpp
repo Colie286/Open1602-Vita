@@ -1063,8 +1063,10 @@ void MultiplayerMenu::click(const MultiplayerModel& model, Id id, std::vector<Mu
                 }
             } else if (id == kCreate) {
                 m_screen = Screen::Create;
-                if (m_setup.title.empty()) {
-                    m_setup.title = tr(MpText::DefaultTitle, m_name);
+                if (m_setup.title.empty() || m_setup.title == m_auto_title) {
+                    // The suggestion follows the name until the person types a title of their own.
+                    m_auto_title = tr(MpText::DefaultTitle, m_name);
+                    m_setup.title = m_auto_title;
                 }
             } else if (id == kBrowseUp) {
                 m_browse_first -= std::min(m_browse_first, kBrowseRows);
@@ -1329,6 +1331,9 @@ void MultiplayerMenu::type(std::string_view text) {
         return;
     }
     const bool digits = *focus == kSeed || *focus == kPort;
+    if (!text.empty() && m_form.take_all_selected()) {
+        s->clear();  // typed over the whole text (Ctrl+A)
+    }
     for (const char c : text) {
         const bool ok = digits ? (c >= '0' && c <= '9') : static_cast<unsigned char>(c) >= 0x20;
         if (ok && s->size() < field_limit(*focus)) {
@@ -1345,9 +1350,16 @@ std::vector<MultiplayerEvent> MultiplayerMenu::key(const MultiplayerModel& model
         m_form.set_focus(std::nullopt);
         return out;
     }
+    if (key == 1) {
+        m_form.select_all();  // Ctrl+A
+        return out;
+    }
+    const bool all = m_form.take_all_selected();
     switch (key) {
         case 8:
-            if (!s->empty()) {
+            if (all) {
+                s->clear();
+            } else if (!s->empty()) {
                 s->pop_back();
             }
             break;

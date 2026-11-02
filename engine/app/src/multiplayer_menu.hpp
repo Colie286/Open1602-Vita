@@ -229,7 +229,8 @@ public:
 
     [[nodiscard]] bool typing() const noexcept { return m_form.focus().has_value(); }
     void type(std::string_view text);
-    /// Backspace 8, Tab 9 (next field), Enter 13 (sends the chat, connects), Escape 27.
+    /// Ctrl+A 1 (selects the field's whole text), Backspace 8, Tab 9 (next field), Enter 13 (sends
+    /// the chat, connects), Escape 27.
     std::vector<MultiplayerEvent> key(const MultiplayerModel& model, int key);
 
 private:
@@ -297,6 +298,7 @@ private:
     std::size_t m_browse_first = 0;
     // Create
     HostSetup m_setup;
+    std::string m_auto_title;  ///< the title last suggested from m_name
     std::string m_seed_text;
     std::string m_port_text;
     std::size_t m_list_first = 0;

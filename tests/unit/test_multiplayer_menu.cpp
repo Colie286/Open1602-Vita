@@ -194,6 +194,64 @@ TEST_CASE("multiplayer menu: a field keeps the keys when the mouse leaves it, un
     CHECK(!menu.typing());
 }
 
+TEST_CASE("multiplayer menu: Ctrl+A selects the whole field, typing or Backspace replaces it") {
+    MultiplayerMenu menu(ui::FormStyle{});
+    app::MultiplayerModel model;
+    model.name = "Anna";
+    menu.open();
+    CHECK(click_at(menu, model, 800, 48).empty());  // the name field
+    REQUIRE(menu.typing());
+    (void)menu.key(model, 1);  // Ctrl+A
+    menu.type("Bernd");
+    CHECK(menu.name() == "Bernd");
+    menu.type("t");  // the selection is gone: typing adds again
+    CHECK(menu.name() == "Berndt");
+
+    (void)menu.key(model, 1);
+    (void)menu.key(model, 8);  // Backspace takes the whole selection
+    CHECK(menu.name().empty());
+    menu.type("Carla");
+    (void)menu.key(model, 8);  // and then one character, as before
+    CHECK(menu.name() == "Carl");
+}
+
+TEST_CASE("multiplayer menu: the suggested title follows the name, a title of one's own stays") {
+    MultiplayerMenu menu(ui::FormStyle{});
+    app::MultiplayerModel model;
+    model.name = "Anna";
+    menu.open();
+    CHECK(click(menu, model, "Create game").empty());
+    CHECK(!menu.back().has_value());
+
+    // The name changes after the title was suggested: the suggestion changes with it.
+    CHECK(click_at(menu, model, 800, 48).empty());
+    (void)menu.key(model, 1);
+    menu.type("Bernd");
+    (void)menu.key(model, 13);
+    CHECK(click(menu, model, "Create game").empty());
+    auto events = click(menu, model, "Open lobby");
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].setup.title == "Bernd's game");
+
+    // A title typed by the person is kept, whatever the name.
+    MultiplayerMenu own(ui::FormStyle{});
+    own.open();
+    CHECK(click(own, model, "Create game").empty());
+    CHECK(click(own, model, "Anna's game").empty());  // the title field
+    (void)own.key(model, 1);
+    own.type("Abend");
+    (void)own.key(model, 13);
+    CHECK(!own.back().has_value());
+    CHECK(click_at(own, model, 800, 48).empty());
+    (void)own.key(model, 1);
+    own.type("Carla");
+    (void)own.key(model, 13);
+    CHECK(click(own, model, "Create game").empty());
+    events = click(own, model, "Open lobby");
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].setup.title == "Abend");
+}
+
 TEST_CASE("multiplayer menu: creating a game: endless, scenario, settings") {
     MultiplayerMenu menu(ui::FormStyle{});
     app::MultiplayerModel model;

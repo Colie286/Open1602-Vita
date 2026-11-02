@@ -82,6 +82,7 @@ TEST_CASE("command line: a new game with its own world, and the player's name") 
     CHECK(c->options.multiplayer->role == app::ViewerOptions::Multiplayer::Role::Host);
     CHECK(c->options.multiplayer->port == 2700);
     CHECK(c->options.multiplayer->name == "J\xfcrgen");
+    CHECK(c->options.player_name == "J\xfcrgen");
     CHECK(c->new_game->custom->shapes == sim::WorldSettings::Shapes::Templates);
     // An own world is a new game.
     CHECK(error_of({"--world", "300x400"}).find("--new-game") != std::string::npos);
@@ -91,6 +92,15 @@ TEST_CASE("command line: a new game with its own world, and the player's name") 
     REQUIRE(own->new_game->custom.has_value());
     CHECK(own->new_game->custom->shapes == sim::WorldSettings::Shapes::Own);
     CHECK(error_of({"--new-game", "0", "--island-shapes", "round"}) == "bad value for --island-shapes: round");
+}
+
+TEST_CASE("command line: the player's name alone is the multiplayer menu's for this run") {
+    const auto c = parse({"--name", "Merlin"});
+    REQUIRE(static_cast<bool>(c));
+    CHECK(c->options.menu);
+    CHECK(c->options.player_name == "Merlin");
+    CHECK(!c->options.multiplayer.has_value());
+    CHECK(parse({})->options.player_name.empty());
 }
 
 TEST_CASE("command line: the landscape of islands of their own shape, by preset and one by one") {

@@ -809,6 +809,8 @@ void MapInput::handle_event(const SDL_Event& event) {
                     m_hud->type_key(27);
                 } else if (event.key.key == SDLK_TAB) {
                     m_hud->type_key(9);
+                } else if (event.key.key == SDLK_A && (event.key.mod & SDL_KMOD_CTRL) != 0) {
+                    m_hud->type_key(1);  // select the whole text (Open1602's own fields)
                 }
                 break;
             }

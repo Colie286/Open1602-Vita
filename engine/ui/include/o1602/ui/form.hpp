@@ -12,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "o1602/ui/font.hpp"
@@ -107,7 +108,18 @@ public:
 
     /// The field that takes the keys, if any.
     [[nodiscard]] std::optional<Id> focus() const noexcept { return m_focus; }
-    void set_focus(std::optional<Id> id) noexcept { m_focus = id; }
+    void set_focus(std::optional<Id> id) noexcept {
+        if (id != m_focus) {
+            m_all_selected = false;
+        }
+        m_focus = id;
+    }
+    /// Ctrl+A: the whole text of the field with the focus is selected (shown on the selected
+    /// colour); what is typed next replaces it, Backspace removes it.
+    void select_all() noexcept { m_all_selected = m_focus.has_value(); }
+    [[nodiscard]] bool all_selected() const noexcept { return m_all_selected && m_focus.has_value(); }
+    /// Whether the whole text was selected; the selection is gone afterwards (any key ends it).
+    bool take_all_selected() noexcept { return std::exchange(m_all_selected, false) && m_focus.has_value(); }
 
     /// The mouse at (x, y) in pixels of the form's region: the widget clicked (pressed and
     /// released on it with the same button), if any. The right button clicks cycle buttons only;
@@ -179,6 +191,7 @@ private:
     MouseButton m_clicked_with = MouseButton::Left;
     std::optional<Id> m_hovered;
     std::optional<Id> m_focus;
+    bool m_all_selected = false;  ///< select_all()
     bool m_released = false;
     double m_slide = 0.0;  ///< the held slider's knob, then where it was let go
 };

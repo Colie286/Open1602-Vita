@@ -447,8 +447,9 @@ std::vector<DrawItem> Form::draw(const std::array<const Font*, kFontSlots>& font
             }
             case Widget::Kind::Field: {
                 const bool focused = m_focus == w.id;
-                framed(w.rect, m_style.field);
-                text(w.rect, focused ? w.text + "_" : w.text, Align::Left, m_style.text, focused);
+                const bool all = focused && m_all_selected && !w.text.empty();
+                framed(w.rect, all ? m_style.selected : m_style.field);
+                text(w.rect, focused && !all ? w.text + "_" : w.text, Align::Left, m_style.text, focused);
                 break;
             }
             case Widget::Kind::Check: {
