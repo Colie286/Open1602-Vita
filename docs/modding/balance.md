@@ -75,7 +75,7 @@ running_cost = 10
 
 ### Revised bread production
 
-The game setting "Bread production" (`Rules::revised_bread`, [ADR 0008](../architecture/0008-game-settings.md))
+The game setting "Alternative balance" (`Rules::revised_bread`, with the wider hunter's hut, [ADR 0008](../architecture/0008-game-settings.md))
 uses the same values, from `data/balance/revised_bread.toml`, compiled into the game: the grain farm
 makes 2 t of grain per ripe field, the bakery 2 t of bread from 2 t of flour for 15 gold a minute
 instead of 5. Three farms with 21 fields, two mills and a bakery then make about 6.3 t of bread a

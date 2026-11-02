@@ -441,10 +441,9 @@ std::size_t setup_choices(SetupItem item) noexcept {
             return kGoldIslands.size();
         case SetupItem::TraderPrices:
         case SetupItem::TraderReach:
-        case SetupItem::BreadChain:
+        case SetupItem::Balance:
         case SetupItem::TradeCarts:
         case SetupItem::FertileFields:
-        case SetupItem::Hunting:
         case SetupItem::ClimateCrops:
         case SetupItem::BigOreVeins:
         case SetupItem::ShipPurchases:
@@ -521,12 +520,10 @@ std::size_t setup_choice(const EndlessSetup& setup, SetupItem item) noexcept {
             return r.trader_reach == sim::TraderReach::Scaled ? 1 : 0;
         case SetupItem::OreVeins:
             return std::min<std::size_t>(static_cast<std::size_t>(r.ore_veins), kOreVeinNames.size() - 1);
-        case SetupItem::BreadChain:
-            return r.revised_bread ? 1 : 0;
+        case SetupItem::Balance:
+            return r.revised_bread && r.wider_hunting ? 1 : 0;
         case SetupItem::TradeCarts:
             return r.more_carts ? 1 : 0;
-        case SetupItem::Hunting:
-            return r.wider_hunting ? 1 : 0;
         case SetupItem::FertileFields:
             return r.fertile_fields ? 1 : 0;
         case SetupItem::ClimateCrops:
@@ -688,14 +685,12 @@ void choose(EndlessSetup& setup, SetupItem item, std::size_t choice) {
         case SetupItem::OreVeins:
             r.ore_veins = static_cast<sim::OreVeins>(choice);
             break;
-        case SetupItem::BreadChain:
+        case SetupItem::Balance:
             r.revised_bread = choice == 1;
+            r.wider_hunting = choice == 1;
             break;
         case SetupItem::TradeCarts:
             r.more_carts = choice == 1;
-            break;
-        case SetupItem::Hunting:
-            r.wider_hunting = choice == 1;
             break;
         case SetupItem::FertileFields:
             r.fertile_fields = choice == 1;
@@ -1069,9 +1064,8 @@ bool setup_item_offered(SetupScope scope, SetupItem item) noexcept {
         case SetupItem::TraderPrices:
         case SetupItem::TraderReach:
         case SetupItem::OreVeins:
-        case SetupItem::BreadChain:
+        case SetupItem::Balance:
         case SetupItem::TradeCarts:
-        case SetupItem::Hunting:
         case SetupItem::FertileFields:
         case SetupItem::ShipPurchases:
         case SetupItem::Ships:
@@ -1150,9 +1144,8 @@ std::string setup_label(SetupItem item) {
         "setup.trader",
         "setup.trader_reach",
         "setup.ore_veins",
-        "setup.bread",
+        "setup.balance",
         "setup.trade_carts",
-        "setup.hunting",
         "setup.ships",
         "setup.units",
         "setup.speed",
@@ -1248,12 +1241,10 @@ std::string setup_value(SetupItem item, std::size_t choice) {
                                                                       "setup.ore_veins.endless"};
             return ui::tr(kKeys[choice]);
         }
-        case SetupItem::BreadChain:
-            return ui::tr(choice == 1 ? "setup.bread.revised" : "setup.bread.original");
+        case SetupItem::Balance:
+            return ui::tr(choice == 1 ? "setup.on" : "setup.off");
         case SetupItem::TradeCarts:
             return ui::tr(choice == 1 ? "setup.trade_carts.more" : "setup.trade_carts.one");
-        case SetupItem::Hunting:
-            return ui::tr(choice == 1 ? "setup.hunting.wider" : "setup.hunting.original");
         case SetupItem::FertileFields:
             return ui::tr(choice == 1 ? "setup.fertile_fields.all" : "setup.fertile_fields.original");
         case SetupItem::ClimateCrops:
@@ -1587,7 +1578,7 @@ bool read_setup_line(EndlessSetup& setup, std::string_view key, std::string_view
         if (value == "code" || value == "start" || value == "off") {
             r.cheats = value == "code" ? sim::Cheats::Code : value == "start" ? sim::Cheats::Start : sim::Cheats::Off;
         }
-    } else if (key == "hunting") {
+    } else if (key == "hunting") {  // the same
         if (value == "wider" || value == "original") {
             r.wider_hunting = value == "wider";
         }
@@ -1603,7 +1594,12 @@ bool read_setup_line(EndlessSetup& setup, std::string_view key, std::string_view
         if (value == "on" || value == "off") {
             r.computers_buy_ships = value == "on";
         }
-    } else if (key == "bread") {
+    } else if (key == "balance") {
+        if (value == "alternative" || value == "original") {
+            r.revised_bread = value == "alternative";
+            r.wider_hunting = value == "alternative";
+        }
+    } else if (key == "bread") {  // before the alternative balance: its parts one by one
         if (value == "revised" || value == "original") {
             r.revised_bread = value == "revised";
         }
@@ -1727,9 +1723,8 @@ std::string write_setup(const EndlessSetup& setup, std::string_view prefix) {
     line("trader_prices", r.trader_prices == sim::TraderPrices::Market ? "market" : "original");
     line("trader_reach", kTraderReachNames[std::min<std::size_t>(static_cast<std::size_t>(r.trader_reach), 1)]);
     line("ore_veins", kOreVeinNames[std::min<std::size_t>(static_cast<std::size_t>(r.ore_veins), 2)]);
-    line("bread", r.revised_bread ? "revised" : "original");
+    line("balance", r.revised_bread && r.wider_hunting ? "alternative" : "original");
     line("trade_carts", r.more_carts ? "more" : "one");
-    line("hunting", r.wider_hunting ? "wider" : "original");
     line("cheats", r.cheats == sim::Cheats::Code ? "code" : r.cheats == sim::Cheats::Start ? "start" : "off");
     line("fertile_fields", r.fertile_fields ? "all" : "original");
     line("climate_crops", r.climate_crops ? "all" : "original");

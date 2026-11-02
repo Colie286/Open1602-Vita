@@ -91,8 +91,6 @@ constexpr Group kBugGroups[] = {
     {"setup.group.opponents", SetupItem::BugNativeLand, SetupItem::BugNativeLand, kRight},
     // Not a bug, but a trick of the original: its cheats (with the code, from the start, or never).
     {"setup.group.cheats", SetupItem::Cheats, SetupItem::Cheats, kRight},
-    // Not a bug either: the hunter's hut reaches further in Open1602, the original's reach is a choice.
-    {"setup.group.economy", SetupItem::Hunting, SetupItem::Hunting, kLeft},
 };
 
 // The disasters: how often they come on the left, what they do to the game's speed on the right.

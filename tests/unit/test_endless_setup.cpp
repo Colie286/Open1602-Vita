@@ -177,17 +177,33 @@ TEST_CASE("endless setup: the values reach the rules and the world") {
     app::read_setup(read, app::write_setup(s));
     CHECK(read.rules.computer_players == sim::Computers::Off);
     CHECK(app::setup_item_offered(app::SetupScope::Scenario, SetupItem::ComputerPlayers));
-    // Bread production: the revised chain by default, the original's on choice.
+    // The alternative balance (the revised bread chain and the wider hunter's hut): on by default,
+    // the original's on choice, one item for both.
     CHECK(s.rules.revised_bread);
-    CHECK(value_of(s, SetupItem::BreadChain) == ui::tr("setup.bread.revised"));
-    app::choose(s, SetupItem::BreadChain, 0);
+    CHECK(s.rules.wider_hunting);
+    CHECK(value_of(s, SetupItem::Balance) == ui::tr("setup.on"));
+    app::choose(s, SetupItem::Balance, 0);
     CHECK(!s.rules.revised_bread);
-    CHECK(value_of(s, SetupItem::BreadChain) == ui::tr("setup.bread.original"));
-    CHECK(app::write_setup(s).find("endless.bread = original\n") != std::string::npos);
+    CHECK(!s.rules.wider_hunting);
+    CHECK(value_of(s, SetupItem::Balance) == ui::tr("setup.off"));
+    CHECK(app::write_setup(s).find("endless.balance = original\n") != std::string::npos);
     app::read_setup(read, app::write_setup(s));
     CHECK(!read.rules.revised_bread);
-    CHECK(app::read_setup_line(read, "bread", "revised"));
+    CHECK(!read.rules.wider_hunting);
+    CHECK(app::read_setup_line(read, "balance", "alternative"));
     CHECK(read.rules.revised_bread);
+    CHECK(read.rules.wider_hunting);
+    // The keys of before, one part each, still read.
+    CHECK(app::read_setup_line(read, "bread", "original"));
+    CHECK(!read.rules.revised_bread);
+    CHECK(read.rules.wider_hunting);
+    CHECK(app::setup_choice(read, SetupItem::Balance) == 0);  // only both are the alternative balance
+    CHECK(app::read_setup_line(read, "hunting", "original"));
+    CHECK(!read.rules.wider_hunting);
+    // The original's settings switch it off.
+    EndlessSetup original;
+    original.rules = sim::Rules::original();
+    CHECK(app::setup_choice(original, SetupItem::Balance) == 0);
     // Trade carts per island: one per Kontor and market by default, one as in the original on choice.
     CHECK(s.rules.more_carts);
     CHECK(value_of(s, SetupItem::TradeCarts) == ui::tr("setup.trade_carts.more"));
@@ -382,9 +398,9 @@ TEST_CASE("game setup: what a scenario, a multiplayer game and a savegame offer"
         CHECK(!app::setup_item_offered(SetupScope::Scenario, item));
     }
     for (const SetupItem item :
-         {SetupItem::Refund, SetupItem::TraderPrices, SetupItem::TraderReach, SetupItem::OreVeins,
-          SetupItem::BreadChain, SetupItem::Ships, SetupItem::Units, SetupItem::GameSpeed, SetupItem::Droughts,
-          SetupItem::Volcanoes, SetupItem::ClassicAi, SetupItem::Pirates, SetupItem::PirateNests, SetupItem::Reveal}) {
+         {SetupItem::Refund, SetupItem::TraderPrices, SetupItem::TraderReach, SetupItem::OreVeins, SetupItem::Balance,
+          SetupItem::Ships, SetupItem::Units, SetupItem::GameSpeed, SetupItem::Droughts, SetupItem::Volcanoes,
+          SetupItem::ClassicAi, SetupItem::Pirates, SetupItem::PirateNests, SetupItem::Reveal}) {
         CHECK(app::setup_item_offered(SetupScope::Scenario, item));
         CHECK(app::setup_item_open(EndlessSetup{}, SetupScope::Scenario, item));
         CHECK(!app::setup_item_open(EndlessSetup{}, SetupScope::Savegame, item));  // to look at only
@@ -918,8 +934,8 @@ TEST_CASE("game setup: a savegame's values take the room their labels leave, in 
         for (auto i = 0; i < static_cast<int>(SetupItem::Count); ++i) {
             const auto item = static_cast<SetupItem>(i);
             if (!app::setup_item_offered(app::SetupScope::Savegame, item) || app::victory_item(item) ||
-                app::bug_item(item) || app::disaster_item(item) || item == SetupItem::Cheats ||
-                item == SetupItem::Hunting) {  // the cheats and the hunter's hut: on the page of the bugs
+                app::bug_item(item) || app::disaster_item(item) ||
+                item == SetupItem::Cheats) {  // the cheats: on the page of the bugs
                 continue;
             }
             // Without fonts every byte is 9 units: wider than a button's room for the longest values.

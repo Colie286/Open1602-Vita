@@ -63,9 +63,8 @@ enum class SetupItem : std::uint8_t {
     TraderPrices,
     TraderReach,
     OreVeins,
-    BreadChain,
+    Balance,     ///< Open1602's alternative balance: Rules::revised_bread and Rules::wider_hunting together
     TradeCarts,  ///< Rules::more_carts
-    Hunting,     ///< Rules::wider_hunting
     // Limits
     Ships,
     Units,
