@@ -95,4 +95,15 @@ struct ViewerOptions {
     std::optional<Multiplayer> multiplayer;
 };
 
+/// The game time of a frame in a run of N frames (--frames N): 16 ms, about the 60 frames a second
+/// of a usual screen. Every frame advances the game by it, however fast the computer draws, so two
+/// runs with the same game and seed give the same pictures (screenshots compared pixel by pixel).
+inline constexpr std::uint32_t kFixedFrameMs = 16;
+
+/// The step of the fixed clock (platform::use_fixed_clock) these options ask for: kFixedFrameMs for
+/// a run of N frames, 0 (real time) otherwise. A multiplayer game keeps real time: the others do too.
+[[nodiscard]] constexpr std::uint32_t fixed_frame_ms(const ViewerOptions& options) noexcept {
+    return options.max_frames != 0 && !options.multiplayer ? kFixedFrameMs : 0;
+}
+
 }  // namespace o1602::app

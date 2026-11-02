@@ -777,13 +777,13 @@ core::Status MapViewer::ensure_graphics(render::Zoom zoom) {
     }
     // Wanted before the background has it: the frames stand still until it is there, the sound
     // goes on.
-    const std::uint64_t start = platform::ticks_ms();
+    const std::uint64_t start = platform::real_ticks_ms();
     auto prepared = m_preloader->take(zoom, [this] {
         if (m_sound) {
             m_sound->prefill();
         }
     });
-    if (const std::uint64_t waited = platform::ticks_ms() - start; waited > 0) {
+    if (const std::uint64_t waited = platform::real_ticks_ms() - start; waited > 0) {
         std::fprintf(stderr, "%s: waited %llu ms for it\n", zoom_name(zoom), static_cast<unsigned long long>(waited));
     }
     if (!prepared) {
@@ -818,7 +818,7 @@ void MapViewer::adopt_preloaded_graphics() {
 core::Status MapViewer::install_graphics(render::Zoom zoom, render::PreparedGraphics prepared) {
     auto& slot = m_graphics[static_cast<std::size_t>(zoom)];
     const std::uint32_t made_ms = prepared.ms;
-    const std::uint64_t start = platform::ticks_ms();
+    const std::uint64_t start = platform::real_ticks_ms();
     slot.emplace(ZoomGraphics{std::move(prepared.graphics), nullptr, std::move(prepared.hit_mask)});
     slot->renderer = std::make_unique<render::SdlSpriteRenderer>(m_window->sdl_renderer());
     if (auto status = slot->renderer->upload(slot->graphics.atlas); !status) {
@@ -830,7 +830,7 @@ core::Status MapViewer::install_graphics(render::Zoom zoom, render::PreparedGrap
                  "%s: %zu sprites in %zu page(s) of %u px, figure masks %zu KB, made in %u ms, upload %llu ms\n",
                  zoom_name(zoom), slot->graphics.atlas.sprite_count(), slot->graphics.atlas.pages().size(),
                  slot->graphics.atlas.page_size(), slot->hit_mask.bytes() / 1024, made_ms,
-                 static_cast<unsigned long long>(platform::ticks_ms() - start));
+                 static_cast<unsigned long long>(platform::real_ticks_ms() - start));
     return core::Ok{};
 }
 
@@ -841,7 +841,7 @@ void MapViewer::quit() {
 
 int MapViewer::run() {
     std::uint64_t last = platform::ticks_ms();
-    const std::uint64_t run_start = last;
+    const std::uint64_t run_start = platform::real_ticks_ms();
     std::uint64_t fps_start = last;
     std::uint32_t fps_frames = 0;
     std::uint32_t frames = 0;
@@ -923,6 +923,7 @@ int MapViewer::run() {
                     break;
             }
         }
+        platform::advance_fixed_clock();  // a run of N frames: the same step every frame
         const std::uint64_t now = platform::ticks_ms();
         const auto delta = static_cast<std::uint32_t>(std::min<std::uint64_t>(now - last, 1000));
         last = now;
@@ -997,7 +998,7 @@ int MapViewer::run() {
     }
     finish_autosave();
     if (m_options.max_frames != 0) {
-        const std::uint64_t elapsed = std::max<std::uint64_t>(platform::ticks_ms() - run_start, 1);
+        const std::uint64_t elapsed = std::max<std::uint64_t>(platform::real_ticks_ms() - run_start, 1);
         std::fprintf(stderr, "%u frames in %llu ms (%.1f fps), %zu sprites in %zu batches in the last frame\n", frames,
                      static_cast<unsigned long long>(elapsed), frames * 1000.0 / static_cast<double>(elapsed),
                      m_sprites_drawn, m_batches_drawn);
@@ -1148,11 +1149,13 @@ void MapViewer::update(std::uint32_t delta_ms) {
     // While the game is paused this only carries out the commands (building is possible then).
     // Ticks run while the frame has time (at least one); before each, the positions of the ships,
     // soldiers and walkers are kept so that they move smoothly between ticks. A computer too slow
-    // for the speed runs the game slower instead of stalling (review point 20).
+    // for the speed runs the game slower instead of stalling (review point 20). Under a fixed clock
+    // (--frames N) every tick owed runs, however long it takes: the frames do not hang on the computer.
+    const bool budget = !platform::fixed_clock();
     const auto frame_end = std::chrono::steady_clock::now() + std::chrono::milliseconds(kTickBudgetMs);
     bool first = true;
     const auto before_tick = [&] {
-        if (!first && std::chrono::steady_clock::now() >= frame_end) {
+        if (!first && budget && std::chrono::steady_clock::now() >= frame_end) {
             return false;
         }
         first = false;

@@ -249,6 +249,8 @@ int run_program(int argc, char** argv) {
         }
         options.new_game = new_game_options;
     }
+    // Before the game is made: what it notes while loading already goes by the clock of the frames.
+    platform::use_fixed_clock(app::fixed_frame_ms(options));
     auto viewer = app::MapViewer::create(*game, options);
     if (!viewer) {
         app::report_fatal(viewer.error().message);

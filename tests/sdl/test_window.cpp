@@ -223,3 +223,36 @@ TEST_CASE("window: with vertical sync on, frames that do not wait for the screen
     CHECK(platform::frame_hold_ns(0, 0.0F) == 15'000'000);
     CHECK(platform::frame_hold_ns(0, 5000.0F) == 15'000'000);
 }
+
+TEST_CASE("window: a fixed clock moves only by its step, the real one goes on beside it") {
+    test::use_dummy_drivers();
+    auto sdl = platform::SdlSystem::init();
+    REQUIRE(sdl.ok());
+    CHECK(!platform::fixed_clock());
+
+    platform::use_fixed_clock(16);
+    CHECK(platform::fixed_clock());
+    CHECK(platform::ticks_ms() == 0);
+    const std::uint64_t real = platform::real_ticks_ms();
+    SDL_Delay(5);
+    CHECK(platform::ticks_ms() == 0);  // real time passing does not move it
+    CHECK(platform::real_ticks_ms() >= real + 5);
+    for (int frame = 0; frame < 300; ++frame) {
+        platform::advance_fixed_clock();
+    }
+    CHECK(platform::ticks_ms() == 300 * 16);
+
+    // Set again, it starts at 0 again: two runs in one program see the same times.
+    platform::use_fixed_clock(16);
+    platform::advance_fixed_clock();
+    CHECK(platform::ticks_ms() == 16);
+
+    // The real clock back: advancing does nothing, the time is SDL's.
+    platform::use_fixed_clock(0);
+    CHECK(!platform::fixed_clock());
+    platform::advance_fixed_clock();
+    const std::uint64_t before = platform::real_ticks_ms();
+    const std::uint64_t now = platform::ticks_ms();
+    CHECK(now >= before);
+    CHECK(now <= platform::real_ticks_ms());
+}

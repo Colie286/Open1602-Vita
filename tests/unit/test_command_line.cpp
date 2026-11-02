@@ -65,6 +65,18 @@ TEST_CASE("command line: options and their values") {
     CHECK(!parse({"--no-dialogs"})->dialogs);
 }
 
+TEST_CASE("command line: a run of N frames advances the game by the same time every frame") {
+    // Screenshots of two runs with the same game and seed compare pixel by pixel.
+    CHECK(app::fixed_frame_ms(parse({"--frames", "300"})->options) == app::kFixedFrameMs);
+    CHECK(app::kFixedFrameMs == 16);
+    // Without --frames the game goes by real time.
+    CHECK(app::fixed_frame_ms(parse({})->options) == 0);
+    CHECK(app::fixed_frame_ms(parse({"--frames", "0"})->options) == 0);
+    // So does a multiplayer game: the other computers go by real time too.
+    CHECK(app::fixed_frame_ms(parse({"--frames", "300", "--host"})->options) == 0);
+    CHECK(app::fixed_frame_ms(parse({"--frames", "300", "--join", "example.org"})->options) == 0);
+}
+
 TEST_CASE("command line: how often disasters come and what they do to the speed") {
     const auto c = parse({"--volcanoes", "rare", "--plagues", "off", "--fires", "rare", "--event-speed", "attacks"});
     REQUIRE(static_cast<bool>(c));

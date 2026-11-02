@@ -53,7 +53,9 @@ number of players and the state of the session, in the player's language. With t
 variable `O1602_DEBUG_TITLE` set, it also shows a developer readout: zoom and rotation, the tile under
 the mouse with its island, city and owner, the selection, the frame rate and the number of sprites
 drawn. With `--frames N --screenshot image.png` the program runs for N frames, saves the last one and
-reports the frame rate (for tests without user input).
+reports the frame rate (for tests without user input). Every frame of such a run advances the game by
+the same 16 ms, however fast the computer draws, so two runs with the same game and `--seed` give
+pixel-identical screenshots (not in a multiplayer game, which goes by real time).
 
 ## 2. The original under Wine (for side-by-side comparisons)
 
