@@ -34,6 +34,9 @@ constexpr Id kIslands = 59;            // the page of the islands
 constexpr Id kReroll = 60;             // another world for the preview
 constexpr Id kDisasters = 61;          // the page of the disasters
 constexpr Id kDisastersOriginal = 62;  // all of them as in the original
+constexpr Id kBalance = 63;            // the page of Open1602's balance changes
+constexpr Id kBalanceOriginal = 64;    // all of them off, as in the original
+constexpr Id kBalanceAll = 65;         // all of them on
 constexpr Id kItem = 100;              // + SetupItem
 
 // The frame and the bottom row, as the multiplayer menu's.
@@ -64,7 +67,8 @@ constexpr std::int32_t kLeft = 40;
 constexpr std::int32_t kRight = kLeft + kGroupW + 16;
 
 // Economy, limits and nature on the left, the world and the opponents on the right; the disasters
-// have a page of their own, its way below the nature.
+// have a page of their own, its way below the nature, and so have the balance changes, their way
+// below the economy.
 constexpr Group kGroups[] = {
     {"setup.group.economy", SetupItem::Refund, SetupItem::TradeCarts, kLeft},
     {"setup.group.limits", SetupItem::Ships, SetupItem::GameSpeed, kLeft},
@@ -91,6 +95,11 @@ constexpr Group kBugGroups[] = {
     {"setup.group.opponents", SetupItem::BugNativeLand, SetupItem::BugNativeLand, kRight},
     // Not a bug, but a trick of the original: its cheats (with the code, from the start, or never).
     {"setup.group.cheats", SetupItem::Cheats, SetupItem::Cheats, kRight},
+};
+
+// Open1602's changes to the balance, each on its own.
+constexpr Group kBalanceGroups[] = {
+    {"setup.group.balance", SetupItem::BalanceBread, SetupItem::BalanceShips, kLeft},
 };
 
 // The disasters and how often they come.
@@ -333,6 +342,12 @@ GameSettingsMenu::Result GameSettingsMenu::mouse(std::int32_t x, std::int32_t y,
         m_page = Page::Disasters;
     } else if (*id == kDisastersOriginal && editable) {
         m_setup.rules = original_disasters(m_setup.rules);
+    } else if (*id == kBalance) {
+        m_page = Page::Balance;
+    } else if (*id == kBalanceOriginal && editable) {
+        m_setup.rules = original_balance(m_setup.rules);
+    } else if (*id == kBalanceAll && editable) {
+        m_setup.rules = open1602_balance(m_setup.rules);
     } else if (*id == kIslands) {
         m_page = Page::Islands;
         if (m_setup.world_seed == 0 && editable && m_scope != SetupScope::MultiplayerEndless) {
@@ -377,11 +392,13 @@ void GameSettingsMenu::layout() {
     const bool bugs = m_page == Page::Bugs;
     const bool islands = m_page == Page::Islands;
     const bool disasters = m_page == Page::Disasters;
+    const bool balance = m_page == Page::Balance;
     f.label(kHeading,
             ui::tr(victory     ? "setup.title.victory"
                    : bugs      ? "setup.title.bugs"
                    : islands   ? "setup.title.islands"
                    : disasters ? "setup.title.disasters"
+                   : balance   ? "setup.title.balance"
                                : title_key(m_scope)),
             Align::Left, Tone::Heading);
     const bool editable = m_mode != Mode::View;
@@ -391,6 +408,7 @@ void GameSettingsMenu::layout() {
                                           : bugs      ? std::span<const Group>(kBugGroups)
                                           : islands   ? std::span<const Group>(kIslandGroups)
                                           : disasters ? std::span<const Group>(kDisasterGroups)
+                                          : balance   ? std::span<const Group>(kBalanceGroups)
                                                       : std::span<const Group>(kGroups);
     const auto offered = [&](const Group& g) {
         std::vector<SetupItem> items;
@@ -408,6 +426,8 @@ void GameSettingsMenu::layout() {
     const bool islands_row = m_page == Page::Settings && setup_item_offered(m_scope, SetupItem::IslandPreset);
     // The way to the disasters' page, below the nature's items.
     const bool disasters_row = m_page == Page::Settings && setup_item_offered(m_scope, SetupItem::Plagues);
+    // The way to the page of the balance changes, below the economy's items.
+    const bool balance_row = m_page == Page::Settings && setup_item_offered(m_scope, SetupItem::BalanceBread);
     double longest = 0.0;
     const auto measure = [&](const std::string& label) {
         const double w = m_label_font != nullptr ? m_label_font->width(label) / m_label_font->design_scale()
@@ -429,6 +449,9 @@ void GameSettingsMenu::layout() {
         }
         if (disasters_row) {
             measure(ui::tr("setup.disasters"));
+        }
+        if (balance_row) {
+            measure(ui::tr("setup.balance"));
         }
     }
     const std::int32_t label_w = std::clamp(static_cast<std::int32_t>(std::ceil(longest)) + 2 * kTextPadding,
@@ -459,7 +482,8 @@ void GameSettingsMenu::layout() {
         }
         const bool world = g.first == SetupItem::Map && islands_row;
         const bool nature = g.first == SetupItem::FertileFields && disasters_row;
-        const std::int32_t extra = world || nature ? 1 : 0;
+        const bool economy = g.first == SetupItem::Refund && balance_row;
+        const std::int32_t extra = world || nature || economy ? 1 : 0;
         const std::int32_t top = group(g.heading, static_cast<std::int32_t>(items.size()) + extra, g.x);
         const std::int32_t extra_y = top + static_cast<std::int32_t>(items.size()) * kRowH;
         if (world) {
@@ -468,6 +492,9 @@ void GameSettingsMenu::layout() {
         } else if (nature) {
             const Rect value = row(g.x, extra_y, ui::tr("setup.disasters"), true);
             f.button(kDisasters, value, ui::tr("setup.disasters.open", {disasters_summary(m_setup.rules)}));
+        } else if (economy) {
+            const Rect value = row(g.x, extra_y, ui::tr("setup.balance"), true);
+            f.button(kBalance, value, ui::tr("setup.balance.open", {balance_summary(m_setup.rules)}));
         }
         for (std::size_t i = 0; i < items.size(); ++i) {
             const SetupItem item = items[i];
@@ -511,6 +538,7 @@ void GameSettingsMenu::layout() {
                                           : editable         ? "setup.hint.islands"
                                                              : "setup.hint.islands.view")
                            : disasters ? (editable ? "setup.hint.disasters" : "setup.hint.disasters.view")
+                           : balance   ? (editable ? "setup.hint.balance" : "setup.hint.balance.view")
                                        : hint_key(m_scope)),
                     Tone::Dim);
     }
@@ -526,6 +554,11 @@ void GameSettingsMenu::layout() {
     } else if (disasters) {
         f.button(kDisastersOriginal, Rect{520, kBottomY, 240, 44}, ui::tr("setup.disasters.all_original"), true,
                  original_disasters(m_setup.rules) == m_setup.rules);
+    } else if (balance) {
+        f.button(kBalanceOriginal, Rect{260, kBottomY, 240, 44}, ui::tr("setup.balance.all_original"), true,
+                 original_balance(m_setup.rules) == m_setup.rules);
+        f.button(kBalanceAll, Rect{520, kBottomY, 240, 44}, ui::tr("setup.balance.all_on"), true,
+                 open1602_balance(m_setup.rules) == m_setup.rules);
     } else if (bugs) {
         f.button(kBugsOriginal, Rect{260, kBottomY, 240, 44}, ui::tr("setup.bugs.all_original"), true,
                  page_bugs(m_setup.rules.bugs) == page_bugs(sim::OriginalBugs::all()));

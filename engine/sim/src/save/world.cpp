@@ -60,6 +60,7 @@ enum RuleKey : std::uint16_t {
     kFires = 52,          // Rules::fires, when not the original's
     kRareEruptions = 53,  // 1: Volcanoes::Rare, under its own key so older versions read the game's way
     kEventSpeed = 54,     // no longer read: the speed at events became an option of each computer
+    kShipHolds = 55,      // 1: the large merchant ship has 8 holds, the warship 6 (Rules::large_ship_holds)
     // The victory conditions (VictoryConditions).
     kWinInhabitants = 11,
     kWinResidentClass = 12,
@@ -229,6 +230,9 @@ void write_rules(Writer& out, const Rules& r) {
     if (r.wider_hunting) {
         values.emplace_back(kWiderHunting, 1U);
     }
+    if (r.large_ship_holds) {
+        values.emplace_back(kShipHolds, 1U);
+    }
     // Rarer eruptions and outbreaks only when not the original's: the original's way keeps the
     // bytes.
     if (r.volcanoes == Volcanoes::Rare) {
@@ -283,6 +287,7 @@ Rules read_rules(Reader& in) {
     // Without its key a game plays the original's bread chain, as the versions before the key did.
     r.revised_bread = false;
     r.wider_hunting = false;      // the same for the hunter's hut
+    r.large_ship_holds = false;   // and for the large ships' holds
     bool rare_eruptions = false;  // applies to the game's way only, whichever key comes first
     const std::uint32_t n = in.in().count(6);
     for (std::uint32_t i = 0; i < n; ++i) {
@@ -388,6 +393,9 @@ Rules read_rules(Reader& in) {
                 break;
             case kWiderHunting:
                 r.wider_hunting = v != 0;
+                break;
+            case kShipHolds:
+                r.large_ship_holds = v != 0;
                 break;
             case kRareEruptions:
                 rare_eruptions = v != 0;

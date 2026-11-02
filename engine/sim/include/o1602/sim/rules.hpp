@@ -331,6 +331,11 @@ struct Rules {
     /// original's settings keep the original's reach.
     bool wider_hunting = true;
 
+    /// Open1602: the large merchant ship has 8 holds and the large warship 6, the original's the
+    /// other way round (data/balance/large_ship_holds.toml), so that the merchant ship carries
+    /// more, as the small one does. On by default; the original's settings keep the original's holds.
+    bool large_ship_holds = true;
+
     /// Which towns are discovered from the start (players, natives, pirates) or only by ship.
     Reveal reveal = Reveal::Original;
 
@@ -387,6 +392,7 @@ struct Rules {
         r.computers_buy_ships = false;
         r.more_carts = false;
         r.wider_hunting = false;
+        r.large_ship_holds = false;
         r.reveal = Reveal::Original;
         r.fertile_fields = false;
         r.climate_crops = false;

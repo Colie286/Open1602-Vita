@@ -2,6 +2,7 @@
 // The diplomacy window with more partners than VERTRAG.GAD has rows (diplomacy_strip.hpp): where
 // the strip puts the coats of arms, who the partners are and which offers wait for an answer.
 
+#include <algorithm>
 #include <set>
 #include <string>
 #include <utility>
@@ -96,6 +97,12 @@ TEST_CASE("diplomacy strip: partners are the other humans and computers, offers 
     CHECK(diplomacy::open_offers(world, 0).size() == 1);
     // Nobody to answer for a player who is not in the game.
     CHECK(diplomacy::open_offers(world, sim::kNoPlayer).empty());
+    // A defeated opponent leaves the window, and its offers with it.
+    world.player(1)->status = sim::PlayerStatus::Defeated;
+    const std::vector<sim::PlayerId> left = diplomacy::partners(world, 0);
+    CHECK(left.size() == 10);
+    CHECK(std::find(left.begin(), left.end(), sim::PlayerId{1}) == left.end());
+    CHECK(diplomacy::open_offers(world, 0).empty());
 }
 
 TEST_CASE("diplomacy strip: a partner's wars") {

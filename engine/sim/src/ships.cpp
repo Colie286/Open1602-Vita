@@ -258,6 +258,9 @@ Fleet::Fleet(World& world, const assets::BuildingTable& buildings, const assets:
         }
         if (s.cargo.empty()) {
             s.cargo.resize(type != nullptr && type->ship.cargo_slots != 0 ? type->ship.cargo_slots : 1U);
+        } else if (type != nullptr && type->ship.cargo_slots != 0) {
+            // A file played with other holds than it was saved with (Rules::large_ship_holds).
+            fit_holds(s, type->ship.cargo_slots);
         }
         if (world.simulation_state().empty()) {
             // An original savegame keeps no island for its ships; a game saved by Open1602 does.
@@ -269,6 +272,27 @@ Fleet::Fleet(World& world, const assets::BuildingTable& buildings, const assets:
     // making a Simulation does not change the game.
     Random names = world.random(RandomStream::Ships);
     m_name_index = names.next();
+}
+
+void fit_holds(Ship& ship, std::size_t holds) {
+    if (ship.cargo.size() < holds) {
+        ship.cargo.resize(holds);
+        return;
+    }
+    std::size_t free = 0;
+    for (std::size_t h = holds; h < ship.cargo.size(); ++h) {
+        if (ship.cargo[h].ware == 0) {
+            continue;
+        }
+        while (free < holds && ship.cargo[free].ware != 0) {
+            ++free;
+        }
+        if (free == holds) {
+            return;  // full: the goods keep their holds
+        }
+        ship.cargo[free] = ship.cargo[h];
+        ship.cargo[h] = CargoSlot{};
+    }
 }
 
 // ---- Data of ships -----------------------------------------------------------------------------

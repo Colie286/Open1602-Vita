@@ -31,7 +31,8 @@ std::vector<sim::PlayerId> partners(const sim::World& world, sim::PlayerId local
     const auto& players = world.players();
     for (std::size_t i = 0; i < players.size(); ++i) {
         const auto id = static_cast<sim::PlayerId>(i);
-        if (id != local &&
+        // A defeated opponent has nothing left to make treaties with: it leaves the window.
+        if (id != local && players[i].active() &&
             (players[i].role == sim::PlayerRole::Human || players[i].role == sim::PlayerRole::Computer)) {
             out.push_back(id);
         }

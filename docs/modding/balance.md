@@ -75,7 +75,7 @@ running_cost = 10
 
 ### Revised bread production
 
-The game setting "Alternative balance" (`Rules::revised_bread`, with the wider hunter's hut, [ADR 0008](../architecture/0008-game-settings.md))
+The game setting "Bread chain" on the page "Balance changes" (`Rules::revised_bread`, [ADR 0008](../architecture/0008-game-settings.md))
 uses the same values, from `data/balance/revised_bread.toml`, compiled into the game: the grain farm
 makes 2 t of grain per ripe field, the bakery 2 t of bread from 2 t of flour for 15 gold a minute
 instead of 5. Three farms with 21 fields, two mills and a bakery then make about 6.3 t of bread a
@@ -83,6 +83,11 @@ minute instead of 1.5 t, for the same 6.3 gold per ton as two cattle farms and a
 fish stay as they are (`tests/data/test_food_chains.cpp` measures it). A package's values for the
 same buildings go before the setting's. The setting is on by default; the original's settings
 switch it off.
+
+The other settings of that page work the same way: "Hunter's hut reach" (`Rules::wider_hunting`,
+`data/balance/wider_hunting.toml`: 12 tiles instead of 8) and "Holds of large ships"
+(`Rules::large_ship_holds`, `data/balance/large_ship_holds.toml`, the figures' field `holds`: the
+large merchant ship 8 holds and the large warship 6, the original's the other way round).
 
 ## Where a mod's changes are
 

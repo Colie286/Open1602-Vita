@@ -15,6 +15,7 @@
 #include "o1602/sim/balance.hpp"
 #include "o1602/sim/rules.hpp"
 #include "o1602/sim/save_game.hpp"
+#include "o1602/sim/ships.hpp"
 #include "o1602/sim/world.hpp"
 
 using namespace o1602;
@@ -376,6 +377,70 @@ TEST_CASE("balance: the hunter's hut reaches 12 tiles in Open1602, 8 with the or
     const std::vector<sim::BuildingValue> hunting = sim::rule_building_values(rules);
     REQUIRE(hunting.size() == 1);
     CHECK((hunting[0] == sim::BuildingValue{22003, sim::BuildingField::Radius, 12}));
+}
+
+TEST_CASE("balance: the large merchant ship has 8 holds and the large warship 6 in Open1602") {
+    CHECK(sim::Rules::open1602().large_ship_holds);
+    CHECK(!sim::Rules::original().large_ship_holds);
+    CHECK(sim::rule_figure_values(sim::Rules::original()).empty());
+    sim::Rules rules = sim::Rules::original();
+    rules.large_ship_holds = true;
+    CHECK(sim::rule_building_values(rules).empty());
+    const std::vector<sim::FigureValue> holds = sim::rule_figure_values(rules);
+    REQUIRE(holds.size() == 2);
+    CHECK((holds[0] == sim::FigureValue{23, sim::FigureField::Holds, 8}));  // large merchant ship
+    CHECK((holds[1] == sim::FigureValue{27, sim::FigureField::Holds, 6}));  // large warship
+
+    // A package that sets the warship's holds itself keeps them.
+    sim::Balance balance;
+    sim::set_figure_value(balance, sim::FigureValue{27, sim::FigureField::Holds, 4});
+    sim::add_figure_values(balance, holds);
+    REQUIRE(balance.figures.size() == 2);
+    CHECK((balance.figures[1] == sim::FigureValue{27, sim::FigureField::Holds, 4}));
+    CHECK(sim::valid(balance));
+
+    // The rule is kept with the game; a game without its key plays the original's holds.
+    const auto buildings = make_buildings();
+    sim::World world(60, 40);
+    world.set_saved_rules(rules);
+    auto bytes = sim::write_game(world, buildings);
+    REQUIRE(bytes.ok());
+    auto loaded = sim::read_game(*bytes, buildings);
+    REQUIRE(loaded.ok());
+    REQUIRE(loaded->saved_rules().has_value());
+    CHECK(loaded->saved_rules()->large_ship_holds);
+    rules.large_ship_holds = false;
+    world.set_saved_rules(rules);
+    bytes = sim::write_game(world, buildings);
+    REQUIRE(bytes.ok());
+    loaded = sim::read_game(*bytes, buildings);
+    REQUIRE(loaded.ok());
+    CHECK(!loaded->saved_rules()->large_ship_holds);
+}
+
+TEST_CASE("balance: a ship gets the holds of its type, its goods kept") {
+    sim::Ship ship;
+    ship.cargo.resize(6);
+    ship.cargo[5] = sim::CargoSlot{22, 10 * 32, 0};
+    sim::fit_holds(ship, 8);  // more holds: new empty ones
+    REQUIRE(ship.cargo.size() == 8);
+    CHECK(ship.cargo[5].ware == 22);
+    CHECK(ship.cargo[7].ware == 0);
+    // Fewer holds (a file of the original with 8 slots): the goods beyond move into empty holds.
+    ship.cargo[7] = sim::CargoSlot{23, 20 * 32, 0};
+    ship.cargo[0] = sim::CargoSlot{2, 32, 0};
+    sim::fit_holds(ship, 6);
+    REQUIRE(ship.cargo.size() == 8);  // slots are never taken away
+    CHECK(ship.cargo[1].ware == 23);
+    CHECK(ship.cargo[1].amount == 20 * 32);
+    CHECK(ship.cargo[7].ware == 0);
+    // No empty hold left: the goods stay where they are.
+    for (std::size_t h = 0; h < 6; ++h) {
+        ship.cargo[h] = sim::CargoSlot{24, 32, 0};
+    }
+    ship.cargo[6] = sim::CargoSlot{2, 32, 0};
+    sim::fit_holds(ship, 6);
+    CHECK(ship.cargo[6].ware == 2);
 }
 
 TEST_CASE("balance: a game keeps its building values and the rule in the savegame") {

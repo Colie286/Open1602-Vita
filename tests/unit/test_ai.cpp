@@ -479,7 +479,7 @@ TEST_CASE("ai: a computer's first minutes give the same state on every platform"
     // whose goods do not fit at home is free again; the computers' state version 4 (a search's target);
     // the revised bread chain by default; the computers' state version 5 (the slots counted).
     // The wider hunter's hut by default.
-    constexpr std::uint64_t kExpected = 0x280cf538d2399e89ULL;
+    constexpr std::uint64_t kExpected = 0x6e90c0ea8852cc84ULL;
     if (hash != kExpected) {
         std::printf("  state hash after 90 s: 0x%016llx\n", static_cast<unsigned long long>(hash));
     }

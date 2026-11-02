@@ -328,6 +328,10 @@ class Combat;
 /// the original's files keep its eight slots; the ones beyond the type's stay empty. Everything
 /// that puts goods or soldiers into a hold looks only at these.
 [[nodiscard]] std::size_t usable_holds(const Ship& ship, const assets::FigureTable& figures);
+/// Gives a ship at least `holds` holds (a game played with more holds for its type than it was
+/// saved with, Rules::large_ship_holds) and moves goods of the holds beyond them into empty ones
+/// it uses; what does not fit stays where it is rather than being lost. Slots are never taken away.
+void fit_holds(Ship& ship, std::size_t holds);
 /// The hold a goods exchange window selects when it opens, as in the original: the one with the most
 /// goods. An empty ship gets the first hold; of equally full holds the last one is taken.
 [[nodiscard]] std::size_t fullest_hold(const Ship& ship, const assets::FigureTable& figures);

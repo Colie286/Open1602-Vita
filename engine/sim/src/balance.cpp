@@ -220,6 +220,15 @@ void set_figure_value(Balance& balance, FigureValue value) {
     }
 }
 
+void add_figure_values(Balance& balance, const std::vector<FigureValue>& under) {
+    for (const FigureValue& v : under) {
+        const auto at = std::lower_bound(balance.figures.begin(), balance.figures.end(), v, before_figure);
+        if (at == balance.figures.end() || at->number != v.number || at->field != v.field) {
+            balance.figures.insert(at, v);
+        }
+    }
+}
+
 void apply_buildings_file(Balance& balance, std::string_view package, std::string_view utf8,
                           std::vector<std::string>& warnings, std::span<const assets::OwnBuilding> own) {
     apply_table_file(package, kBuildingsFile, utf8, warnings,
@@ -421,6 +430,7 @@ void apply_figure_values(assets::FigureTable& table, const assets::FigureTable& 
         t.ship.max_cannons = o.ship.max_cannons;
         t.ship.price = o.ship.price;
         t.ship.build_amount = o.ship.build_amount;
+        t.ship.cargo_slots = o.ship.cargo_slots;
         t.combat.max_health = o.combat.max_health;
         t.combat.hit = o.combat.hit;
         t.combat.range8 = o.combat.range8;
@@ -471,27 +481,47 @@ void apply_figure_values(assets::FigureTable& table, const assets::FigureTable& 
                 t->ship.build_amount = v.value * kTon;
                 t->combat.weapon_amount = t->ship.build_amount;
                 break;
+            case FigureField::Holds:
+                t->ship.cargo_slots = static_cast<std::uint8_t>(v.value);
+                break;
         }
     }
 }
 
-std::vector<BuildingValue> rule_building_values(const Rules& rules) {
+namespace {
+
+/// The balance of the rules' files (data/balance, compiled in) that `rules` switch on.
+Balance rule_balance(const Rules& rules) {
     Balance balance;
     std::vector<std::string> warnings;
-    const auto add = [&](std::string_view name) {
+    const auto find = [](std::string_view name) -> std::string_view {
         for (std::size_t i = 0; i < presets::kEmbeddedFileCount; ++i) {
             if (presets::kEmbeddedFiles[i].name == name) {
-                apply_balance_file(balance, "open1602", presets::kEmbeddedFiles[i].text(), warnings);
+                return presets::kEmbeddedFiles[i].text();
             }
         }
+        return {};
     };
     if (rules.revised_bread) {
-        add("revised_bread");
+        apply_balance_file(balance, "open1602", find("revised_bread"), warnings);
     }
     if (rules.wider_hunting) {
-        add("wider_hunting");
+        apply_balance_file(balance, "open1602", find("wider_hunting"), warnings);
     }
-    return balance.buildings;
+    if (rules.large_ship_holds) {
+        apply_figures_file(balance, "open1602", find("large_ship_holds"), warnings);
+    }
+    return balance;
+}
+
+}  // namespace
+
+std::vector<BuildingValue> rule_building_values(const Rules& rules) {
+    return rule_balance(rules).buildings;
+}
+
+std::vector<FigureValue> rule_figure_values(const Rules& rules) {
+    return rule_balance(rules).figures;
 }
 
 }  // namespace o1602::sim

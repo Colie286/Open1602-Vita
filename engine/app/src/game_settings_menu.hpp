@@ -4,9 +4,10 @@
 // settings in groups (economy, limits, disasters, world, opponents), each a button with its value;
 // a left click chooses the next value, a right click the previous one. Presets for the original's
 // rules and Open1602's defaults. The victory conditions of an endless game, the bugs of the
-// original a game can bring back ("Original settings") and the islands of a world of its own have
-// a page of their own each, which a button of the first opens. The page of the islands shows the
-// world the settings make (sim::preview_world), drawn in the background.
+// original a game can bring back ("Original settings"), the disasters, Open1602's balance changes
+// and the islands of a world of its own have a page of their own each, which a button of the
+// first opens. The page of the islands shows the world the settings make (sim::preview_world),
+// drawn in the background.
 //
 // One dialog for every kind of game: the endless game after the name and the banner, a scenario
 // after its mission screen, and the multiplayer menu, where the host chooses and the others look
@@ -87,6 +88,8 @@ public:
     [[nodiscard]] bool islands_page() const noexcept { return m_page == Page::Islands; }
     /// Whether the page of the disasters is open.
     [[nodiscard]] bool disasters_page() const noexcept { return m_page == Page::Disasters; }
+    /// Whether the page of Open1602's balance changes is open.
+    [[nodiscard]] bool balance_page() const noexcept { return m_page == Page::Balance; }
     /// The world of the preview, when it is made (for the tests: wait_preview() waits for it).
     [[nodiscard]] const std::optional<sim::WorldPreview>& preview() const noexcept { return m_preview; }
     void wait_preview();
@@ -99,7 +102,7 @@ public:
     Result mouse(std::int32_t x, std::int32_t y, bool down, ui::MouseButton button = ui::MouseButton::Left);
 
 private:
-    enum class Page : std::uint8_t { Settings, Victory, Bugs, Islands, Disasters };
+    enum class Page : std::uint8_t { Settings, Victory, Bugs, Islands, Disasters, Balance };
     /// A row of the preview's picture in one colour.
     struct Run {
         std::int32_t x = 0;

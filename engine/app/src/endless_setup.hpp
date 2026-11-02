@@ -63,7 +63,6 @@ enum class SetupItem : std::uint8_t {
     TraderPrices,
     TraderReach,
     OreVeins,
-    Balance,     ///< Open1602's alternative balance: Rules::revised_bread and Rules::wider_hunting together
     TradeCarts,  ///< Rules::more_carts
     // Limits
     Ships,
@@ -76,6 +75,10 @@ enum class SetupItem : std::uint8_t {
     Volcanoes,
     Plagues,  ///< Rules::plagues
     Fires,    ///< Rules::fires
+    // Open1602's changes to the balance (a page of their own; balance_item), each on its own
+    BalanceBread,    ///< Rules::revised_bread
+    BalanceHunting,  ///< Rules::wider_hunting
+    BalanceShips,    ///< Rules::large_ship_holds
     // World
     Map,
     WorldSize,
@@ -151,6 +154,16 @@ enum class SetupItem : std::uint8_t {
 [[nodiscard]] sim::Rules original_disasters(sim::Rules rules) noexcept;
 /// The page of the disasters in a few words: as in the original, or how many differ.
 [[nodiscard]] std::string disasters_summary(const sim::Rules& rules);
+/// Whether an item is on the page of the balance changes.
+[[nodiscard]] constexpr bool balance_item(SetupItem item) noexcept {
+    return item >= SetupItem::BalanceBread && item <= SetupItem::BalanceShips;
+}
+/// The rules of the page of the balance changes as in the original (all off), the others as in `rules`.
+[[nodiscard]] sim::Rules original_balance(sim::Rules rules) noexcept;
+/// The rules of the page of the balance changes all on (Open1602's), the others as in `rules`.
+[[nodiscard]] sim::Rules open1602_balance(sim::Rules rules) noexcept;
+/// The page of the balance changes in a few words: all on, as in the original, or how many are on.
+[[nodiscard]] std::string balance_summary(const sim::Rules& rules);
 /// Whether an item is on the page of the islands.
 [[nodiscard]] constexpr bool island_item(SetupItem item) noexcept {
     return item >= SetupItem::IslandPreset && item <= SetupItem::OreMountains;

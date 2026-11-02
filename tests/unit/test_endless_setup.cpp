@@ -177,33 +177,56 @@ TEST_CASE("endless setup: the values reach the rules and the world") {
     app::read_setup(read, app::write_setup(s));
     CHECK(read.rules.computer_players == sim::Computers::Off);
     CHECK(app::setup_item_offered(app::SetupScope::Scenario, SetupItem::ComputerPlayers));
-    // The alternative balance (the revised bread chain and the wider hunter's hut): on by default,
-    // the original's on choice, one item for both.
+    // Open1602's balance changes, each on its own: on by default, the original's settings off.
     CHECK(s.rules.revised_bread);
     CHECK(s.rules.wider_hunting);
-    CHECK(value_of(s, SetupItem::Balance) == ui::tr("setup.on"));
-    app::choose(s, SetupItem::Balance, 0);
-    CHECK(!s.rules.revised_bread);
-    CHECK(!s.rules.wider_hunting);
-    CHECK(value_of(s, SetupItem::Balance) == ui::tr("setup.off"));
-    CHECK(app::write_setup(s).find("endless.balance = original\n") != std::string::npos);
+    CHECK(s.rules.large_ship_holds);
+    CHECK(app::balance_summary(s.rules) == ui::tr("setup.balance.all"));
+    CHECK(value_of(s, SetupItem::BalanceBread) == ui::tr("setup.balance.bread.revised"));
+    CHECK(value_of(s, SetupItem::BalanceHunting) == ui::tr("setup.balance.hunting.wider"));
+    CHECK(value_of(s, SetupItem::BalanceShips) == ui::tr("setup.balance.ships.merchant"));
+    app::choose(s, SetupItem::BalanceShips, 0);
+    CHECK(!s.rules.large_ship_holds);
+    CHECK(s.rules.revised_bread);
+    CHECK(s.rules.wider_hunting);
+    CHECK(app::balance_summary(s.rules) == ui::tr("setup.balance.some", {"2", "3"}));
+    CHECK(app::write_setup(s).find("endless.large_ship_holds = original\n") != std::string::npos);
     app::read_setup(read, app::write_setup(s));
+    CHECK(!read.rules.large_ship_holds);
+    CHECK(read.rules.revised_bread);
+    CHECK(read.rules.wider_hunting);
+    app::choose(s, SetupItem::BalanceBread, 0);
+    CHECK(!s.rules.revised_bread);
+    CHECK(s.rules.wider_hunting);
+    CHECK(app::write_setup(s).find("endless.bread = original\n") != std::string::npos);
+    CHECK(app::write_setup(s).find("endless.hunting = wider\n") != std::string::npos);
+    app::choose(s, SetupItem::BalanceHunting, 0);
+    CHECK(!s.rules.wider_hunting);
+    CHECK(app::balance_summary(s.rules) == ui::tr("setup.balance.original"));
+    s.rules = app::open1602_balance(s.rules);
+    CHECK(s.rules.revised_bread);
+    CHECK(s.rules.wider_hunting);
+    CHECK(s.rules.large_ship_holds);
+    // The one setting of before still reads, for both of its parts.
+    CHECK(app::read_setup_line(read, "balance", "original"));
     CHECK(!read.rules.revised_bread);
     CHECK(!read.rules.wider_hunting);
     CHECK(app::read_setup_line(read, "balance", "alternative"));
     CHECK(read.rules.revised_bread);
     CHECK(read.rules.wider_hunting);
-    // The keys of before, one part each, still read.
-    CHECK(app::read_setup_line(read, "bread", "original"));
-    CHECK(!read.rules.revised_bread);
-    CHECK(read.rules.wider_hunting);
-    CHECK(app::setup_choice(read, SetupItem::Balance) == 0);  // only both are the alternative balance
-    CHECK(app::read_setup_line(read, "hunting", "original"));
-    CHECK(!read.rules.wider_hunting);
-    // The original's settings switch it off.
+    CHECK(app::read_setup_line(read, "large_ship_holds", "merchant"));
+    CHECK(read.rules.large_ship_holds);
+    CHECK(app::setup_item_offered(app::SetupScope::Scenario, SetupItem::BalanceShips));
+    CHECK(app::balance_item(SetupItem::BalanceHunting));
+    CHECK(!app::balance_item(SetupItem::TradeCarts));
+    // The original's settings switch them all off.
     EndlessSetup original;
     original.rules = sim::Rules::original();
-    CHECK(app::setup_choice(original, SetupItem::Balance) == 0);
+    CHECK(app::setup_choice(original, SetupItem::BalanceBread) == 0);
+    CHECK(app::setup_choice(original, SetupItem::BalanceHunting) == 0);
+    CHECK(app::setup_choice(original, SetupItem::BalanceShips) == 0);
+    CHECK(app::balance_summary(app::original_balance(s.rules)) == ui::tr("setup.balance.original"));
+    CHECK(app::balance_summary(app::open1602_balance(original.rules)) == ui::tr("setup.balance.all"));
     // Trade carts per island: one per Kontor and market by default, one as in the original on choice.
     CHECK(s.rules.more_carts);
     CHECK(value_of(s, SetupItem::TradeCarts) == ui::tr("setup.trade_carts.more"));
@@ -398,9 +421,10 @@ TEST_CASE("game setup: what a scenario, a multiplayer game and a savegame offer"
         CHECK(!app::setup_item_offered(SetupScope::Scenario, item));
     }
     for (const SetupItem item :
-         {SetupItem::Refund, SetupItem::TraderPrices, SetupItem::TraderReach, SetupItem::OreVeins, SetupItem::Balance,
-          SetupItem::Ships, SetupItem::Units, SetupItem::GameSpeed, SetupItem::Droughts, SetupItem::Volcanoes,
-          SetupItem::ClassicAi, SetupItem::Pirates, SetupItem::PirateNests, SetupItem::Reveal}) {
+         {SetupItem::Refund, SetupItem::TraderPrices, SetupItem::TraderReach, SetupItem::OreVeins,
+          SetupItem::BalanceBread, SetupItem::BalanceShips, SetupItem::Ships, SetupItem::Units, SetupItem::GameSpeed,
+          SetupItem::Droughts, SetupItem::Volcanoes, SetupItem::ClassicAi, SetupItem::Pirates, SetupItem::PirateNests,
+          SetupItem::Reveal}) {
         CHECK(app::setup_item_offered(SetupScope::Scenario, item));
         CHECK(app::setup_item_open(EndlessSetup{}, SetupScope::Scenario, item));
         CHECK(!app::setup_item_open(EndlessSetup{}, SetupScope::Savegame, item));  // to look at only
@@ -934,7 +958,7 @@ TEST_CASE("game setup: a savegame's values take the room their labels leave, in 
         for (auto i = 0; i < static_cast<int>(SetupItem::Count); ++i) {
             const auto item = static_cast<SetupItem>(i);
             if (!app::setup_item_offered(app::SetupScope::Savegame, item) || app::victory_item(item) ||
-                app::bug_item(item) || app::disaster_item(item) ||
+                app::bug_item(item) || app::disaster_item(item) || app::balance_item(item) ||
                 item == SetupItem::Cheats) {  // the cheats: on the page of the bugs
                 continue;
             }
@@ -946,6 +970,15 @@ TEST_CASE("game setup: a savegame's values take the room their labels leave, in 
         for (auto i = 0; i < static_cast<int>(SetupItem::Count); ++i) {
             const auto item = static_cast<SetupItem>(i);
             if (app::disaster_item(item)) {
+                CHECK(find_text(menu, value_of(menu.setup(), item)).has_value());
+            }
+        }
+        menu.back();
+        (void)click(menu, ui::tr("setup.balance.open", {ui::tr("setup.balance.all")}));
+        REQUIRE(menu.balance_page());
+        for (auto i = 0; i < static_cast<int>(SetupItem::Count); ++i) {
+            const auto item = static_cast<SetupItem>(i);
+            if (app::balance_item(item)) {
                 CHECK(find_text(menu, value_of(menu.setup(), item)).has_value());
             }
         }
@@ -1300,4 +1333,63 @@ TEST_CASE("game setup: the page of the disasters and how often they come") {
     CHECK(!find_text(menu, ui::tr("setup.disasters.all_original")).has_value());
     (void)click(menu, value_of(saved, SetupItem::Fires));
     CHECK(menu.setup().rules.fires == sim::Outbreaks::Off);
+}
+
+TEST_CASE("game setup: the page of the balance changes, each on its own") {
+    for (const std::string_view code : {"de", "en"}) {
+        ui::set_language(code);
+        for (const auto scope : {app::SetupScope::Endless, app::SetupScope::Scenario}) {
+            app::GameSettingsMenu menu;
+            menu.open(EndlessSetup{}, scope);
+            // On the settings' page only the way there, with what is on.
+            CHECK(!find_text(menu, app::setup_label(SetupItem::BalanceShips)).has_value());
+            CHECK(click(menu, ui::tr("setup.balance.open", {ui::tr("setup.balance.all")})) ==
+                  app::GameSettingsMenu::Result::None);
+            REQUIRE(menu.balance_page());
+            CHECK(find_text(menu, ui::tr("setup.title.balance")).has_value());
+            CHECK(!find_text(menu, ui::tr("setup.original")).has_value());
+            (void)click(menu, ui::tr("setup.balance.ships.merchant"));
+            CHECK(!menu.setup().rules.large_ship_holds);
+            CHECK(menu.setup().rules.revised_bread);
+            (void)click(menu, ui::tr("setup.balance.hunting.wider"));
+            CHECK(!menu.setup().rules.wider_hunting);
+
+            // Every row ends above the hint.
+            std::int32_t lowest = 0;
+            std::int32_t hint_y = INT32_MAX;
+            const std::string hint = ui::tr("setup.hint.balance");
+            for (const ui::DrawItem& d : menu.draw(kNoFonts)) {
+                if (d.kind != ui::DrawItem::Kind::Text || d.text.empty()) {
+                    continue;
+                }
+                if (d.text.size() > 20 && hint.compare(0, 20, d.text, 0, 20) == 0) {
+                    hint_y = std::min(hint_y, d.y);
+                } else if (d.text == app::setup_label(SetupItem::BalanceShips)) {
+                    lowest = std::max(lowest, d.y);
+                }
+            }
+            CHECK(lowest > 0);
+            CHECK(lowest < hint_y);
+
+            CHECK(menu.back());
+            const std::string some = ui::tr("setup.balance.open", {ui::tr("setup.balance.some", {"1", "3"})});
+            CHECK(find_text(menu, some).has_value());
+            (void)click(menu, some);
+            REQUIRE(menu.balance_page());
+            (void)click(menu, ui::tr("setup.balance.all_original"));
+            CHECK(!menu.setup().rules.revised_bread);
+            CHECK(!menu.setup().rules.wider_hunting);
+            CHECK(!menu.setup().rules.large_ship_holds);
+            (void)click(menu, ui::tr("setup.balance.all_on"));
+            CHECK(menu.setup().rules == sim::Rules{});
+            (void)click(menu, ui::tr("setup.balance.all_original"));
+            CHECK(menu.back());
+            CHECK(find_text(menu, ui::tr("setup.balance.open", {ui::tr("setup.balance.original")})).has_value());
+            // The original's settings switch every change off.
+            (void)click(menu, ui::tr("setup.defaults"));
+            (void)click(menu, ui::tr("setup.original"));
+            CHECK(app::balance_summary(menu.setup().rules) == ui::tr("setup.balance.original"));
+        }
+    }
+    ui::set_language(ui::kFallbackLanguage);
 }

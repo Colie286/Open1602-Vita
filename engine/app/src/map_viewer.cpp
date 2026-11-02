@@ -1543,10 +1543,14 @@ void MapViewer::render() {
                             continue;
                         }
                         // Ground that cannot be built on is checkered yellow, as in the original and the
-                        // History Edition, and drawn over the buildings so that none hides it.
+                        // History Edition, and drawn over the buildings so that none hides it. A
+                        // building that can go there is checkered yellow too, over its ground, as
+                        // the History Edition shows it (blueprints have their own colour); one short
+                        // of means only while it shows.
                         std::uint32_t w = 1;
                         std::uint32_t h = 1;
                         sim::rotated_size(*item.type, item.rotation, w, h);
+                        const bool shown_ghost = !blueprint && (item.ok() || (short_of_means && !blink_off));
                         bool inside = true;
                         for (std::uint32_t j = 0; j < h; ++j) {
                             for (std::uint32_t i = 0; i < w; ++i) {
@@ -1556,7 +1560,7 @@ void MapViewer::render() {
                                     inside = false;
                                     continue;
                                 }
-                                if (!item.ok() && !short_of_means) {
+                                if ((!item.ok() && !short_of_means) || shown_ghost) {
                                     render::TileMark mark{order->island, static_cast<std::uint16_t>(tx),
                                                           static_cast<std::uint16_t>(ty), render::kDragHatch};
                                     mark.hatched = true;
@@ -3620,6 +3624,7 @@ std::unique_ptr<GameState> MapViewer::make_state(sim::World world, const sim::Ru
         // A new game, or one from a file of the original: the rule's values under the mods'.
         sim::Balance balance = world.balance();
         sim::add_building_values(balance, sim::rule_building_values(rules));
+        sim::add_figure_values(balance, sim::rule_figure_values(rules));
         world.set_balance(balance);
     }
     sim::apply_building_values(m_buildings, m_original_buildings, world.balance());

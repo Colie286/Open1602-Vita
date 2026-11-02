@@ -64,6 +64,7 @@ enum class FigureField : std::uint8_t {
     Cannons,   ///< Maxkanon: cannons a ship carries at most
     Price,     ///< Preis: what a ship is worth
     Material,  ///< Rohmenge: t of material a shipyard builds the ship from, of weapons a castle needs for the unit
+    Holds,     ///< Maxware: cargo holds of 50 t a ship has
 };
 
 /// A changed value of a figure, in the units of figures.toml.
@@ -256,7 +257,7 @@ struct FigureFieldInfo {
 };
 
 /// Every field of a figure, in the order of FigureField.
-inline constexpr std::array<FigureFieldInfo, 10> kFigureFields = {{
+inline constexpr std::array<FigureFieldInfo, 11> kFigureFields = {{
     {"speed", FigureField::Speed, 1, 10000},
     {"max_carry", FigureField::MaxCarry, 1, 64},
     {"work_time", FigureField::WorkTime, 1, 600000},
@@ -267,6 +268,7 @@ inline constexpr std::array<FigureFieldInfo, 10> kFigureFields = {{
     {"cannons", FigureField::Cannons, 0, 100},
     {"price", FigureField::Price, 0, 100000},
     {"material", FigureField::Material, 0, 255},
+    {"holds", FigureField::Holds, 1, 8},  // at most the wares of a route stop (RouteStop::kEntries)
 }};
 
 /// Whether every value lies within its limits and the building and figure values are sorted and
@@ -329,5 +331,11 @@ void apply_figure_values(assets::FigureTable& table, const assets::FigureTable& 
 /// The building values a rule brings (Rules::revised_bread: data/balance/revised_bread.toml,
 /// compiled in), to go under those of the packages.
 [[nodiscard]] std::vector<BuildingValue> rule_building_values(const Rules& rules);
+/// The figure values a rule brings (Rules::large_ship_holds: data/balance/large_ship_holds.toml,
+/// compiled in), to go under those of the packages.
+[[nodiscard]] std::vector<FigureValue> rule_figure_values(const Rules& rules);
+
+/// Adds the values of `under` that `balance` does not set itself (a rule's values under the mods').
+void add_figure_values(Balance& balance, const std::vector<FigureValue>& under);
 
 }  // namespace o1602::sim
