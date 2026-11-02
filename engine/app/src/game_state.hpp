@@ -19,6 +19,10 @@ struct GameState {
     GameState(sim::World w, const assets::BuildingTable& buildings, const assets::FigureTable& figures,
               const sim::Rules& rules)
         : world(std::move(w)), simulation(world, buildings, figures, rules) {}
+    /// A world the editor shows (ADR 0013): the simulation never runs on it (Simulation::ViewOnly).
+    GameState(sim::World w, const assets::BuildingTable& buildings, const assets::FigureTable& figures,
+              const sim::Rules& rules, sim::Simulation::ViewOnly tag)
+        : world(std::move(w)), simulation(world, buildings, figures, rules, tag), view_only(true) {}
     GameState(const GameState&) = delete;
     GameState& operator=(const GameState&) = delete;
     ~GameState() { simulation.set_scripts(nullptr); }
@@ -39,6 +43,8 @@ struct GameState {
 
     sim::World world;
     sim::Simulation simulation;
+    /// The editor's world: shown, never run.
+    bool view_only = false;
     /// The scripts of the game's packages (docs/modding/scripts.md); the simulation runs them.
     std::unique_ptr<script::GameScripts> scripts;
 };

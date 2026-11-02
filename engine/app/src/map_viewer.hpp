@@ -45,6 +45,7 @@
 #include "o1602/assets/palette.hpp"
 #include "o1602/core/file.hpp"
 #include "o1602/core/result.hpp"
+#include "o1602/editor/document.hpp"
 #include "o1602/net/enet_transport.hpp"
 #include "o1602/net/lan.hpp"
 #include "o1602/net/session.hpp"
@@ -136,6 +137,7 @@ private:
     void toggle_pause_video() override;
     void save_template() override;
     void notify(std::string text, std::string_view log) override;
+    void editor_key(ui::KeyAction action) override;
 
     /// The window's events; the rest goes to the input.
     void handle_event(const SDL_Event& event);
@@ -216,7 +218,11 @@ private:
     /// `rules`: the settings of a new game; else those of the command line (a loaded game brings its own).
     /// The state of a game with `world`: a new game takes the building values of `rules` under the
     /// mods' (a savegame of Open1602 keeps its own), and m_buildings gets the game's values.
-    [[nodiscard]] std::unique_ptr<GameState> make_state(sim::World world, const sim::Rules& rules);
+    [[nodiscard]] std::unique_ptr<GameState> make_state(sim::World world, const sim::Rules& rules,
+                                                        bool view_only = false);
+    /// The presentation takes `next` as the game: everything of the old one goes. `source`: the file
+    /// it came from.
+    void adopt_state(std::unique_ptr<GameState> next, const std::filesystem::path& source);
     core::Status replace_world(sim::World world, const std::filesystem::path& source = {},
                                const sim::Rules* rules = nullptr);
     /// The name of the game for the window title (UTF-8).
@@ -277,6 +283,33 @@ private:
                                const EndlessSetup& setup);
     /// Open1602's own folder for savegames (the user's data folder, not the installation).
     [[nodiscard]] static std::filesystem::path save_folder();
+
+    // ---- The editor (editor_mode.cpp, ADR 0013) ----
+    /// Shows `world` in the editor, as a new document of `file` (empty: a new map). The game that
+    /// ran goes; out of memory leaves everything as it was.
+    core::Status enter_editor(sim::World world, const std::filesystem::path& file);
+    /// The editor with the file of the command line (--editor), or a new map.
+    void start_editor();
+    /// Opens `file` in the editor (a file of Open1602 or of the original).
+    core::Status editor_open(const std::filesystem::path& file);
+    /// A new map in the editor.
+    core::Status editor_new(const EditorNewMap& map);
+    /// Saves the document under `file`; what happened goes to the panel's notice.
+    void editor_save(const std::filesystem::path& file);
+    /// Out of the editor, to the main menu.
+    void leave_editor();
+    /// Every frame of the editor: what its panel asked for, and the panel's model.
+    void apply_editor();
+    /// What the panel or a key asked for; a request that would lose changes asks first.
+    void editor_request(const EditorRequest& request, bool confirmed = false);
+    /// The model of the editor's panel for this frame.
+    [[nodiscard]] EditorModel editor_model() const;
+    /// The files the page "Open" lists: the own scenarios, then the game's.
+    void list_editor_files();
+    /// The editor's note in its panel and the status line (and the log, in English).
+    void editor_notice(std::string text, bool error, std::string_view log);
+    /// An empty sea of `width` x `height` tiles with the mods' content, as behind the menu.
+    [[nodiscard]] sim::World sea_world(std::uint32_t width, std::uint32_t height) const;
 
     // ---- Multiplayer (multiplayer.cpp, ADR 0011) ----
     /// Hosts or joins the multiplayer game of the command line.
@@ -592,6 +625,21 @@ private:
     std::vector<render::DrawCommand> m_commands;  ///< reused every frame
     render::DrawListScratch m_draw_scratch;       ///< reused every frame
 
+    /// The editor's document while the editor runs (ADR 0013): it edits m_state's world.
+    struct EditorSession {
+        editor::Document document;
+        std::filesystem::path file;  ///< where Save writes; empty: not saved as Open1602's yet
+        std::string source_name;     ///< the name of the file opened (Windows-1252), empty: a new map
+        std::string notice;          ///< Windows-1252
+        bool notice_error = false;
+    };
+    std::optional<EditorSession> m_editor;
+    /// A request of the editor waiting for the answer to "discard the changes?".
+    std::optional<EditorRequest> m_editor_pending;
+    /// The files of the page "Open", in the order of the panel's list.
+    std::vector<std::filesystem::path> m_editor_files;
+    std::vector<EditorFile> m_editor_file_rows;
+    EditorNewMap m_editor_new;  ///< the settings of the last new map
     bool m_running = true;
     bool m_show_owners = false;              ///< ownership overlay (key O)
     bool m_show_fps = false;                 ///< the frame rate in the map's corner (Ctrl+F)

@@ -7,7 +7,7 @@
 #   ui -> sim, assets           platform -> core (+ SDL3)   render_sdl -> render, platform, ui
 #   script -> sim, assets (+ Lua)    editor -> sim, assets
 #   menus -> sim, assets, audio, render, ui, net
-#   app (open1602) -> sim, render_sdl, platform, audio, video, ui, net, menus, script
+#   app (open1602) -> sim, render_sdl, platform, audio, video, ui, net, menus, script, editor
 #
 # Only the game build (O1602_BUILD_GAME) adds platform, render_sdl and app; everything else builds
 # and is tested without SDL.

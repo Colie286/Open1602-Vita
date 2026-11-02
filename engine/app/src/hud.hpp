@@ -22,6 +22,7 @@
 #include "chat_window.hpp"
 #include "diplomacy_strip.hpp"
 #include "display_menu.hpp"
+#include "editor_panel.hpp"
 #include "end_screen.hpp"
 #include "goods_window.hpp"
 #include "key_help.hpp"
@@ -243,6 +244,17 @@ public:
     [[nodiscard]] std::vector<TemplateRequest> take_template_requests() {
         return std::exchange(m_template_requests, {});
     }
+    /// The editor runs (ADR 0013): its panel takes the place of the modes below the head, whose
+    /// buttons go; the money, the mission's window and the tutorial do not show.
+    void set_editing(bool on);
+    [[nodiscard]] bool editing() const noexcept { return m_editing; }
+    /// The editor's panel, null without the menus' layouts.
+    [[nodiscard]] EditorPanel* editor_panel() noexcept { return m_editor.get(); }
+    /// What the editor's panel shows; the viewer sets it every frame.
+    void set_editor_model(EditorModel model) { m_editor_model = std::move(model); }
+    [[nodiscard]] const EditorModel& editor_model() const noexcept { return m_editor_model; }
+    /// What the editor's panel asked for since the last call.
+    [[nodiscard]] std::vector<EditorRequest> take_editor_requests() { return std::exchange(m_editor_requests, {}); }
     /// The build menu shows a tool a key started (its title names it).
     void show_tool_in_build_menu(BuildPanel::Tool tool) {
         if (m_build) {
@@ -418,6 +430,9 @@ public:
         if (templates_open() && m_templates->typing()) {
             return true;
         }
+        if (m_editing && m_editor && m_editor->typing()) {
+            return true;
+        }
         if (naming()) {
             return true;
         }
@@ -432,6 +447,8 @@ public:
             m_chat->type(text);
         } else if (templates_open() && m_templates->typing()) {
             m_templates->type(text);
+        } else if (m_editing && m_editor && m_editor->typing()) {
+            m_editor->type(text);
         } else if (naming()) {
             m_names.type(text);
         } else if (m_options) {
@@ -446,6 +463,10 @@ public:
         } else if (templates_open() && m_templates->typing()) {
             if (auto request = m_templates->key(key)) {
                 m_template_requests.push_back(std::move(*request));
+            }
+        } else if (m_editing && m_editor && m_editor->typing()) {
+            if (auto request = m_editor->key(key)) {
+                m_editor_requests.push_back(std::move(*request));
             }
         } else if (naming()) {
             if (auto c = m_names.key(key)) {
@@ -547,6 +568,8 @@ private:
     bool refresh_minimap_island(const sim::World& world, const assets::BuildingTable& buildings,
                                 const render::BannerTable& banners, std::size_t island);
     [[nodiscard]] ui::Rect minimap_rect() const;
+    /// The editor's panel's room in the side panel (design units): below the head, to the bottom.
+    void place_editor_panel();
     /// Where the world's picture lies: all of minimap_rect() once there is a world.
     [[nodiscard]] ui::Rect minimap_image() const;
     /// m_minimap (a pixel per tile) shrunk to the minimap's w x h pixels into m_minimap_small.
@@ -638,6 +661,10 @@ private:
     [[nodiscard]] ui::Rect blueprint_rect() const;
     std::unique_ptr<TemplateWindow> m_templates;
     TemplatesModel m_templates_model;
+    std::unique_ptr<EditorPanel> m_editor;
+    EditorModel m_editor_model;
+    std::vector<EditorRequest> m_editor_requests;
+    bool m_editing = false;
     std::vector<TemplateRequest> m_template_requests;
     /// The templates' window on the screen (at the upper right of the map, by the side panel).
     [[nodiscard]] ui::Rect templates_rect() const;

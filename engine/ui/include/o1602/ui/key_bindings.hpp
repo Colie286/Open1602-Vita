@@ -92,9 +92,13 @@ enum class KeyAction : std::uint16_t {
     ShowUnitArms,     ///< the owner's coat of arms over the own land units (History Edition)
     Fullscreen,       ///< window or full screen
     Quit,
+    // Editor (ADR 0013)
+    EditorUndo,
+    EditorRedo,
+    EditorSave,
 };
 
-enum class KeyContext : std::uint8_t { General, Building, Units };
+enum class KeyContext : std::uint8_t { General, Building, Units, Editor };
 
 /// A key as it was pressed: what it means in the keyboard layout (`key`, a keycode) and where it
 /// sits on the keyboard (`scancode`).

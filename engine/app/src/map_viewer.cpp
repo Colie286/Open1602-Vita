@@ -706,6 +706,14 @@ core::Status MapViewer::install_graphics(render::Zoom zoom, render::PreparedGrap
 }
 
 void MapViewer::quit() {
+    if (m_editor && m_editor->document.modified() && m_hud && !m_hud->asking()) {
+        // The editor's changes are not kept anywhere else: ask first.
+        EditorRequest request{EditorRequest::Kind::Close};
+        request.name = "quit";
+        m_editor_pending = request;
+        m_hud->ask(ui::tr("editor.discard"));
+        return;
+    }
     std::fprintf(stderr, "quit: the key for quitting (Ctrl+Q)\n");
     m_running = false;
 }
@@ -729,6 +737,9 @@ int MapViewer::run() {
                 return 1;
             }
         }
+    }
+    if (m_options.editor) {
+        start_editor();
     }
     update_title(0.0);
     while (m_running) {
@@ -834,7 +845,9 @@ int MapViewer::run() {
                         return 1;
                     }
                 }
-                if (m_hud) {
+                if (m_editor) {
+                    apply_editor();
+                } else if (m_hud) {
                     // What the windows of the panel ordered (scuttling and disbanding ask first).
                     m_input->submit_orders(m_hud->take_commands(), false);
                     update_blueprint_window();
@@ -843,7 +856,9 @@ int MapViewer::run() {
                     apply_options();
                 }
                 update(delta);
-                check_end_screen(now);
+                if (!m_editor) {
+                    check_end_screen(now);
+                }
                 render();
             }
         }
@@ -1013,6 +1028,14 @@ void MapViewer::update(std::uint32_t delta_ms) {
     m_input->scroll_with_keys(delta_ms);
     if (m_app_settings.display.edge_scroll) {
         m_input->scroll_at_edges(delta_ms, m_app_settings.display.edge_speed);
+    }
+    if (m_editor) {
+        // The editor's world is shown, never run (ADR 0013): no tick, no figures moving, no autosave.
+        // The animations of the pictures (water, flags) go on, at 1x.
+        m_clock.advance(delta_ms, 1);
+        m_tick_fraction = 1.0;
+        m_ship_trail.set_fraction(m_tick_fraction);
+        return;
     }
     // The pause of the video ended another way (F3, another player): the video goes too.
     m_video->follow_pause(m_state->simulation.paused());
@@ -2520,6 +2543,19 @@ void MapViewer::apply_hud(const Hud::Action& action) {
                 answer_package_offer(action.step != 0);
                 break;
             }
+            if (auto pending = std::exchange(m_editor_pending, std::nullopt)) {
+                // "Discard the changes?" of the editor.
+                if (action.step == 0) {
+                    break;
+                }
+                if (pending->kind == EditorRequest::Kind::Close && pending->name == "quit") {
+                    std::fprintf(stderr, "quit: the key for quitting (Ctrl+Q), the editor's changes discarded\n");
+                    m_running = false;
+                    break;
+                }
+                editor_request(*pending, true);
+                break;
+            }
             if (std::exchange(m_quit_pending, false)) {
                 if (action.step == 0) {
                     break;
@@ -3569,7 +3605,7 @@ core::Result<sim::World> MapViewer::read_world(const std::filesystem::path& path
     return world;
 }
 
-std::unique_ptr<GameState> MapViewer::make_state(sim::World world, const sim::Rules& rules) {
+std::unique_ptr<GameState> MapViewer::make_state(sim::World world, const sim::Rules& rules, bool view_only) {
     if (!world.saved_rules()) {
         // A new game, or one from a file of the original: the rule's values under the mods'.
         sim::Balance balance = world.balance();
@@ -3580,6 +3616,10 @@ std::unique_ptr<GameState> MapViewer::make_state(sim::World world, const sim::Ru
     sim::apply_resident_classes(m_buildings, m_original_buildings, world.resident_classes());
     sim::apply_infra_levels(m_buildings, m_original_buildings, world.infra_levels());
     sim::apply_figure_values(m_figures, m_original_figures, world.balance());
+    if (view_only) {
+        return std::make_unique<GameState>(std::move(world), m_buildings, m_figures, rules,
+                                           sim::Simulation::ViewOnly{});
+    }
     return std::make_unique<GameState>(std::move(world), m_buildings, m_figures, rules);
 }
 
@@ -3610,6 +3650,20 @@ core::Status MapViewer::replace_world(sim::World world, const std::filesystem::p
         keep_old();
         return core::make_error(core::ErrorCode::PlatformError, std::string("the game could not start: ") + e.what());
     }
+    adopt_state(std::move(next), source);
+    return core::Ok{};
+}
+
+void MapViewer::adopt_state(std::unique_ptr<GameState> next, const std::filesystem::path& source) {
+    if (m_editor && !next->view_only) {
+        // A game takes the editor's place: its document edits the world that goes now.
+        m_editor.reset();
+        m_editor_pending.reset();
+        m_input->set_editor(false);
+        if (m_hud) {
+            m_hud->set_editing(false);
+        }
+    }
     // What belongs to the old game goes: videos, selection, orders waiting for an answer, tools.
     m_video->reset();
     m_events.reset_game();
@@ -3622,7 +3676,7 @@ core::Status MapViewer::replace_world(sim::World world, const std::filesystem::p
     // the one shown behind the lobby, whose people the computer plays in the new game.
     m_session_roles.clear();
     m_state = std::move(next);
-    m_campaign_part = source.empty() ? std::nullopt : campaign_part_of(source);
+    m_campaign_part = source.empty() || m_state->view_only ? std::nullopt : campaign_part_of(source);
     use_game_packages();
     m_command_sink.set_simulation(&m_state->simulation);
     m_options.scenario = source;
@@ -3632,8 +3686,11 @@ core::Status MapViewer::replace_world(sim::World world, const std::filesystem::p
     m_state->simulation.offer_names(m_city_names, m_ship_names);  // a saved game keeps its own
     m_state->simulation.set_tick_observer(
         [this](const sim::World& now) { m_ambient.tick(now, m_buildings, m_figures); });
-    // In a multiplayer game the slot the host gave this computer (kNoPlayer: watching).
-    m_local_player = m_session ? m_session->local_seat() : sim::first_human_player(m_state->world);
+    // In a multiplayer game the slot the host gave this computer (kNoPlayer: watching); nobody in
+    // the editor's world.
+    m_local_player = m_state->view_only ? sim::kNoPlayer
+                     : m_session        ? m_session->local_seat()
+                                        : sim::first_human_player(m_state->world);
     if (m_local_player < m_state->world.unit_groups().size()) {
         m_input->restore_groups(m_state->world.unit_groups()[m_local_player]);
     }
@@ -3655,7 +3712,7 @@ core::Status MapViewer::replace_world(sim::World world, const std::filesystem::p
         // The tutorial: the chapter of the settings, its window open,
         // its speech once at the start. Not saved: a loaded tutorial
         // game starts its chapter again.
-        if (m_state->world.game_settings().tutorial && !m_session) {
+        if (m_state->world.game_settings().tutorial && !m_session && !m_state->view_only) {
             const std::uint8_t chapter = m_app_settings.tutorial_chapter;
             m_hud->set_tutorial(chapter);
             m_hud->options_model().mission_window = true;
@@ -3666,7 +3723,6 @@ core::Status MapViewer::replace_world(sim::World world, const std::filesystem::p
     }
     m_camera.set_world_size(m_state->world.width(), m_state->world.height());
     m_camera.center_on(home_tile());
-    return core::Ok{};
 }
 
 namespace {
@@ -3867,6 +3923,12 @@ void MapViewer::apply_menu() {
                 menu->set_mods(std::move(model));
                 continue;
             }
+            case MenuEvent::Kind::Editor:
+                started = enter_editor(sea_world(sim::World::kOriginalWidth, sim::World::kOriginalHeight), {});
+                if (!started) {
+                    break;
+                }
+                return;  // the editor took the menu's place
             case MenuEvent::Kind::NameEntered:
                 // "Unter welcher Flagge wollt Ihr segeln?" and four more, one at random (Speech8
                 // 107..115). The original speaks on entering the screen; Open1602 once the name is in.

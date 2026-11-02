@@ -21,6 +21,7 @@ add_library(o1602_menus
     ../src/diplomacy_strip.cpp
     ../src/display_menu.cpp
     ../src/display_settings.cpp
+    ../src/editor_panel.cpp
     ../src/end_screen.cpp
     ../src/fertility_view.cpp
     ../src/endless_setup.cpp
