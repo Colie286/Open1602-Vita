@@ -131,6 +131,7 @@ struct MultiplayerEvent {
         Name,        ///< the player's name changed to `text`
         SetBanner,   ///< slot `seat` gets `banner` (the own slot; the host also the computer's and open ones)
         Settings,    ///< (host, in the lobby) the game's settings are now `setup.settings`
+        StartNow,    ///< (host) stop waiting for the players still loading the game at the start
     };
     Kind kind = Kind::Close;
     std::string address{};
@@ -186,6 +187,7 @@ public:
     void show_connecting(std::string address);
     void show_lobby();
     void set_scale(double scale) {
+        m_scale = scale > 0.0 ? scale : 1.0;
         m_form.set_scale(scale);
         m_settings.set_scale(scale);
     }
@@ -225,6 +227,11 @@ private:
     void layout_browse(const MultiplayerModel& model);
     void layout_create(const MultiplayerModel& model);
     void layout_lobby(const MultiplayerModel& model);
+    /// The lobby's slots and who watches, from the top of the left column. Returns where they end.
+    std::int32_t layout_seats(const MultiplayerModel& model);
+    /// While the game starts (net::Session::starting()): everyone in the game with how far they are
+    /// with it, in place of the slots, from row m_start_first on. Returns where the rows end.
+    std::int32_t layout_start_list(const MultiplayerModel& model);
     void layout_connecting();
     /// The game from the host on its way (MultiplayerModel::join), in `box` of the lobby.
     void layout_join_progress(const MultiplayerModel& model, ui::Rect box);
@@ -306,6 +313,13 @@ private:
     std::vector<sim::BannerId> m_banner_choices;  ///< the banners of the buttons shown, in order
     /// (Host) The roster entries and names of the spectators shown with a kick button.
     std::vector<std::pair<std::size_t, std::string>> m_watchers;
+    // While the game starts: the list of who is in it and how far they are with it.
+    std::size_t m_start_first = 0;  ///< the first row shown
+    std::size_t m_start_rows = 0;   ///< rows shown at the last layout (0: no list)
+    ui::Rect m_start_box{};         ///< where the list is, for the mouse wheel
+    std::int32_t m_mouse_x = 0;     ///< where the mouse last was, in design units
+    std::int32_t m_mouse_y = 0;
+    double m_scale = 1.0;  ///< of the design units (set_scale())
 };
 
 }  // namespace o1602::app

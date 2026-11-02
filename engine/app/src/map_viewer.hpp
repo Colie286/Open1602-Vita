@@ -325,6 +325,8 @@ private:
     void session_line(MpText id, std::string_view value = {}, sim::PlayerId seat = sim::kNoPlayer);
     [[nodiscard]] net::HostSession* host_session() const noexcept;
     [[nodiscard]] net::ClientSession* client_session() const noexcept;
+    /// Closes the lobby for the game: it runs now on this computer.
+    void close_lobby();
 
     /// Tells the sound where the view is (every frame, before events are heard).
     void place_listener();

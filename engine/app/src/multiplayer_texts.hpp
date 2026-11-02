@@ -124,6 +124,14 @@ enum class MpText : std::uint16_t {
     GameReceiving,
     GameBytes,
     GameLoading,
+    Starting,
+    StartingHint,
+    StartingCount,
+    LoadWaiting,
+    LoadPercent,
+    LoadLoading,
+    Spectator,
+    StartNow,
 };
 
 /// The catalogue key of a text ("net.player_joined").

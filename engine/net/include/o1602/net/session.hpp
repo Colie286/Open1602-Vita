@@ -106,6 +106,12 @@ struct SessionConfig {
     /// (TB-26). 0 waits at once, as a test that steps time faster than it passes needs; the game
     /// gives a few seconds.
     std::uint32_t pack_wait_ms = 0;
+    /// (Host) After start(), the game's first frame waits until every player of the lobby has the
+    /// game loaded, so that all begin together; meanwhile everyone sees how far each one is
+    /// (Member::loaded). A player whose game made no progress for this long is no longer waited
+    /// for: it catches up as one that joins a running game. 0: the game runs at once and the
+    /// others catch up.
+    std::uint32_t start_wait_ms = 0;
     /// Desyncs of one computer within this many fingerprints after it got the game anew: it
     /// cannot follow the host (another build?) and is sent away.
     std::uint32_t max_resyncs = 2;
@@ -170,6 +176,8 @@ struct SessionEvent {
         SpeedRefused,  ///< (computer) only the host pauses, resumes and sets the speed of this game
                        ///< (Lobby::host_controls_speed)
         PackageKept,   ///< (computer) a package the host sent was kept (packages[0])
+        Started,       ///< the first frame of the game runs: every player has it loaded, or the host
+                       ///< stopped waiting (Session::starting())
     };
     Kind kind = Kind::Joined;
     Seat seat = sim::kNoPlayer;
@@ -228,6 +236,9 @@ public:
     /// Who carries the game on if the host leaves (kNoPlayer: nobody), and where the others then
     /// connect (Roster::successor).
     [[nodiscard]] Seat successor() const noexcept { return m_successor; }
+    /// The game has started, but its first frame waits until every player has it loaded
+    /// (SessionConfig::start_wait_ms): the players see how far each one is (Member::loaded).
+    [[nodiscard]] bool starting() const noexcept { return m_starting; }
     [[nodiscard]] const std::string& successor_address() const noexcept { return m_successor_address; }
     [[nodiscard]] bool ended() const noexcept { return m_ended; }
     [[nodiscard]] EndReason end_reason() const noexcept { return m_end_reason; }
@@ -267,6 +278,7 @@ protected:
     std::vector<Member> m_roster;
     Seat m_successor = sim::kNoPlayer;
     std::string m_successor_address;
+    bool m_starting = false;
     Lobby m_lobby;
     std::vector<SessionEvent> m_events;
 };
@@ -328,8 +340,11 @@ public:
     void kick_member(std::size_t member, Seat seat, std::string_view name);
     /// Every human slot of another computer is ready (the host starts when it wants).
     [[nodiscard]] bool everyone_ready() const;
-    /// Begins the game made from the lobby: every computer in the lobby gets it.
+    /// Begins the game made from the lobby: every computer in the lobby gets it. With
+    /// SessionConfig::start_wait_ms, its first frame waits for the players to have it (starting()).
     void start(sim::Simulation& simulation, const assets::BuildingTable& buildings);
+    /// Stops waiting for the players still loading the game at the start: it runs now, they catch up.
+    void start_now();
 
     /// Frames complete so far (all frames below this one).
     [[nodiscard]] std::uint64_t closed() const noexcept { return m_closed; }
@@ -351,6 +366,11 @@ private:
     void hello(Peer& peer, const Hello& m);
     void commands(Peer& peer, CommandBatch& m);
     void progress(Peer& peer, const Progress& m);
+    void load_progress(Peer& peer, const LoadProgress& m);
+    /// While the game starts (m_starting): whether its first frame still waits for a player; once
+    /// it no longer does, the game runs (Started).
+    bool wait_for_start(std::uint32_t real_ms);
+    void stop_starting();
     void take_seat(Peer& peer, Seat seat);
     void ready(Peer& peer, bool ready);
     void chat(Peer& peer, const Chat& m);
@@ -512,6 +532,10 @@ private:
     Standby m_standby;                     ///< what it was told
     bool m_standby_changed = true;
     bool m_roster_changed = true;
+    /// Only how far computers are with the game on its way changed: the roster goes out with the
+    /// next change, or after m_roster_wait_ms.
+    bool m_loading_changed = false;
+    std::uint32_t m_roster_wait_ms = 0;
     bool m_lobby_changed = true;
     std::uint32_t m_chat_ms = 0;        ///< into the current second of the chat limit
     std::uint32_t m_lobby_wait_ms = 0;  ///< before the lobby may be sent again (MS-16)
@@ -599,6 +623,8 @@ private:
     void package_files(PackageFiles& m);
     void run(std::uint32_t real_ms, const sim::Simulation::BeforeTick& before_tick);
     void report(std::uint32_t real_ms);
+    /// Tells the host how much of the game on its way this computer has (LoadProgress).
+    void report_loading(std::uint32_t real_ms);
     /// Sends what the host would admit now of m_outgoing.
     void send_commands();
     /// The connection to the host broke: back into the slot with the token (m_reconnect).
@@ -631,8 +657,11 @@ private:
     /// run since the last sending, so that the host does not have to drop any.
     std::uint32_t m_send_commands = 0;
     std::uint64_t m_send_owed = 0;
-    std::uint64_t m_reported = 0;      ///< frames last told the host
-    std::uint32_t m_since_report = 0;  ///< ms
+    std::uint64_t m_reported = 0;                  ///< frames last told the host
+    std::uint32_t m_since_report = 0;              ///< ms
+    std::uint8_t m_load_reported = kNoLoadReport;  ///< LoadProgress::percent last told the host
+    std::uint32_t m_since_load_report = 0;         ///< ms
+    static constexpr std::uint8_t kNoLoadReport = 0xff;
     std::optional<Standby> m_standby;  ///< from the host, if it named this computer its successor
     Connect m_connect;                 ///< following a successor: connects again after a failure
     Connect m_reconnect;               ///< to the host, after a broken connection (reconnect_with())

@@ -75,6 +75,11 @@ constexpr Id kLeave = 61;
 constexpr Id kReady = 62;
 constexpr Id kStart = 63;
 constexpr Id kWatch = 64;
+constexpr Id kStartNow = 65;
+constexpr Id kStartUp = 66;
+constexpr Id kStartDown = 67;
+/// Rows of the list of who is in the game while it starts; more are scrolled.
+constexpr std::size_t kStartRows = 10;
 constexpr std::size_t kChatLines = 12;
 constexpr Rect kChatBox{48, 0, 604, 28};  ///< a row of the lobby's chat (x and width)
 // Connecting
@@ -283,6 +288,12 @@ bool MultiplayerMenu::wheel(const MultiplayerModel& model, std::int32_t notches)
                 notches);
             return true;
         case Screen::Lobby: {
+            if (m_start_rows > 0 && m_start_box.contains(m_mouse_x, m_mouse_y)) {
+                // The list of who is in the starting game, under the mouse.
+                const std::size_t count = model.session != nullptr ? model.session->roster().size() : 0;
+                m_start_first = ui::wheel_scroll(m_start_first, count, m_start_rows, notches);
+                return true;
+            }
             // The chat, back to older rows and forward again (not while the colours are offered).
             if (m_banner_seat || m_chat_rows == 0) {
                 return true;
@@ -326,6 +337,8 @@ std::vector<MultiplayerEvent> MultiplayerMenu::mouse(const MultiplayerModel& mod
         }
         return out;
     }
+    m_mouse_x = static_cast<std::int32_t>(x / m_scale);
+    m_mouse_y = static_cast<std::int32_t>(y / m_scale);
     if (button != ui::MouseButton::Left) {
         return out;
     }
@@ -625,83 +638,11 @@ void MultiplayerMenu::layout_lobby(const MultiplayerModel& model) {
     f.label(Rect{560, 32, 424, 32}, model.hosting ? tr(MpText::HostPort, std::to_string(model.port)) : lobby.game,
             Align::Right, Tone::Dim);
 
-    // The slots of the players (the factions' are left out), closer together when there are many;
-    // the chat below gets what they leave.
-    std::vector<std::size_t> shown;
-    for (std::size_t s = 0; s < lobby.seats.size() && s < kMaxSeats; ++s) {
-        if (lobby.seats[s].kind != net::LobbySeat::Kind::Reserved) {
-            shown.push_back(s);
-        }
-    }
-    const std::int32_t row_h = shown.size() <= 8 ? 36 : 30;
-    const auto rows_end = static_cast<std::int32_t>(96 + shown.size() * static_cast<std::size_t>(row_h));
+    // While the game starts, who is in it and how far they are with it; before, the slots.
+    const bool starting = lobby.started && session->starting();
+    m_start_rows = 0;
+    const std::int32_t rows_end = starting ? layout_start_list(model) : layout_seats(model);
     const std::int32_t chat_top = rows_end + 50;
-    f.panel(Rect{40, 84, 620, chat_top - 96});
-    for (std::size_t r = 0; r < shown.size(); ++r) {
-        const std::size_t s = shown[r];
-        const net::LobbySeat& seat = lobby.seats[s];
-        const auto y = static_cast<std::int32_t>(96 + r * static_cast<std::size_t>(row_h));
-        const std::int32_t h = row_h - 2;
-        const Id k = static_cast<Id>(s);
-        if (may_choose_banner(model, s)) {
-            // A click on the colour offers the others.
-            f.button(kSeatBanner + k, Rect{48, y, 30, h}, {}, true, m_banner_seat == s);
-        }
-        f.swatch(Rect{52, y + 4, 22, h - 8}, banner_colour(seat.banner));
-        std::string who;
-        std::string state;
-        Tone tone = Tone::Normal;
-        switch (seat.kind) {
-            case net::LobbySeat::Kind::Human: {
-                who = seat.name;
-                const bool host = std::any_of(session->roster().begin(), session->roster().end(),
-                                              [&](const net::Member& m) { return m.host && m.seat == s; });
-                if (s == me) {
-                    who += " " + tr(MpText::You);
-                } else if (host) {
-                    who += " " + tr(MpText::Host);
-                }
-                state = seat.ready ? tr(MpText::Ready) : tr(MpText::Choosing);
-                tone = seat.ready ? Tone::Normal : Tone::Dim;
-                break;
-            }
-            case net::LobbySeat::Kind::Open:
-                who = tr(MpText::SeatOpen);
-                state = tr(MpText::Free);
-                tone = Tone::Dim;
-                break;
-            case net::LobbySeat::Kind::Computer:
-                who = tr(MpText::SeatComputer);
-                state = tr(MpText::Ready);
-                break;
-            case net::LobbySeat::Kind::Closed:
-            case net::LobbySeat::Kind::Reserved:
-                who = tr(MpText::SeatBlocked);
-                tone = Tone::Dim;
-                break;
-        }
-        const bool human = seat.kind == net::LobbySeat::Kind::Human;
-        if (model.hosting && !human) {
-            // The host sets who plays a slot by clicking through the kinds.
-            f.button(kSeatKind + k, Rect{84, y, 250, h}, who);
-        } else {
-            f.label(Rect{80, y, 260, h}, who, Align::Left, human ? Tone::Normal : Tone::Dim);
-        }
-        f.label(Rect{344, y, 150, h}, state, Align::Left, tone);
-        if (model.hosting && human && s != me) {
-            f.button(kSeatKick + k, Rect{500, y, 150, h}, tr(MpText::Kick));
-        } else if (seat.kind == net::LobbySeat::Kind::Open && s != me && !lobby.started) {
-            f.button(kSeatTake + k, Rect{500, y, 150, h}, tr(MpText::Take));
-        }
-    }
-    std::string watchers;
-    for (const net::Member& m : session->roster()) {
-        if (m.seat == sim::kNoPlayer) {
-            watchers += (watchers.empty() ? "" : ", ") + m.name;
-        }
-    }
-    f.label(Rect{48, rows_end + 4, 600, 30}, tr(MpText::Watchers, watchers.empty() ? tr(MpText::Nobody) : watchers),
-            Align::Left, Tone::Dim);
 
     // The chat, or the colours to choose from.
     f.panel(Rect{40, chat_top, 620, 670 - chat_top});
@@ -784,19 +725,179 @@ void MultiplayerMenu::layout_lobby(const MultiplayerModel& model) {
             }
         }
     }
-    if (model.join != net::ClientSession::JoinStage::None) {
+    if (starting) {
+        f.paragraph(Rect{684, 560, 292, 30}, tr(MpText::Starting), Tone::Heading);
+        f.paragraph(Rect{684, 592, 292, 70}, tr(MpText::StartingHint), Tone::Dim);
+    } else if (model.join != net::ClientSession::JoinStage::None) {
         layout_join_progress(model, Rect{684, 560, 292, 100});
     } else {
         f.paragraph(Rect{684, 560, 292, 100}, tr(model.hosting ? MpText::StartHint : MpText::WaitHostStart), Tone::Dim);
     }
 
     f.button(kLeave, Rect{40, kBottomY, 180, 44}, tr(MpText::Leave));
-    if (!model.hosting && me != sim::kNoPlayer) {
+    if (!model.hosting && me != sim::kNoPlayer && !lobby.started) {
         f.button(kReady, Rect{560, kBottomY, 200, 44}, tr(MpText::Ready), true, m_ready);
     }
-    if (model.hosting) {
+    if (model.hosting && starting) {
+        f.button(kStartNow, Rect{764, kBottomY, 220, 44}, tr(MpText::StartNow));
+    } else if (model.hosting) {
         f.button(kStart, Rect{764, kBottomY, 220, 44}, tr(MpText::Start), model.everyone_ready, true);
     }
+}
+
+std::int32_t MultiplayerMenu::layout_seats(const MultiplayerModel& model) {
+    // The slots of the players (the factions' are left out), closer together when there are many;
+    // the chat below gets what they leave.
+    ui::Form& f = m_form;
+    const net::Session* session = model.session;
+    const net::Lobby& lobby = session->lobby();
+    const sim::PlayerId me = session->local_seat();
+    std::vector<std::size_t> shown;
+    for (std::size_t s = 0; s < lobby.seats.size() && s < kMaxSeats; ++s) {
+        if (lobby.seats[s].kind != net::LobbySeat::Kind::Reserved) {
+            shown.push_back(s);
+        }
+    }
+    const std::int32_t row_h = shown.size() <= 8 ? 36 : 30;
+    const auto rows_end = static_cast<std::int32_t>(96 + shown.size() * static_cast<std::size_t>(row_h));
+    f.panel(Rect{40, 84, 620, rows_end - 46});
+    for (std::size_t r = 0; r < shown.size(); ++r) {
+        const std::size_t s = shown[r];
+        const net::LobbySeat& seat = lobby.seats[s];
+        const auto y = static_cast<std::int32_t>(96 + r * static_cast<std::size_t>(row_h));
+        const std::int32_t h = row_h - 2;
+        const Id k = static_cast<Id>(s);
+        if (may_choose_banner(model, s)) {
+            // A click on the colour offers the others.
+            f.button(kSeatBanner + k, Rect{48, y, 30, h}, {}, true, m_banner_seat == s);
+        }
+        f.swatch(Rect{52, y + 4, 22, h - 8}, banner_colour(seat.banner));
+        std::string who;
+        std::string state;
+        Tone tone = Tone::Normal;
+        switch (seat.kind) {
+            case net::LobbySeat::Kind::Human: {
+                who = seat.name;
+                const bool host = std::any_of(session->roster().begin(), session->roster().end(),
+                                              [&](const net::Member& m) { return m.host && m.seat == s; });
+                if (s == me) {
+                    who += " " + tr(MpText::You);
+                } else if (host) {
+                    who += " " + tr(MpText::Host);
+                }
+                state = seat.ready ? tr(MpText::Ready) : tr(MpText::Choosing);
+                tone = seat.ready ? Tone::Normal : Tone::Dim;
+                break;
+            }
+            case net::LobbySeat::Kind::Open:
+                who = tr(MpText::SeatOpen);
+                state = tr(MpText::Free);
+                tone = Tone::Dim;
+                break;
+            case net::LobbySeat::Kind::Computer:
+                who = tr(MpText::SeatComputer);
+                state = tr(MpText::Ready);
+                break;
+            case net::LobbySeat::Kind::Closed:
+            case net::LobbySeat::Kind::Reserved:
+                who = tr(MpText::SeatBlocked);
+                tone = Tone::Dim;
+                break;
+        }
+        const bool human = seat.kind == net::LobbySeat::Kind::Human;
+        if (model.hosting && !human) {
+            // The host sets who plays a slot by clicking through the kinds.
+            f.button(kSeatKind + k, Rect{84, y, 250, h}, who);
+        } else {
+            f.label(Rect{80, y, 260, h}, who, Align::Left, human ? Tone::Normal : Tone::Dim);
+        }
+        f.label(Rect{344, y, 150, h}, state, Align::Left, tone);
+        if (model.hosting && human && s != me) {
+            f.button(kSeatKick + k, Rect{500, y, 150, h}, tr(MpText::Kick));
+        } else if (seat.kind == net::LobbySeat::Kind::Open && s != me && !lobby.started) {
+            f.button(kSeatTake + k, Rect{500, y, 150, h}, tr(MpText::Take));
+        }
+    }
+    std::string watchers;
+    for (const net::Member& m : session->roster()) {
+        if (m.seat == sim::kNoPlayer) {
+            watchers += (watchers.empty() ? "" : ", ") + m.name;
+        }
+    }
+    f.label(Rect{48, rows_end + 4, 600, 30}, tr(MpText::Watchers, watchers.empty() ? tr(MpText::Nobody) : watchers),
+            Align::Left, Tone::Dim);
+    return rows_end;
+}
+
+std::int32_t MultiplayerMenu::layout_start_list(const MultiplayerModel& model) {
+    ui::Form& f = m_form;
+    const net::Session* session = model.session;
+    const net::Lobby& lobby = session->lobby();
+    const sim::PlayerId me = session->local_seat();
+    const std::vector<net::Member>& roster = session->roster();
+    const std::size_t count = roster.size();
+    // Closer together when there are many, and beyond kStartRows scrolled.
+    const std::int32_t row_h = count <= 8 ? 36 : 30;
+    m_start_rows = std::min(count, kStartRows);
+    m_start_first = std::min(m_start_first, count - m_start_rows);
+    const auto rows_end = static_cast<std::int32_t>(96 + m_start_rows * static_cast<std::size_t>(row_h));
+    m_start_box = Rect{40, 84, 620, rows_end - 46};
+    f.panel(m_start_box);
+    std::size_t ready = 0;
+    std::size_t players = 0;
+    for (const net::Member& m : roster) {
+        if (m.seat != sim::kNoPlayer) {
+            ++players;
+            ready += m.state != net::Member::State::Loading ? 1U : 0U;
+        }
+    }
+    for (std::size_t r = 0; r < m_start_rows; ++r) {
+        const net::Member& m = roster[m_start_first + r];
+        const auto y = static_cast<std::int32_t>(96 + r * static_cast<std::size_t>(row_h));
+        const std::int32_t h = row_h - 2;
+        const bool player = m.seat != sim::kNoPlayer && m.seat < lobby.seats.size();
+        if (player) {
+            f.swatch(Rect{52, y + 4, 22, h - 8}, banner_colour(lobby.seats[m.seat].banner));
+        }
+        std::string who = m.name;
+        if ((me != sim::kNoPlayer && m.seat == me) || (me == sim::kNoPlayer && m.host && model.hosting)) {
+            who += " " + tr(MpText::You);
+        } else if (m.host) {
+            who += " " + tr(MpText::Host);
+        } else if (!player) {
+            who += " " + tr(MpText::Spectator);
+        }
+        f.label(Rect{80, y, 250, h}, who, Align::Left, player ? Tone::Normal : Tone::Dim);
+        // How far it is: this computer's own from what it has, the others' as the host last heard.
+        double done = m.loaded / 100.0;
+        std::string state;
+        if (m.state != net::Member::State::Loading) {
+            done = 1.0;
+            state = tr(MpText::Ready);
+        } else if (m.seat == me && !model.hosting && model.join == net::ClientSession::JoinStage::Receiving &&
+                   model.join_total > 0) {
+            done = static_cast<double>(model.join_received) / static_cast<double>(model.join_total);
+            state = tr(MpText::LoadPercent, std::to_string(static_cast<int>(done * 100.0)));
+        } else if (m.loaded >= 100 || (m.seat == me && model.join == net::ClientSession::JoinStage::Loading)) {
+            done = 1.0;
+            state = tr(MpText::LoadLoading);
+        } else if (m.loaded == 0) {
+            state = tr(MpText::LoadWaiting);
+        } else {
+            state = tr(MpText::LoadPercent, std::to_string(m.loaded));
+        }
+        f.progress(Rect{338, y + 8, 190, h - 16}, done);
+        f.label(Rect{538, y, 114, h}, state, Align::Left, done >= 1.0 ? Tone::Normal : Tone::Dim);
+    }
+    f.label(Rect{48, rows_end + 4, 500, 30},
+            mp_text(MpText::StartingCount, std::to_string(ready), std::to_string(players)), Align::Left, Tone::Dim);
+    if (m_start_first > 0) {
+        f.button(kStartUp, Rect{576, rows_end + 4, 36, 30}, "-");
+    }
+    if (m_start_first + m_start_rows < count) {
+        f.button(kStartDown, Rect{616, rows_end + 4, 36, 30}, "+");
+    }
+    return rows_end;
 }
 
 bool MultiplayerMenu::may_choose_banner(const MultiplayerModel& model, std::size_t seat) {
@@ -1033,6 +1134,12 @@ void MultiplayerMenu::click(const MultiplayerModel& model, Id id, std::vector<Mu
                 event(MultiplayerEvent::Kind::Ready)->ready = m_ready;
             } else if (id == kStart) {
                 event(MultiplayerEvent::Kind::Start);
+            } else if (id == kStartNow) {
+                event(MultiplayerEvent::Kind::StartNow);
+            } else if (id == kStartUp) {
+                m_start_first -= std::min(m_start_first, m_start_rows);
+            } else if (id == kStartDown) {
+                m_start_first += m_start_rows;  // kept within the list by the next layout
             } else if (id == kSettings && session != nullptr) {
                 if (const auto settings = read_lobby_setup(session->lobby().setup)) {
                     const bool change = model.hosting && !session->lobby().started;

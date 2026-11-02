@@ -26,7 +26,7 @@ namespace o1602::net {
 /// Raised whenever the messages or the simulation change in a way older builds would not follow.
 /// The first three bytes of a Hello (its type and this version) never change, so that a computer of
 /// another version is told so (RefuseReason::Version) rather than refused as nonsense (MS-22).
-inline constexpr std::uint16_t kProtocolVersion = 24;
+inline constexpr std::uint16_t kProtocolVersion = 25;
 
 /// Upper limits a decoded message must keep; more comes from damaged or hostile data.
 inline constexpr std::size_t kMaxNameLength = sim::PlayerRename::kMaxNameLength;
@@ -118,6 +118,12 @@ struct Progress {
     std::optional<FrameHash> hash;
 };
 
+/// How much of the game on its way the computer has (sent whenever that changes, a few times a
+/// second at most): the host shows it to everyone in the Roster while the game starts.
+struct LoadProgress {
+    std::uint8_t percent = 0;  ///< 0 to 100: received, and loaded at 100
+};
+
 // --- From the host to a computer ---
 
 /// The computer is in: the slot it plays and the token to come back to it.
@@ -189,6 +195,8 @@ struct Member {
     std::string name;
     State state = State::Playing;
     bool host = false;
+    /// (Loading) How much of its game it has, 0 to 100 (LoadProgress).
+    std::uint8_t loaded = 0;
     friend bool operator==(const Member&, const Member&) = default;
 };
 
@@ -198,6 +206,9 @@ struct Roster {
     /// nobody, and its address as the host sees it, where the others then connect.
     Seat successor = sim::kNoPlayer;
     std::string successor_address;
+    /// The game has started and the host holds its first frame until every player has it loaded:
+    /// all begin together (HostSession::starting()).
+    bool starting = false;
 };
 
 /// The fingerprints of these players differed from the host's after frame `frame`; they get the
@@ -347,8 +358,9 @@ struct PackageFiles {
     std::vector<assets::PackageFile> files;
 };
 
-using Message = std::variant<Hello, CommandBatch, Progress, Welcome, Refused, Snapshot, Turn, Roster, Desync, Lobby,
-                             TakeSeat, SetReady, Chat, Standby, SetBanner, Dropped, HostLeaving, Part, PackageFiles>;
+using Message =
+    std::variant<Hello, CommandBatch, Progress, Welcome, Refused, Snapshot, Turn, Roster, Desync, Lobby, TakeSeat,
+                 SetReady, Chat, Standby, SetBanner, Dropped, HostLeaving, Part, PackageFiles, LoadProgress>;
 
 [[nodiscard]] std::vector<std::uint8_t> encode(const Message& message);
 /// What goes over the transport for an encoded message: the message itself, or the encoded Parts of

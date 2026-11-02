@@ -36,6 +36,8 @@ constexpr std::uint32_t kMaxGameOrdersPerSecond = 4;
 /// (MS-16): each change goes to everyone, up to 64 KiB of setup.
 constexpr std::uint32_t kMaxSeatChangesPerSecond = 4;
 constexpr std::uint32_t kLobbyEveryMs = 100;
+/// How often the roster goes out at most when only the progress of games on their way changed.
+constexpr std::uint32_t kLoadingEveryMs = 250;
 /// Time a new connection has to send its Hello (MS-12: short, so that connections that never say
 /// who they are do not hold the few there are).
 constexpr std::uint32_t kGreetingMs = 3'000;
@@ -78,15 +80,18 @@ struct HostSession::Peer {
     std::uint32_t epoch = 0;   ///< of the last game sent
     std::uint64_t frames = 0;  ///< run, as last reported
     bool lagging = false;
-    std::uint32_t stalls = 0;        ///< times the others stopped waiting for it
-    std::uint64_t token = 0;         ///< to come back to its slot (0: it watches)
-    std::uint64_t owner = 0;         ///< player_verifier of its player ID (0: none)
-    std::uint32_t chat_lines = 0;    ///< in the current second
-    std::uint32_t game_orders = 0;   ///< pauses and renames in the current second
-    std::uint32_t lobby_orders = 0;  ///< slot changes in the current second
-    std::uint32_t greeting_ms = 0;   ///< connected without a Hello this long
-    std::uint32_t resyncs = 0;       ///< games sent after desyncs without a matching fingerprint since
-    std::deque<FrameHash> hashes;    ///< reported ahead of the host, not compared yet
+    std::uint32_t stalls = 0;         ///< times the others stopped waiting for it
+    std::uint64_t token = 0;          ///< to come back to its slot (0: it watches)
+    std::uint64_t owner = 0;          ///< player_verifier of its player ID (0: none)
+    std::uint32_t chat_lines = 0;     ///< in the current second
+    std::uint32_t game_orders = 0;    ///< pauses and renames in the current second
+    std::uint32_t lobby_orders = 0;   ///< slot changes in the current second
+    std::uint32_t greeting_ms = 0;    ///< connected without a Hello this long
+    std::uint32_t resyncs = 0;        ///< games sent after desyncs without a matching fingerprint since
+    std::uint8_t loaded = 0;          ///< of the game on its way, in percent (LoadProgress)
+    bool start_wait = false;          ///< the game's first frame waits for it (SessionConfig::start_wait_ms)
+    std::uint32_t start_idle_ms = 0;  ///< since its game last made progress, while the start waits for it
+    std::deque<FrameHash> hashes;     ///< reported ahead of the host, not compared yet
 };
 
 HostSession::HostSession(std::unique_ptr<Transport> transport, sim::Simulation& simulation,
@@ -397,7 +402,11 @@ void HostSession::update(std::uint32_t real_ms, const sim::Simulation::BeforeTic
         });
         take_over_vacant(real_ms);
         update_lead(real_ms);
-        run(real_ms, before_tick);
+        if (wait_for_start(real_ms)) {
+            m_waiting = true;  // the first frame waits until every player has the game
+        } else {
+            run(real_ms, before_tick);
+        }
         broadcast_frames();
         deliver_packed(real_ms);
         m_game_credit_ms = std::min(kGameCreditMs, m_game_credit_ms + std::min(real_ms, kGameCreditMs));
@@ -412,7 +421,8 @@ void HostSession::update(std::uint32_t real_ms, const sim::Simulation::BeforeTic
         forget_frames();
     }
     std::erase_if(m_peers, [](const auto& p) { return p->gone; });
-    if (m_roster_changed) {
+    m_roster_wait_ms -= std::min(m_roster_wait_ms, real_ms);
+    if (m_roster_changed || (m_loading_changed && m_roster_wait_ms == 0)) {
         refresh_roster();
     }
     if (started()) {
@@ -455,6 +465,8 @@ void HostSession::receive(LinkId link, std::span<const std::uint8_t> bytes) {
         commands(*peer, *batch);
     } else if (const auto* report = std::get_if<Progress>(&*message)) {
         progress(*peer, *report);
+    } else if (const auto* loading = std::get_if<LoadProgress>(&*message)) {
+        load_progress(*peer, *loading);
     } else if (const auto* seat = std::get_if<TakeSeat>(&*message)) {
         // Each move costs a Welcome and a new token; ready and banner only change the lobby, which
         // goes out at most every kLobbyEveryMs (MS-16).
@@ -629,6 +641,7 @@ void HostSession::progress(Peer& peer, const Progress& m) {
     peer.frames = m.frames;
     if (peer.state == Peer::State::Loading) {
         peer.state = Peer::State::Playing;
+        peer.loaded = 100;
         // Far behind after loading: it catches up without the others waiting for it.
         peer.lagging = m_frames > peer.frames + ahead_frames();
         m_roster_changed = true;
@@ -639,6 +652,65 @@ void HostSession::progress(Peer& peer, const Progress& m) {
     if (m.hash) {
         compare(peer, *m.hash);
     }
+}
+
+void HostSession::load_progress(Peer& peer, const LoadProgress& m) {
+    // Only of a game on its way: a computer that plays has it.
+    if (peer.state != Peer::State::Loading || peer.packing || m.percent == peer.loaded) {
+        return;
+    }
+    peer.loaded = m.percent;
+    peer.start_idle_ms = 0;
+    m_loading_changed = true;
+}
+
+bool HostSession::wait_for_start(std::uint32_t real_ms) {
+    if (!m_starting) {
+        return false;
+    }
+    bool waiting = false;
+    for (const auto& p : m_peers) {
+        if (p->gone || !p->start_wait) {
+            continue;
+        }
+        if (p->state == Peer::State::Playing && !p->packing && !p->game_due) {
+            p->start_wait = false;  // it has the game
+            continue;
+        }
+        // Writing and packing its game is the host's part: only a game on its way that does not
+        // come on counts against the computer.
+        if (p->state == Peer::State::Loading && !p->packing && !p->game_due) {
+            p->start_idle_ms += real_ms;
+            if (p->start_idle_ms >= m_config.start_wait_ms) {
+                p->start_wait = false;  // it catches up once it has the game
+                continue;
+            }
+        }
+        waiting = true;
+    }
+    if (!waiting) {
+        stop_starting();
+    }
+    return waiting;
+}
+
+void HostSession::stop_starting() {
+    if (!m_starting) {
+        return;
+    }
+    m_starting = false;
+    for (const auto& p : m_peers) {
+        p->start_wait = false;
+    }
+    m_roster_changed = true;
+    SessionEvent e;
+    e.kind = SessionEvent::Kind::Started;
+    e.seat = m_seat;
+    event(std::move(e));
+}
+
+void HostSession::start_now() {
+    stop_starting();
 }
 
 void HostSession::compare(Peer& peer, const FrameHash& theirs) {
@@ -853,6 +925,7 @@ void HostSession::start_packing() {
         // takes the epoch of the game on its way), nobody waits for it, and it gets no frames
         // until its game comes with those run since.
         p->packing = true;
+        p->loaded = 0;
         ++p->epoch;
         p->lagging = false;
         p->hashes.clear();
@@ -916,6 +989,8 @@ void HostSession::send_game(Peer& peer, std::uint64_t first) {
     }
     send(peer.link, turn);
     peer.state = Peer::State::Loading;
+    peer.loaded = 0;
+    peer.start_idle_ms = 0;  // the game is on its way now
     peer.frames = first;
     peer.lagging = false;
     peer.hashes.clear();
@@ -1147,9 +1222,11 @@ Seat HostSession::seat_of_owner(std::uint64_t owner) const {
 
 void HostSession::refresh_roster() {
     m_roster_changed = false;
+    m_loading_changed = false;
+    m_roster_wait_ms = kLoadingEveryMs;
     m_roster.clear();
     m_roster_links.clear();
-    m_roster.push_back(Member{m_seat, m_name, Member::State::Playing, true});
+    m_roster.push_back(Member{m_seat, m_name, Member::State::Playing, true, 100});
     m_roster_links.push_back(LinkId{});  // the host itself: never sent away
     for (const auto& p : m_peers) {
         if (p->gone || !p->welcomed) {
@@ -1158,7 +1235,8 @@ void HostSession::refresh_roster() {
         const Member::State state = p->lagging                                        ? Member::State::Lagging
                                     : p->state == Peer::State::Playing && !p->packing ? Member::State::Playing
                                                                                       : Member::State::Loading;
-        m_roster.push_back(Member{p->seat, p->name, state, false});
+        const std::uint8_t loaded = state == Member::State::Loading ? p->loaded : std::uint8_t{100};
+        m_roster.push_back(Member{p->seat, p->name, state, false, loaded});
         m_roster_links.push_back(p->link);
     }
     // The successor: of the computers that play a slot and run the game, the one with the lowest
@@ -1174,8 +1252,8 @@ void HostSession::refresh_roster() {
     }
     m_standby_changed = true;
     // The successor's address only to those who play: spectators get it when the host leaves (MS-25).
-    const std::vector<std::uint8_t> players = encode(Roster{m_roster, m_successor, m_successor_address});
-    const std::vector<std::uint8_t> spectators = encode(Roster{m_roster, m_successor, {}});
+    const std::vector<std::uint8_t> players = encode(Roster{m_roster, m_successor, m_successor_address, m_starting});
+    const std::vector<std::uint8_t> spectators = encode(Roster{m_roster, m_successor, {}, m_starting});
     for (const auto& p : m_peers) {
         if (!p->gone && p->welcomed) {
             m_transport->send(p->link, p->seat != sim::kNoPlayer ? players : spectators);
@@ -1564,11 +1642,16 @@ void HostSession::start(sim::Simulation& simulation, const assets::BuildingTable
             m_computer_held.push_back(static_cast<Seat>(s));
         }
     }
+    // All begin together: the first frame waits for the players in the lobby to have the game.
+    m_starting = m_config.start_wait_ms > 0;
+    m_roster_changed = true;
     for (const auto& p : m_peers) {
         if (p->gone || !p->welcomed) {
             continue;
         }
         p->game_due = true;
+        p->start_wait = m_starting && p->seat != sim::kNoPlayer;
+        p->start_idle_ms = 0;
         if (p->seat != sim::kNoPlayer) {
             insert(sim::PlayerRename{p->seat, p->name});
             if (p->owner != 0) {

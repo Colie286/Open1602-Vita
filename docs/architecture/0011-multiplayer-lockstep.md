@@ -138,6 +138,15 @@ menu in `engine/app` (`multiplayer_menu.hpp`, `multiplayer.cpp`).
     natives are reserved and not shown. Every game has all its players: a slot nobody takes is played by
     the computer, and the host hands it to whoever comes into the running game (the command
     `PlayerControl`) and back to the computer when that player leaves.
+    **All begin together** (protocol version 25): a game started from the lobby does not run on the
+    host while the others still receive it. The host holds its first frame (`HostSession::starting()`,
+    `Roster::starting`) until every player of the lobby has the game loaded; each computer tells the
+    host how much of the game on its way it has (`LoadProgress`, a few times a second), and the roster
+    carries it to everyone (`Member::loaded`). Meanwhile the lobby lists everyone in the game with a
+    progress bar (scrolled when there are more than ten), and the others' games stand at frame 0, as
+    there are no frames yet. A player whose game makes no progress for 60 s (`start_wait_ms`) is no
+    longer waited for, and the host may stop waiting at any time (`start_now()`); such a player
+    catches up like one who joins the running game. Spectators are not waited for.
 12. **Players.** A new endless game has four to twelve players. Four play on the original's maps;
     more get a world of their own (ADR 0008), as much sea and land per player as the original's
     500 × 350 for four. Players five on sit behind the original's seven slots (slot 7 on) with

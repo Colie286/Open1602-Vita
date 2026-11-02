@@ -302,6 +302,12 @@ TEST_CASE("net: every message goes to bytes and back") {
                                   net::Member{sim::kNoPlayer, "Zuschauer", net::Member::State::Lagging, false}},
                                  1,
                                  "192.168.1.20"});
+    all.emplace_back(net::Roster{{net::Member{0, "Gastgeber", net::Member::State::Playing, true, 100},
+                                  net::Member{1, "Anna", net::Member::State::Loading, false, 42}},
+                                 1,
+                                 "",
+                                 true});
+    all.emplace_back(net::LoadProgress{57});
     all.emplace_back(net::Desync{300, {1, 2}});
     net::Lobby lobby;
     lobby.title = "Merlins Inselwelt";
@@ -338,6 +344,19 @@ TEST_CASE("net: every message goes to bytes and back") {
     REQUIRE(t.frames.size() == 2);
     CHECK(t.frames[1].frame == 19);
     CHECK(std::get<sim::PlayerRename>(t.frames[1].commands[1]).name == "C");
+}
+
+TEST_CASE("net: a load progress beyond 100 percent is no message") {
+    auto bytes = net::encode(net::LoadProgress{100});
+    CHECK(net::decode(bytes).has_value());
+    bytes.back() = 101;
+    CHECK(!net::decode(bytes).has_value());
+    auto roster =
+        net::encode(net::Roster{{net::Member{0, "A", net::Member::State::Loading, false, 100}}, 0, "", false});
+    CHECK(net::decode(roster).has_value());
+    // The member's percent comes after its seat, name (length and bytes), state and host flag.
+    roster[4 + 1 + 4 + 1 + 1 + 1 + 1] = 200;
+    CHECK(!net::decode(roster).has_value());
 }
 
 TEST_CASE("net: damaged or hostile bytes give no message") {
@@ -2459,6 +2478,7 @@ TEST_CASE("net: a joining computer tells how far the game on its way has come") 
     const auto parts = net::packets(game);
     REQUIRE(parts.size() > 3);
     std::optional<net::LinkId> link;
+    std::vector<std::uint8_t> told;  // LoadProgress the host was sent
     const auto step = [&] {
         network.advance(kStepMs);
         std::vector<net::TransportEvent> events;
@@ -2468,6 +2488,10 @@ TEST_CASE("net: a joining computer tells how far the game on its way has come") 
                 link = e.link;
                 host->send(e.link, net::encode(net::Welcome{net::kProtocolVersion, 1, 0xA77A}));
                 host->send(e.link, net::encode(lobby));
+            } else if (e.kind == net::TransportEvent::Kind::Received) {
+                if (const auto m = net::decode(e.data); m && std::holds_alternative<net::LoadProgress>(*m)) {
+                    told.push_back(std::get<net::LoadProgress>(*m).percent);
+                }
             }
         }
         a.update(kStepMs);
@@ -2508,6 +2532,14 @@ TEST_CASE("net: a joining computer tells how far the game on its way has come") 
     CHECK(a.session->join_stage() == Stage::Loading);
     CHECK(a.session->received_bytes() == game.size());
     CHECK(!a.session->ended());
+    // The host heard how far it came, rising, and of the whole game at once.
+    step();
+    REQUIRE(told.size() >= 2);
+    CHECK(std::is_sorted(told.begin(), told.end()));
+    CHECK(told.front() > 0);
+    CHECK(told.front() < 100);
+    CHECK(told.back() == 100);
+    CHECK(std::adjacent_find(told.begin(), told.end()) == told.end());  // each only once
     a.update(kStepMs);
     CHECK(a.session->ended());
     CHECK(a.session->end_reason() == net::EndReason::LoadFailed);
@@ -2531,4 +2563,153 @@ TEST_CASE("net: the host takes a few spectators, not any number (MS-12)") {
     CHECK(w3.session->ended());
     REQUIRE(!w3.events.empty());
     CHECK(w3.events.back().refused == net::RefuseReason::Full);
+}
+
+namespace {
+
+/// A lobby of four slots, the third the computer's, whose host waits for everyone at the start
+/// (SessionConfig::start_wait_ms); Anna and Bernd join it.
+struct StartingLobby {
+    net::LoopbackNetwork network{30, 10};
+    std::unique_ptr<net::HostSession> host;
+    std::vector<net::SessionEvent> host_events;
+    std::optional<Game> host_game;
+    std::optional<Computer> anna;
+    std::optional<Computer> bernd;
+    bool bernd_frozen = false;  ///< Bernd's program stands still (loading, a debugger)
+
+    explicit StartingLobby(std::uint32_t start_wait_ms) {
+        net::SessionConfig config;
+        config.start_wait_ms = start_wait_ms;
+        net::Lobby setup;
+        setup.seats = {net::LobbySeat{}, net::LobbySeat{}, net::LobbySeat{net::LobbySeat::Kind::Computer, "", false},
+                       net::LobbySeat{}};
+        host = std::make_unique<net::HostSession>(network.listen(), setup, 0, "Merlin", kContent, config);
+        anna.emplace(network, "Anna");
+        tick(300);
+        bernd.emplace(network, "Bernd");
+        tick(300);
+        REQUIRE(anna->session->local_seat() == 1);
+        REQUIRE(bernd->session->local_seat() == 3);
+    }
+
+    void tick(std::uint32_t ms) {
+        for (std::uint32_t t = 0; t < ms; t += kStepMs) {
+            network.advance(kStepMs);
+            host->update(kStepMs);
+            for (auto& e : host->take_events()) {
+                host_events.push_back(std::move(e));
+            }
+            anna->update(kStepMs);
+            if (bernd && !bernd_frozen) {
+                bernd->update(kStepMs);
+            }
+        }
+    }
+
+    void start() {
+        host_game.emplace(Game::from_lobby(host->lobby()));
+        host->start(*host_game->simulation, buildings());
+    }
+
+    [[nodiscard]] std::size_t host_count(net::SessionEvent::Kind kind) const {
+        return static_cast<std::size_t>(std::count_if(host_events.begin(), host_events.end(),
+                                                      [kind](const net::SessionEvent& e) { return e.kind == kind; }));
+    }
+};
+
+const net::Member* member(const net::Session& session, std::string_view name) {
+    const auto& roster = session.roster();
+    const auto it = std::find_if(roster.begin(), roster.end(), [&](const net::Member& m) { return m.name == name; });
+    return it != roster.end() ? &*it : nullptr;
+}
+
+}  // namespace
+
+TEST_CASE("net: the game starts for everyone at once: its first frame waits until every player has it") {
+    StartingLobby lobby(60'000);
+    lobby.bernd_frozen = true;  // Bernd's computer is slow to take the game
+    lobby.start();
+    lobby.tick(3000);
+    net::HostSession& host = *lobby.host;
+    Computer& anna = *lobby.anna;
+    Computer& bernd = *lobby.bernd;
+    // The host holds frame 0 for Bernd; Anna has the game, but no frame to run either.
+    CHECK(host.starting());
+    CHECK(host.frames() == 0);
+    CHECK(host.waiting());
+    REQUIRE(anna.session->playing());
+    CHECK(anna.session->frames() == 0);
+    CHECK(anna.session->starting());
+    CHECK(anna.count(net::SessionEvent::Kind::Started) == 0);
+    // Everyone sees who is ready and who is still loading.
+    const net::Member* b = member(*anna.session, "Bernd");
+    REQUIRE(b != nullptr);
+    CHECK(b->state == net::Member::State::Loading);
+    const net::Member* a = member(*anna.session, "Anna");
+    REQUIRE(a != nullptr);
+    CHECK(a->state == net::Member::State::Playing);
+    CHECK(a->loaded == 100);
+
+    // Bernd's computer takes the game: then all begin, at the same frame.
+    lobby.bernd_frozen = false;
+    for (int i = 0; i < 400 && host.starting(); ++i) {
+        lobby.tick(kStepMs);
+    }
+    CHECK(!host.starting());
+    CHECK(lobby.host_count(net::SessionEvent::Kind::Started) == 1);
+    lobby.tick(2000);
+    REQUIRE(bernd.session->playing());
+    CHECK(!anna.session->starting());
+    CHECK(!bernd.session->starting());
+    CHECK(anna.count(net::SessionEvent::Kind::Started) == 1);
+    CHECK(bernd.count(net::SessionEvent::Kind::Started) == 1);
+    CHECK(host.frames() > 0);
+    // Nobody ran ahead: all three a few frames apart at most, not seconds.
+    const auto gap = [](std::uint64_t x, std::uint64_t y) { return x > y ? x - y : y - x; };
+    CHECK(gap(host.frames(), anna.session->frames()) <= 10);
+    CHECK(gap(host.frames(), bernd.session->frames()) <= 10);
+    CHECK(member(*bernd.session, "Bernd")->state == net::Member::State::Playing);
+}
+
+TEST_CASE("net: a player whose game makes no progress at the start is not waited for for ever") {
+    StartingLobby lobby(2'000);
+    lobby.start();
+    lobby.tick(400);  // the game is on its way to everyone
+    lobby.bernd_frozen = true;
+    lobby.tick(4000);
+    // Bernd stood still too long: the others began without him.
+    CHECK(!lobby.host->starting());
+    CHECK(lobby.host->frames() > 0);
+    CHECK(lobby.anna->count(net::SessionEvent::Kind::Started) == 1);
+    // He catches up once his computer goes on.
+    lobby.bernd_frozen = false;
+    lobby.tick(4000);
+    CHECK(lobby.bernd->session->playing());
+    CHECK(lobby.bernd->session->frames() > 0);
+    CHECK(!lobby.bernd->session->ended());
+}
+
+TEST_CASE("net: the host stops waiting for the players still loading at the start") {
+    StartingLobby lobby(60'000);
+    lobby.bernd_frozen = true;
+    lobby.start();
+    lobby.tick(1000);
+    REQUIRE(lobby.host->starting());
+    lobby.host->start_now();
+    lobby.tick(1000);
+    CHECK(!lobby.host->starting());
+    CHECK(lobby.host->frames() > 0);
+    CHECK(lobby.anna->session->frames() > 0);
+    CHECK(lobby.host_count(net::SessionEvent::Kind::Started) == 1);
+}
+
+TEST_CASE("net: without waiting at the start the host's game runs at once") {
+    StartingLobby lobby(0);
+    lobby.bernd_frozen = true;
+    lobby.start();
+    lobby.tick(1000);
+    CHECK(!lobby.host->starting());
+    CHECK(lobby.host->frames() > 0);
+    CHECK(lobby.host_count(net::SessionEvent::Kind::Started) == 0);  // nothing was held
 }

@@ -945,3 +945,92 @@ TEST_CASE("multiplayer menu: in the lobby the host changes the settings, the oth
     CHECK(click(menu, model, ui::tr("setup.back")).empty());
     CHECK(menu.screen() == MultiplayerMenu::Screen::Lobby);
 }
+
+TEST_CASE("multiplayer menu: while the game starts, everyone in it with how far they are, scrolled when many") {
+    // A computer in a started lobby of twelve players and two spectators, whose host still waits
+    // for some of them (net::Roster::starting).
+    net::LoopbackNetwork network(5, 0);
+    auto host = network.listen();
+    net::Hello hello;
+    hello.name = "P1";
+    hello.content = 1;
+    net::ClientSession client(network.connect(), hello, [](std::span<const std::uint8_t>) { return nullptr; });
+    net::Lobby lobby;
+    lobby.title = "Abend";
+    lobby.started = true;
+    lobby.seats.resize(12);
+    net::Roster roster;
+    roster.starting = true;
+    for (std::size_t s = 0; s < 12; ++s) {
+        const std::string name = "P" + std::to_string(s);
+        lobby.seats[s].kind = net::LobbySeat::Kind::Human;
+        lobby.seats[s].name = name;
+        lobby.seats[s].banner = static_cast<sim::BannerId>(s);
+        // The host ready, then waiting, receiving, loading and ready in turn.
+        const auto state = s % 4 == 0 ? net::Member::State::Playing : net::Member::State::Loading;
+        const std::uint8_t loaded = s % 4 == 1 ? 0 : s % 4 == 2 ? 45 : 100;
+        roster.members.push_back(net::Member{static_cast<sim::PlayerId>(s), name, state, s == 0, loaded});
+    }
+    roster.members.push_back(net::Member{sim::kNoPlayer, "W1", net::Member::State::Loading, false, 10});
+    roster.members.push_back(net::Member{sim::kNoPlayer, "W2", net::Member::State::Playing, false, 100});
+    std::optional<net::LinkId> link;
+    for (int i = 0; i < 20; ++i) {
+        network.advance(16);
+        std::vector<net::TransportEvent> events;
+        host->poll(events);
+        for (const auto& e : events) {
+            if (e.kind == net::TransportEvent::Kind::Received && !link) {
+                link = e.link;
+                host->send(e.link, net::encode(net::Welcome{net::kProtocolVersion, 1, 7}));
+                host->send(e.link, net::encode(lobby));
+                host->send(e.link, net::encode(roster));
+            }
+        }
+        client.update(16);
+    }
+    REQUIRE(client.starting());
+    REQUIRE(client.roster().size() == 14);
+
+    MultiplayerMenu menu(ui::FormStyle{});
+    app::MultiplayerModel model;
+    model.session = &client;
+    menu.show_lobby();
+    CHECK(find_text(menu, model, "P0 (host)").has_value());
+    CHECK(find_text(menu, model, "P1 (you)").has_value());
+    CHECK(find_text(menu, model, "Waiting").has_value());
+    CHECK(find_text(menu, model, "45%").has_value());
+    CHECK(find_text(menu, model, "Loading").has_value());
+    CHECK(find_text(menu, model, "Ready").has_value());
+    CHECK(find_text(menu, model, "3 of 12 players ready").has_value());  // P0, P4 and P8
+    CHECK(find_text(menu, model, "The game is starting").has_value());
+    // No slots to take, no ready button and no start: the game has started.
+    CHECK(!find_text(menu, model, "Take").has_value());
+    CHECK(!find_text(menu, model, "Stop waiting").has_value());
+    // Ten rows: the rest by the button, or the wheel over the list.
+    CHECK(!find_text(menu, model, "W2 (spectator)").has_value());
+    CHECK(!find_text(menu, model, "-").has_value());
+    (void)click(menu, model, "+");
+    CHECK(find_text(menu, model, "W1 (spectator)").has_value());
+    CHECK(find_text(menu, model, "W2 (spectator)").has_value());
+    CHECK(!find_text(menu, model, "P0 (host)").has_value());
+    CHECK(!find_text(menu, model, "+").has_value());
+    (void)click(menu, model, "-");
+    CHECK(find_text(menu, model, "P0 (host)").has_value());
+    (void)menu.mouse(model, 200, 150, false);  // the mouse over the list
+    CHECK(menu.wheel(model, -2));
+    CHECK(!find_text(menu, model, "P1 (you)").has_value());
+    CHECK(find_text(menu, model, "P2").has_value());
+
+    // The host may stop waiting.
+    model.hosting = true;
+    const auto events = click(menu, model, "Stop waiting");
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].kind == MultiplayerEvent::Kind::StartNow);
+
+    // In German.
+    const LanguageGuard german("de");
+    CHECK(find_text(menu, model, "Das Spiel startet").has_value());
+    CHECK(find_text(menu, model, "3 von 12 Spielern bereit").has_value());
+    CHECK(find_text(menu, model, "45 %").has_value());
+    CHECK(find_text(menu, model, "Nicht mehr warten").has_value());
+}

@@ -126,6 +126,14 @@ constexpr std::array kTexts = {
     Entry{MpText::GameReceiving, "net.game_receiving"},
     Entry{MpText::GameBytes, "net.game_bytes"},
     Entry{MpText::GameLoading, "net.game_loading"},
+    Entry{MpText::Starting, "net.starting"},
+    Entry{MpText::StartingHint, "net.starting_hint"},
+    Entry{MpText::StartingCount, "net.starting_count"},
+    Entry{MpText::LoadWaiting, "net.load_waiting"},
+    Entry{MpText::LoadPercent, "net.load_percent"},
+    Entry{MpText::LoadLoading, "net.load_loading"},
+    Entry{MpText::Spectator, "net.spectator"},
+    Entry{MpText::StartNow, "net.start_now"},
 };
 
 constexpr bool in_order() {
@@ -137,7 +145,7 @@ constexpr bool in_order() {
     return true;
 }
 static_assert(in_order(), "kTexts must list every MpText in order");
-static_assert(kTexts.size() == static_cast<std::size_t>(MpText::GameLoading) + 1, "a text is missing");
+static_assert(kTexts.size() == static_cast<std::size_t>(MpText::StartNow) + 1, "a text is missing");
 
 /// "lighthouse 1.2, weather" in the fonts' Windows-1252.
 std::string package_names(std::span<const assets::ContentPackage> packages) {

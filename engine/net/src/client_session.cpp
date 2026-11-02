@@ -176,6 +176,7 @@ void ClientSession::update(std::uint32_t real_ms, const sim::Simulation::BeforeT
     }
     send_commands();
     report(real_ms);
+    report_loading(real_ms);
     m_transport->flush();
 }
 
@@ -290,6 +291,12 @@ void ClientSession::receive(std::span<const std::uint8_t> bytes) {
         if (m_successor != m_seat) {
             m_standby.reset();
         }
+        if (std::exchange(m_starting, roster->starting) && !m_starting) {
+            SessionEvent e;
+            e.kind = SessionEvent::Kind::Started;
+            e.seat = m_seat;
+            event(std::move(e));
+        }
     } else if (auto* standby = std::get_if<Standby>(&*message)) {
         m_standby = std::move(*standby);
     } else if (auto* lobby = std::get_if<Lobby>(&*message)) {
@@ -385,6 +392,7 @@ void ClientSession::load(Snapshot& m) {
     send(kHost, Progress{m_epoch, m_frames, std::nullopt});
     m_reported = m_frames;
     m_since_report = 0;
+    m_load_reported = kNoLoadReport;  // the next game on its way starts from nothing
 }
 
 void ClientSession::turn(Turn& m) {
@@ -498,6 +506,7 @@ void ClientSession::reconnect() {
     m_closed = m_frames;
     m_epoch = 0;
     m_part.clear();
+    m_load_reported = kNoLoadReport;
     SessionEvent e;
     e.kind = SessionEvent::Kind::Reconnecting;
     e.seat = m_seat;
@@ -514,6 +523,26 @@ void ClientSession::report(std::uint32_t real_ms) {
         m_reported = m_frames;
         m_since_report = 0;
     }
+}
+
+void ClientSession::report_loading(std::uint32_t real_ms) {
+    m_since_load_report = std::min(m_since_load_report + real_ms, m_config.progress_interval_ms);
+    std::uint8_t percent = 0;
+    if (!m_whole.empty()) {
+        percent = 100;  // here, and loaded with the next update
+    } else if (!m_part.empty() && m_part_total > 0) {
+        percent =
+            static_cast<std::uint8_t>(std::min<std::uint64_t>(99, std::uint64_t{m_part.size()} * 100 / m_part_total));
+    } else {
+        return;  // no game on its way (one that comes whole is loaded at once)
+    }
+    // A few times a second, but the end at once: the host may be waiting for it to start.
+    if (percent == m_load_reported || (percent < 100 && m_since_load_report < m_config.progress_interval_ms)) {
+        return;
+    }
+    send(kHost, LoadProgress{percent});
+    m_load_reported = percent;
+    m_since_load_report = 0;
 }
 
 }  // namespace o1602::net
