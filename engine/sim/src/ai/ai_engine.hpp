@@ -309,8 +309,16 @@ private:
     void set_stage(AiPlayer& p, CityPlan& r, std::uint8_t s);
     void nothing_to_do(AiPlayer& p);
     void run_stage(AiPlayer& p, City& c, CityPlan& r);
-    bool first_need(AiPlayer& p, const City& c, const CityPlan& r, std::int32_t money,
-                    std::span<const StageNeed> needs);
+    /// Open1602: `n` grown with the free land of a city past the settlers (kGrowLand), so that a
+    /// computer fills a large island; `n` itself for the original's computers and smaller cities.
+    /// `any_stage`: for a colony too (its caps on fields and farms).
+    [[nodiscard]] std::uint32_t grown(const CityPlan& r, std::uint32_t n, bool any_stage = false) const;
+    /// Open1602: the houses of an order, `grown` only while at most an eighth of the city's houses
+    /// hold pioneers, so that a city grows tall before it grows wide.
+    [[nodiscard]] std::uint32_t houses_wanted(const City& c, const CityPlan& r, std::uint32_t n) const;
+    /// `grow`: with the numbers `grown` by the city's land (houses: `houses_wanted`).
+    bool first_need(AiPlayer& p, const City& c, const CityPlan& r, std::int32_t money, std::span<const StageNeed> needs,
+                    bool grow = false);
     void unload_ship(AiPlayer& p, City& c);
     bool colony_luxury(AiPlayer& p, const City& c, const CityPlan& r, std::uint32_t tiles_per_field);
     bool farm_animals(AiPlayer& p, const CityPlan& r);
@@ -455,11 +463,21 @@ private:
     [[nodiscard]] std::vector<std::uint8_t> land_reach(PlayerId owner, std::uint16_t island,
                                                        const std::vector<std::uint32_t>& soldiers) const;
     /// Open1602: keeps the goals of an attack the soldiers can walk up to; with none of them, the
-    /// buildings of the city they can walk up to (its walls, gates and towers first), nearest to
-    /// the first goal first.
+    /// first obstacle on the cheapest way to one (`way_in`).
     void reachable_goals(const AiPlayer& a, std::uint16_t island, const City& hostile,
                          const std::vector<std::uint32_t>& soldiers,
                          std::vector<std::pair<std::int32_t, std::int32_t>>& goals) const;
+    /// Open1602: the tree, field, wall, gate or building of `hostile`'s owner that stands first on
+    /// the cheapest way from the tiles in `reach` to a tile with a goal (`goal_at` >= 0), by its
+    /// origin; none if no way leads there.
+    [[nodiscard]] std::optional<std::pair<std::int32_t, std::int32_t>> way_in(
+        const AiPlayer& a, std::uint16_t island, const City& hostile, const std::vector<std::uint8_t>& reach,
+        const std::vector<std::int16_t>& goal_at) const;
+    /// Open1602: sends the soldiers on `island` against the soldiers of `enemies` that stand in
+    /// one of its cities there; whether it gave an order.
+    bool defend(AiPlayer& a, std::uint16_t island, const std::vector<PlayerId>& enemies);
+    /// The island the soldier controller looks at next (the original: simply the next one).
+    [[nodiscard]] std::optional<std::uint16_t> next_watched_island();
     void island_controller();
     void diplomacy(AiPlayer& p);
     void pirate_step(AiPlayer& p);

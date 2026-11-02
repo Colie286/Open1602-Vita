@@ -130,6 +130,17 @@ line, the rest of the order is kept.
 A game keeps the orders that differ from the original's (section `AIOR` of the savegame), so it
 plays with them whatever the packages installed later say.
 
+**Large islands.** The numbers of an order were made for the original's islands, where no city
+has 2000 tiles of free land. Once a stage's orders have nothing more to do, a city past the settlers
+(the lists from `second` and `main` on) with more than 2000 tiles of free land on its island goes
+through them again with the numbers of its `houses`, producers, public buildings, `luxury`, `tower`
+and package entries multiplied by its land / 1000, up to eight times, rounded up; houses beyond the
+order's own number only while at most an eighth of the city's houses hold pioneers, so that the city
+moves up before it spreads. A colony does the same with its caps on luxury fields and farms. So a
+computer fills an island of 3000 free tiles with up to three times as many houses and the farms and
+workshops to feed them, while maps of the original's islands play as before. The original's computer
+players (`Rules::bugs.classic_ai`, `--ai classic`) keep the plain numbers.
+
 ## What they get from nowhere
 
 The original gives its computer players money and goods on every difficulty: steady money while

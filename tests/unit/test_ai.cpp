@@ -478,7 +478,7 @@ TEST_CASE("ai: a computer's first minutes give the same state on every platform"
     // Names left empty without Text.cod (MD-10); SIMU in parts (DS-3); tiles by blocks (TB-26); a ship
     // whose goods do not fit at home is free again; the computers' state version 4 (a search's target);
     // the revised bread chain by default; the computers' state version 5 (the slots counted).
-    constexpr std::uint64_t kExpected = 0xa3d2080bccbe303fULL;
+    constexpr std::uint64_t kExpected = 0x15af58bafb00d370ULL;
     if (hash != kExpected) {
         std::printf("  state hash after 90 s: 0x%016llx\n", static_cast<unsigned long long>(hash));
     }

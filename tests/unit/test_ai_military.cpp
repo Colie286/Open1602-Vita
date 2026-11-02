@@ -29,6 +29,7 @@ constexpr std::uint32_t kCastle = 22521;
 constexpr std::uint32_t kSwordsmith = 20511;
 constexpr std::uint32_t kWall = 20902;
 constexpr std::uint32_t kGate = 20904;
+constexpr std::uint32_t kTree = 20202;
 constexpr std::uint16_t kSword = 1;
 
 constexpr sim::PlayerId kHuman = 0;
@@ -59,6 +60,8 @@ assets::BuildingTable make_buildings() {
         "  Ruinenr: 255\n"  // a stone wall
         "  @Nummer: 7\n  Id: 20904\n  Kind: 3\n  Gfx: 81\n  Size: 1, 1\n  Maxenergy: 20\n  NoShotFlg: 1\n"
         "  Ruinenr: 255\n"  // a gate
+        "  @Nummer: 8\n  Id: 20202\n  Kind: 10\n  Gfx: 90\n  Size: 1, 1\n  Maxenergy: 3\n  NoShotFlg: 1\n"
+        "  Ruinenr: 255\n"  // a tree
         "EndObj\n",
         types);
     auto table = assets::BuildingTable::from_cod(doc);
@@ -158,6 +161,22 @@ struct Island {
         s.owner = owner;
         s.island = island;
         world.add_soldier(s);
+    }
+
+    /// A tree of nobody at tile (x, y) of the island.
+    void tree(std::int32_t x, std::int32_t y, std::uint16_t island = 0) {
+        REQUIRE(world.island(island).map.place(*buildings.by_id(kTree), x, y, 0, 0).ok());
+    }
+
+    /// Tiles x0..x1, y0..y1 of the island become land of `owner`'s city `city`.
+    void claim(std::int32_t x0, std::int32_t y0, std::int32_t x1, std::int32_t y1, sim::PlayerId owner,
+               std::uint8_t city, std::uint16_t island = 0) {
+        for (std::int32_t y = y0; y <= y1; ++y) {
+            for (std::int32_t x = x0; x <= x1; ++x) {
+                world.island(island).map.set_city(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y), city,
+                                                  owner);
+            }
+        }
     }
 
     void war() { REQUIRE(world.diplomacy().set_peace(world, kHuman, kComputer, sim::Treaty::None, world.time_ms())); }
@@ -386,4 +405,59 @@ TEST_CASE("ai military: soldiers pass over an enemy city with nothing left to at
         with_target += soldier->target.kind == sim::Target::Kind::Building ? 1U : 0U;
     }
     CHECK(with_target == 8);
+}
+
+TEST_CASE("ai military: soldiers kept out by a forest cut their way in and take the Kontor") {
+    // A band of trees of nobody, three deep, closes the human city off from the computer's
+    // soldiers. The original sends them to the Kontor all the same, where they cannot walk, and
+    // they stand; Open1602 has them fell the tree in the way first.
+    Island a;
+    a.build(kKontor, 4, 8, kComputer, 0);
+    a.build(kKontor, 70, 8, kHuman, 1);
+    for (std::int32_t y = 0; y < 20; ++y) {
+        for (std::int32_t x = 60; x <= 62; ++x) {
+            a.tree(x, y);
+        }
+    }
+    for (std::int32_t k = 0; k < 6; ++k) {
+        a.add(kComputer, 100, 24 + 2 * k);
+    }
+    a.war();
+    sim::Simulation s(a.world, a.buildings, a.figures);
+    run(s, 20'000);
+    std::size_t at_trees = 0;
+    for (const sim::Soldier* soldier : a.soldiers(kComputer)) {
+        if (soldier->target.kind == sim::Target::Kind::Building) {
+            at_trees += soldier->target.x == 60 ? 1U : 0U;  // the first tree on the way
+        }
+    }
+    CHECK(at_trees >= 4);
+    const sim::IslandMap& map = a.world.islands()[0].map;
+    REQUIRE(map.top(70, 8).owner == kHuman);
+    run(s, 8 * 60'000);
+    CHECK(map.top(70, 8).empty() || map.top(70, 8).owner != kHuman);  // through the forest, the Kontor has fallen
+}
+
+TEST_CASE("ai military: soldiers defend their own city before they go for an enemy city") {
+    // The human has a city on the island too and sends two soldiers into the computer's city. The
+    // original goes for the human city first; Open1602 meets the intruders.
+    Island a;
+    a.build(kKontor, 10, 8, kComputer, 0);
+    a.claim(0, 0, 30, 19, kComputer, 0);
+    a.build(kKontor, 70, 8, kHuman, 1);
+    for (std::int32_t k = 0; k < 6; ++k) {
+        a.add(kComputer, 2 * (10 + 40), 2 * (10 + 4) + 2 * k);  // halfway between the cities
+    }
+    a.add(kHuman, 2 * (10 + 20), 2 * (10 + 16));
+    a.add(kHuman, 2 * (10 + 21), 2 * (10 + 16));
+    a.war();
+    sim::Simulation s(a.world, a.buildings, a.figures);
+    run(s, 20'000);
+    std::size_t hunting = 0;
+    for (const sim::Soldier* soldier : a.soldiers(kComputer)) {
+        hunting += soldier->target.kind == sim::Target::Kind::Soldier ? 1U : 0U;
+    }
+    CHECK(hunting == 6);  // every one of them, not a quarter more than the enemy has
+    run(s, 3 * 60'000);
+    CHECK(a.soldiers(kHuman).empty());
 }

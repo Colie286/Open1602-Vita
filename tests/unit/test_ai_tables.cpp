@@ -110,3 +110,14 @@ TEST_CASE("ai tables: Needs and public tasks name each slot once") {
         REQUIRE(public_task(t.task) == &t);
     }
 }
+
+TEST_CASE("ai tables: a city on a large island grows its orders with its free land") {
+    CHECK(grown_count(500, 44) == 44);  // the original's islands: the original's orders
+    CHECK(grown_count(kGrowFrom, 44) == 44);
+    CHECK(grown_count(kGrowLand * 3, 44) == 132);
+    CHECK(grown_count(kGrowLand * 5 / 2, 44) == 110);
+    CHECK(grown_count(kGrowLand * 3, 1) == 3);
+    CHECK(grown_count(kGrowLand * 3, 0) == 0);          // "while houses lack it" stays so
+    CHECK(grown_count(kGrowLand * 100, 44) == 44 * 8);  // at most eight times as many
+    CHECK(grown_count(kGrowLand * 100, 1000) == 1000);  // and no more than an order may ask for
+}

@@ -437,7 +437,7 @@ TEST_CASE("ai arena: an hour of two computers develops the same on every platfor
     }
     if (minutes == 60) {
         // The computers' state version 4 (a search's target); the revised bread chain by default.
-        test::check_golden("arena after an hour", s.state_hash(), 0x5346e529f0446bb1ULL);
+        test::check_golden("arena after an hour", s.state_hash(), 0x989c00a10297e854ULL);
     }
 }
 
