@@ -2,12 +2,19 @@
 #
 # Builds and tests on Linux, Windows and macOS. Original Anno 1602 data never reaches CI; the tests
 # that need it skip themselves.
+#
+# macOS runners are often not available for a long time, so the macOS jobs do not run for pull
+# requests and pushes: they run once a week and on a manual run (Actions > CI > Run workflow).
+# They reuse the steps of the Linux/Windows jobs (YAML anchors), so every platform builds the same
+# way. Release packages for macOS are built by release.yml as before.
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '17 3 * * 1'  # Mondays 03:17 UTC: keeps the macOS build checked
   workflow_dispatch:
 
 # Actions are pinned to commit SHAs (the tag in the comment); Dependabot proposes updates
@@ -36,9 +43,7 @@ jobs:
           - { name: Windows MSVC,  os: windows-2025, cc: cl,    cxx: cl,      preset: ci }
           # Debug off Linux: asserts and the debug checks of MSVC's STL run there too.
           - { name: Windows Debug, os: windows-2025, cc: cl,    cxx: cl,      preset: debug }
-          - { name: macOS Clang,   os: macos-15,     cc: clang, cxx: clang++, preset: ci }
-          - { name: macOS Debug,   os: macos-15,     cc: clang, cxx: clang++, preset: debug }
-    steps:
+    steps: &build-steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Install dependencies (Linux)
@@ -97,10 +102,9 @@ jobs:
           - { name: Linux,      os: ubuntu-24.04, preset: ci }
           - { name: Linux ASan, os: ubuntu-24.04, preset: asan }  # the game's start under ASan/UBSan
           - { name: Windows,    os: windows-2025, preset: ci }
-          - { name: macOS,      os: macos-15,     preset: ci }
-    env:
+    env: &game-env
       SDL_VERSION: 3.2.24
-    steps:
+    steps: &game-steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Install dependencies (Linux)
@@ -184,6 +188,31 @@ jobs:
         timeout-minutes: 5
         run: >
           .github/workflows/start-game.sh build/${{ matrix.preset }}/bin/${{ runner.os == 'macOS' && 'Open1602.app/Contents/MacOS/Open1602' || 'open1602' }}
+
+  # The macOS jobs: the same steps as above, only on the weekly and manual runs (see the top).
+  build-macos:
+    name: ${{ matrix.name }}
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macOS Clang, os: macos-15, cc: clang, cxx: clang++, preset: ci }
+          - { name: macOS Debug, os: macos-15, cc: clang, cxx: clang++, preset: debug }
+    steps: *build-steps
+
+  game-macos:
+    name: Game (SDL3, ${{ matrix.name }})
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macOS, os: macos-15, preset: ci }
+    env: *game-env
+    steps: *game-steps
 
   vcpkg:
     name: Game (vcpkg preset, Windows)
