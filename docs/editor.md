@@ -44,7 +44,7 @@ A selected island has four more buttons:
 
 | Button | What it does |
 |---|---|
-| Move | Takes the island in hand as a new one: a left click puts it down elsewhere. An island with cities moves with everything on it. |
+| Move | Takes the island in hand as a new one: a left click puts it down elsewhere. An island with cities moves with everything on it, and the ships in its rectangle (at its coast) go with it. Another ship where it would lie keeps it from that place (a red outline). |
 | Turn | Turns the island a quarter clockwise about its centre, with its deposits, volcano, deer and growing trees. |
 | Copy | A copy in hand, with a number of its own: a left click puts it down. Nobody knows the copy yet. |
 | Delete | Takes the island out; the islands after it get the numbers one lower. |

@@ -386,13 +386,14 @@ void EditorPanel::layout_islands(const EditorModel& model) {
     value(kClimate, "editor.islands.climate",
           ui::tr(m_island.climate == 0 ? "editor.prop.north" : "editor.prop.south"));
     value(kIslandSize, "editor.islands.size", ui::tr(kIslandSizeTexts[m_island.size % kIslandSizeTexts.size()]));
-    const std::int32_t half = (kW - kGap) / 2;
-    f.button(kOtherIsland, Rect{kX, y, half, kButtonH}, ui::tr("editor.islands.other"), !model.placing);
-    f.button(kPlace, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.islands.place"), !model.placing);
+    f.button(kOtherIsland, Rect{kX, y, kW, kButtonH}, ui::tr("editor.islands.other"), !model.placing);
     y += kButtonH + kGap;
-    f.paragraph(Rect{kX, y, kW, kNote}, ui::tr(model.placing ? "editor.islands.placing" : "editor.islands.note"),
+    f.button(kPlace, Rect{kX, y, kW, kButtonH}, ui::tr("editor.islands.place"), !model.placing);
+    y += kButtonH + kGap;
+    constexpr std::int32_t kIslandNote = 3 * 20;
+    f.paragraph(Rect{kX, y, kW, kIslandNote}, ui::tr(model.placing ? "editor.islands.placing" : "editor.islands.note"),
                 Tone::Dim, 20);
-    y += kNote + 4;
+    y += kIslandNote + 4;
     if (model.placing) {
         f.button(kStopPlacing, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
         y += kButtonH + kGap;

@@ -616,6 +616,10 @@ bool MapViewer::editor_place(const render::TilePos& tile) {
         editor_notice(ui::tr("editor.islands.no_room"), true, "no room for the island");
         return true;
     }
+    if (editor::ship_in_way(world, x, y, p.width, p.height, except)) {
+        editor_notice(ui::tr("editor.islands.ship"), true, "a ship is in the way");
+        return true;
+    }
     const auto ux = static_cast<std::uint32_t>(x);
     const auto uy = static_cast<std::uint32_t>(y);
     const std::size_t index = p.kind == Kind::Move ? p.index : world.islands().size();
@@ -829,9 +833,10 @@ void MapViewer::draw_editor_marks() {
         if (const auto tile = m_input->tile_at_mouse()) {
             const EditorSession::Placing& p = *m_editor->placing;
             const auto [x0, y0] = editor_place_origin(*tile);
-            const bool fits = editor::free_place(
-                world, x0, y0, p.width, p.height,
-                p.kind == EditorSession::Placing::Kind::Move ? std::optional<std::size_t>(p.index) : std::nullopt);
+            const std::optional<std::size_t> except =
+                p.kind == EditorSession::Placing::Kind::Move ? std::optional<std::size_t>(p.index) : std::nullopt;
+            const bool fits = editor::free_place(world, x0, y0, p.width, p.height, except) &&
+                              !editor::ship_in_way(world, x0, y0, p.width, p.height, except);
             const std::int32_t ink =
                 ui::rgb_ink(fits ? assets::Rgba{90, 230, 90, 255} : assets::Rgba{235, 70, 60, 255});
             const auto screen = [&](double x, double y) {

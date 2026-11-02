@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 
+#include "o1602/sim/sea_paths.hpp"
 #include "o1602/sim/world.hpp"
 
 namespace o1602::sim {
@@ -117,6 +118,16 @@ core::Status World::move_island(std::size_t index, std::uint32_t x, std::uint32_
     }
     const std::uint32_t old_x = island.x;
     const std::uint32_t old_y = island.y;
+    const std::uint32_t w = island.map.width();
+    const std::uint32_t h = island.map.height();
+    // The ships in its rectangle (at its coast, in its bays) go with it.
+    const auto inside = [&](const Ship& ship) {
+        return ship.x >= old_x && ship.y >= old_y && ship.x < old_x + w && ship.y < old_y + h;
+    };
+    std::vector<bool> riding(m_ships.size(), false);
+    for (std::size_t i = 0; i < m_ships.size(); ++i) {
+        riding[i] = inside(m_ships[i]);
+    }
     const std::vector<Cell> old_cells = m_cells;
     island.x = x;
     island.y = y;
@@ -129,9 +140,10 @@ core::Status World::move_island(std::size_t index, std::uint32_t x, std::uint32_
         undo();
         return status;
     }
-    // No ship may end up on its land.
-    for (const Ship& ship : m_ships) {
-        if (!contains(ship.x, ship.y)) {
+    // No other ship may end up on its land.
+    for (std::size_t i = 0; i < m_ships.size(); ++i) {
+        const Ship& ship = m_ships[i];
+        if (riding[i] || !contains(ship.x, ship.y)) {
             continue;
         }
         const Cell& c = cell(ship.x, ship.y);
@@ -141,10 +153,46 @@ core::Status World::move_island(std::size_t index, std::uint32_t x, std::uint32_
         const MapCell& tile = island.map.top(c.local_x, c.local_y);
         const assets::BuildingType* b =
             buildings != nullptr && !tile.empty() ? buildings->by_sprite(tile.sprite) : nullptr;
-        if (buildings == nullptr || b == nullptr || b->kind != assets::kind::kSea) {
+        if (b == nullptr || !sailable_building(*b)) {
             undo();
             return make_error(ErrorCode::InvalidFormat, "the island would lie on a ship");
         }
+    }
+    const std::int64_t dx = std::int64_t{x} - old_x;
+    const std::int64_t dy = std::int64_t{y} - old_y;
+    constexpr std::int64_t kUnit = 4096;  // a ship's position is in 1/4096 tile
+    // Those that go with it stay on water (another island's land may lie where its sea was).
+    for (std::size_t i = 0; i < m_ships.size(); ++i) {
+        if (!riding[i]) {
+            continue;
+        }
+        const auto nx = static_cast<std::uint32_t>(m_ships[i].x + dx);
+        const auto ny = static_cast<std::uint32_t>(m_ships[i].y + dy);
+        const Cell& c = cell(nx, ny);
+        if (c.island == kSea) {
+            continue;
+        }
+        const MapCell& tile = m_islands[c.island].map.top(c.local_x, c.local_y);
+        const assets::BuildingType* b =
+            buildings != nullptr && !tile.empty() ? buildings->by_sprite(tile.sprite) : nullptr;
+        if (b == nullptr || !sailable_building(*b)) {
+            undo();
+            return make_error(ErrorCode::InvalidFormat, "a ship of the island would lie on land");
+        }
+    }
+    for (std::size_t i = 0; i < m_ships.size(); ++i) {
+        if (!riding[i]) {
+            continue;
+        }
+        Ship& ship = m_ships[i];
+        ship.x = static_cast<std::uint16_t>(ship.x + dx);
+        ship.y = static_cast<std::uint16_t>(ship.y + dy);
+        ship.pos_x = static_cast<std::int32_t>(ship.pos_x + dx * kUnit);
+        ship.pos_y = static_cast<std::int32_t>(ship.pos_y + dy * kUnit);
+        // Its course led from the old place: it plans anew.
+        ship.motion = ShipMotion{};
+        ship.motion.from_x = ship.pos_x;
+        ship.motion.from_y = ship.pos_y;
     }
     island.header.pos_x = static_cast<std::uint16_t>(std::min<std::uint32_t>(x, 0xFFFF));
     island.header.pos_y = static_cast<std::uint16_t>(std::min<std::uint32_t>(y, 0xFFFF));

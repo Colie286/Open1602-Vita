@@ -96,7 +96,7 @@ TEST_CASE("editor panel: the document's page tells what the map is and offers th
     CHECK(r->kind == EditorRequest::Kind::Close);
     // A world plan: the islands are made when a game starts.
     m.planned_islands = 18;
-    CHECK(shows(panel.draw(m, kNoFonts), "18, made at the start"));
+    CHECK(shows(panel.draw(m, kNoFonts), "18 planned"));
     // Everything lies in the panel's room.
     for (const ui::Form::Widget& w : panel.form().widgets()) {
         CHECK(w.rect.y >= 200);

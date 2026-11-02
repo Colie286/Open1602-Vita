@@ -132,6 +132,20 @@ bool free_place(const sim::World& world, std::int64_t x, std::int64_t y, std::ui
     return true;
 }
 
+bool ship_in_way(const sim::World& world, std::int64_t x, std::int64_t y, std::uint32_t w, std::uint32_t h,
+                 std::optional<std::size_t> except) {
+    const auto in = [](const sim::Ship& ship, std::int64_t rx, std::int64_t ry, std::int64_t rw, std::int64_t rh) {
+        return ship.x >= rx && ship.y >= ry && ship.x < rx + rw && ship.y < ry + rh;
+    };
+    const sim::WorldIsland* own = except && *except < world.islands().size() ? &world.islands()[*except] : nullptr;
+    return std::any_of(world.ships().begin(), world.ships().end(), [&](const sim::Ship& ship) {
+        if (own != nullptr && in(ship, own->x, own->y, own->map.width(), own->map.height())) {
+            return false;
+        }
+        return in(ship, x, y, w, h);
+    });
+}
+
 core::Result<std::unique_ptr<Operation>> add_island(const sim::World& world, sim::WorldIsland island, std::uint32_t x,
                                                     std::uint32_t y, const assets::BuildingTable& buildings) {
     const bool taken = std::any_of(world.islands().begin(), world.islands().end(),
@@ -151,7 +165,7 @@ core::Result<std::unique_ptr<Operation>> add_island(const sim::World& world, sim
     if (auto status = after.add_island(std::move(island), &buildings); !status) {
         return status.error();
     }
-    return edit(std::move(after), "islands");
+    return edit(std::move(after), "island_new");
 }
 
 core::Result<std::unique_ptr<Operation>> move_island(const sim::World& world, std::size_t index, std::uint32_t x,
@@ -160,7 +174,7 @@ core::Result<std::unique_ptr<Operation>> move_island(const sim::World& world, st
     if (auto status = after.move_island(index, x, y, &buildings); !status) {
         return status.error();
     }
-    return edit(std::move(after), "islands");
+    return edit(std::move(after), "island_move");
 }
 
 core::Result<std::unique_ptr<Operation>> rotate_island(const sim::World& world, std::size_t index,
@@ -169,7 +183,7 @@ core::Result<std::unique_ptr<Operation>> rotate_island(const sim::World& world, 
     if (auto status = after.rotate_island(index, &buildings); !status) {
         return status.error();
     }
-    return edit(std::move(after), "islands");
+    return edit(std::move(after), "island_turn");
 }
 
 core::Result<std::unique_ptr<Operation>> copy_island(const sim::World& world, std::size_t index, std::uint32_t x,
@@ -182,7 +196,7 @@ core::Result<std::unique_ptr<Operation>> copy_island(const sim::World& world, st
     if (auto status = after.copy_island(index, x, y, *number, &buildings); !status) {
         return status.error();
     }
-    return edit(std::move(after), "islands");
+    return edit(std::move(after), "island_copy");
 }
 
 core::Result<std::unique_ptr<Operation>> remove_island(const sim::World& world, std::size_t index,
@@ -191,7 +205,7 @@ core::Result<std::unique_ptr<Operation>> remove_island(const sim::World& world, 
     if (auto status = after.remove_island(index, &buildings); !status) {
         return status.error();
     }
-    return edit(std::move(after), "islands");
+    return edit(std::move(after), "island_remove");
 }
 
 }  // namespace o1602::editor

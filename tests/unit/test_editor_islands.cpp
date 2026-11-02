@@ -91,7 +91,7 @@ TEST_CASE("editor islands: a move is one step, and undo gives the same bytes") {
     CHECK(world.cell(205, 154).local_x == 5);
     CHECK(world.cell(45, 34).island == sim::World::kSea);  // the old place is open sea
     CHECK(sim::validate(world).ok());
-    CHECK(document.history().next_undo() == "islands");
+    CHECK(document.history().next_undo() == "island_move");
 
     CHECK(document.undo());
     auto after = document.save(buildings);
@@ -285,4 +285,36 @@ TEST_CASE("editor islands: the state of a running game keeps the islands as they
     CHECK(!editor::rotate_island(world, 0, buildings).ok());
     CHECK(!editor::remove_island(world, 0, buildings).ok());
     CHECK(!editor::copy_island(world, 0, 200, 150, buildings).ok());
+}
+
+TEST_CASE("editor islands: ships at an island's coast go with it, others keep it from their place") {
+    const auto buildings = make_buildings();
+    sim::World world = make_world(buildings);
+    sim::Ship anchored;
+    anchored.id = 1;
+    anchored.x = 40;  // the island's ring of sea at (40, 30)
+    anchored.y = 31;
+    anchored.pos_x = 40 * 4096 + 2048;
+    anchored.pos_y = 31 * 4096 + 2048;
+    world.ships().push_back(anchored);
+    sim::Ship other;
+    other.id = 2;
+    other.x = 205;
+    other.y = 154;
+    other.pos_x = 205 * 4096;
+    other.pos_y = 154 * 4096;
+    world.ships().push_back(other);
+    CHECK(editor::ship_in_way(world, 200, 150, 10, 8, std::size_t{0}));
+    CHECK(!editor::ship_in_way(world, 300, 150, 10, 8, std::size_t{0}));
+    CHECK(!editor::ship_in_way(world, 35, 25, 10, 8, std::size_t{0}));  // its own ship goes along
+    CHECK(!editor::move_island(world, 0, 200, 150, buildings).ok());    // onto the other ship
+    auto op = editor::move_island(world, 0, 300, 150, buildings);
+    REQUIRE(op.ok());
+    (*op)->apply(world);
+    CHECK(world.ships()[0].x == 300);
+    CHECK(world.ships()[0].y == 151);
+    CHECK(world.ships()[0].pos_x == 300 * 4096 + 2048);
+    CHECK(world.ships()[1].x == 205);
+    (*op)->revert(world);
+    CHECK(world.ships()[0].x == 40);
 }

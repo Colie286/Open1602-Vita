@@ -66,6 +66,11 @@ struct NewIsland {
 [[nodiscard]] bool free_place(const sim::World& world, std::int64_t x, std::int64_t y, std::uint32_t w, std::uint32_t h,
                               std::optional<std::size_t> except = std::nullopt);
 
+/// Whether a ship lies in the rectangle of `w` x `h` tiles at (x, y), other than those in the
+/// rectangle of the island `except` (being moved, they go with it).
+[[nodiscard]] bool ship_in_way(const sim::World& world, std::int64_t x, std::int64_t y, std::uint32_t w,
+                               std::uint32_t h, std::optional<std::size_t> except = std::nullopt);
+
 // The operations: each makes the change on a copy of the world and gives it as a WorldEdit for
 // Document::perform(); an error, and the world unchanged, where sim::World refuses it.
 
