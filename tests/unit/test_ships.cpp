@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <algorithm>
+#include <array>
 
 #include "../test_framework.hpp"
 
@@ -9,6 +10,7 @@
 #include "o1602/core/byte_reader.hpp"
 #include "o1602/core/byte_writer.hpp"
 #include "o1602/sim/diplomacy.hpp"
+#include "o1602/sim/save_game.hpp"
 #include "o1602/sim/sea_paths.hpp"
 #include "o1602/sim/ships.hpp"
 #include "o1602/sim/world.hpp"
@@ -868,6 +870,61 @@ TEST_CASE("ships: a shipyard builds a ship from wood and cloth and repairs one l
     CHECK(sea.world.ship(id)->health == 50 * kTon);
     CHECK(!sea.world.ship(id)->repairing);
     CHECK(repaired == 1);
+}
+
+TEST_CASE("ships: a shipyard builds a package's ship beside the original's of its type, a savegame keeps the order") {
+    Sea sea(true);
+    // A cog of a package beside the small trade ship (type 0), with more health; its wreck follows.
+    assets::FigureType cog = *sea.figures.get(21);
+    cog.ship.max_health = 60 * kTon;
+    const std::array<assets::FigureType, 2> cog_and_wreck{cog, *sea.figures.get(21)};
+    const auto number = sea.figures.add_ship(cog_and_wreck, 0);
+    REQUIRE(number.ok());
+    CHECK(*number == assets::kMaxFigures - 2);
+    CHECK(sea.figures.ship_type_of(*number) == std::optional<std::uint8_t>{0});
+    CHECK(sea.figures.ship_type_of(21) == std::optional<std::uint8_t>{0});
+    CHECK(!sea.figures.ship_type_of(29).has_value());  // the free trader's: no shipyard builds it
+    CHECK(sea.figures.package_ships().size() == 1);
+    CHECK(!sea.figures.add_ship(cog_and_wreck, 4).ok());                      // no such type
+    CHECK(!sea.figures.add_ship(std::span(cog_and_wreck).first(1), 0).ok());  // no wreck
+
+    sim::WorldIsland& isl = sea.world.island(0);
+    REQUIRE(isl.map.place(*sea.buildings.by_id(20104), 3, 0, 0, 0, 0, 0).ok());
+    sea.world.add_cost_building(sim::CostBuilding{sim::CostBuilding::Kind::Shipyard, 0, 3, 0, false});
+    sim::Fleet fleet(sea.world, sea.buildings, sea.figures, sea.rules);
+    using Op = sim::ShipyardOrder::Op;
+    // A ship of another type, or one no shipyard builds, is refused.
+    CHECK(!fleet.shipyard(sim::ShipyardOrder{0, 0, 3, 0, Op::Build, 0, true, 0, 29}));
+    CHECK(!fleet.shipyard(sim::ShipyardOrder{0, 0, 3, 0, Op::Build, 1, true, 0, *number}));
+    REQUIRE(fleet.shipyard(sim::ShipyardOrder{0, 0, 3, 0, Op::Build, 0, true, 0, *number}));
+    CHECK(sea.world.cost_buildings()[0].order_figure == *number);
+    CHECK(sim::yard_ship(sea.world.cost_buildings()[0]) == *number);
+
+    // The savegame keeps it (FLEE version 7).
+    const auto bytes = sim::write_game(sea.world, sea.buildings);
+    REQUIRE(bytes.ok());
+    auto read = sim::read_game(*bytes, sea.buildings, nullptr, &sea.figures);
+    REQUIRE(read.ok());
+    REQUIRE(read->cost_buildings().size() == 1);
+    CHECK(read->cost_buildings()[0].order == 0);
+    CHECK(read->cost_buildings()[0].order_figure == *number);
+
+    // Cancelled, the yard forgets it; ordered again, it launches the cog.
+    REQUIRE(fleet.shipyard(sim::ShipyardOrder{0, 0, 3, 0, Op::Cancel}));
+    CHECK(sea.world.cost_buildings()[0].order_figure == 0);
+    CHECK(sim::yard_ship(sea.world.cost_buildings()[0]) == 0);
+    REQUIRE(fleet.shipyard(sim::ShipyardOrder{0, 0, 3, 0, Op::Build, 0, true, 0, *number}));
+    for (int second = 0; second < 140 && sea.world.ships().empty(); ++second) {
+        run(fleet, sea.world, 1000);
+        for (const auto& r : fleet.take_fetch_requests()) {
+            fleet.yard_delivery(r.island, r.x, r.y, r.ware, 6 * kTon);
+        }
+    }
+    REQUIRE(sea.world.ships().size() == 1);
+    CHECK(sea.world.ships().front().figure == *number);
+    CHECK(sea.world.ships().front().health == 60 * kTon);
+    CHECK(sea.world.cost_buildings()[0].order == sim::CostBuilding::kNoOrder);
+    CHECK(sea.world.cost_buildings()[0].order_figure == 0);
 }
 
 TEST_CASE("ships: a fire in a shipyard discards the running cycle, and the yard goes on when it is out") {

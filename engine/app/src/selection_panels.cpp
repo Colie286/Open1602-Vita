@@ -1179,6 +1179,7 @@ public:
         for (std::int32_t k = 0; k < 4; ++k) {
             if (const assets::Gadget* g = m_bauship.layout().find(kType + k)) {
                 m_type_pos[static_cast<std::size_t>(k)] = g->pos;
+                m_type_gfx[static_cast<std::size_t>(k)] = g->gfx;
             }
         }
     }
@@ -1222,8 +1223,22 @@ public:
             }
             for (std::int32_t k = 0; k < 4; ++k) {
                 m_bauship.set_selected(kType + k, k == m_type);
+                // The button of the chosen type shows a package's ship by its icon.
+                const assets::OwnShip* own = k == m_type ? assets::find_own_ship(c.own_ships, m_figure) : nullptr;
+                const auto icon =
+                    own != nullptr && !own->icon.empty() ? ui::package_icon_sprite(own->icon) : std::nullopt;
+                bool& shown = m_type_icon[static_cast<std::size_t>(k)];
+                if (icon) {
+                    set_package_icon(m_bauship, kType + k, *icon, c.banner(c.local));
+                } else if (shown) {
+                    m_bauship.set_graphic(kType + k, m_type_gfx[static_cast<std::size_t>(k)], 0);
+                }
+                shown = icon.has_value();
             }
-            if (const assets::FigureType* f = c.figures.get(sim::figure::ship_figure(m_type))) {
+            if (m_figure != 0 && c.figures.ship_type_of(m_figure) != m_type) {
+                m_figure = 0;  // the packages changed
+            }
+            if (const assets::FigureType* f = c.figures.get(chosen_ship())) {
                 m_bauship.set_text(60015, ui::format_text(tons, {std::int64_t{f->ship.cargo_slots} * 50}));
                 m_bauship.set_text(60017, std::to_string(f->ship.max_cannons));
                 m_bauship.set_text(60019, ui::format_text(c.text("GAME", 47), {std::int64_t{f->speed / 20}}));
@@ -1251,7 +1266,7 @@ public:
         m_werft.set_visible(39017, order);
         m_werft.set_selected(39018, m_stop.shown(switch_key(s), !yard->enabled, c.now_ms));
         if (order) {
-            const assets::FigureType* f = c.figures.get(sim::figure::ship_figure(yard->order));
+            const assets::FigureType* f = c.figures.get(sim::yard_ship(*yard));
             const std::uint32_t need = f != nullptr ? std::max<std::uint32_t>(f->ship.build_amount, 1) : 1;
             m_werft.set_slider(
                 39012, 1,
@@ -1279,10 +1294,29 @@ public:
         o.y = s.y;
         if (m_choose) {
             if (e.id >= kType && e.id < kType + 4) {
-                m_type = static_cast<std::uint8_t>(e.id - kType);
+                // Open1602: a click on the chosen type again picks the next ship of a package of
+                // that type, and after the last the original's again.
+                const auto type = static_cast<std::uint8_t>(e.id - kType);
+                std::uint32_t next = 0;
+                if (type == m_type) {
+                    bool after = m_figure == 0;
+                    for (const assets::OwnShip& own : c.own_ships) {
+                        if (own.type != type) {
+                            continue;
+                        }
+                        if (after) {
+                            next = own.figure;
+                            break;
+                        }
+                        after = own.figure == m_figure;
+                    }
+                }
+                m_type = type;
+                m_figure = next;
             } else if (e.id == 60022) {
                 o.op = sim::ShipyardOrder::Op::Build;
                 o.ship_type = m_type;
+                o.figure = m_figure;
                 out.emplace_back(o);
                 m_choose = false;
             }
@@ -1292,6 +1326,7 @@ public:
             case 39016:  // order a ship: the type choice, the first type picked
                 m_choose = true;
                 m_type = 0;
+                m_figure = 0;
                 break;
             case 39017:
                 o.op = sim::ShipyardOrder::Op::Cancel;
@@ -1316,6 +1351,11 @@ public:
         const sim::CostBuilding* yard = cost_building_at(s, c, sim::CostBuilding::Kind::Shipyard);
         if (m_choose) {
             if (id >= kType && id < kType + 4) {
+                if (const assets::OwnShip* own =
+                        id - kType == m_type ? assets::find_own_ship(c.own_ships, m_figure) : nullptr) {
+                    return own->name(ui::current_language()) + "\n" +
+                           help_line(c, static_cast<std::size_t>(95 + id - kType));
+                }
                 return line(static_cast<std::size_t>(95 + id - kType));
             }
             switch (id) {
@@ -1372,14 +1412,22 @@ public:
     }
 
 private:
+    /// The ship the type choice shows: a package's or the original's of m_type.
+    [[nodiscard]] std::uint32_t chosen_ship() const noexcept {
+        return m_figure != 0 ? m_figure : sim::figure::ship_figure(m_type);
+    }
+
     static constexpr std::int32_t kType = 60003;
     ui::Panel m_werft;
     ui::Panel m_bauship;
     std::int32_t m_gfx_ware = 192;
     std::array<std::array<std::int32_t, 2>, 4> m_type_pos{};
+    std::array<std::int32_t, 4> m_type_gfx{};  ///< the type buttons' own pictures
+    std::array<bool, 4> m_type_icon{};         ///< a button shows a package's icon instead
     PendingSwitch m_stop;
     bool m_choose = false;
     std::uint8_t m_type = 0;
+    std::uint32_t m_figure = 0;  ///< a package's ship of m_type, 0: the original's
     SelectionPages m_pages;
 };
 

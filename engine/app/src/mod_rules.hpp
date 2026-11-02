@@ -37,6 +37,8 @@ struct ModRules {
     std::vector<assets::OwnFigure> own_figures;
     /// The unit families among them, which castles train (own-figures.md#soldiers).
     std::vector<assets::OwnUnit> own_units;
+    /// The ships of the packages, which shipyards build beside the original's.
+    std::vector<assets::OwnShip> own_ships;
     /// The original's goods and those the packages added (goods.toml).
     assets::Goods goods;
     /// The classes of inhabitants as the packages change and add them (classes.toml); empty when

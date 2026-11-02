@@ -125,8 +125,11 @@ void io_city_trade(A& a, C& c) {
 
 /// The shipyard fields of a cost building.
 template <class A, class B>
-void io_yard(A& a, B& b) {
+void io_yard(A& a, B& b, std::uint16_t version) {
     a.u8(b.order);
+    if (version >= kPackageShips) {
+        a.u32(b.order_figure);
+    }
     a.u32(b.progress);
     a.u32(b.wood);
     a.u32(b.cloth);
@@ -153,7 +156,7 @@ void io_fleet(A& a, std::uint16_t version, Id& next_ship_id, Discovered& discove
         a.bools(item.second);
     });
     a.list(cities, 12, [&](auto& c) { io_city_trade(a, c); });
-    a.list(yards, 23, [&](auto& b) { io_yard(a, b); });
+    a.list(yards, version >= kPackageShips ? 27 : 23, [&](auto& b) { io_yard(a, b, version); });
     a.list(ships, 40, [&](auto& s) { io_ship(a, s, version); });
 }
 
@@ -198,6 +201,10 @@ std::vector<Ship> read_ships(Reader& in) {
 }
 
 std::uint16_t fleet_version(const World& w) {
+    // Version 7 has all of version 6 and the ships of packages the shipyards build.
+    if (std::ranges::any_of(w.cost_buildings(), [](const CostBuilding& b) { return b.order_figure != 0; })) {
+        return kPackageShips;
+    }
     // Version 6 has all of version 5 and the units of packages in the holds.
     if (std::ranges::any_of(w.ships(), [](const Ship& s) {
             return std::ranges::any_of(s.cargo, [](const CargoSlot& c) { return c.unit != 0; });

@@ -281,6 +281,8 @@ struct ShipyardOrder {
     std::uint8_t ship_type = 0;
     bool on = true;
     std::uint32_t ship = 0;
+    /// Build: a package's ship of type `ship_type` (FigureTable::add_ship), 0: the original's.
+    std::uint32_t figure = 0;
 };
 
 /// What happened to ships, for messages and the display.
@@ -364,6 +366,10 @@ public:
     bool edit_route(const RouteEdit& edit);
     bool set_trade(const TradeSetting& setting);
     bool shipyard(const ShipyardOrder& order);
+    /// A ship of `owner` that shipyards build (`figure`: the original's or a package's,
+    /// FigureTable::ship_type_of) appears on sailable world tile (x, y), new and empty, as a yard
+    /// launches it. Its id; nothing for another figure or a tile ships cannot sail on.
+    std::optional<std::uint32_t> add_ship(PlayerId owner, std::uint32_t figure, std::int32_t x, std::int32_t y);
     /// Starts exploring the island the ship stands in (ExploreState::Possible only).
     bool explore(const ExploreOrder& order);
     /// A new trade cart (carts.cpp); its id, or 0 when the request is refused.

@@ -3,6 +3,7 @@
 // that name them as their workers, their values from figures.toml and the savegame section OWNF
 // (engine/assets/include/o1602/assets/own_figures.hpp, docs/modding/own-figures.md).
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -225,6 +226,66 @@ TEST_CASE("own figures: a unit with tint = true draws one template in every colo
     REQUIRE(sprites.size() == 1);
     CHECK(sprites[0].first == 40000);
     CHECK(sprites[0].second == 1);
+}
+
+TEST_CASE("own figures: a figure like a ship of the shipyards is a ship with its wreck") {
+    const assets::CodPredefinedSymbol types[] = {{"FIGUR", 1}};
+    const auto doc = assets::cod::parse(
+        "Objekt: FIGUR\n"
+        "  Nummer: 21\n  Gfx: 200\n  Blocknr: 2\n  Rotate: 1\n  Maxenergy: 50\n  Rohmenge: 25\n"
+        "  Nummer: 22\n  Gfx: 300\n  Blocknr: 2\n"
+        "  Nummer: 29\n  Gfx: 400\n  Blocknr: 2\n  Rotate: 1\n"
+        "  Nummer: 30\n  Gfx: 410\n  Blocknr: 2\n"
+        "EndObj\n",
+        types);
+    auto loaded = assets::FigureTable::from_cod(doc);
+    REQUIRE(loaded.ok());
+    auto figures = std::move(loaded).value();
+    std::vector<assets::OwnFigure> own;
+    std::vector<assets::OwnUnit> units;
+    std::vector<assets::OwnShip> ships;
+    std::vector<std::string> warnings;
+    const std::vector<assets::PackageImage> images = {image("fleet:cog", 50000, 8)};
+    assets::apply_own_figures_file(figures, own, "fleet",
+                                   "[cog]\n"
+                                   "like = \"anno1602:small_merchant_ship\"\n"
+                                   "image = \"fleet:cog\"\n"
+                                   "tint = true\n"
+                                   "icon = \"fleet:cog\"\n"
+                                   "name.en = \"Cog\"\n"
+                                   "name.de = \"Kogge\"\n"
+                                   "[big_cog]\n"
+                                   "like = \"fleet:cog\"\n"
+                                   "[trader]\n"
+                                   "like = \"anno1602:free_trader\"\n"
+                                   "icon = \"fleet:trader\"\n",
+                                   warnings, images, {}, &units, &ships);
+    CHECK(warnings.size() == 1);  // the trader's icon: no shipyard builds the free trader's ship
+    CHECK(units.empty());
+    REQUIRE(own.size() == 3);
+    REQUIRE(ships.size() == 2);
+    // The ship and its wreck: the highest two numbers.
+    CHECK(ships[0].id == "fleet:cog");
+    CHECK(ships[0].figure == assets::kMaxFigures - 2);
+    CHECK(own[0].number == ships[0].figure);
+    CHECK(ships[0].type == 0);
+    CHECK(ships[0].icon == "fleet:cog");
+    CHECK(ships[0].name("de") == "Kogge");
+    CHECK(ships[0].tint);
+    CHECK(figures.get(ships[0].figure)->gfx == 50000);
+    CHECK(figures.get(ships[0].figure)->ship.max_health == 50 * 32);
+    CHECK(figures.get(ships[0].figure + 1)->gfx == 300);  // the wreck of the ship it copies
+    // A ship like the cog stands beside the same type and draws the cog's template.
+    CHECK(ships[1].figure == assets::kMaxFigures - 4);
+    CHECK(ships[1].type == 0);
+    CHECK(ships[1].tint);
+    CHECK(figures.ship_type_of(ships[1].figure) == std::optional<std::uint8_t>{0});
+    CHECK(!figures.ship_type_of(own[2].number).has_value());  // the trader is no shipyard's ship
+    CHECK(assets::find_own_ship(ships, ships[1].figure) == &ships[1]);
+    CHECK(assets::find_own_ship(ships, 21) == nullptr);
+    const auto sprites = assets::tint_template_sprites(units, figures, ships);
+    REQUIRE(sprites.size() == 1);
+    CHECK(sprites[0].first == 50000);
 }
 
 TEST_CASE("own figures: a package's building names its workers, figures.toml their values") {

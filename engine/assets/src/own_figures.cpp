@@ -2,6 +2,7 @@
 #include "o1602/assets/own_figures.hpp"
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 
 #include "o1602/assets/figure_looks.hpp"
@@ -63,21 +64,39 @@ std::string OwnUnit::name(std::string_view language) const {
 }
 
 std::vector<std::pair<std::uint32_t, std::uint32_t>> tint_template_sprites(std::span<const OwnUnit> units,
-                                                                           const FigureTable& table) {
+                                                                           const FigureTable& table,
+                                                                           std::span<const OwnShip> ships) {
     std::vector<std::pair<std::uint32_t, std::uint32_t>> sprites;
+    const auto add = [&](std::uint32_t number) {
+        const FigureType* f = table.get(number);
+        if (f == nullptr || !draws_package_image(*f)) {
+            return;
+        }
+        const std::pair<std::uint32_t, std::uint32_t> range{f->gfx, figure_sprite_count(*f)};
+        if (std::find(sprites.begin(), sprites.end(), range) == sprites.end()) {
+            sprites.push_back(range);
+        }
+    };
     for (const OwnUnit& unit : units) {
         for (std::uint32_t k = 0; k < FigureTable::kUnitVariants && unit.tint; ++k) {
-            const FigureType* f = table.get(unit.family + k);
-            if (f == nullptr || !draws_package_image(*f)) {
-                continue;
-            }
-            const std::pair<std::uint32_t, std::uint32_t> range{f->gfx, figure_sprite_count(*f)};
-            if (std::find(sprites.begin(), sprites.end(), range) == sprites.end()) {
-                sprites.push_back(range);
-            }
+            add(unit.family + k);
+        }
+    }
+    for (const OwnShip& ship : ships) {
+        if (ship.tint) {
+            add(ship.figure);
         }
     }
     return sprites;
+}
+
+const OwnShip* find_own_ship(std::span<const OwnShip> ships, std::uint32_t figure) noexcept {
+    const auto it = std::find_if(ships.begin(), ships.end(), [&](const OwnShip& s) { return s.figure == figure; });
+    return it != ships.end() ? &*it : nullptr;
+}
+
+std::string OwnShip::name(std::string_view language) const {
+    return name_in(names, language, id);
 }
 
 const OwnUnit* find_own_unit(std::span<const OwnUnit> units, std::uint32_t family) noexcept {
@@ -120,7 +139,7 @@ std::optional<std::uint32_t> figure_number(std::span<const OwnFigure> own, const
 void apply_own_figures_file(FigureTable& table, std::vector<OwnFigure>& own, std::string_view package,
                             std::string_view utf8, std::vector<std::string>& warnings,
                             std::span<const PackageImage> images, std::span<const PackageSound> sounds,
-                            std::vector<OwnUnit>* units) {
+                            std::vector<OwnUnit>* units, std::vector<OwnShip>* ships) {
     const std::string where = std::string(package) + "/" + std::string(kOwnFiguresFile);
     auto tables = core::parse_data_file(utf8);
     if (!tables) {
@@ -227,15 +246,21 @@ void apply_own_figures_file(FigureTable& table, std::vector<OwnFigure>& own, std
             warnings.push_back(at + id + " names no figure to copy ('like')");
             continue;
         }
-        if (!family && !unit_fields.empty()) {
+        // `like` names a ship that shipyards build: the figure is one too.
+        // An index of figure::kShips, -1 for another figure.
+        int ship_type = -1;
+        if (const auto type = family ? std::nullopt : table.ship_type_of(like->number)) {
+            ship_type = *type;
+        }
+        if (!family && ship_type < 0 && !unit_fields.empty()) {
             for (const core::DataEntry* e : unit_fields) {
-                warnings.push_back(
-                    line_of(where, e->value.line) + "'" + e->key +
-                    "' is a field of a unit only (a figure whose 'like' names a unit) and is passed over");
+                warnings.push_back(line_of(where, e->value.line) + "'" + e->key +
+                                   "' is a field of a unit or a ship only (a figure whose 'like' names a unit or a "
+                                   "ship that shipyards build) and is passed over");
             }
         }
-        if (family && tint && image == nullptr) {
-            warnings.push_back(at + id + ": 'tint' needs the unit's own 'image', the template; it is passed over");
+        if ((family || ship_type >= 0) && tint && image == nullptr) {
+            warnings.push_back(at + id + ": 'tint' needs the figure's own 'image', the template; it is passed over");
             tint = false;
         }
         const auto dressed = [&](FigureType f, std::uint32_t colour) -> std::optional<FigureType> {
@@ -304,6 +329,31 @@ void apply_own_figures_file(FigureTable& table, std::vector<OwnFigure>& own, std
         }
         auto dressed_figure = dressed(*like, 0);
         if (!dressed_figure) {
+            continue;
+        }
+        if (ship_type >= 0) {
+            // The ship and, after it, its wreck as the ship it copies has it. Adding moves the
+            // table's figures, `like` among them.
+            const std::uint32_t like_number = like->number;
+            const FigureType* wreck = table.get(like_number + 1);
+            if (wreck == nullptr) {
+                warnings.push_back(at + id + ": the ship it copies has no wreck after it");
+                continue;
+            }
+            const std::array<FigureType, 2> pair{*dressed_figure, *wreck};
+            const auto number = table.add_ship(pair, static_cast<std::uint8_t>(ship_type));
+            if (!number) {
+                warnings.push_back(at + id + ": " + number.error().message);
+                continue;
+            }
+            own.push_back(OwnFigure{id, *number});
+            if (ships != nullptr) {
+                const OwnShip* base = find_own_ship(*ships, like_number);
+                const bool template_image = tint || (image == nullptr && base != nullptr && base->tint);
+                ships->push_back(
+                    OwnShip{id, *number, static_cast<std::uint8_t>(ship_type), icon, std::move(names), template_image});
+            }
+            ++added;
             continue;
         }
         FigureType f = std::move(*dressed_figure);

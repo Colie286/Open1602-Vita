@@ -190,7 +190,7 @@ constexpr std::uint16_t max_version(std::uint32_t id) noexcept {
         return kPlayerCheats;
     }
     if (id == kFleet) {
-        return kPackageUnits;
+        return kPackageShips;
     }
     if (id == kMap) {
         return kCompactMap;

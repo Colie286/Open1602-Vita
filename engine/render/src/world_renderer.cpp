@@ -335,12 +335,15 @@ bool ship_sprites(const sim::Ship& ship, const sim::World& world, const WorldVie
         return false;
     }
     const assets::FigureType* fig = layers.figures->get(ship.figure);
-    if (fig == nullptr || fig->sheet != assets::FigureSheet::Ship) {
+    // From SHIP.BSH, or a ship of a package drawn with its own image (own_figures.hpp).
+    if (fig == nullptr || (fig->sheet != assets::FigureSheet::Ship && !assets::draws_package_image(*fig))) {
         return false;
     }
-    // Below half health the next record (HANDELD1 ..., Gfx + 8) every frame.
+    // Below half health the next record (HANDELD1 ..., Gfx + 8) every frame; a ship of a package
+    // with its own image keeps it, as the record after it shows the original's.
     const std::uint32_t max_health = fig->ship.max_health;
-    if (ship.health != 0 && max_health != 0 && ship.health * 128U / max_health < 64U) {
+    if (ship.health != 0 && max_health != 0 && ship.health * 128U / max_health < 64U &&
+        !assets::draws_package_image(*fig)) {
         const assets::FigureType* damaged = layers.figures->get(ship.figure + 1U);
         if (damaged != nullptr && damaged->sheet == assets::FigureSheet::Ship) {
             fig = damaged;
@@ -384,6 +387,14 @@ bool ship_sprites(const sim::Ship& ship, const sim::World& world, const WorldVie
             ? layers.sheet_base[static_cast<std::size_t>(assets::FigureSheet::Stadtfld)].value_or(0)
             : layers.ship_base;
     out.hull.sprite = hull_base + fig->gfx + dir * fig->rotate;
+    // A package's ship drawn as a tint template: in the colour of its owner's banner.
+    if (assets::draws_package_image(*fig) && layers.template_tint != nullptr && ship.owner != sim::kNoPlayer) {
+        if (const sim::Player* owner = world.player(ship.owner)) {
+            if (const auto tinted = layers.template_tint->sprite(owner->banner, fig->gfx + dir * fig->rotate)) {
+                out.hull.sprite = *tinted;
+            }
+        }
+    }
     const AtlasRect& hull = layers.atlas->rect(out.hull.sprite);
     out.hull.x = static_cast<std::int32_t>(std::floor(screen_x)) - hull.width / 2;
     out.hull.y = depth + fig->posoffs[0] * itw / 64 - 1;

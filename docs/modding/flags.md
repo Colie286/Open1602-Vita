@@ -57,7 +57,7 @@ number of players, up to 12, and for colours chosen freely in the flag menu.
 |---|---|---|
 | flags | `FlagTemplate` of a banner table, see above | done |
 | soldiers of a package | `tint = true` in `own_figures.toml` ([own-figures.md](own-figures.md#soldiers)) | done |
-| ships of a package | the same field for ships of a package's own | open, with them |
+| ships of a package | `tint = true` for a ship of a package's own ([own-figures.md](own-figures.md#ships)), in the owner's colour | done |
 | coats of arms and message icons of a package | `tint = true` in `icons.toml` ([graphics.md](graphics.md#icons)): a message's icon in the colour of the player it is about (`game.message(..., about)`), a soldier's icon in a castle in the owner's | done |
 
 For the original's units Open1602 makes the template itself from the four colours drawn

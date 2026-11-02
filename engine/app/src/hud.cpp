@@ -561,6 +561,7 @@ SelectionPanel* Hud::selection_panel(std::optional<PanelContext>& context) {
         context->shift = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
         context->now_ms = platform::ticks_ms();
         context->own_units = m_own_units;
+        context->own_ships = m_own_ships;
         return m_selection_panels->military_panel_for(*context);
     }
     if (m_mode != kModeInfo || m_selection.kind == Selection::Kind::None) {
@@ -572,6 +573,7 @@ SelectionPanel* Hud::selection_panel(std::optional<PanelContext>& context) {
     context->shift = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
     context->now_ms = platform::ticks_ms();
     context->own_units = m_own_units;
+    context->own_ships = m_own_ships;
     return m_selection_panels->panel_for(m_selection, *context);
 }
 

@@ -66,6 +66,8 @@ struct PanelContext {
     bool shift = false;
     /// The unit families of the packages, which a castle trains beside the original's.
     std::span<const assets::OwnUnit> own_units{};
+    /// The ships of the packages, which a shipyard builds beside the original's.
+    std::span<const assets::OwnShip> own_ships{};
     /// Real time in milliseconds, for what blinks (the diplomacy window's open offers).
     std::uint64_t now_ms = 0;
     [[nodiscard]] const sim::World& world() const noexcept { return simulation.world(); }

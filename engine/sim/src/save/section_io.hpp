@@ -316,6 +316,9 @@ inline constexpr std::uint16_t kPlunderedFlag = 5;
 /// FLEE version 6: every hold also names the unit of a package it carries (CargoSlot::unit, 0 for
 /// none). The writer takes it only when a hold carries one.
 inline constexpr std::uint16_t kPackageUnits = 6;
+/// FLEE version 7: every shipyard also names the ship of a package it builds
+/// (CostBuilding::order_figure, 0 for the original's). The writer takes it only when a yard builds one.
+inline constexpr std::uint16_t kPackageShips = 7;
 
 /// FACT version 2: every faction also says whether scripts steer it (Faction::scripted). The writer
 /// takes it only when one is; the section is required then.

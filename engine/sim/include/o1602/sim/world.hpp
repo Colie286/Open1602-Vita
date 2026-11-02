@@ -363,6 +363,8 @@ struct CostBuilding {
     /// and the material in the yard.
     static constexpr std::uint8_t kNoOrder = 0xFF;
     std::uint8_t order = kNoOrder;  ///< ship type 0..3 (HANDEL1, HANDEL2, KRIEG1, KRIEG2)
+    /// A package's ship of type `order` being built (own_figures.hpp, OwnShip), 0: the original's.
+    std::uint32_t order_figure = 0;
     std::uint32_t progress = 0;     ///< build points, 32 per full cycle
     std::uint32_t wood = 0;         ///< Rohstoff in the yard, 1/32 t
     std::uint32_t cloth = 0;        ///< Workstoff in the yard, 1/32 t (the original does not save it)
@@ -380,6 +382,15 @@ struct CostBuilding {
     std::array<std::uint32_t, 3> weapons{};
     std::vector<CastleSlot> slots{};
 };
+
+/// The ship a shipyard builds for its order: a package's (CostBuilding::order_figure) or the
+/// original's of its type; 0 without an order.
+[[nodiscard]] inline std::uint32_t yard_ship(const CostBuilding& yard) noexcept {
+    if (yard.order == CostBuilding::kNoOrder) {
+        return 0;
+    }
+    return yard.order_figure != 0 ? yard.order_figure : figure::ship_figure(yard.order);
+}
 
 /// A growing field, tree, meadow or fish shoal (ROHWACHS2 in the original). One growth stage of
 /// class c lasts 40 s + 7 s * c; at AnimAnz stages the tile turns into its ripe record.

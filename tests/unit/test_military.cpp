@@ -665,6 +665,44 @@ TEST_CASE("military: a script sets down units of the original and of a package")
     CHECK(guard.health == 40);
 }
 
+TEST_CASE("military: a script sets down ships of the original and of a package") {
+    Field f;
+    assets::FigureType cog = *f.figures.get(21);
+    cog.ship.max_health = 70;
+    const std::array<assets::FigureType, 2> cog_and_wreck{cog, cog};
+    const auto number = f.figures.add_ship(cog_and_wreck, 0);
+    REQUIRE(number.ok());
+    f.world.set_own_figures({assets::OwnFigure{"fleet:cog", *number}});
+    sim::Simulation simulation(f.world, f.buildings, f.figures);
+    std::vector<script::PackageScript> sources;
+    sources.push_back(
+        script::PackageScript{"fleet",
+                              "function on_start()\n"
+                              "  print(game.add_ship(0, 'anno1602:small_merchant_ship', 8, 15) ~= false,\n"
+                              "        game.add_ship(1, 'cog', 8, 17) ~= false,\n"
+                              "        game.add_ship(1, 'anno1602:free_trader', 8, 19),\n"
+                              "        game.add_ship(0, 'cog', 14, 15))\n"  // the island
+                              "  print(pcall(game.add_ship, 5, 'cog', 8, 15))\n"
+                              "end\n",
+                              {}});
+    auto scripts = std::make_unique<script::GameScripts>(std::move(sources), f.world);
+    simulation.set_scripts(scripts.get());
+    simulation.tick();
+    const auto notes = scripts->take_notes();
+    simulation.set_scripts(nullptr);
+    REQUIRE(notes.size() == 2);
+    CHECK(notes[0].text == "true\ttrue\tfalse\tfalse");
+    CHECK(notes[1].text.find("no such player") != std::string::npos);
+    REQUIRE(f.world.ships().size() == 2);
+    CHECK(f.world.ships()[0].figure == 21);
+    CHECK(f.world.ships()[0].owner == 0);
+    CHECK(f.world.ships()[1].figure == *number);
+    CHECK(f.world.ships()[1].owner == 1);
+    CHECK(f.world.ships()[1].health == 70);
+    CHECK(f.world.ships()[1].x == 8);
+    CHECK(f.world.ships()[1].y == 17);
+}
+
 TEST_CASE("military: a ship from the original's files takes as many soldiers as its type has holds") {
     Field f;
     f.start();
