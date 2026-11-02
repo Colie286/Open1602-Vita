@@ -219,3 +219,68 @@ TEST_CASE("editor panel: a name is typed to save under, and a taken one replaces
     CHECK(EditorPanel::name_taken(m, "INSELN"));
     CHECK(!EditorPanel::name_taken(m, "Insel"));
 }
+
+TEST_CASE("editor panel: a pick on the map shows its properties, Back goes to the document") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(200, 560);
+    EditorModel m = document();
+    m.selection = "Island 3";
+    m.properties = {{"Size", "40 \xD7 30"}, {"Climate", "North"}};
+    CHECK(panel.show_selection());
+    CHECK(panel.page() == EditorPanel::Page::Selection);
+    auto items = panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Island 3"));
+    CHECK(says(panel, "40 \xD7 30"));
+    CHECK(says(panel, "Climate"));
+    CHECK(!click(panel, m, "Back to the map").has_value());
+    CHECK(panel.page() == EditorPanel::Page::Document);
+    // What was picked is gone: the page says so.
+    m.selection.clear();
+    m.properties.clear();
+    CHECK(panel.show_selection());
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "is gone"));
+    CHECK(panel.back());
+    // A click on the map does not leave a page of the files or of a new map.
+    panel.ask_new(EditorNewMap{});
+    CHECK(!panel.show_selection());
+    CHECK(panel.page() == EditorPanel::Page::New);
+}
+
+TEST_CASE("editor panel: the overlays go on and off, the check list goes through its pages") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(200, 560);
+    EditorModel m = document();
+    CHECK(!click(panel, m, "Overlays").has_value());
+    CHECK(panel.page() == EditorPanel::Page::View);
+    auto r = click(panel, m, "Island numbers");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::Overlay);
+    CHECK(r->index == static_cast<std::size_t>(app::EditorOverlay::IslandNumbers));
+    CHECK(panel.back());
+
+    r = click(panel, m, "Check");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::Check);
+    CHECK(panel.page() == EditorPanel::Page::Check);
+    using Line = app::EditorCheckLine;
+    m.check.push_back(Line{"For saving", Line::Kind::Heading});
+    m.check.push_back(Line{"All right.", Line::Kind::Fine});
+    m.check.push_back(Line{"The original's limits (not asked for)", Line::Kind::Heading});
+    for (int i = 0; i < 10; ++i) {
+        m.check.push_back(Line{"Island " + std::to_string(i + 1) + " has 3 ore deposits", Line::Kind::Note});
+    }
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "All right."));
+    CHECK(!says(panel, "Island 10 has"));
+    CHECK(!click(panel, m, "More").has_value());
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Island 10 has"));
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        CHECK(w.rect.y + w.rect.h <= 760);
+    }
+    CHECK(!click(panel, m, "Back to the map").has_value());
+    CHECK(panel.page() == EditorPanel::Page::Document);
+}

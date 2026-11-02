@@ -357,6 +357,17 @@ TEST_CASE("editor original limits: a world of the original's size passes, more i
     const auto many = editor::check_original_limits(world);
     REQUIRE(many.size() == 2);
     CHECK(many[0] == "5 players, the original holds 4");
+    // The same as parts, for the editor's check list in the player's language.
+    const auto parts = editor::original_limit_problems(world);
+    REQUIRE(parts.size() == 2);
+    CHECK(parts[0].kind == editor::LimitProblem::Kind::Players);
+    CHECK(parts[0].count == 5);
+    CHECK(parts[0].limit == 4);
+    CHECK(parts[1].kind == editor::LimitProblem::Kind::Script);
+    const auto sizes = editor::original_limit_problems(large);
+    REQUIRE(!sizes.empty());
+    CHECK(sizes[0].kind == editor::LimitProblem::Kind::MapSize);
+    CHECK(sizes[0].width == 600);
 }
 
 TEST_CASE("editor document: edits a world kept elsewhere, which stays where it is when the document moves") {
