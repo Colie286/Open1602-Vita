@@ -153,7 +153,7 @@ void Form::panel(Rect r) {
     m_widgets.push_back(make(Widget::Kind::Panel, -1, r));
 }
 
-void Form::swatch(Rect r, std::uint8_t colour) {
+void Form::swatch(Rect r, std::int32_t colour) {
     Widget w = make(Widget::Kind::Swatch, -1, r);
     w.colour = colour;
     m_widgets.push_back(std::move(w));
@@ -330,7 +330,7 @@ std::vector<DrawItem> Form::draw(const std::array<const Font*, kFontSlots>& font
     const double s = m_scale;
     const auto px = [s](std::int32_t v) { return to_pixels(v, s); };
     std::vector<DrawItem> out;
-    const auto fill = [&](Rect r, std::uint8_t colour, bool ground = false) {
+    const auto fill = [&](Rect r, std::int32_t colour, bool ground = false) {
         DrawItem d;
         d.kind = DrawItem::Kind::Fill;
         d.x = px(r.x);

@@ -371,17 +371,18 @@ Hud::Hud(SDL_Renderer* renderer, const assets::GameDirectory& game, const assets
         }
         m_goods_shadow = goods.shadow;
         m_goods_parchment = parchment_pixels(GoodsWindow::kWidth, GoodsWindow::kHeight);
-        // The banners of the slots in the palette's nearest colours, grey for any further one.
+        // The banners of the slots in exactly their colours (the palette has no pink and no violet),
+        // grey for any further one.
         render::BannerTable banners = render::BannerTable::original();
         banners.add_more_players();
         std::vector<MenuBanner> menu_banners;
-        std::vector<std::uint8_t> banner_colours;
+        std::vector<std::int32_t> banner_colours;
         // Names in a banner's colour stay readable on the menus' dark ground (4.5:1, as for text).
         const assets::Rgba ground = palette[ui::FormStyle{}.ground];
         for (const render::Banner& b : banners.banners()) {
             // In exactly that colour: the palette has no light shade of some banners (no violet).
-            menu_banners.push_back(MenuBanner{ui::nearest_colour(palette, b.colour.r, b.colour.g, b.colour.b), b.id,
-                                              ui::rgb_ink(ui::legible_on(b.colour, ground, 4.5))});
+            menu_banners.push_back(
+                MenuBanner{ui::rgb_ink(b.colour), b.id, ui::rgb_ink(ui::legible_on(b.colour, ground, 4.5))});
             banner_colours.push_back(menu_banners.back().colour);
         }
         const std::uint8_t grey = ui::nearest_colour(palette, 128, 128, 128);
@@ -930,7 +931,7 @@ ui::Rect Hud::layout_question() {
         f.button(kQuestionOption + static_cast<ui::Form::Id>(i), ui::Rect{x, y, cell, kQuestionButtonH},
                  m_choices[i].text, true, i == 0);
         if (const auto& banner = m_choices[i].banner) {
-            const std::uint8_t colour =
+            const std::int32_t colour =
                 *banner < m_banner_palette.size() ? m_banner_palette[*banner] : m_other_banner_palette;
             f.swatch(ui::Rect{x + kQuestionGap + 2, y + 10, kQuestionSwatch, kQuestionButtonH - 20}, colour);
         }

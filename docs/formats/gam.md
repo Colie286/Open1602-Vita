@@ -122,6 +122,10 @@ colours.
 
 One record per ship (at most 150). Position and direction come from the ship's figure on the map.
 
+A map may keep ships beyond its edge (Seeschlacht: the third player's two warships at x 4090 and
+4095); the original loads them there, where nobody sees or reaches them. Open1602 puts such a ship on
+the nearest open sea tile inside the map and says so in the log.
+
 | Offset | Type | Contents |
 |---|---|---|
 | 0x000 | char[28] | name |

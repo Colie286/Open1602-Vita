@@ -641,7 +641,10 @@ void SdlUiRenderer::draw(const std::vector<ui::DrawItem>& items, std::int32_t ox
                 break;
             }
             case ui::DrawItem::Kind::Fill: {
-                const assets::Rgba c = m_palette[static_cast<std::uint8_t>(std::clamp(d.colour, 0, 255))];
+                // A colour of its own (a banner's that the palette lacks) or a palette colour.
+                const assets::Rgba c = ui::is_rgb_ink(d.colour)
+                                           ? ui::ink_rgb(d.colour)
+                                           : m_palette[static_cast<std::uint8_t>(std::clamp(d.colour, 0, 255))];
                 if (d.faded) {
                     checkerboard(d, c);  // a faded fill or bar: its own colour on every second pixel
                     break;

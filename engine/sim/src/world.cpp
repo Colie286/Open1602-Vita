@@ -2,7 +2,9 @@
 #include "o1602/sim/world.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <map>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -332,6 +334,44 @@ std::uint8_t ware_of_producer(const assets::BuildingTable& buildings, std::uint3
     return b != nullptr ? b->ware : std::uint8_t{0};
 }
 
+/// The open sea tile nearest to (x, y) clamped into the world, a tile off its edge and free of
+/// other ships, or nothing within `reach` tiles. Some maps keep a player's ships far beyond the map
+/// (Seeschlacht: the third player's two warships at x 4090 and 4095); the original loads them
+/// there, where nobody can see or reach them.
+std::optional<std::pair<std::uint32_t, std::uint32_t>> open_sea_near(const World& world, std::uint32_t x,
+                                                                     std::uint32_t y) {
+    constexpr std::int32_t kReach = 64;
+    constexpr std::int32_t kMargin = 2;
+    const auto w = static_cast<std::int32_t>(world.width());
+    const auto h = static_cast<std::int32_t>(world.height());
+    if (w <= 2 * kMargin || h <= 2 * kMargin) {
+        return std::nullopt;
+    }
+    const std::int32_t cx =
+        std::clamp(static_cast<std::int32_t>(std::min<std::uint32_t>(x, 0x7FFF)), kMargin, w - 1 - kMargin);
+    const std::int32_t cy =
+        std::clamp(static_cast<std::int32_t>(std::min<std::uint32_t>(y, 0x7FFF)), kMargin, h - 1 - kMargin);
+    const auto free = [&](std::int32_t tx, std::int32_t ty) {
+        if (tx < kMargin || ty < kMargin || tx >= w - kMargin || ty >= h - kMargin ||
+            world.cell(static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(ty)).island != World::kSea) {
+            return false;
+        }
+        return std::none_of(world.ships().begin(), world.ships().end(),
+                            [&](const Ship& s) { return s.x == tx && s.y == ty; });
+    };
+    // Ring by ring around the clamped tile, the first free one.
+    for (std::int32_t r = 0; r <= kReach; ++r) {
+        for (std::int32_t dy = -r; dy <= r; ++dy) {
+            for (std::int32_t dx = -r; dx <= r; ++dx) {
+                if (std::max(std::abs(dx), std::abs(dy)) == r && free(cx + dx, cy + dy)) {
+                    return std::pair{static_cast<std::uint32_t>(cx + dx), static_cast<std::uint32_t>(cy + dy)};
+                }
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 /// SHIP4 and HANDLER: after the cities, so that route stops can name them.
 template <typename Warn>
 void load_ships(World& world, const assets::ChunkFile& file, const assets::BuildingTable& buildings, Warn&& warn) {
@@ -351,9 +391,20 @@ void load_ships(World& world, const assets::ChunkFile& file, const assets::Build
     constexpr std::uint8_t kFlagForSale = 1U << 2;
     constexpr std::uint8_t kFlagRepair = 1U << 4;
     for (const auto& s : *records) {
+        std::uint32_t at_x = s.x;
+        std::uint32_t at_y = s.y;
         if (!world.contains(s.x, s.y)) {
-            warn("ship '" + s.name + "' outside the world map");
-            continue;
+            // A ship beyond the map goes to the nearest open sea, so that its player has it; a
+            // trade cart (on land) or a ship with no sea near the edge is left out.
+            const auto sea = s.kind != kKindCart ? open_sea_near(world, s.x, s.y) : std::nullopt;
+            if (!sea) {
+                warn("ship '" + s.name + "' outside the world map");
+                continue;
+            }
+            warn("ship '" + s.name + "' outside the world map: moved to the sea at " + std::to_string(sea->first) +
+                 ", " + std::to_string(sea->second));
+            at_x = sea->first;
+            at_y = sea->second;
         }
         Ship ship;
         ship.id = ship_id_of_slot(s.slot);
@@ -362,7 +413,7 @@ void load_ships(World& world, const assets::ChunkFile& file, const assets::Build
         }
         ship.source_slot = s.slot;
         ship.name = s.name;
-        ship.place(s.x, s.y);
+        ship.place(at_x, at_y);
         // Kind 5 is a player's trade cart on land (TRADER1), kept in the ship table.
         ship.figure = s.kind == kKindCart ? figure::kTradeCart : s.figure;
         ship.owner = player_from_original(s.owner);

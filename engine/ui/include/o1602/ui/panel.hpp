@@ -76,7 +76,7 @@ struct DrawItem {
         SpriteMask,    ///< the sprite's shape in palette colour `colour`
         SpriteRaster,  ///< the shape as a checkerboard of `colour`
         Text,          ///< `text` in font `block`, text colour `colour`, aligned at x, cell bottom at y
-        Fill,          ///< rectangle (x, y, w, h) in palette colour `colour`
+        Fill,          ///< rectangle (x, y, w, h) in palette colour `colour` (or ui::rgb_ink)
         Raster,        ///< checkerboard over (x, y, w, h) (disabled gadgets), black
     };
     Kind kind = Kind::Sprite;

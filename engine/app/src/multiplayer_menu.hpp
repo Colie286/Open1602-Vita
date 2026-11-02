@@ -153,7 +153,7 @@ struct MultiplayerEvent {
 /// A banner as the lobby shows it: its colour in the palette and its id (render::Banner::id), whose
 /// name after the colon names its text ("anno1602:red": "net.colour.red").
 struct MenuBanner {
-    std::uint8_t colour = 0;
+    std::int32_t colour = 0;  ///< a palette colour or exactly the banner's (ui::rgb_ink)
     std::string id;
     /// The player's name in the chat: the banner's colour, lightened where it would be hard to
     /// read on the menus' dark ground (a dark blue): a palette colour or a colour of its own
@@ -273,7 +273,7 @@ private:
 
     ui::Form m_form;
     Screen m_screen = Screen::Browse;
-    [[nodiscard]] std::uint8_t banner_colour(sim::BannerId banner) const noexcept {
+    [[nodiscard]] std::int32_t banner_colour(sim::BannerId banner) const noexcept {
         return banner < m_banners.size() ? m_banners[banner].colour : m_other_banner;
     }
     [[nodiscard]] std::int32_t banner_text_colour(sim::BannerId banner) const noexcept {

@@ -560,6 +560,51 @@ TEST_CASE("save game: the original's chunks of a .GAM alone hold the synthetic w
     CHECK(original_chunks_only(loaded, buildings) == bytes);
 }
 
+TEST_CASE("save game: a ship far beyond the map goes to the nearest open sea, as a map's player needs it") {
+    const auto buildings = make_buildings();
+    const sim::World world = make_world(buildings);
+    auto chunks = sim::savegame_chunks(world, buildings);
+    REQUIRE(chunks.ok());
+    // The pirate (450, 30) at x 4090, as Seeschlacht keeps the third player's warships.
+    bool moved = false;
+    assets::ChunkWriter out;
+    for (sim::SavedChunk& c : *chunks) {
+        if (c.name == "SHIP4") {
+            for (std::size_t o = 0; o + 0x1B4 <= c.data.size(); o += 0x1B4) {
+                if (std::string_view(reinterpret_cast<const char*>(c.data.data() + o), 5) == "Pirat") {
+                    c.data[o + 0x1C] = 0xFA;
+                    c.data[o + 0x1D] = 0x0F;
+                    moved = true;
+                }
+            }
+        }
+        out.add(c.name, c.data);
+    }
+    out.add_checksum();
+    REQUIRE(moved);
+    auto file = assets::ChunkFile::from_bytes(out.take());
+    REQUIRE(file.ok());
+    std::vector<std::string> warnings;
+    auto loaded = sim::load_world(*file, buildings, assets::GameDirectory{}, &warnings);
+    REQUIRE(loaded.ok());
+    REQUIRE(loaded->ships().size() == world.ships().size());
+    const sim::Ship* pirate = nullptr;
+    for (const sim::Ship& ship : loaded->ships()) {
+        if (ship.name == "Pirat") {
+            pirate = &ship;
+        }
+    }
+    REQUIRE(pirate != nullptr);
+    // Near the right edge at its row, on open sea, and the log says so.
+    CHECK(pirate->x < loaded->width());
+    CHECK(pirate->x + 10U >= loaded->width());
+    CHECK(pirate->y >= 20);
+    CHECK(pirate->y <= 40);
+    CHECK(loaded->cell(pirate->x, pirate->y).island == sim::World::kSea);
+    CHECK(std::any_of(warnings.begin(), warnings.end(),
+                      [](const std::string& w) { return w.find("moved to the sea") != std::string::npos; }));
+}
+
 TEST_CASE("save game: a satisfaction, tax rate or food supply of 0 loads as 128, as in the original") {
     const auto buildings = make_buildings();
     sim::World world = make_world(buildings);

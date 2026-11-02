@@ -624,6 +624,18 @@ TEST_CASE("ui: an ink in a colour of its own carries its colour, a palette ink d
     CHECK(ui::is_rgb_ink(ui::rgb_ink(assets::Rgba{0, 0, 0, 255})));
 }
 
+TEST_CASE("ui: a form's swatch in a colour of its own draws exactly it, a palette swatch its index") {
+    ui::Form form;
+    const std::int32_t violet = ui::rgb_ink(assets::Rgba{168, 105, 210, 255});
+    form.swatch(ui::Rect{10, 10, 20, 20}, violet);
+    form.swatch(ui::Rect{40, 10, 20, 20}, 150);
+    const auto items = form.draw({nullptr, nullptr, nullptr});
+    REQUIRE(items.size() == 2);
+    CHECK(items[0].kind == ui::DrawItem::Kind::Fill);
+    CHECK(items[0].colour == violet);
+    CHECK(items[1].colour == 150);
+}
+
 TEST_CASE("ui: a form's chat line: the speaker's name in its ink, the rest behind it, cut as one") {
     ui::Form form;
     form.set_scale(2.0);

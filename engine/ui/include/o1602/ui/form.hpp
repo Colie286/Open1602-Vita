@@ -74,8 +74,9 @@ public:
 
     /// A framed background.
     void panel(Rect r);
-    /// A plain rectangle of a palette colour (a banner's colour).
-    void swatch(Rect r, std::uint8_t colour);
+    /// A plain rectangle of a palette colour or a colour of its own (ui::rgb_ink): a banner's colour,
+    /// which the palette does not have for every banner (no pink, no violet).
+    void swatch(Rect r, std::int32_t colour);
     /// Text in the box, cut to its width; vertically centred.
     void label(Rect r, std::string text, Align align = Align::Left, Tone tone = Tone::Normal);
     /// A line of a chat, left aligned and cut to the box as one text: the speaker's name in palette
@@ -166,7 +167,7 @@ public:
         Align align = Align::Left;
         Tone tone = Tone::Normal;
         Tone value_tone = Tone::Normal;  ///< entry
-        std::uint8_t colour = 0;         ///< swatch: its colour
+        std::int32_t colour = 0;         ///< swatch: its colour (a palette colour or ui::rgb_ink)
         std::int32_t ink = -1;           ///< speech: the name's (a palette colour or ui::rgb_ink)
         std::int32_t line = 0;           ///< paragraph: line height
         double position = 0.0;           ///< slider: where the knob is; progress: how far (0..1)

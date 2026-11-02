@@ -633,7 +633,7 @@ private:
     /// settings of a game): a heading, a button per answer, a field of a banner's colour beside it.
     ui::Form m_question_form;
     /// The banners' colours in the palette (by BannerId) for the options' fields; grey for others.
-    std::vector<std::uint8_t> m_banner_palette;
+    std::vector<std::int32_t> m_banner_palette;  ///< the banners' colours (ui::rgb_ink)
     std::uint8_t m_other_banner_palette = 0;
     void draw_question();
     /// Lays the question out in m_question_form; its place on the screen.
