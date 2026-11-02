@@ -17,6 +17,7 @@
 #include "o1602/core/text.hpp"
 #include "o1602/editor/original_check.hpp"
 #include "o1602/render/world_renderer.hpp"
+#include "o1602/sim/growth.hpp"
 #include "o1602/sim/save_game.hpp"
 #include "o1602/sim/validate.hpp"
 #include "o1602/ui/build_menu.hpp"
@@ -71,12 +72,20 @@ std::string tiles(std::uint32_t x, std::uint32_t y) {
     return ui::tr("editor.prop.at", {number(x), number(y)});
 }
 
-/// The name of a building as the build menu calls it, else by its number.
-std::string building_name(const assets::BuildingType& b, const assets::TextTable* texts) {
-    if (const ui::BuildCategory* cat = ui::build_menu().category_of(b.id); cat != nullptr && texts != nullptr) {
-        std::string name = cat->name(cat->index_of(b.id).value_or(0), texts->section(cat->names));
-        if (!name.empty()) {
-            return name;
+/// The name of a building as the build menu calls it, else by its number. A field in another
+/// stage of growth than the one the build menu offers is named as that one.
+std::string building_name(const assets::BuildingType& b, const assets::BuildingTable& buildings,
+                          const assets::TextTable* texts) {
+    if (texts != nullptr) {
+        for (const assets::BuildingType* t : {&b, sim::growing_record(buildings, b), sim::ripe_record(buildings, b)}) {
+            const ui::BuildCategory* cat = t != nullptr ? ui::build_menu().category_of(t->id) : nullptr;
+            if (cat == nullptr) {
+                continue;
+            }
+            std::string name = cat->name(cat->index_of(t->id).value_or(0), texts->section(cat->names));
+            if (!name.empty()) {
+                return name;
+            }
         }
     }
     return ui::tr("editor.prop.building_number", {number(b.id)});
@@ -493,7 +502,7 @@ void MapViewer::editor_properties(EditorModel& m) const {
                 t.origin_y != static_cast<std::int32_t>(pick.y)) {
                 return;  // gone
             }
-            m.selection = building_name(*t.building, m_hud ? m_hud->texts() : nullptr);
+            m.selection = building_name(*t.building, m_buildings, m_hud ? m_hud->texts() : nullptr);
             add("editor.prop.island_number", number(pick.island + 1U));
             add("editor.prop.position", tiles(island.x + pick.x, island.y + pick.y));
             const std::uint8_t city = island.map.top(pick.x, pick.y).city;
