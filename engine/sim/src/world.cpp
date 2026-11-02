@@ -1294,7 +1294,8 @@ void trim_all_trade_settings(World& world, const assets::BuildingTable& building
 core::Result<World> load_world(const assets::ChunkFile& file, const assets::BuildingTable& buildings,
                                const assets::GameDirectory& game, std::vector<std::string>* warnings,
                                const WorldStart& start) {
-    if (plans_islands(file)) {
+    const bool keep_plan = start.keep_plan && plans_islands(file);
+    if (!keep_plan && plans_islands(file)) {
         // The SZENE handler of the original makes the islands while the scenario loads.
         auto generated = generate_islands(file, game, buildings, start, warnings);
         if (!generated) {
@@ -1353,6 +1354,13 @@ core::Result<World> load_world(const assets::ChunkFile& file, const assets::Buil
     trim_all_trade_settings(world, buildings);
     if (auto status = validate(world); !status) {
         return status.error();
+    }
+    if (keep_plan) {
+        auto plan = assets::load_scenario_plan(file);
+        if (!plan) {
+            return plan.error();
+        }
+        world.set_planned_islands(PlannedIslands{std::move(**plan), assets::load_random_table(file)});
     }
     world.set_source(std::make_shared<const assets::ChunkFile>(file));
     return world;

@@ -1825,6 +1825,35 @@ std::uint32_t PlanRandom::below(std::uint32_t n) noexcept {
     return static_cast<std::uint32_t>(r < 0 ? r + static_cast<std::int32_t>(n) : r);
 }
 
+std::vector<std::string> check_planned_islands(const PlannedIslands& planned, std::uint32_t width,
+                                               std::uint32_t height) {
+    std::vector<std::string> problems;
+    const auto& islands = planned.plan.islands;
+    if (islands.size() > PlannedIslands::kMaxIslands) {
+        problems.push_back("more than " + std::to_string(PlannedIslands::kMaxIslands) + " islands");
+    }
+    for (std::size_t i = 0; i < islands.size(); ++i) {
+        const ScenarioPlan::Island& e = islands[i];
+        const std::string name = "island " + std::to_string(e.number);
+        for (std::size_t j = 0; j < i; ++j) {
+            if (islands[j].number == e.number) {
+                problems.push_back(name + " twice");
+                break;
+            }
+        }
+        if (e.climate > ScenarioPlan::kClimateByPosition) {
+            problems.push_back(name + ": no climate " + std::to_string(e.climate));
+        }
+        if (e.size > 4) {
+            problems.push_back(name + ": no size class " + std::to_string(e.size));
+        }
+        if (e.x >= width || e.y >= height) {
+            problems.push_back(name + ": outside the world");
+        }
+    }
+    return problems;
+}
+
 bool plans_islands(const assets::ChunkFile& file) {
     const auto plan = assets::load_scenario_plan(file);
     if (!plan || !plan->has_value()) {

@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -237,6 +238,8 @@ struct ScenarioPlan {
         std::uint16_t template_number = kRandomTemplate;
         std::uint32_t x = 0;  ///< world tile of the top left corner
         std::uint32_t y = 0;
+
+        friend bool operator==(const Island&, const Island&) = default;
     };
     /// An entry of the ore, crop or treasure list: a haeuser.cod building whose Ware names what
     /// is placed, how many times, and (ore) 0 big vein, 1 small vein.
@@ -244,6 +247,8 @@ struct ScenarioPlan {
         std::uint32_t building = 0;  ///< haeuser.cod Id
         std::uint16_t count = 0;
         std::uint32_t type = 0;
+
+        friend bool operator==(const Resource&, const Resource&) = default;
     };
     std::array<std::uint32_t, 2> natives{};  ///< native villages to place in the north, the south
     std::uint32_t max_crops = 0;             ///< crops per island in the main passes, 0 = 2
@@ -253,10 +258,18 @@ struct ScenarioPlan {
     std::array<Resource, 12> crops{};
     std::array<Resource, 4> treasures{};
     std::vector<Island> islands;
+
+    friend bool operator==(const ScenarioPlan&, const ScenarioPlan&) = default;
 };
 
 /// The SZENE chunk, nothing if the file has none.
 [[nodiscard]] core::Result<std::optional<ScenarioPlan>> load_scenario_plan(const ChunkFile& file);
+
+/// `base` (a SZENE chunk, or nothing) with the fields of `plan` written into it: the chunk a
+/// scenario of that plan carries. Bytes the plan does not hold stay as they were; the chunk is at
+/// least as long as a plan of 50 islands needs. At most 50 islands are written.
+[[nodiscard]] std::vector<std::uint8_t> write_scenario_plan(std::span<const std::uint8_t> base,
+                                                            const ScenarioPlan& plan);
 
 /// RANDTAB: the 512 random numbers the world plan draws from (a saved rand() table), nothing if
 /// the file has none. A shorter chunk repeats, as the original copies it.

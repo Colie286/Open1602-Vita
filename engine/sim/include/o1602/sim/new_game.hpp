@@ -107,6 +107,15 @@ std::optional<PlayerId> take_banner(World& world, PlayerId who, BannerId banner)
 [[nodiscard]] core::Result<assets::ChunkFile> own_world_scenario(const assets::ChunkFile& scenario,
                                                                  const WorldPlan& plan, std::uint8_t players);
 
+/// Makes the islands of a world that kept its plan (World::planned_islands, WorldStart::keep_plan),
+/// as the original makes them when the scenario starts: the scenario the world came from
+/// (World::source) with the plan as it is now, drawn as `start` says (from the plan's table, or
+/// with Open1602's generator if it has none). The world's description, markers and script are
+/// carried over. Fails for a world without a plan or without the scenario it came from.
+[[nodiscard]] core::Result<World> roll_planned_islands(const World& world, const assets::GameDirectory& game,
+                                                       const assets::BuildingTable& buildings, const WorldStart& start,
+                                                       std::vector<std::string>* warnings = nullptr);
+
 /// Starts a new endless game: the scenario of new_game_scenario() with its islands made.
 [[nodiscard]] core::Result<World> start_new_game(const assets::GameDirectory& game,
                                                  const assets::BuildingTable& buildings, const assets::TextTable& text,

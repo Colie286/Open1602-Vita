@@ -33,6 +33,9 @@ core::Status check(const World& w, const Decoded& d) {
     if (d.markers && !check_markers(*d.markers, w.width(), w.height()).empty()) {
         return bad("a marker lies outside the world");
     }
+    if (d.planned_islands && !check_planned_islands(*d.planned_islands, w.width(), w.height()).empty()) {
+        return bad("an island of the world plan lies outside the world");
+    }
     if (d.islands) {
         for (std::size_t i = 0; i < w.islands().size(); ++i) {
             if ((*d.islands)[i].number != w.islands()[i].header.number) {
@@ -243,6 +246,9 @@ core::Status apply_decoded(World& world, Decoded& d) {
     }
     if (d.editor_state) {
         world.set_editor_state(std::move(*d.editor_state));
+    }
+    if (d.planned_islands) {
+        world.set_planned_islands(std::move(d.planned_islands));
     }
     if (d.blueprints) {
         world.blueprints() = std::move(d.blueprints->blueprints);
