@@ -53,7 +53,7 @@ Symbols: ✅ done · 🟡 partly · ⬜ open · ❓ behaviour of the original no
 
 | Area | Status | Open | Document |
 |---|---|---|---|
-| Building and demolishing | ✅ checks, costs, dragging roads and walls, beach, bridges, piers, unlocking, territory, founding a town from a ship, takeover of defenceless towns; build menu with alignment to the road | – | – |
+| Building and demolishing | ✅ checks, costs, dragging roads and walls, beach, bridges, piers, unlocking, territory, founding a town from a ship, takeover of defenceless towns; a market over the destroyed market of another player takes the land that market held, with its buildings, where the own land reaches; build menu with alignment to the road | – | – |
 | Production | ✅ cycle, raw materials, storage, idling, statistics, on/off | – | – |
 | Logistics | ✅ carriers, market carts, farmers, herds, fishing boats, mines and deposits, pack mules, stonemason at the quarry, `Grundflg` buildings in pathfinding, trade settings by `Maxware` of the warehouse | – (the original does not prefer urgent goods either, S-104) | – |
 | Growth, drought, hunting | ✅ class clocks, harvest, drought, deer and hunters (field by field against Merlin02 → Merlin03) | – | – |

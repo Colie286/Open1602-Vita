@@ -127,6 +127,10 @@ struct BuildPlan {
     /// A Kontor built over the destroyed Kontor of a defenceless city of another player: the city
     /// changes hands (build_effects 4.3).
     bool takeover = false;
+    /// A market built over the destroyed market of another player's city (Open1602): that city.
+    /// The market joins the builder's city (`city`), and the land the destroyed market held for
+    /// it within the new market's circle goes to the builder with everything standing on it.
+    std::uint8_t captured_city = MapCell::kNoCity;
 };
 
 /// Checks an order without changing anything (the preview of the build tool).

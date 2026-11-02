@@ -806,6 +806,43 @@ bool city_defenceless(const World& world, const assets::BuildingTable& buildings
     return true;
 }
 
+namespace {
+
+/// The city of `player` on the island with the most land in the circle of `radius` around
+/// `area`'s centre, or kNoCity when none of its land lies there.
+std::uint8_t own_city_in_circle(const World& world, const IslandMap& map, std::uint16_t island, PlayerId player,
+                                const Catchment& area, std::uint8_t radius) {
+    std::array<std::uint32_t, 256> count{};
+    const std::vector<std::uint8_t>& half = circle_table(radius);
+    for (std::int32_t dy = 0; dy <= radius; ++dy) {
+        const std::int32_t hw = half[static_cast<std::size_t>(dy)];
+        for (const std::int32_t row : {area.centre.y - dy, area.centre.y + area.parity_y + dy}) {
+            for (std::int32_t tx = area.centre.x - hw; tx <= area.centre.x + area.parity_x + hw; ++tx) {
+                if (!map.contains(tx, row)) {
+                    continue;
+                }
+                const MapCell& cell = map.top(static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(row));
+                const City* c = cell.city != MapCell::kNoCity ? world.city(island, cell.city) : nullptr;
+                if (c != nullptr && c->owner == player) {
+                    ++count[cell.city];
+                }
+            }
+            if (dy == 0 && area.parity_y == 0) {
+                break;  // the centre row once
+            }
+        }
+    }
+    std::uint8_t best = MapCell::kNoCity;
+    for (std::size_t c = 0; c < count.size(); ++c) {
+        if (count[c] > 0 && (best == MapCell::kNoCity || count[c] > count[best])) {
+            best = static_cast<std::uint8_t>(c);
+        }
+    }
+    return best;
+}
+
+}  // namespace
+
 BuildPlan plan_build(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order) {
     BuildPlan plan;
     plan_build(world, buildings, order, plan);
@@ -858,6 +895,37 @@ void plan_order(const World& world, const assets::BuildingTable& buildings, cons
                 planner.city = oc.city;
                 planner.foreign = false;
                 plan.takeover = true;
+            }
+        }
+    }
+    // Taking a market (Open1602): a market over the destroyed market of another human or computer
+    // player's city, where the land of one of the builder's cities on the island reaches into the
+    // new market's circle. The market joins that city and takes the land the destroyed one held.
+    std::optional<BuildingAt> captured;
+    if (const assets::BuildingType* t = buildings.by_id(first.building);
+        t != nullptr && planner.foreign && !plan.takeover && order.items.size() == 1 && t->prod_kind == prod::kMarket &&
+        !t->destroyed && player != nullptr &&
+        (player->role == PlayerRole::Human || player->role == PlayerRole::Computer)) {
+        const auto old = building_at(world, buildings, order.island, {first.x, first.y});
+        const City* foreign = old ? world.city(order.island, old->city) : nullptr;
+        const Player* loser = foreign != nullptr ? world.player(foreign->owner) : nullptr;
+        std::uint32_t w = 0;
+        std::uint32_t h = 0;
+        if (old) {
+            rotated_size(*t, old->rotation, w, h);
+        }
+        if (old && old->type->destroyed && old->type->prod_kind == prod::kMarket && loser != nullptr &&
+            foreign->owner != order.player &&
+            (loser->role == PlayerRole::Human || loser->role == PlayerRole::Computer) && w == old->width &&
+            h == old->height) {
+            const std::uint8_t own =
+                own_city_in_circle(world, island.map, order.island, order.player,
+                                   catchment_of(*t, old->rotation, old->origin), std::max(t->radius, kMinKontorRadius));
+            if (own != MapCell::kNoCity) {
+                planner.city = own;
+                planner.foreign = false;
+                plan.captured_city = old->city;
+                captured = old;
             }
         }
     }
@@ -942,11 +1010,18 @@ void plan_order(const World& world, const assets::BuildingTable& buildings, cons
         }
 
         BuildRefusal refusal = BuildRefusal::None;
+        if (captured) {
+            // The new market stands where the destroyed one stood, turned as it was.
+            out.x = captured->origin.x;
+            out.y = captured->origin.y;
+            out.rotation = captured->rotation;
+            out.upgrade = true;
+        }
         // Upgrade in place (Ausbauflg): a building of the same family of the city is replaced and
         // keeps its origin and rotation. Open1602 accepts only buildings of the same Kind (D-006:
         // the gold mine shares the weavers' family in haeuser.cod); like the original it allows
         // steps down (S-036).
-        if (type->upgrade && !options.move) {
+        if (type->upgrade && !options.move && !captured) {
             if (const auto old = building_at(world, buildings, order.island, {item.x, item.y});
                 old && old->type->kreuz_base == type->kreuz_base && old->type->id != type->id &&
                 old->type->kind == type->kind && old->city == planner.city && planner.city != MapCell::kNoCity) {
@@ -1944,6 +2019,34 @@ public:
         services_of(index);
     }
 
+    /// A market of city `to` took the place of a destroyed market of city `from` (Open1602): the
+    /// tiles `from` no longer holds that `to` now reaches go to `to`, with what stands on them;
+    /// what `from` no longer holds otherwise is lost as usual (finish()).
+    void capture_land(std::uint8_t from, std::uint8_t to) {
+        IslandMap& m = map();
+        const std::uint32_t w = m.width();
+        const std::vector<std::uint8_t> covered = territory_coverage(m_world, m_buildings, m_island, {});
+        if (from >= kCitySlotsPerIsland || to >= kCitySlotsPerIsland) {
+            return;
+        }
+        for (std::uint32_t y = 0; y < m.height(); ++y) {
+            for (std::uint32_t x = 0; x < w; ++x) {
+                if (m.top(x, y).city != from) {
+                    continue;
+                }
+                const std::uint8_t bits = covered[std::size_t{y} * w + x];
+                if ((bits >> from & 1U) == 0 && (bits >> to & 1U) != 0) {
+                    lose_tile(x, y, to);
+                }
+            }
+        }
+        m_territory = true;
+        m_storage_cities.insert(from);
+        m_storage_cities.insert(to);
+        services_of(from);
+        services_of(to);
+    }
+
     /// After the changes: territory, services and warehouse room.
     void finish() {
         // Growth entries of removed crops and trees; entries added by this change stay.
@@ -2120,6 +2223,9 @@ BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, co
             t.money = treasure->amount;
             builder.emit(t);
         }
+    }
+    if (plan.captured_city != MapCell::kNoCity && city != MapCell::kNoCity) {
+        builder.capture_land(plan.captured_city, city);
     }
     if (plan.takeover && city != MapCell::kNoCity) {
         // Every tile of the city, and the city with its goods, go to the builder.
