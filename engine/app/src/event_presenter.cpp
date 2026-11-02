@@ -21,6 +21,9 @@ constexpr std::uint16_t kMessageTreasure = 0x2E;
 /// „Ein Schiff steht zum Verkauf“ (MELDUNG 0x0A): its icon tells of a sold ship too.
 constexpr std::uint16_t kMessageShipForSale = 0x0A;
 
+/// The messages of disasters: plague, fire, drought (MELDUNG 1, 2, 3) and an eruption (0x5E).
+constexpr std::array<MessageId, 4> kDisasterMessages = {0x01, 0x02, 0x03, 0x5E};
+
 /// A message, with where it happened and the player it is about.
 Announcement announce(MessageId message, std::optional<std::pair<double, double>> tile = std::nullopt,
                       std::optional<sim::PlayerId> about = std::nullopt) {
@@ -110,6 +113,18 @@ std::optional<std::uint16_t> shortage_message(std::uint8_t ware) {
 }
 
 }  // namespace
+
+bool slows_down(sim::EventSpeed setting, MessageId message) noexcept {
+    switch (setting) {
+        case sim::EventSpeed::Normal:
+            return true;
+        case sim::EventSpeed::Attacks:
+            return std::find(kDisasterMessages.begin(), kDisasterMessages.end(), message) == kDisasterMessages.end();
+        case sim::EventSpeed::Keep:
+            break;
+    }
+    return false;
+}
 
 std::array<std::pair<std::uint8_t, std::uint32_t>, 3> island_crops(const sim::WorldIsland& island) {
     static constexpr std::array<std::uint8_t, 3> kNorth = {46, 50, 48};  // tobacco, grapes, sugar cane

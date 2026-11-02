@@ -89,6 +89,12 @@ bool takes_fire(const assets::BuildingType& b, std::uint32_t r, const Rules& rul
     return kFireTakes[easily ? 1U : 0U][r] != 0;
 }
 
+/// The range of an outbreak's roll is this many times the original's: twice as wide is half as
+/// likely, and the roll draws the same random numbers either way.
+std::uint32_t rarity(Outbreaks o) noexcept {
+    return o == Outbreaks::Rare ? 2U : 1U;
+}
+
 std::size_t protection(const House& h) noexcept {
     return ((h.services & hs::kKlinik) != 0 ? 1U : 0U) + ((h.services & hs::kBadehaus) != 0 ? 1U : 0U);
 }
@@ -524,9 +530,10 @@ void advance_city_events(World& world, const assets::BuildingTable& buildings, c
         const std::uint64_t cum2 = count(2);
         Random& random = world.random(RandomStream::Events);
         // Plague: a city of at least 200 settlers and better without a disaster.
+        // Switched off, plague and fire still roll, so that the other events keep their random numbers.
         if (cum1 >= 200 && city->disasters == 0) {
             const std::uint32_t n = cum2 < 200 ? 400 : cum2 < 400 ? 250 : 180;
-            if (random.below(n) <= 12) {
+            if (random.below(n * rarity(rules.plagues)) <= 12 && rules.plagues != Outbreaks::Off) {
                 break_out_plague(world, buildings, *city, events);
             }
         }
@@ -539,15 +546,16 @@ void advance_city_events(World& world, const assets::BuildingTable& buildings, c
         }
         // Fire: many pioneers, or many pioneers and settlers together.
         bool fire = false;
+        const std::uint32_t k = rarity(rules.fires);
         if (n0 >= 80) {
-            fire = random.below(n0 < 120 ? 200 : n0 < 150 ? 150 : 100) <= 30;
+            fire = random.below((n0 < 120 ? 200U : n0 < 150 ? 150U : 100U) * k) <= 30;
         } else if (n0 + n1 >= 250) {
             const std::uint64_t s = n0 + n1;
-            fire = random.below(s < 300 ? 250 : s < 350 ? 180 : 100) <= 15;
+            fire = random.below((s < 300 ? 250U : s < 350 ? 180U : 100U) * k) <= 15;
         } else if (cum1 >= 250) {
-            fire = random.below(256) <= 7;
+            fire = random.below(256 * k) <= 7;
         }
-        if (fire) {
+        if (fire && rules.fires != Outbreaks::Off) {
             break_out_fire(world, buildings, rules, *city, events);
         }
         city->next_event_ms = now + kCityEventMinMs + std::uint64_t{random.below(8)} * 1000U;

@@ -281,6 +281,33 @@ core::Result<CommandLine> parse_command_line(int argc, const char* const* argv) 
                 options.rules.volcanoes = sim::Volcanoes::Off;
             } else if (mode == "on") {
                 options.rules.volcanoes = sim::Volcanoes::On;
+            } else if (mode == "rare") {
+                options.rules.volcanoes = sim::Volcanoes::Rare;
+            } else {
+                return bad(i);
+            }
+        } else if ((arg == "--plagues" || arg == "--fires") && has_value) {
+            // Game setting: how often plagues or fires break out in towns.
+            sim::Outbreaks& rule = arg == "--plagues" ? options.rules.plagues : options.rules.fires;
+            const std::string_view mode = argv[++i];
+            if (mode == "original") {
+                rule = sim::Outbreaks::Original;
+            } else if (mode == "rare") {
+                rule = sim::Outbreaks::Rare;
+            } else if (mode == "off") {
+                rule = sim::Outbreaks::Off;
+            } else {
+                return bad(i);
+            }
+        } else if (arg == "--event-speed" && has_value) {
+            // Game setting: which messages set the game back to normal speed.
+            const std::string_view mode = argv[++i];
+            if (mode == "normal") {
+                options.rules.event_speed = sim::EventSpeed::Normal;
+            } else if (mode == "attacks") {
+                options.rules.event_speed = sim::EventSpeed::Attacks;
+            } else if (mode == "keep") {
+                options.rules.event_speed = sim::EventSpeed::Keep;
             } else {
                 return bad(i);
             }

@@ -56,6 +56,10 @@ enum RuleKey : std::uint16_t {
     kBigOreVeins = 48,    // 1: every iron vein was a big one at the start (Rules::big_ore_veins)
     kWiderHunting = 49,   // 1: the hunter's hut reaches further (Rules::wider_hunting)
     kCheats = 50,         // Rules::cheats (Code when missing)
+    kPlagues = 51,        // Rules::plagues, when not the original's
+    kFires = 52,          // Rules::fires, when not the original's
+    kRareEruptions = 53,  // 1: Volcanoes::Rare, under its own key so older versions read the game's way
+    kEventSpeed = 54,     // Rules::event_speed, when not the original's
     // The victory conditions (VictoryConditions).
     kWinInhabitants = 11,
     kWinResidentClass = 12,
@@ -161,7 +165,7 @@ void write_rules(Writer& out, const Rules& r) {
         {kGuaranteeResources, r.guarantee_resources ? 1U : 0U},
         {kMaxGameSpeed, r.max_game_speed},
         {kDroughts, static_cast<std::uint32_t>(r.droughts)},
-        {kVolcanoRule, static_cast<std::uint32_t>(r.volcanoes)},
+        {kVolcanoRule, static_cast<std::uint32_t>(r.volcanoes == Volcanoes::Rare ? Volcanoes::Game : r.volcanoes)},
         {kTraderPrices, static_cast<std::uint32_t>(r.trader_prices)},
         {kMaxArmy, r.max_army},
         {kClassicAi, r.bugs.classic_ai ? 1U : 0U},
@@ -225,6 +229,20 @@ void write_rules(Writer& out, const Rules& r) {
     if (r.wider_hunting) {
         values.emplace_back(kWiderHunting, 1U);
     }
+    // Rarer eruptions, outbreaks and the speed at events only when not the original's: the
+    // original's way keeps the bytes.
+    if (r.volcanoes == Volcanoes::Rare) {
+        values.emplace_back(kRareEruptions, 1U);
+    }
+    if (r.plagues != Outbreaks::Original) {
+        values.emplace_back(kPlagues, static_cast<std::uint32_t>(r.plagues));
+    }
+    if (r.fires != Outbreaks::Original) {
+        values.emplace_back(kFires, static_cast<std::uint32_t>(r.fires));
+    }
+    if (r.event_speed != EventSpeed::Normal) {
+        values.emplace_back(kEventSpeed, static_cast<std::uint32_t>(r.event_speed));
+    }
     // The towns shown from the start only when there are any: the original's way keeps the bytes.
     if (r.reveal == Reveal::All) {
         values.emplace_back(kReveal, 2U);
@@ -267,7 +285,8 @@ Rules read_rules(Reader& in) {
     Rules r;
     // Without its key a game plays the original's bread chain, as the versions before the key did.
     r.revised_bread = false;
-    r.wider_hunting = false;  // the same for the hunter's hut
+    r.wider_hunting = false;      // the same for the hunter's hut
+    bool rare_eruptions = false;  // applies to the game's way only, whichever key comes first
     const std::uint32_t n = in.in().count(6);
     for (std::uint32_t i = 0; i < n; ++i) {
         const std::uint16_t key = in.in().u16();
@@ -373,6 +392,18 @@ Rules read_rules(Reader& in) {
             case kWiderHunting:
                 r.wider_hunting = v != 0;
                 break;
+            case kRareEruptions:
+                rare_eruptions = v != 0;
+                break;
+            case kPlagues:
+                r.plagues = static_cast<Outbreaks>(std::min<std::uint32_t>(v, 2));
+                break;
+            case kFires:
+                r.fires = static_cast<Outbreaks>(std::min<std::uint32_t>(v, 2));
+                break;
+            case kEventSpeed:
+                r.event_speed = static_cast<EventSpeed>(std::min<std::uint32_t>(v, 2));
+                break;
             case kWinInhabitants:
                 r.victory.inhabitants = v;
                 break;
@@ -412,6 +443,9 @@ Rules read_rules(Reader& in) {
             default:
                 break;  // a setting of a later version
         }
+    }
+    if (rare_eruptions && r.volcanoes == Volcanoes::Game) {
+        r.volcanoes = Volcanoes::Rare;
     }
     return r;
 }

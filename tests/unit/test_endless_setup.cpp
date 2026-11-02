@@ -918,12 +918,20 @@ TEST_CASE("game setup: a savegame's values take the room their labels leave, in 
         for (auto i = 0; i < static_cast<int>(SetupItem::Count); ++i) {
             const auto item = static_cast<SetupItem>(i);
             if (!app::setup_item_offered(app::SetupScope::Savegame, item) || app::victory_item(item) ||
-                app::bug_item(item) || item == SetupItem::Cheats ||
+                app::bug_item(item) || app::disaster_item(item) || item == SetupItem::Cheats ||
                 item == SetupItem::Hunting) {  // the cheats and the hunter's hut: on the page of the bugs
                 continue;
             }
             // Without fonts every byte is 9 units: wider than a button's room for the longest values.
             CHECK(find_text(menu, value_of(menu.setup(), item)).has_value());
+        }
+        (void)click(menu, ui::tr("setup.disasters.open", {ui::tr("setup.disasters.original")}));
+        REQUIRE(menu.disasters_page());
+        for (auto i = 0; i < static_cast<int>(SetupItem::Count); ++i) {
+            const auto item = static_cast<SetupItem>(i);
+            if (app::disaster_item(item)) {
+                CHECK(find_text(menu, value_of(menu.setup(), item)).has_value());
+            }
         }
     }
     ui::set_language(ui::kFallbackLanguage);
@@ -1190,4 +1198,91 @@ TEST_CASE("endless setup: kinds of island world of a package (landscapes.toml) c
     CHECK(app::islands_summary(s) == atolls.title(ui::current_language()));
     app::set_package_island_presets({});
     CHECK(app::setup_choices(SetupItem::IslandPreset) == before);
+}
+
+TEST_CASE("game setup: the page of the disasters, how often they come and what they do to the speed") {
+    // Their lines in settings.cfg, and back.
+    EndlessSetup s;
+    s.rules.volcanoes = sim::Volcanoes::Rare;
+    s.rules.plagues = sim::Outbreaks::Off;
+    s.rules.fires = sim::Outbreaks::Rare;
+    s.rules.event_speed = sim::EventSpeed::Keep;
+    const std::string lines = app::write_setup(s);
+    CHECK(lines.find("endless.volcanoes = rare\n") != std::string::npos);
+    CHECK(lines.find("endless.plagues = off\n") != std::string::npos);
+    CHECK(lines.find("endless.fires = rare\n") != std::string::npos);
+    CHECK(lines.find("endless.event_speed = keep\n") != std::string::npos);
+    EndlessSetup back;
+    app::read_setup(back, lines);
+    CHECK(back == s);
+    CHECK(app::read_setup_line(back, "plagues", "often"));  // unknown: kept
+    CHECK(back.rules.plagues == sim::Outbreaks::Off);
+    CHECK(app::original_disasters(s.rules) == sim::Rules{});
+    CHECK(EndlessSetup::original().rules == app::original_disasters(EndlessSetup::original().rules));
+
+    for (const std::string_view code : {"de", "en"}) {
+        ui::set_language(code);
+        for (const auto scope : {app::SetupScope::Endless, app::SetupScope::Scenario}) {
+            app::GameSettingsMenu menu;
+            menu.open(EndlessSetup{}, scope);
+            // On the settings' page only the way there.
+            CHECK(!find_text(menu, app::setup_label(SetupItem::Plagues)).has_value());
+            CHECK(!find_text(menu, app::setup_label(SetupItem::Droughts)).has_value());
+            CHECK(click(menu, ui::tr("setup.disasters.open", {ui::tr("setup.disasters.original")})) ==
+                  app::GameSettingsMenu::Result::None);
+            REQUIRE(menu.disasters_page());
+            CHECK(find_text(menu, ui::tr("setup.title.disasters")).has_value());
+            CHECK(!find_text(menu, ui::tr("setup.original")).has_value());
+            (void)click(menu, ui::tr("setup.outbreaks.original"));  // the first: the plague
+            CHECK(menu.setup().rules.plagues == sim::Outbreaks::Rare);
+            (void)click(menu, ui::tr("setup.outbreaks.rare"));
+            CHECK(menu.setup().rules.plagues == sim::Outbreaks::Off);
+            (void)click(menu, ui::tr("setup.event_speed.normal"));
+            CHECK(menu.setup().rules.event_speed == sim::EventSpeed::Attacks);
+            (void)click(menu, ui::tr("setup.event_speed.attacks"), ui::MouseButton::Right);
+            CHECK(menu.setup().rules.event_speed == sim::EventSpeed::Normal);
+            (void)click(menu, ui::tr("setup.event_speed.normal"), ui::MouseButton::Right);
+            CHECK(menu.setup().rules.event_speed == sim::EventSpeed::Keep);
+
+            // Every row ends above the hint.
+            std::int32_t lowest = 0;
+            std::int32_t hint_y = INT32_MAX;
+            const std::string hint = ui::tr("setup.hint.disasters");
+            for (const ui::DrawItem& d : menu.draw(kNoFonts)) {
+                if (d.kind != ui::DrawItem::Kind::Text || d.text.empty()) {
+                    continue;
+                }
+                if (d.text.size() > 20 && hint.compare(0, 20, d.text, 0, 20) == 0) {
+                    hint_y = std::min(hint_y, d.y);
+                } else if (d.text == app::setup_label(SetupItem::Fires) ||
+                           d.text == app::setup_label(SetupItem::EventSpeed)) {
+                    lowest = std::max(lowest, d.y);
+                }
+            }
+            CHECK(lowest > 0);
+            CHECK(lowest < hint_y);
+
+            // Back on the settings' page the way there counts what differs from the original.
+            CHECK(menu.back());
+            CHECK(find_text(menu, ui::tr("setup.disasters.open", {ui::tr("setup.disasters.many", {"2"})})).has_value());
+            (void)click(menu, ui::tr("setup.disasters.open", {ui::tr("setup.disasters.many", {"2"})}));
+            REQUIRE(menu.disasters_page());
+            (void)click(menu, ui::tr("setup.disasters.all_original"));
+            CHECK(menu.setup().rules == sim::Rules{});
+            CHECK(menu.back());
+            CHECK(find_text(menu, ui::tr("setup.disasters.open", {ui::tr("setup.disasters.original")})).has_value());
+        }
+    }
+    ui::set_language(ui::kFallbackLanguage);
+
+    // A savegame's can be looked at, not changed.
+    EndlessSetup saved;
+    saved.rules.fires = sim::Outbreaks::Off;
+    app::GameSettingsMenu menu;
+    menu.open(saved, app::SetupScope::Savegame);
+    (void)click(menu, ui::tr("setup.disasters.open", {ui::tr("setup.disasters.one")}));
+    REQUIRE(menu.disasters_page());
+    CHECK(!find_text(menu, ui::tr("setup.disasters.all_original")).has_value());
+    (void)click(menu, value_of(saved, SetupItem::Fires));
+    CHECK(menu.setup().rules.fires == sim::Outbreaks::Off);
 }

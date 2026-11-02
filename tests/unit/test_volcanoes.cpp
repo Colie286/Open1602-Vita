@@ -144,6 +144,33 @@ TEST_CASE("volcanoes: intervals shrink with the craters, an eruption takes 28.9 
     CHECK(first <= 4'200'000 + (15 * 60 + 31) * 1000);
 }
 
+TEST_CASE("volcanoes: rare eruptions wait twice as long, as the game's settings say") {
+    for (const bool rare : {false, true}) {
+        Volcano v;
+        v.finish();
+        v.world.volcanoes().next_ms = 600'000;
+        v.world.set_time_ms(600'000);
+        sim::Rules rules;
+        rules.volcanoes = rare ? sim::Volcanoes::Rare : sim::Volcanoes::Game;
+        sim::roll_eruptions(v.world, rules, &v.events);
+        REQUIRE(v.events.size() == 1);
+        const std::uint64_t wait = v.world.volcanoes().next_ms - 600'000;
+        const std::uint64_t factor = rare ? 2 : 1;
+        CHECK(wait >= factor * 2'100'000);
+        CHECK(wait <= factor * (2'100'000 + 931'000));
+
+        // A game without volcanoes has none, rare or not.
+        Volcano off;
+        off.finish();
+        sim::World::GameSettings settings;
+        settings.flags = 1U << 8;
+        off.world.set_game_settings(settings);
+        off.world.volcanoes().next_ms = 0;
+        sim::roll_eruptions(off.world, rules, &off.events);
+        CHECK(off.events.empty());
+    }
+}
+
 TEST_CASE("volcanoes: the roll waits for the time and the settings, then the volcano erupts") {
     Volcano v;
     v.finish();

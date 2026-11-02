@@ -85,6 +85,8 @@ public:
     [[nodiscard]] bool bugs_page() const noexcept { return m_page == Page::Bugs; }
     /// Whether the page of the islands is open.
     [[nodiscard]] bool islands_page() const noexcept { return m_page == Page::Islands; }
+    /// Whether the page of the disasters is open.
+    [[nodiscard]] bool disasters_page() const noexcept { return m_page == Page::Disasters; }
     /// The world of the preview, when it is made (for the tests: wait_preview() waits for it).
     [[nodiscard]] const std::optional<sim::WorldPreview>& preview() const noexcept { return m_preview; }
     void wait_preview();
@@ -97,7 +99,7 @@ public:
     Result mouse(std::int32_t x, std::int32_t y, bool down, ui::MouseButton button = ui::MouseButton::Left);
 
 private:
-    enum class Page : std::uint8_t { Settings, Victory, Bugs, Islands };
+    enum class Page : std::uint8_t { Settings, Victory, Bugs, Islands, Disasters };
     /// A row of the preview's picture in one colour.
     struct Run {
         std::int32_t x = 0;

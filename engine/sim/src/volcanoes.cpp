@@ -341,6 +341,7 @@ bool volcanoes_enabled(const World& world, const Rules& rules) noexcept {
         case Volcanoes::On:
             return true;
         case Volcanoes::Game:
+        case Volcanoes::Rare:
             break;
     }
     return (world.game_settings().flags & World::GameSettings::kNoVolcanoes) == 0;
@@ -369,7 +370,9 @@ void roll_eruptions(World& world, const Rules& rules, std::vector<VolcanoEvent>*
         erupt(world, ref, seed, true, events);
         const std::uint64_t minutes = random.below(16);
         const std::uint64_t seconds = random.below(32);
-        v.next_ms = world.time_ms() + eruption_interval_ms(crater_count(world)) + (60 * minutes + seconds) * 1000;
+        // Rare eruptions wait twice as long for the next one.
+        const std::uint64_t wait = eruption_interval_ms(crater_count(world)) + (60 * minutes + seconds) * 1000;
+        v.next_ms = world.time_ms() + (rules.volcanoes == Volcanoes::Rare ? 2 * wait : wait);
         v.last.reset();
     }
 }

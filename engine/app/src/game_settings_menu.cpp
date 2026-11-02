@@ -25,14 +25,16 @@ constexpr Id kOriginal = 50;
 constexpr Id kDefaults = 51;
 constexpr Id kBack = 52;
 constexpr Id kStart = 53;
-constexpr Id kVictory = 54;       // the page of the victory conditions
-constexpr Id kVictoryOff = 55;    // all of them off
-constexpr Id kBugs = 56;          // the page of the original's bugs
-constexpr Id kBugsOriginal = 57;  // all of them as in the original
-constexpr Id kBugsFixed = 58;     // all of them fixed
-constexpr Id kIslands = 59;       // the page of the islands
-constexpr Id kReroll = 60;        // another world for the preview
-constexpr Id kItem = 100;         // + SetupItem
+constexpr Id kVictory = 54;            // the page of the victory conditions
+constexpr Id kVictoryOff = 55;         // all of them off
+constexpr Id kBugs = 56;               // the page of the original's bugs
+constexpr Id kBugsOriginal = 57;       // all of them as in the original
+constexpr Id kBugsFixed = 58;          // all of them fixed
+constexpr Id kIslands = 59;            // the page of the islands
+constexpr Id kReroll = 60;             // another world for the preview
+constexpr Id kDisasters = 61;          // the page of the disasters
+constexpr Id kDisastersOriginal = 62;  // all of them as in the original
+constexpr Id kItem = 100;              // + SetupItem
 
 // The frame and the bottom row, as the multiplayer menu's.
 constexpr Rect kScreen{16, 16, 992, 736};
@@ -61,11 +63,12 @@ struct Group {
 constexpr std::int32_t kLeft = 40;
 constexpr std::int32_t kRight = kLeft + kGroupW + 16;
 
-// Economy, limits and disasters on the left, the world and the opponents on the right.
+// Economy, limits and nature on the left, the world and the opponents on the right; the disasters
+// have a page of their own, its way below the nature.
 constexpr Group kGroups[] = {
     {"setup.group.economy", SetupItem::Refund, SetupItem::TradeCarts, kLeft},
     {"setup.group.limits", SetupItem::Ships, SetupItem::GameSpeed, kLeft},
-    {"setup.group.nature", SetupItem::FertileFields, SetupItem::Volcanoes, kLeft},
+    {"setup.group.nature", SetupItem::FertileFields, SetupItem::FertileFields, kLeft},
     {"setup.group.world", SetupItem::Map, SetupItem::Resources, kRight},
     {"setup.group.opponents", SetupItem::ComputerPlayers, SetupItem::Reveal, kRight},
 };
@@ -90,6 +93,12 @@ constexpr Group kBugGroups[] = {
     {"setup.group.cheats", SetupItem::Cheats, SetupItem::Cheats, kRight},
     // Not a bug either: the hunter's hut reaches further in Open1602, the original's reach is a choice.
     {"setup.group.economy", SetupItem::Hunting, SetupItem::Hunting, kLeft},
+};
+
+// The disasters: how often they come on the left, what they do to the game's speed on the right.
+constexpr Group kDisasterGroups[] = {
+    {"setup.group.disasters", SetupItem::Droughts, SetupItem::Fires, kLeft},
+    {"setup.group.game_speed", SetupItem::EventSpeed, SetupItem::EventSpeed, kRight},
 };
 
 // The islands: what kind of world, the land and its sizes, and what is on the islands; the
@@ -323,6 +332,10 @@ GameSettingsMenu::Result GameSettingsMenu::mouse(std::int32_t x, std::int32_t y,
         m_setup.rules.victory = {};
     } else if (*id == kBugs) {
         m_page = Page::Bugs;
+    } else if (*id == kDisasters) {
+        m_page = Page::Disasters;
+    } else if (*id == kDisastersOriginal && editable) {
+        m_setup.rules = original_disasters(m_setup.rules);
     } else if (*id == kIslands) {
         m_page = Page::Islands;
         if (m_setup.world_seed == 0 && editable && m_scope != SetupScope::MultiplayerEndless) {
@@ -366,19 +379,22 @@ void GameSettingsMenu::layout() {
     const bool victory = m_page == Page::Victory;
     const bool bugs = m_page == Page::Bugs;
     const bool islands = m_page == Page::Islands;
+    const bool disasters = m_page == Page::Disasters;
     f.label(kHeading,
-            ui::tr(victory   ? "setup.title.victory"
-                   : bugs    ? "setup.title.bugs"
-                   : islands ? "setup.title.islands"
-                             : title_key(m_scope)),
+            ui::tr(victory     ? "setup.title.victory"
+                   : bugs      ? "setup.title.bugs"
+                   : islands   ? "setup.title.islands"
+                   : disasters ? "setup.title.disasters"
+                               : title_key(m_scope)),
             Align::Left, Tone::Heading);
     const bool editable = m_mode != Mode::View;
     std::int32_t left_y = kTop;
     std::int32_t right_y = kTop;
-    const std::span<const Group> groups = victory   ? std::span<const Group>(kVictoryGroups)
-                                          : bugs    ? std::span<const Group>(kBugGroups)
-                                          : islands ? std::span<const Group>(kIslandGroups)
-                                                    : std::span<const Group>(kGroups);
+    const std::span<const Group> groups = victory     ? std::span<const Group>(kVictoryGroups)
+                                          : bugs      ? std::span<const Group>(kBugGroups)
+                                          : islands   ? std::span<const Group>(kIslandGroups)
+                                          : disasters ? std::span<const Group>(kDisasterGroups)
+                                                      : std::span<const Group>(kGroups);
     const auto offered = [&](const Group& g) {
         std::vector<SetupItem> items;
         for (auto i = static_cast<std::int32_t>(g.first); i <= static_cast<std::int32_t>(g.last); ++i) {
@@ -393,6 +409,8 @@ void GameSettingsMenu::layout() {
     const bool victory_row = m_page == Page::Settings && victory_offered(m_scope);
     // The way to the islands' page, below the world's items.
     const bool islands_row = m_page == Page::Settings && setup_item_offered(m_scope, SetupItem::IslandPreset);
+    // The way to the disasters' page, below the nature's items.
+    const bool disasters_row = m_page == Page::Settings && setup_item_offered(m_scope, SetupItem::Plagues);
     double longest = 0.0;
     const auto measure = [&](const std::string& label) {
         const double w = m_label_font != nullptr ? m_label_font->width(label) / m_label_font->design_scale()
@@ -411,6 +429,9 @@ void GameSettingsMenu::layout() {
         }
         if (islands_row) {
             measure(ui::tr("setup.island_page"));
+        }
+        if (disasters_row) {
+            measure(ui::tr("setup.disasters"));
         }
     }
     const std::int32_t label_w = std::clamp(static_cast<std::int32_t>(std::ceil(longest)) + 2 * kTextPadding,
@@ -439,13 +460,17 @@ void GameSettingsMenu::layout() {
         if (items.empty()) {
             continue;
         }
-        const bool world = g.first == SetupItem::Map;
-        const std::int32_t extra = world && islands_row ? 1 : 0;
+        const bool world = g.first == SetupItem::Map && islands_row;
+        const bool nature = g.first == SetupItem::FertileFields && disasters_row;
+        const std::int32_t extra = world || nature ? 1 : 0;
         const std::int32_t top = group(g.heading, static_cast<std::int32_t>(items.size()) + extra, g.x);
-        if (extra != 0) {
-            const std::int32_t y = top + static_cast<std::int32_t>(items.size()) * kRowH;
-            const Rect value = row(g.x, y, ui::tr("setup.island_page"), m_setup.own_world);
+        const std::int32_t extra_y = top + static_cast<std::int32_t>(items.size()) * kRowH;
+        if (world) {
+            const Rect value = row(g.x, extra_y, ui::tr("setup.island_page"), m_setup.own_world);
             f.button(kIslands, value, ui::tr("setup.island_page.open", {islands_summary(m_setup)}));
+        } else if (nature) {
+            const Rect value = row(g.x, extra_y, ui::tr("setup.disasters"), true);
+            f.button(kDisasters, value, ui::tr("setup.disasters.open", {disasters_summary(m_setup.rules)}));
         }
         for (std::size_t i = 0; i < items.size(); ++i) {
             const SetupItem item = items[i];
@@ -462,7 +487,7 @@ void GameSettingsMenu::layout() {
         }
     }
     if (m_page == Page::Settings) {
-        // Below the disasters: the ways to the pages of the victory conditions and of the original's
+        // Below the nature: the ways to the pages of the victory conditions and of the original's
         // bugs, each with what is chosen (to look at too, for a game that is only shown).
         std::int32_t top = group({}, victory_row ? 2 : 1, kLeft);
         if (victory_row) {
@@ -483,12 +508,13 @@ void GameSettingsMenu::layout() {
         f.paragraph(Rect{40, hint_y, 944, kBottomY - 4 - hint_y}, m_error, Tone::Warning);
     } else {
         f.paragraph(Rect{40, hint_y, 944, kBottomY - 4 - hint_y},
-                    ui::tr(victory   ? (editable ? "setup.hint.victory" : "setup.hint.victory.view")
-                           : bugs    ? (editable ? "setup.hint.bugs" : "setup.hint.bugs.view")
-                           : islands ? (!m_setup.own_world ? "setup.hint.islands.original"
-                                        : editable         ? "setup.hint.islands"
-                                                           : "setup.hint.islands.view")
-                                     : hint_key(m_scope)),
+                    ui::tr(victory     ? (editable ? "setup.hint.victory" : "setup.hint.victory.view")
+                           : bugs      ? (editable ? "setup.hint.bugs" : "setup.hint.bugs.view")
+                           : islands   ? (!m_setup.own_world ? "setup.hint.islands.original"
+                                          : editable         ? "setup.hint.islands"
+                                                             : "setup.hint.islands.view")
+                           : disasters ? (editable ? "setup.hint.disasters" : "setup.hint.disasters.view")
+                                       : hint_key(m_scope)),
                     Tone::Dim);
     }
     f.button(kBack, Rect{40, kBottomY, 180, 44}, ui::tr("setup.back"));
@@ -500,6 +526,9 @@ void GameSettingsMenu::layout() {
     } else if (victory) {
         f.button(kVictoryOff, Rect{520, kBottomY, 240, 44}, ui::tr("setup.victory.off"), true,
                  !m_setup.rules.victory.active());
+    } else if (disasters) {
+        f.button(kDisastersOriginal, Rect{520, kBottomY, 240, 44}, ui::tr("setup.disasters.all_original"), true,
+                 original_disasters(m_setup.rules) == m_setup.rules);
     } else if (bugs) {
         f.button(kBugsOriginal, Rect{260, kBottomY, 240, 44}, ui::tr("setup.bugs.all_original"), true,
                  page_bugs(m_setup.rules.bugs) == page_bugs(sim::OriginalBugs::all()));

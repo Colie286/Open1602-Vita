@@ -146,7 +146,9 @@ std::optional<std::uint32_t> parse_number(std::string_view v) {
 
 // Names of the values in settings.cfg.
 constexpr std::array<std::string_view, 5> kDroughtNames = {"game", "off", "rare", "normal", "frequent"};
-constexpr std::array<std::string_view, 3> kVolcanoNames = {"game", "off", "on"};
+constexpr std::array<std::string_view, 4> kVolcanoNames = {"game", "off", "on", "rare"};
+constexpr std::array<std::string_view, 3> kOutbreakNames = {"original", "rare", "off"};
+constexpr std::array<std::string_view, 3> kEventSpeedNames = {"normal", "attacks", "keep"};
 constexpr std::array<std::string_view, 3> kPirateNames = {"game", "off", "on"};
 constexpr std::array<std::string_view, 3> kComputerNames = {"game", "off", "on"};
 constexpr std::array<std::string_view, 3> kMovingNames = {"free", "rebuild", "off"};  // sim::Moving
@@ -388,6 +390,11 @@ std::size_t setup_choices(SetupItem item) noexcept {
             return kDroughtNames.size();
         case SetupItem::Volcanoes:
             return kVolcanoNames.size();
+        case SetupItem::Plagues:
+        case SetupItem::Fires:
+            return kOutbreakNames.size();
+        case SetupItem::EventSpeed:
+            return kEventSpeedNames.size();
         case SetupItem::Pirates:
             return kPirateNames.size();
         case SetupItem::ComputerPlayers:
@@ -539,7 +546,13 @@ std::size_t setup_choice(const EndlessSetup& setup, SetupItem item) noexcept {
         case SetupItem::Droughts:
             return std::min<std::size_t>(static_cast<std::size_t>(r.droughts), kDroughtNames.size() - 1);
         case SetupItem::Volcanoes:
-            return std::min<std::size_t>(static_cast<std::size_t>(r.volcanoes), kVolcanoNames.size() - 1);
+            return enum_choice(r.volcanoes, kVolcanoNames.size());
+        case SetupItem::Plagues:
+            return enum_choice(r.plagues, kOutbreakNames.size());
+        case SetupItem::Fires:
+            return enum_choice(r.fires, kOutbreakNames.size());
+        case SetupItem::EventSpeed:
+            return enum_choice(r.event_speed, kEventSpeedNames.size());
         case SetupItem::Map:
             return setup.own_world ? 1 : 0;
         case SetupItem::WorldSize: {
@@ -713,6 +726,15 @@ void choose(EndlessSetup& setup, SetupItem item, std::size_t choice) {
             break;
         case SetupItem::Volcanoes:
             r.volcanoes = static_cast<sim::Volcanoes>(choice);
+            break;
+        case SetupItem::Plagues:
+            r.plagues = static_cast<sim::Outbreaks>(choice);
+            break;
+        case SetupItem::Fires:
+            r.fires = static_cast<sim::Outbreaks>(choice);
+            break;
+        case SetupItem::EventSpeed:
+            r.event_speed = static_cast<sim::EventSpeed>(choice);
             break;
         case SetupItem::Map:
             setup.own_world = choice == 1;
@@ -942,6 +964,28 @@ sim::OriginalBugs page_bugs(sim::OriginalBugs bugs) noexcept {
     return bugs;
 }
 
+sim::Rules original_disasters(sim::Rules rules) noexcept {
+    const sim::Rules original = sim::Rules::original();
+    rules.droughts = original.droughts;
+    rules.volcanoes = original.volcanoes;
+    rules.plagues = original.plagues;
+    rules.fires = original.fires;
+    rules.event_speed = original.event_speed;
+    return rules;
+}
+
+std::string disasters_summary(const sim::Rules& rules) {
+    const sim::Rules original = original_disasters(rules);
+    const std::size_t n = (rules.droughts != original.droughts ? 1U : 0U) +
+                          (rules.volcanoes != original.volcanoes ? 1U : 0U) +
+                          (rules.plagues != original.plagues ? 1U : 0U) + (rules.fires != original.fires ? 1U : 0U) +
+                          (rules.event_speed != original.event_speed ? 1U : 0U);
+    if (n == 0) {
+        return ui::tr("setup.disasters.original");
+    }
+    return ui::tr(n == 1 ? "setup.disasters.one" : "setup.disasters.many", {std::to_string(n)});
+}
+
 std::string islands_summary(const EndlessSetup& setup) {
     return setup_value(setup, SetupItem::IslandPreset);
 }
@@ -1036,6 +1080,9 @@ bool setup_item_offered(SetupScope scope, SetupItem item) noexcept {
         case SetupItem::Cheats:
         case SetupItem::Droughts:
         case SetupItem::Volcanoes:
+        case SetupItem::Plagues:
+        case SetupItem::Fires:
+        case SetupItem::EventSpeed:
         case SetupItem::ComputerPlayers:
         case SetupItem::Pirates:
         case SetupItem::PirateNests:
@@ -1112,6 +1159,9 @@ std::string setup_label(SetupItem item) {
         "setup.fertile_fields",
         "setup.droughts",
         "setup.volcanoes",
+        "setup.plagues",
+        "setup.fires",
+        "setup.event_speed",
         "setup.map",
         "setup.size",
         "setup.players",
@@ -1230,7 +1280,19 @@ std::string setup_value(SetupItem item, std::size_t choice) {
             return ui::tr(kKeys[choice]);
         }
         case SetupItem::Volcanoes: {
-            static constexpr std::array<std::string_view, 3> kKeys = {"setup.volcanoes.game", "setup.off", "setup.on"};
+            static constexpr std::array<std::string_view, 4> kKeys = {"setup.volcanoes.game", "setup.off", "setup.on",
+                                                                      "setup.volcanoes.rare"};
+            return ui::tr(kKeys[choice]);
+        }
+        case SetupItem::Plagues:
+        case SetupItem::Fires: {
+            static constexpr std::array<std::string_view, 3> kKeys = {"setup.outbreaks.original",
+                                                                      "setup.outbreaks.rare", "setup.off"};
+            return ui::tr(kKeys[choice]);
+        }
+        case SetupItem::EventSpeed: {
+            static constexpr std::array<std::string_view, 3> kKeys = {
+                "setup.event_speed.normal", "setup.event_speed.attacks", "setup.event_speed.keep"};
             return ui::tr(kKeys[choice]);
         }
         case SetupItem::Map:
@@ -1561,6 +1623,14 @@ bool read_setup_line(EndlessSetup& setup, std::string_view key, std::string_view
         if (const auto i = name_index(kVolcanoNames, value)) {
             r.volcanoes = static_cast<sim::Volcanoes>(*i);
         }
+    } else if (key == "plagues" || key == "fires") {
+        if (const auto i = name_index(kOutbreakNames, value)) {
+            (key == "plagues" ? r.plagues : r.fires) = static_cast<sim::Outbreaks>(*i);
+        }
+    } else if (key == "event_speed") {
+        if (const auto i = name_index(kEventSpeedNames, value)) {
+            r.event_speed = static_cast<sim::EventSpeed>(*i);
+        }
     } else if (key == "pirates") {
         if (const auto i = name_index(kPirateNames, value)) {
             r.pirates = static_cast<sim::Pirates>(*i);
@@ -1668,7 +1738,10 @@ std::string write_setup(const EndlessSetup& setup, std::string_view prefix) {
     line("units", std::to_string(r.max_army));
     line("game_speed", std::to_string(r.max_game_speed));
     line("droughts", kDroughtNames[std::min<std::size_t>(static_cast<std::size_t>(r.droughts), 4)]);
-    line("volcanoes", kVolcanoNames[std::min<std::size_t>(static_cast<std::size_t>(r.volcanoes), 2)]);
+    line("volcanoes", kVolcanoNames[enum_choice(r.volcanoes, kVolcanoNames.size())]);
+    line("plagues", kOutbreakNames[enum_choice(r.plagues, kOutbreakNames.size())]);
+    line("fires", kOutbreakNames[enum_choice(r.fires, kOutbreakNames.size())]);
+    line("event_speed", kEventSpeedNames[enum_choice(r.event_speed, kEventSpeedNames.size())]);
     line("resources", on_off(r.guarantee_resources));
     line("ai", r.bugs.classic_ai ? "classic" : "open1602");
     line("ship_purchases", r.computers_buy_ships ? "on" : "off");

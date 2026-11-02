@@ -39,11 +39,28 @@ enum class Droughts : std::uint8_t {
     Frequent,  ///< 10 in 32, 15 minutes ("hard")
 };
 
-/// Whether volcanoes erupt. The original has a game setting for it.
+/// Whether and how often volcanoes erupt. The original has a game setting for whether.
 enum class Volcanoes : std::uint8_t {
     Game,  ///< as the game's settings say (original)
     Off,   ///< never
     On,    ///< always, whatever the game says
+    Rare,  ///< as the game's settings say, but half as often: twice the time between eruptions
+};
+
+/// How often a plague or a fire breaks out in a town by itself. Fires that lava or
+/// a burning neighbour start, and the spreading of a plague, are not counted.
+enum class Outbreaks : std::uint8_t {
+    Original,  ///< as in the original
+    Rare,      ///< half as often
+    Off,       ///< never
+};
+
+/// Which messages set the game back to normal speed. In the original those of disasters and
+/// attacks do.
+enum class EventSpeed : std::uint8_t {
+    Normal,   ///< every one of them (original)
+    Attacks,  ///< attacks only: disasters let the game run on at its speed
+    Keep,     ///< none: the game keeps its speed
 };
 
 /// The cheats (CheatOrder): as in the original, a code typed in the number line unlocks them, and
@@ -277,8 +294,15 @@ struct Rules {
 
     /// Droughts: as the game says, or chosen for the endless game.
     Droughts droughts = Droughts::Game;
-    /// Volcanoes: as the game says, or switched on or off.
+    /// Volcanoes: as the game says, rarer, or switched on or off.
     Volcanoes volcanoes = Volcanoes::Game;
+    /// Plagues breaking out in towns: as in the original, half as often, or never.
+    Outbreaks plagues = Outbreaks::Original;
+    /// Fires breaking out in towns: as in the original, half as often, or never.
+    Outbreaks fires = Outbreaks::Original;
+    /// Which messages set the game back to normal speed. The host's computer decides for a
+    /// multiplayer game, as it does for every change of the speed.
+    EventSpeed event_speed = EventSpeed::Normal;
     /// Pirates: as the game says, or switched on or off.
     Pirates pirates = Pirates::Game;
     /// Pirate nests: one, or as the faction scales them. Up to four players both are the original.
@@ -362,6 +386,9 @@ struct Rules {
         r.moving = Moving::Off;
         r.droughts = Droughts::Game;
         r.volcanoes = Volcanoes::Game;
+        r.plagues = Outbreaks::Original;
+        r.fires = Outbreaks::Original;
+        r.event_speed = EventSpeed::Normal;
         r.pirates = Pirates::Game;
         r.pirate_nests = PirateNests::One;
         r.trader_prices = TraderPrices::Original;

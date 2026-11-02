@@ -494,6 +494,86 @@ TEST_CASE("disasters: wooden houses catch fire more easily than brick ones (S-04
     CHECK(original_wood < 280);
 }
 
+TEST_CASE("disasters: plagues and fires break out as in the original, half as often, or never") {
+    // Outbreaks in 2000 checks of the same city, with the same random numbers.
+    const auto outbreaks = [](std::uint32_t house, std::uint8_t cls, std::uint32_t inhabitants,
+                              const sim::Rules& rules) {
+        Town town;
+        for (std::uint16_t i = 0; i < 10; ++i) {
+            town.place(house, 2 + 3 * i, 4);
+        }
+        town.finish({});
+        for (std::uint16_t i = 0; i < 10; ++i) {
+            town.add_house(static_cast<std::uint16_t>(2 + 3 * i), 4, cls, inhabitants);
+        }
+        std::size_t n = 0;
+        sim::advance_city_events(town.world, town.buildings, rules, nullptr, nullptr);
+        for (int i = 0; i < 2000; ++i) {
+            town.world.set_time_ms(town.city().next_event_ms);
+            std::vector<sim::DisasterEvent> events;
+            sim::advance_city_events(town.world, town.buildings, rules, &events, nullptr);
+            n += count(events, sim::DisasterEvent::Kind::Started, false);
+            town.world.disasters().clear();
+            sim::recount_disasters(town.world);
+            for (sim::House& h : town.world.houses()) {
+                h.services = 0;
+            }
+        }
+        return n;
+    };
+    const auto with = [](sim::Outbreaks plagues, sim::Outbreaks fires) {
+        sim::Rules r = sim::Rules::open1602();
+        r.plagues = plagues;
+        r.fires = fires;
+        return r;
+    };
+    using O = sim::Outbreaks;
+    CHECK(sim::Rules::open1602().plagues == O::Original);
+    CHECK(sim::Rules::open1602().fires == O::Original);
+
+    // 250 citizens: 13 of 250 checks pass the roll, then up to four tries of 8 of 16: about 98.
+    const std::size_t plague = outbreaks(kCitizenHouse, 2, 25, with(O::Original, O::Original));
+    const std::size_t rare_plague = outbreaks(kCitizenHouse, 2, 25, with(O::Rare, O::Original));
+    CHECK(plague > 70);
+    CHECK(plague < 130);
+    CHECK(rare_plague * 10 > plague * 3);
+    CHECK(rare_plague * 10 < plague * 7);
+    CHECK(outbreaks(kCitizenHouse, 2, 25, with(O::Off, O::Original)) == 0);
+    // The fires' setting leaves the plague alone.
+    CHECK(outbreaks(kCitizenHouse, 2, 25, with(O::Original, O::Off)) == plague);
+
+    // 100 pioneers in wooden houses: about 310 fires, rare about half of them.
+    const std::size_t fire = outbreaks(kPioneerHouse, 0, 10, with(O::Original, O::Original));
+    const std::size_t rare_fire = outbreaks(kPioneerHouse, 0, 10, with(O::Original, O::Rare));
+    CHECK(fire > 260);
+    CHECK(fire < 360);
+    CHECK(rare_fire * 10 > fire * 3);
+    CHECK(rare_fire * 10 < fire * 7);
+    CHECK(outbreaks(kPioneerHouse, 0, 10, with(O::Original, O::Off)) == 0);
+}
+
+TEST_CASE("disasters: the outbreaks' and the events' settings stay with the savegame") {
+    Town town;
+    town.place(kCitizenHouse, 2, 4);
+    town.finish({});
+    for (const auto o : {sim::Outbreaks::Original, sim::Outbreaks::Rare, sim::Outbreaks::Off}) {
+        for (const auto v : {sim::Volcanoes::Game, sim::Volcanoes::Rare, sim::Volcanoes::On}) {
+            sim::Rules rules;
+            rules.plagues = o;
+            rules.fires = o == sim::Outbreaks::Rare ? sim::Outbreaks::Off : sim::Outbreaks::Rare;
+            rules.volcanoes = v;
+            rules.event_speed = o == sim::Outbreaks::Original ? sim::EventSpeed::Keep : sim::EventSpeed::Attacks;
+            town.world.set_saved_rules(rules);
+            const auto bytes = sim::write_game(town.world, town.buildings);
+            REQUIRE(bytes.ok());
+            auto back = sim::read_game(*bytes, town.buildings);
+            REQUIRE(back.ok());
+            REQUIRE(back->saved_rules().has_value());
+            CHECK(*back->saved_rules() == rules);
+        }
+    }
+}
+
 TEST_CASE("disasters: a burning house does not catch fire again (S-050)") {
     Town town;
     for (std::uint16_t i = 0; i < 4; ++i) {

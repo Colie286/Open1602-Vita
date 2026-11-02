@@ -72,8 +72,12 @@ enum class SetupItem : std::uint8_t {
     GameSpeed,
     // Nature
     FertileFields,  ///< Rules::fertile_fields
+    // Disasters (a page of their own; disaster_item)
     Droughts,
     Volcanoes,
+    Plagues,     ///< Rules::plagues
+    Fires,       ///< Rules::fires
+    EventSpeed,  ///< Rules::event_speed
     // World
     Map,
     WorldSize,
@@ -141,6 +145,14 @@ enum class SetupItem : std::uint8_t {
 [[nodiscard]] constexpr bool victory_item(SetupItem item) noexcept {
     return item >= SetupItem::WinInhabitants && item <= SetupItem::WinComputers;
 }
+/// Whether an item is on the page of the disasters.
+[[nodiscard]] constexpr bool disaster_item(SetupItem item) noexcept {
+    return item >= SetupItem::Droughts && item <= SetupItem::EventSpeed;
+}
+/// The rules of the page of the disasters as in the original, the others as in `rules`.
+[[nodiscard]] sim::Rules original_disasters(sim::Rules rules) noexcept;
+/// The page of the disasters in a few words: as in the original, or how many differ.
+[[nodiscard]] std::string disasters_summary(const sim::Rules& rules);
 /// Whether an item is on the page of the islands.
 [[nodiscard]] constexpr bool island_item(SetupItem item) noexcept {
     return item >= SetupItem::IslandPreset && item <= SetupItem::OreMountains;

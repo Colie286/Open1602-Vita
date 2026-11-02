@@ -53,6 +53,11 @@ struct ScoreUpdate {
 
 using Notice = std::variant<Announcement, DirectVideo, ScoreUpdate>;
 
+/// Whether a message that asks for normal speed (MessageTable, kMessageNormalSpeed) sets the game
+/// back to it under the game's setting: disasters (plague, fire, drought, eruption) only with
+/// EventSpeed::Normal, every other message (attacks) unless EventSpeed::Keep.
+[[nodiscard]] bool slows_down(sim::EventSpeed setting, MessageId message) noexcept;
+
 /// The help bar of the original over grass and trees of an explored island: the
 /// three crops of the climate (north sugar cane, grapes, tobacco; south spices, cotton, cocoa)
 /// with their fertility in percent.
