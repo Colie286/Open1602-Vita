@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "app_settings.hpp"
+#include "autosave.hpp"
 #include "build_tool.hpp"
 #include "catchment_view.hpp"
 #include "command_sink.hpp"
@@ -166,6 +167,9 @@ private:
     /// Saves the game into a slot of the savegame list and names it there (slots.cfg, the panel,
     /// the menu).
     core::Status save_slot(std::size_t slot, std::string name);
+    /// Keeps the game as lastgame when DisplaySettings::autosave_minutes of game time have passed
+    /// (only while a game is played, not in the menus or while a multiplayer game stands).
+    void autosave_if_due();
     /// The settings and savegame names of the user's data folder into the panel (at the start).
     void load_options();
     /// Chooses the language of Open1602's own texts: --language, else settings.cfg, else the
@@ -494,6 +498,7 @@ private:
     double m_tick_fraction = 1.0;                   ///< share of the next tick that has passed
     std::uint64_t m_title_real_ms = 0;              ///< real and game time of the last title (the speed reached)
     std::uint64_t m_title_game_ms = 0;
+    AutosaveTimer m_autosave;
     bool m_debug_title = core::environment_variable("O1602_DEBUG_TITLE").has_value();
     ViewerOptions m_options;
     std::unique_ptr<GameState> m_state;  ///< the running game (after m_buildings, m_figures, m_options)

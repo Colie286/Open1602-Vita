@@ -28,7 +28,7 @@ constexpr std::int32_t kValueW = 232;
 constexpr std::array<std::string_view, DisplayMenu::kItems> kLabels = {
     "display.mode",       "display.size",         "display.ui_scale",   "display.zoom",       "display.zoom_drawing",
     "display.vsync",      "display.edge_scroll",  "display.edge_speed", "display.grab_mouse", "display.goods_trend",
-    "display.rival_wars", "display.plant_fields", "display.graphics"};
+    "display.rival_wars", "display.plant_fields", "display.graphics",   "display.autosave"};
 
 std::string on_off(bool on) {
     return ui::tr(on ? "display.on" : "display.off");
@@ -72,6 +72,11 @@ std::string DisplayMenu::value_text(const DisplayModel& model, Item item) {
             return on_off(s.plant_fields);
         case Item::Graphics:
             return ui::tr(s.classic_graphics ? "display.graphics_classic" : "display.graphics_modern");
+        case Item::Autosave:
+            if (s.autosave_minutes <= 0) {
+                return on_off(false);
+            }
+            return ui::tr("display.minutes", {std::to_string(s.autosave_minutes)});
     }
     return {};
 }
@@ -136,6 +141,12 @@ bool DisplayMenu::choose(DisplayModel& model, Item item, bool forward) {
         case Item::Graphics:
             s.classic_graphics = !s.classic_graphics;
             return true;
+        case Item::Autosave: {
+            const std::int32_t next = next_autosave(s.autosave_minutes, forward);
+            const bool changed = next != s.autosave_minutes;
+            s.autosave_minutes = next;
+            return changed;
+        }
     }
     return false;
 }
@@ -163,6 +174,12 @@ DisplayMenu::Result DisplayMenu::mouse(std::int32_t x, std::int32_t y, bool down
         model.settings.edge_speed = speed;
         return changed ? Result::Changed : Result::None;
     }
+    if (*id == kItem + static_cast<Id>(Item::Autosave)) {
+        const std::int32_t minutes = autosave_at(m_form.slid_to());
+        const bool changed = minutes != model.settings.autosave_minutes;
+        model.settings.autosave_minutes = minutes;
+        return changed ? Result::Changed : Result::None;
+    }
     if (*id >= kItem && *id < kItem + static_cast<Id>(kItems)) {
         const bool forward = m_form.clicked_with() == ui::MouseButton::Left;
         return choose(model, static_cast<Item>(*id - kItem), forward) ? Result::Changed : Result::None;
@@ -184,14 +201,20 @@ void DisplayMenu::layout(const DisplayModel& model) {
         f.label(Rect{24, y, kLabelW, kRowH - 4}, ui::tr(kLabels[i]), Align::Left, used ? Tone::Normal : Tone::Dim);
         const Id id = kItem + static_cast<Id>(i);
         const Rect value{kWidth - 24 - kValueW, y, kValueW, kRowH - 6};
-        if (item == Item::EdgeSpeed) {
+        if (item == Item::EdgeSpeed || item == Item::Autosave) {
             // A slider, with its value beside it; while it is dragged the value it would take.
+            const bool edge = item == Item::EdgeSpeed;
             DisplayModel shown = model;
             if (const auto at = f.sliding(id)) {
-                shown.settings.edge_speed = edge_speed_at(*at);
+                if (edge) {
+                    shown.settings.edge_speed = edge_speed_at(*at);
+                } else {
+                    shown.settings.autosave_minutes = autosave_at(*at);
+                }
             }
-            f.slider(id, Rect{value.x, value.y, value.w - kPercentW, value.h},
-                     edge_speed_position(model.settings.edge_speed), used);
+            const double position = edge ? edge_speed_position(model.settings.edge_speed)
+                                         : autosave_position(model.settings.autosave_minutes);
+            f.slider(id, Rect{value.x, value.y, value.w - kPercentW, value.h}, position, used);
             f.label(Rect{value.x + value.w - kPercentW, value.y, kPercentW, value.h}, value_text(shown, item),
                     Align::Right, used ? Tone::Normal : Tone::Dim);
             continue;

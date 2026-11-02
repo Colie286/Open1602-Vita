@@ -1440,3 +1440,46 @@ TEST_CASE("world generator: large islands of their own size get veins by their s
     }
     CHECK(sim::validate(*world).ok());
 }
+
+TEST_CASE("world generator: a native village on an island larger than the original's, within its first 255 tiles") {
+    const auto& fake = full_game();
+    const auto templates = sim::island_templates(fake.game, buildings());
+    sim::WorldSettings settings;
+    settings.seed = 5;
+    settings.shapes = sim::WorldSettings::Shapes::Own;
+    settings.natives = sim::WorldSettings::Amount::Many;
+    settings.landscape.min_side = 260;
+    settings.landscape.max_side = 300;
+    settings.landscape.land = 30;
+    std::vector<std::string> warnings;
+    auto plan = sim::plan_world(sim::fit_landscape(settings), templates, &warnings);
+    REQUIRE(plan.ok());
+    sim::WorldStart start;
+    start.seed = 5;
+    // The scenario of the world's size, as a new game makes it.
+    auto own = sim::own_world_scenario(scenario(standard_plan()), *plan, settings.players);
+    REQUIRE(own.ok());
+    auto w = sim::generate_islands(*own, *plan, fake.game, buildings(), start, &warnings);
+    REQUIRE(w.ok());
+    auto world = sim::load_world(w->file, buildings(), fake.game, &warnings, start);
+    REQUIRE(world.ok());
+    std::size_t villages = 0;
+    for (const sim::WorldIsland& island : world->islands()) {
+        if (island.map.width() <= 255 && island.map.height() <= 255) {
+            continue;
+        }
+        for (std::uint32_t y = 0; y < island.map.height(); ++y) {
+            for (std::uint32_t x = 0; x < island.map.width(); ++x) {
+                const assets::BuildingType* b = buildings().by_sprite(island.map.top(x, y).sprite);
+                if (b != nullptr && b->id == 20533) {
+                    CHECK(x < 255);
+                    CHECK(y < 255);
+                    ++villages;
+                }
+            }
+        }
+    }
+    CHECK(villages >= 30);  // one village of 6 x 5 tiles at least
+    CHECK(std::none_of(warnings.begin(), warnings.end(),
+                       [](const std::string& text) { return text.find("no room for a native village") != text.npos; }));
+}

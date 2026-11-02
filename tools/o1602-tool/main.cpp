@@ -10,7 +10,7 @@
 //                                                        interpret a .cod script and print its records
 //   o1602-tool bsh-info   <file.bsh|.zei>                list sprites
 //   o1602-tool bsh-export <file.bsh|.zei> <outdir> [--palette FILE] [--sheet] [--first N] [--count N]
-//   o1602-tool islands    <file.scp|.szs|.szm|.gam>      list islands and tile statistics
+//   o1602-tool islands    <file.scp|.szs|.szm|.gam|.o1602> list islands and tile statistics
 //   o1602-tool savegames                                 list savegames (names from Game.dat)
 //   o1602-tool render-island <file.scp|.szs|.gam> <out.png> [--island N] [--zoom 0|1|2]
 //                            [--rotation 0-3] [--anim N] [--no-template] [--base FILE.scp]
@@ -48,7 +48,7 @@ int usage() {
         "  o1602-tool cod-dump   <file.cod> [--predefined haeuser|figuren|none] [--type NAME]\n"
         "  o1602-tool bsh-info   <file.bsh|.zei>\n"
         "  o1602-tool bsh-export <file.bsh|.zei> <outdir> [--palette FILE] [--sheet] [--first N] [--count N]\n"
-        "  o1602-tool islands    <file.scp|.szs|.szm|.gam>\n"
+        "  o1602-tool islands    <file.scp|.szs|.szm|.gam|.o1602>  (.o1602 needs ANNO1602_DIR)\n"
         "  o1602-tool template-stats [--count N]           (the island templates' tiles, rivers and rocks;\n"
         "                                                   N maps of templates with rivers, needs ANNO1602_DIR)\n"
         "  o1602-tool savegames                               (names from Game.dat, needs ANNO1602_DIR)\n"
@@ -76,7 +76,7 @@ int usage() {
         "  o1602-tool bk2        <file.bk2> [--png DIR] [--every N] [--wav TRACK OUT.wav]\n"
         "                        (Bink 2 video: header, decode all frames and their time; frames as PNG, a\n"
         "                         track as WAVE)\n"
-        "  o1602-tool state      <file.gam|.szs> [--wares] [--production]\n"
+        "  o1602-tool state      <file.gam|.szs|.o1602> [--wares] [--production]  (.o1602 needs ANNO1602_DIR)\n"
         "                        (players, cities, warehouses, production, ships, deer)\n"
         "  o1602-tool render-island <file.scp|.szs|.gam> <out.png> [--island N] [--zoom 0|1|2] [--rotation 0-3]\n"
         "                           [--anim N] [--no-template] [--base FILE.scp]\n"

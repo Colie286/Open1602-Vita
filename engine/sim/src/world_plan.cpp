@@ -161,10 +161,10 @@ std::uint32_t village_count(const WorldSettings& s, std::uint32_t islands) {
 /// The shortest side of an island of its own shape with a volcano: the mountain, its ring of slopes
 /// and a tile of room around it, a beach and the surf on both sides.
 constexpr std::int32_t kVolcanoSide = 24;
-/// The sides of an island of its own shape with a native village: room for the villages of the
-/// templates (up to 30 tiles across in the south) inland, and no more than the original's 255.
+/// The shorter side of an island of its own shape with a native village: room for the villages of
+/// the templates (up to 30 tiles across in the south) inland. On an island larger than the
+/// original's 255 tiles the generator puts the village within its first 255.
 constexpr std::int32_t kVillageSide = 40;
-constexpr std::int32_t kVillageMaxSide = 255;
 
 /// Islands with a volcano at most: one per player (none/few/many: 0, half, double), at most 10
 /// (20 craters in a world).
@@ -680,13 +680,12 @@ void Planner::place_land(bool warn_full) {
 void Planner::choose_villages() {
     // Native villages on islands of their own shape, as many as the original's four per 18
     // islands: not on a home, with room for a village of the templates (the generator moves the
-    // village part of a native template onto the island), within the original's 255 tiles.
+    // village part of a native template onto the island).
     const std::uint32_t villages = village_count(m_s, static_cast<std::uint32_t>(m_islands.size()));
     std::vector<std::size_t> candidates;
     for (std::size_t i = 0; i < m_islands.size(); ++i) {
         const Planned& p = m_islands[i];
-        if (p.own && !p.home && std::min(p.rect.w, p.rect.h) >= kVillageSide &&
-            std::max(p.rect.w, p.rect.h) <= kVillageMaxSide) {
+        if (p.own && !p.home && std::min(p.rect.w, p.rect.h) >= kVillageSide) {
             candidates.push_back(i);
         }
     }

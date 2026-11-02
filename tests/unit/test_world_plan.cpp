@@ -509,6 +509,14 @@ TEST_CASE("world plan: the map grows for islands far larger than the original's"
         CHECK(std::max(own.width, own.height) <= 400);
     }
     CHECK(largest > 255);
+
+    // Native villages on such islands too (the generator puts them within the first 255 tiles).
+    s.landscape.min_side = 260;
+    s.natives = sim::WorldSettings::Amount::Many;
+    auto giants = sim::plan_world(sim::fit_landscape(s), templates());
+    REQUIRE(giants.ok());
+    CHECK(std::any_of(giants->own_islands.begin(), giants->own_islands.end(),
+                      [](const auto& own) { return own.village && std::min(own.width, own.height) > 255; }));
 }
 
 TEST_CASE("world plan: the landscape's settings by name, as setup files and the command line give them") {

@@ -1198,6 +1198,27 @@ void MapViewer::update(std::uint32_t delta_ms) {
                          m_state->world.time_ms(), m_state->simulation.speed(), m_drawn_tiles);
     }
     apply_construction();
+    autosave_if_due();
+}
+
+void MapViewer::autosave_if_due() {
+    // Not the world behind the menus, nor a multiplayer game that stands. Every computer of a
+    // multiplayer game keeps its own copy (the same game, as on "Ende"): whoever hosts the next
+    // one can go on from it.
+    const bool playing = m_hud && !m_hud->menu_active() && !m_pending_load &&
+                         !(m_session && (m_session->ended() || m_session->waiting()));
+    if (!playing || !m_autosave.due(m_state->simulation.game_time_ms(), m_app_settings.display.autosave_minutes)) {
+        return;
+    }
+    const auto started = std::chrono::steady_clock::now();
+    if (const auto status = save_slot(kLastGameSlot, std::string(kLastGameName)); !status) {
+        std::fprintf(stderr, "autosave: %s\n", status.error().message.c_str());
+        return;
+    }
+    const auto took =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
+    std::fprintf(stderr, "autosave: kept as %s after %d minutes of game time (%lld ms)\n", kLastGameName.data(),
+                 m_app_settings.display.autosave_minutes, static_cast<long long>(took));
 }
 
 std::string MapViewer::tile_status() const {
@@ -3642,6 +3663,7 @@ core::Status MapViewer::replace_world(sim::World world, const std::filesystem::p
     m_command_sink.set_simulation(&m_state->simulation);
     m_options.scenario = source;
     m_title_real_ms = 0;  // loading took real time the game did not run: no "too slow" for it
+    m_autosave.restart(m_state->simulation.game_time_ms());
     warn_if_state_damaged();
     m_state->simulation.offer_names(m_city_names, m_ship_names);  // a saved game keeps its own
     m_state->simulation.set_tick_observer(
