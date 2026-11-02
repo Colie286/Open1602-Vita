@@ -9,7 +9,7 @@ the guide of each file. What a package can do and what is still to come is in
 
 The repository has a package that uses every file once: [`data/mods/example`](../../data/mods/example).
 It adds pepper, a farm that grows it and a lighthouse drawn with images of its own, sounds and
-music, a script, a scenario with a campaign and a kind of island world, and changes a few values
+music, a script, a scenario with a campaign, a kind of island world and an island template, and changes a few values
 of the original. Copy it, rename the folder and change it, or read it next to the guides below.
 The tests load it with and without the original's data and expect no warning, so it always works
 with the version of Open1602 it comes with.
@@ -64,6 +64,7 @@ Each file does one thing; a package has only the files it needs.
 | what the computer players build | `computers.toml` | [computer-players.md](computer-players.md) |
 | the neutral factions: pirates, trader, natives | `factions.toml` | [factions.md](factions.md) |
 | kinds of island world for new games | `landscapes.toml` | [landscapes.md](landscapes.md) |
+| island templates of the package's own | `islands.toml` | [islands.md](islands.md) |
 | a script that hears and changes the game | `script.lua` | [scripts.md](scripts.md) |
 | scenarios and campaigns | `scenarios.toml`, `campaigns.toml` | [scenarios.md](scenarios.md) |
 

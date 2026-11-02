@@ -7,6 +7,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -191,6 +192,7 @@ struct Slot {
     bool treasure = false;
     std::array<std::uint32_t, 2> mountains{};  ///< big (Erzbergnr 0) and small ones among the first 40
     bool own_shape = false;                    ///< `base` is an island of its own shape, no template
+    bool package = false;                      ///< `base` is an island of a package (package_islands.hpp)
     /// An island of its own shape with a village: how far its native template's tiles and
     /// records were moved onto it.
     std::int32_t village_dx = 0;
@@ -278,6 +280,8 @@ public:
           m_landscape(landscape) {}
 
     core::Result<GeneratedWorld> run(const assets::ChunkFile& scenario, bool guarantee);
+    /// The packages' island templates, which the plan may name after the original's.
+    void use_package_islands(std::span<const PackageIsland> islands) { m_package_islands = islands; }
 
 private:
     void warn(std::string text) {
@@ -289,6 +293,8 @@ private:
     void choose_natives();
     [[nodiscard]] bool wants_own_shape(const ScenarioPlan::Island& e);
     bool load(Slot& slot);
+    /// An island of a package as the template: no village, its tiles kept in the world.
+    bool load_package_island(Slot& slot, const PackageIsland& island);
     void count_mountains(Slot& slot) const;
     void give_own_shape(Slot& slot);
     void place_village(Slot& slot);
@@ -349,6 +355,7 @@ private:
     Random m_shape_random;
     std::vector<WorldPlan::OwnIsland> m_own_islands;  ///< Shapes::Own: sides of the islands of their own shape
     WorldSettings::Landscape m_landscape;
+    std::span<const PackageIsland> m_package_islands;
     std::vector<Slot> m_slots;       ///< in the order of the plan
     std::vector<Slot*> m_by_number;  ///< in the order of the island table (island number)
     std::uint32_t m_max_crops = 2;
@@ -443,6 +450,9 @@ bool Generator::load(Slot& slot) {
         give_own_shape(slot);
         return true;
     }
+    if (const PackageIsland* p = package_template(m_package_islands, e.climate, e.size, e.template_number)) {
+        return load_package_island(slot, *p);
+    }
     const std::string base_path = template_path(e.climate, e.size, e.template_number, false);
     const auto base_file = open(m_game, base_path);
     if (!base_file) {
@@ -493,6 +503,32 @@ bool Generator::load(Slot& slot) {
         } else {
             slot.own_shape = false;
         }
+    }
+    return true;
+}
+
+bool Generator::load_package_island(Slot& slot, const PackageIsland& island) {
+    const auto file = assets::ChunkFile::load(island.file);
+    auto islands = file ? assets::load_islands(*file) : core::Result<std::vector<assets::Island>>(file.error());
+    if (!islands || islands->empty() || islands->front().layers.empty()) {
+        warn("island of a package not found or invalid: " + island.id);
+        return false;
+    }
+    slot.base = std::move(islands->front());
+    slot.base.layers.resize(1);  // the ground; what lies on it in other layers stays out
+    slot.package = true;
+    slot.plan.flags = static_cast<std::uint8_t>(
+        slot.plan.flags & ~1U);  // no native village: a package has no native version of its island
+    slot.map = IslandMap::from_island(slot.base, m_buildings, m_warnings, nullptr);
+    slot.loaded_header = slot.base.header.raw;
+    if (slot.loaded_header.size() == kHeaderSize) {
+        std::copy_n(slot.loaded_header.begin() + 0x1C, 16, slot.deposits.bytes.begin());
+        slot.treasure = slot.loaded_header[0x18] != 0;
+    }
+    count_mountains(slot);
+    if (slot.own_shape) {
+        give_own_shape(slot);  // a mixed world's island of its own shape in this one's place
+        slot.package = false;
     }
     return true;
 }
@@ -1455,10 +1491,11 @@ std::vector<std::uint8_t> Generator::header(const Slot& slot, const std::vector<
     h[0x5D] = static_cast<std::uint8_t>(slot.fertility >> 8);
     h[0x5E] = static_cast<std::uint8_t>(slot.fertility >> 16);
     h[0x5F] = static_cast<std::uint8_t>(slot.fertility >> 24);
-    u16(0x60, slot.own_shape ? assets::IslandHeader::kNoTemplate : slot.plan.template_number);
+    const bool stored = slot.own_shape || slot.package;  // all tiles in the world, no template file
+    u16(0x60, stored ? assets::IslandHeader::kNoTemplate : slot.plan.template_number);
     u16(0x62, slot.plan.size);
     h[0x64] = slot.plan.climate;
-    h[0x65] = slot.own_shape ? 1 : 0;  // all tiles stored
+    h[0x65] = stored ? 1 : 0;  // all tiles stored
     return h;
 }
 
@@ -1758,7 +1795,7 @@ core::Result<GeneratedWorld> Generator::run(const assets::ChunkFile& scenario, b
             add(std::string(assets::kLargeTilesChunk), assets::large_tile_bytes(tiles));
         } else {
             std::vector<std::uint8_t> tiles =
-                s->own_shape ? tile_bytes(s->base.layers.front()) : std::vector<std::uint8_t>{};
+                s->own_shape || s->package ? tile_bytes(s->base.layers.front()) : std::vector<std::uint8_t>{};
             const std::vector<std::uint8_t> village = village_tiles(*s, natives);
             tiles.insert(tiles.end(), village.begin(), village.end());
             add("INSELHAUS", tiles);
@@ -1773,7 +1810,7 @@ core::Result<GeneratedWorld> Generator::run(const assets::ChunkFile& scenario, b
         info.number = s->plan.number;
         info.climate = s->plan.climate;
         info.size = s->plan.size;
-        info.template_number = s->own_shape ? assets::IslandHeader::kNoTemplate : s->plan.template_number;
+        info.template_number = s->own_shape || s->package ? assets::IslandHeader::kNoTemplate : s->plan.template_number;
         info.width = s->base.header.width;
         info.height = s->base.header.height;
         info.natives = s->village.has_value();
@@ -1887,6 +1924,7 @@ core::Result<GeneratedWorld> generate_islands(const assets::ChunkFile& scenario,
     Generator generator(plan.plan, game, buildings, random, warnings,
                         plan.shared_start ? std::vector<StartArea>{} : plan.starts, plan.gold_islands, plan.shapes,
                         plan.seed, plan.own_islands, plan.landscape);
+    generator.use_package_islands(start.package_islands);
     return generator.run(scenario, start.guarantee_resources);
 }
 
@@ -1909,6 +1947,7 @@ core::Result<GeneratedWorld> generate_islands(const assets::ChunkFile& scenario,
         random.emplace(start.seed);  // no table: Open1602's generator
     }
     Generator generator(std::move(**plan), game, buildings, *random, warnings);
+    generator.use_package_islands(start.package_islands);
     return generator.run(scenario, start.guarantee_resources);
 }
 

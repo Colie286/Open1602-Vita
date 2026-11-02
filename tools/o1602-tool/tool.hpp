@@ -148,5 +148,6 @@ int cmd_bk2(const Args& args);
 
 // mods.cpp
 int cmd_check_mod(const Args& args);
+int cmd_export_island(const Args& args);
 
 }  // namespace o1602::tool

@@ -21,7 +21,7 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 | 6. Lua scripts | a sandboxed Lua 5.4 script per package that hears what happens and reads and changes the game (money, goods, missions, buildings, ships, land units, diplomacy, who wins) |
 | 7. Scenarios and campaigns | scenarios with maps, briefings, goals and scripts; campaigns of up to five parts that carry money and a script table on |
 | 8. Factions | factions of a package's own that take the base game's slots, and settlers or pirates left wholly to a script |
-| 9. Island generator | islands of their own shape and size with slopes, rivers with bends, volcanoes and native villages; kinds of island world as data (`landscapes.toml`) |
+| 9. Island generator | islands of their own shape and size with slopes, rivers with bends, volcanoes and native villages; kinds of island world as data (`landscapes.toml`); island templates of a package's own, which new own worlds draw with the original's (`islands.toml`, [islands.md](islands.md)) |
 
 ### Still open
 
@@ -86,6 +86,7 @@ the game besides (sections `FACT` and `BALA`), so every computer plays the host'
 | `music.toml` | music tracks of the package's own (WAV, Ogg Vorbis, FLAC), normal or battle music | [sounds.md](sounds.md) |
 | `sounds.toml` | sounds of the package's own (WAV, Ogg Vorbis, FLAC) for its buildings and figures | [sounds.md](sounds.md#sounds-of-buildings-and-figures) |
 | `landscapes.toml` | kinds of island world the start dialog offers for new games | [landscapes.md](landscapes.md) |
+| `islands.toml` | island templates that new own worlds draw with the original's | [islands.md](islands.md) |
 | `graphics.toml` | PNG images of the package's own, drawn by its buildings at all three zoom levels | [graphics.md](graphics.md) |
 | `icons.toml` | PNG icons of the package's own for the build menu, goods and messages | [graphics.md](graphics.md#icons) |
 | `figure_images.toml` | the original's figures and ships drawn with a package's images | [graphics.md](graphics.md#figures-and-ships) |

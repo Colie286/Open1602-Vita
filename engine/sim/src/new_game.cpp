@@ -289,7 +289,7 @@ core::Result<World> start_new_game(const assets::GameDirectory& game, const asse
     WorldSettings settings = *options.custom;
     settings.difficulty = options.difficulty;
     settings.seed = options.world.seed;
-    const std::vector<TemplateInfo> templates = island_templates(game, buildings);
+    const std::vector<TemplateInfo> templates = island_templates(game, buildings, options.world.package_islands);
     auto plan = plan_world(settings, templates, warnings);
     if (!plan) {
         return plan.error();

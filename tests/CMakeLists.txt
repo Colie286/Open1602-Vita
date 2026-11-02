@@ -248,6 +248,12 @@ if(TARGET o1602-tool)
     o1602_tool_test(check-mod-no-folder 1
         STDERR "^error: [^\\n]*: no folder of packages\\n$"
         ARGS check-mod "${_files}/missing")
+    o1602_tool_test(export-island-template 1
+        STDERR "^error: island 3 keeps only its changes to a template of the original; [^\\n]*\\n$"
+        ARGS export-island "${_files}/world.gam" 3 "${_files}/island.scp")
+    o1602_tool_test(export-island-missing 1
+        STDERR "^error: no island 9 in the file\\n$"
+        ARGS export-island "${_files}/world.gam" 9 "${_files}/island.scp")
     o1602_tool_test(bench-without-data 1
         STDERR "^error: [^\\n]*does not look like an Anno 1602 installation \\(missing haeuser.cod\\)\\n$"
         ARGS bench --minutes 1)

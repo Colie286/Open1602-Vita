@@ -48,6 +48,7 @@
 #include "o1602/sim/game_data.hpp"
 #include "o1602/sim/growth.hpp"
 #include "o1602/sim/new_game.hpp"
+#include "o1602/sim/package_islands.hpp"
 #include "o1602/sim/package_landscapes.hpp"
 #include "o1602/ui/build_menu.hpp"
 #include "o1602/ui/localization.hpp"
@@ -212,6 +213,14 @@ std::vector<sim::PackageLandscape> logged_landscapes(std::span<const assets::Mod
     return presets;
 }
 
+/// The packages' island templates, which new own worlds draw from (package_islands.hpp).
+std::vector<sim::PackageIsland> logged_islands(std::span<const assets::ModPackage> packages) {
+    std::vector<std::string> problems;
+    std::vector<sim::PackageIsland> islands = sim::load_package_islands(packages, problems);
+    log_mod_problems(problems);
+    return islands;
+}
+
 }  // namespace
 
 core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDirectory& game,
@@ -360,6 +369,7 @@ core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDir
     viewer->m_packages = std::move(packages);
     viewer->load_package_scenarios();
     set_package_island_presets(logged_landscapes(viewer->m_packages));
+    viewer->m_options.world.package_islands = logged_islands(viewer->m_packages);
     {
         std::vector<std::string> problems;
         viewer->m_cached_packages = assets::cached_packages(data_folder() / "mods-cache", problems);
@@ -3401,6 +3411,7 @@ void MapViewer::reload_mods() {
     }
     load_package_scenarios();
     set_package_island_presets(logged_landscapes(m_packages));
+    m_options.world.package_islands = logged_islands(m_packages);
     if (m_hud) {
         if (MainMenu* menu = m_hud->menu()) {
             menu->set_package_scenarios(m_package_scenarios, m_package_campaigns);

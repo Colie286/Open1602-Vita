@@ -1,0 +1,8 @@
+# Island templates of this package (islands.md): new own worlds draw them with the original's of
+# their climate and size class. lagoon.island is an island of its own shape, written by
+# `o1602-tool export-island` from a world of `o1602-tool new-world --island-shapes own`.
+[lagoon]
+file = "islands/lagoon.island"
+climate = "north"
+name.en = "Lagoon"
+name.de = "Lagune"

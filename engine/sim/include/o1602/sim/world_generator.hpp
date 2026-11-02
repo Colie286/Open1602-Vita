@@ -26,6 +26,7 @@
 #include "o1602/assets/island.hpp"
 #include "o1602/assets/scenario.hpp"
 #include "o1602/core/result.hpp"
+#include "o1602/sim/package_islands.hpp"
 #include "o1602/sim/random.hpp"
 #include "o1602/sim/world_plan.hpp"
 
@@ -39,6 +40,9 @@ struct WorldStart {
     };
     Draws draws = Draws::Table;
     std::uint64_t seed = 0;
+    /// Island templates of the game's packages (package_islands.hpp). An own world draws them
+    /// with the original's (island_templates), and the generator keeps their tiles in the world.
+    std::vector<PackageIsland> package_islands;
     /// Rules::guarantee_resources (S-019): after the original's passes, every crop of a climate,
     /// iron and gold that the plan asks for but did not get is placed on an island that can
     /// take it. Off: the world as the original makes it.

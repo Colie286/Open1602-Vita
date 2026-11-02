@@ -17,6 +17,7 @@
 
 #include "o1602/assets/building_table.hpp"
 #include "o1602/assets/chunk_file.hpp"
+#include "o1602/assets/game_content.hpp"
 #include "o1602/assets/game_directory.hpp"
 #include "o1602/assets/island.hpp"
 #include "o1602/assets/savegame.hpp"
@@ -25,6 +26,7 @@
 #include "o1602/core/file.hpp"
 #include "o1602/core/text.hpp"
 #include "o1602/sim/new_game.hpp"
+#include "o1602/sim/package_islands.hpp"
 #include "o1602/sim/save_game.hpp"
 #include "o1602/sim/savegame_writer.hpp"
 #include "o1602/sim/world.hpp"
@@ -315,6 +317,15 @@ int cmd_new_world(const Args& args) {
     options.difficulty = static_cast<std::uint8_t>(std::min<std::size_t>(args.number("--level").value_or(0), 3));
     options.world.seed = args.number("--seed").value_or(1);
     options.world.guarantee_resources = true;
+    if (const auto it = args.options.find("--mods"); it != args.options.end()) {
+        // The island templates of the packages of a mods folder, drawn with the original's.
+        std::vector<std::string> problems;
+        const auto packages = assets::load_mod_packages(fs::path(it->second), problems);
+        options.world.package_islands = sim::load_package_islands(packages, problems);
+        for (const std::string& p : problems) {
+            std::fprintf(stderr, "warning: %s\n", p.c_str());
+        }
+    }
     // A world for more than the original's players grows with them, as in the game's start dialog.
     sim::WorldSettings w = sim::settings_for_players(
         static_cast<std::uint8_t>(std::clamp<std::size_t>(args.number("--players").value_or(4), 1, sim::kMaxPlayers)));

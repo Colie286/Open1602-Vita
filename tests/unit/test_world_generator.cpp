@@ -23,6 +23,7 @@
 #include "o1602/assets/scenario.hpp"
 #include "o1602/sim/island_shapes.hpp"
 #include "o1602/sim/new_game.hpp"
+#include "o1602/sim/package_islands.hpp"
 #include "o1602/sim/save_game.hpp"
 #include "o1602/sim/validate.hpp"
 #include "o1602/sim/world.hpp"
@@ -1482,4 +1483,123 @@ TEST_CASE("world generator: a native village on an island larger than the origin
     CHECK(villages >= 30);  // one village of 6 x 5 tiles at least
     CHECK(std::none_of(warnings.begin(), warnings.end(),
                        [](const std::string& text) { return text.find("no room for a native village") != text.npos; }));
+}
+
+namespace {
+
+/// An island file of a package: `width` x `height` of ground, with an ore mountain.
+std::vector<std::uint8_t> package_island_file(std::uint8_t climate, std::uint32_t width, std::uint32_t height) {
+    std::vector<std::uint8_t> header(116, 0);
+    header[1] = static_cast<std::uint8_t>(width);
+    header[2] = static_cast<std::uint8_t>(height);
+    put_u16(header, 0x60, assets::IslandHeader::kNoTemplate);
+    header[0x64] = climate;
+    header[0x65] = 1;
+    std::vector<std::uint8_t> tiles;
+    for (std::uint32_t y = 0; y < height; ++y) {
+        for (std::uint32_t x = 0; x < width; ++x) {
+            add_tile(tiles, kGroundTile, x, y);
+        }
+    }
+    add_tile(tiles, kBigMountainTile, 4, 4);
+    std::vector<std::uint8_t> file;
+    o1602::test::put_chunk(file, "INSEL5", header);
+    o1602::test::put_chunk(file, "INSELHAUS", tiles);
+    return file;
+}
+
+}  // namespace
+
+TEST_CASE("package islands: islands.toml names island files, with their climate, class and size") {
+    const std::filesystem::path root = test::temp_path("o1602_package_islands");
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root / "islands");
+    const auto write = [&](const std::string& name, const std::vector<std::uint8_t>& bytes) {
+        std::ofstream out(root / name, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    };
+    write("islands/reef.scp", package_island_file(1, 20, 18));
+    write("islands/huge.scp", package_island_file(0, 120, 40));
+    assets::ModPackage package;
+    package.id = "atoll";
+    package.folder = root;
+    std::vector<sim::PackageIsland> islands;
+    std::vector<std::string> warnings;
+    sim::apply_islands_file(islands, package,
+                            "[reef]\nfile = \"islands/reef.scp\"\nname.en = \"Reef\"\nname.de = \"Riff\"\n"
+                            "[north_reef]\nfile = \"islands/reef.scp\"\nclimate = \"north\"\n"
+                            "[huge]\nfile = \"islands/huge.scp\"\n"
+                            "[missing]\nfile = \"islands/none.scp\"\n"
+                            "[outside]\nfile = \"../reef.scp\"\n"
+                            "[wrong]\nfile = \"islands/reef.scp\"\nclimate = \"east\"\n",
+                            warnings);
+    REQUIRE(islands.size() == 2);
+    CHECK(islands[0].id == "atoll:reef");
+    CHECK(islands[0].climate == 1);  // the file's
+    CHECK(islands[0].size == 0);     // lit: 30 x 30 at most
+    CHECK(islands[0].width == 20);
+    CHECK(islands[0].height == 18);
+    CHECK(islands[0].name("de") == "Riff");
+    CHECK(islands[0].name("fr") == "Reef");
+    CHECK(islands[1].climate == 0);
+    // huge (wider than any class), missing, outside, wrong: each with a warning that says why.
+    CHECK(warnings.size() >= 4);
+    CHECK(std::any_of(warnings.begin(), warnings.end(),
+                      [](const std::string& w) { return w.find("larger than the largest templates") != w.npos; }));
+
+    // Numbered after the original's templates of their climate and class.
+    CHECK(sim::package_template_number(islands, 0) == kTemplateCount[1][0]);
+    CHECK(sim::package_template(islands, 1, 0, kTemplateCount[1][0]) == &islands[0]);
+    CHECK(sim::package_template(islands, 0, 0, kTemplateCount[0][0]) == &islands[1]);
+    CHECK(sim::package_template(islands, 0, 0, 0) == nullptr);
+    std::filesystem::remove_all(root);
+}
+
+TEST_CASE("package islands: an own world draws them with the templates and keeps their tiles") {
+    const auto& fake = full_game();
+    fake.write("pkg_reef.scp", package_island_file(0, 20, 20));
+    sim::PackageIsland reef;
+    reef.id = "atoll:reef";
+    reef.package = "atoll";
+    reef.file = fake.root / "pkg_reef.scp";
+    reef.climate = 0;
+    reef.size = 0;
+    reef.width = 20;
+    reef.height = 20;
+    std::vector<sim::PackageIsland> package_islands{reef, reef};
+    package_islands[1].climate = 1;
+    const auto templates = sim::island_templates(fake.game, buildings(), package_islands);
+    CHECK(std::count_if(templates.begin(), templates.end(), [](const sim::TemplateInfo& t) { return t.package; }) == 2);
+    bool drawn = false;
+    for (std::uint64_t seed = 1; seed <= 12 && !drawn; ++seed) {
+        sim::WorldSettings settings;
+        settings.seed = seed;
+        settings.sizes = sim::WorldSettings::Sizes::Small;
+        settings.islands = sim::WorldSettings::Amount::Many;
+        std::vector<std::string> warnings;
+        auto plan = sim::plan_world(settings, templates, &warnings);
+        REQUIRE(plan.ok());
+        sim::WorldStart start;
+        start.seed = seed;
+        start.package_islands = package_islands;
+        auto own = sim::own_world_scenario(scenario(standard_plan()), *plan, settings.players);
+        REQUIRE(own.ok());
+        auto w = sim::generate_islands(*own, *plan, fake.game, buildings(), start, &warnings);
+        REQUIRE(w.ok());
+        for (const sim::GeneratedIsland& g : w->islands) {
+            if (g.width == 20 && g.height == 20) {
+                CHECK(g.template_number == assets::IslandHeader::kNoTemplate);  // its tiles are in the world
+                CHECK(!g.natives);
+                drawn = true;
+            }
+        }
+        if (drawn) {
+            // The world loads without the package: the island's tiles are its own.
+            auto world = sim::load_world(w->file, buildings(), fake.game, &warnings, sim::WorldStart{});
+            REQUIRE(world.ok());
+            CHECK(std::any_of(world->islands().begin(), world->islands().end(),
+                              [](const sim::WorldIsland& i) { return i.map.width() == 20 && i.map.height() == 20; }));
+        }
+    }
+    CHECK(drawn);
 }

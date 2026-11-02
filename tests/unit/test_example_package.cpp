@@ -20,6 +20,7 @@
 #include "o1602/assets/game_directory.hpp"
 #include "o1602/assets/package_scenarios.hpp"
 #include "o1602/script/game_scripts.hpp"
+#include "o1602/sim/package_islands.hpp"
 #include "o1602/sim/world.hpp"
 #include "o1602/ui/build_menu.hpp"
 #include "o1602/ui/package_icons.hpp"
@@ -75,6 +76,9 @@ TEST_CASE("the example package loads without a warning, as far as it needs no or
     CHECK(ui::package_icon_sprite("example:pepper").has_value());
     const std::vector<sim::PackageLandscape> landscapes = app::load_package_landscapes(packages, problems);
     CHECK(landscapes.size() == 1);
+    const std::vector<sim::PackageIsland> islands = sim::load_package_islands(packages, problems);
+    REQUIRE(islands.size() == 1);
+    CHECK(islands[0].id == "example:lagoon");
     app::MessageTable messages;
     messages.load_mods(packages, problems);
 

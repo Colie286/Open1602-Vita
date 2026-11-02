@@ -7,8 +7,10 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <limits>
 #include <optional>
+#include <utility>
 
 #include "o1602/assets/chunk_file.hpp"
 #include "o1602/assets/island.hpp"
@@ -867,7 +869,8 @@ void Planner::choose_templates() {
         }
         std::vector<const TemplateInfo*> all;
         for (const TemplateInfo& t : m_templates) {
-            if (t.climate == p.climate && t.size == p.size && t.number < kTemplateCount[t.climate][t.size]) {
+            if (t.climate == p.climate && t.size == p.size &&
+                (t.package || t.number < kTemplateCount[t.climate][t.size])) {
                 all.push_back(&t);
             }
         }
@@ -1162,7 +1165,53 @@ bool set_landscape(WorldSettings::Landscape& landscape, std::string_view key, st
     return true;
 }
 
-std::vector<TemplateInfo> island_templates(const assets::GameDirectory& game, const assets::BuildingTable& buildings) {
+namespace {
+
+/// Its volcano and ore mountains, which the planner's wishes ask for.
+void count_template_features(TemplateInfo& t, const assets::Island& island, const assets::BuildingTable& buildings) {
+    const IslandMap map = IslandMap::from_island(island, buildings, nullptr, nullptr);
+    for (std::uint32_t y = 0; y < map.height(); ++y) {
+        for (std::uint32_t x = 0; x < map.width(); ++x) {
+            const MapCell& cell = map.top(x, y);
+            const assets::BuildingType* b = cell.empty() ? nullptr : buildings.by_sprite(cell.sprite);
+            if (b == nullptr) {
+                continue;
+            }
+            const SubTile sub = map.sub_tile(buildings, x, y);
+            if (sub.origin_x != static_cast<std::int32_t>(x) || sub.origin_y != static_cast<std::int32_t>(y)) {
+                continue;
+            }
+            if (b->id == kVolcanoRecordId) {
+                t.volcano = true;
+            }
+            if (b->prod_kind == prod::kOreMountain && b->ware == ware::kOreMountain) {
+                if (b->ore_mountain == 0) {
+                    ++t.big_mountains;
+                } else if (b->ore_mountain == 1) {
+                    ++t.small_mountains;
+                }
+            }
+        }
+    }
+}
+
+/// The first island of the file at `path`, none if it cannot be read.
+std::optional<assets::Island> first_island(const std::filesystem::path& path) {
+    auto file = assets::ChunkFile::load(path);
+    if (!file) {
+        return std::nullopt;
+    }
+    auto islands = assets::load_islands(*file);
+    if (!islands || islands->empty()) {
+        return std::nullopt;
+    }
+    return std::move(islands->front());
+}
+
+}  // namespace
+
+std::vector<TemplateInfo> island_templates(const assets::GameDirectory& game, const assets::BuildingTable& buildings,
+                                           std::span<const PackageIsland> package_islands) {
     std::vector<TemplateInfo> out;
     for (std::uint8_t climate = 0; climate < climate::kCount; ++climate) {
         for (std::uint8_t size = 0; size < templates::kSizeClasses; ++size) {
@@ -1171,58 +1220,44 @@ std::vector<TemplateInfo> island_templates(const assets::GameDirectory& game, co
                 if (!path) {
                     continue;
                 }
-                auto file = assets::ChunkFile::load(*path);
-                if (!file) {
+                const auto island = first_island(*path);
+                if (!island) {
                     continue;
                 }
-                auto islands = assets::load_islands(*file);
-                if (!islands || islands->empty()) {
-                    continue;
-                }
-                const assets::Island& island = islands->front();
                 TemplateInfo t;
                 t.climate = climate;
                 t.size = size;
                 t.number = number;
-                t.width = island.header.width;
-                t.height = island.header.height;
+                t.width = island->header.width;
+                t.height = island->header.height;
                 // A native version only counts if it is as large (not SuedNat/big15, D-010).
                 if (const auto vpath = game.resolve(template_path(climate, size, number, true))) {
-                    if (auto vfile = assets::ChunkFile::load(*vpath)) {
-                        if (auto v = assets::load_islands(*vfile); v && !v->empty()) {
-                            t.village = v->front().header.width == island.header.width &&
-                                        v->front().header.height == island.header.height;
-                        }
+                    if (const auto v = first_island(*vpath)) {
+                        t.village =
+                            v->header.width == island->header.width && v->header.height == island->header.height;
                     }
                 }
-                const IslandMap map = IslandMap::from_island(island, buildings, nullptr, nullptr);
-                for (std::uint32_t y = 0; y < map.height(); ++y) {
-                    for (std::uint32_t x = 0; x < map.width(); ++x) {
-                        const MapCell& cell = map.top(x, y);
-                        const assets::BuildingType* b = cell.empty() ? nullptr : buildings.by_sprite(cell.sprite);
-                        if (b == nullptr) {
-                            continue;
-                        }
-                        const SubTile sub = map.sub_tile(buildings, x, y);
-                        if (sub.origin_x != static_cast<std::int32_t>(x) ||
-                            sub.origin_y != static_cast<std::int32_t>(y)) {
-                            continue;
-                        }
-                        if (b->id == kVolcanoRecordId) {
-                            t.volcano = true;
-                        }
-                        if (b->prod_kind == prod::kOreMountain && b->ware == ware::kOreMountain) {
-                            if (b->ore_mountain == 0) {
-                                ++t.big_mountains;
-                            } else if (b->ore_mountain == 1) {
-                                ++t.small_mountains;
-                            }
-                        }
-                    }
-                }
+                count_template_features(t, *island, buildings);
                 out.push_back(t);
             }
         }
+    }
+    // The packages' islands, numbered after the original's of their climate and class; no villages.
+    for (std::size_t i = 0; i < package_islands.size(); ++i) {
+        const PackageIsland& p = package_islands[i];
+        const auto island = first_island(p.file);
+        if (!island) {
+            continue;
+        }
+        TemplateInfo t;
+        t.climate = p.climate;
+        t.size = p.size;
+        t.number = package_template_number(package_islands, i);
+        t.width = p.width;
+        t.height = p.height;
+        t.package = true;
+        count_template_features(t, *island, buildings);
+        out.push_back(t);
     }
     return out;
 }

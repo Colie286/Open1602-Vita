@@ -12,6 +12,7 @@
 
 #include <array>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -22,6 +23,7 @@
 #include "o1602/core/result.hpp"
 #include "o1602/sim/island_shapes.hpp"
 #include "o1602/sim/limits.hpp"
+#include "o1602/sim/package_islands.hpp"
 
 namespace o1602::sim {
 
@@ -188,11 +190,14 @@ struct TemplateInfo {
     bool volcano = false;
     std::uint8_t big_mountains = 0;  ///< ore mountains for big veins (Erzbergnr 0)
     std::uint8_t small_mountains = 0;
+    bool package = false;  ///< an island of a package (package_islands.hpp), numbered after the original's
 };
 
-/// All island templates of the game directory; files that cannot be read are left out.
+/// All island templates of the game directory, then the islands of `package_islands`; files that
+/// cannot be read are left out.
 [[nodiscard]] std::vector<TemplateInfo> island_templates(const assets::GameDirectory& game,
-                                                         const assets::BuildingTable& buildings);
+                                                         const assets::BuildingTable& buildings,
+                                                         std::span<const PackageIsland> package_islands = {});
 
 struct WorldPlan {
     std::uint32_t width = 0;

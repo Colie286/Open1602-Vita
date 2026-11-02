@@ -18,7 +18,8 @@
 //   o1602-tool render-world <file.szs|.gam> <out.png> [--zoom 0|1|2] [--rotation 0-3] [--time MS]
 //                           [--tile X,Y] [--size WxH] [--owners]
 //                                                        render the world map or a part of it
-//   o1602-tool export, new-world, bench, scenario, smk, bk2, state, check-mod see usage()
+//   o1602-tool export, new-world, bench, scenario, smk, bk2, state, check-mod,
+//   export-island see usage()
 //
 // The palette defaults to $ANNO1602_DIR/TOOLGFX/STADTFLD.COL.
 //
@@ -59,12 +60,14 @@ int usage() {
         "                       [--island-preset P] [--island-land PERCENT] [--island-min N] [--island-max N]\n"
         "                       [--island-spread S] [--island-gap G] [--island-coast C] [--island-outline O]\n"
         "                       [--island-forest F] [--island-mountains M] [--without-original]\n"
+        "                       [--mods FOLDER]\n"
         "                       (an own world as a new game, 1-4 players in a .gam, more in a .o1602; C "
         "none|few|normal|many, S small|mixed|large,\n"
         "                        N islands with gold, default by the level; shapes: the original's templates,\n"
         "                        islands of their own shape or both; the landscape of islands of their own\n"
         "                        shape as in open1602 --help; written as a savegame; --without-original: a .o1602\n"
-        "                        without the original's file it was made from, for a map to pass on)\n"
+        "                        without the original's file it was made from, for a map to pass on; --mods:\n"
+        "                        the island templates of the packages of that folder too)\n"
         "  o1602-tool bench     [<file.gam|.o1602>] [--players N] [--world WxH] [--seed N] [--level 0-3]\n"
         "                       [--minutes M] [--period M] [--repeat N] [--wall] [--out file.o1602]\n"
         "                       (runs a game headless, every player a computer; tick times per period and step,\n"
@@ -92,7 +95,9 @@ int usage() {
         "                          images instead of the tinted generic flag; --original-data: without the\n"
         "                          corrections of the original's data, D-001 ...)\n"
         "  o1602-tool check-mod <mods folder>  (reads its packages as the game does and lists every\n"
-        "                       problem; exit code 1 if there is one; needs ANNO1602_DIR)\n",
+        "                       problem; exit code 1 if there is one; needs ANNO1602_DIR)\n"
+        "  o1602-tool export-island <in.gam|.szs> <island number> <out.scp>  (an island of its own shape\n"
+        "                       with all its tiles as an island file of a package, islands.toml)\n",
         stderr);
     return 2;
 }
@@ -180,6 +185,9 @@ int main(int argc, char** argv) {
     }
     if (command == "check-mod") {
         return cmd_check_mod(args);
+    }
+    if (command == "export-island") {
+        return cmd_export_island(args);
     }
     return usage();
 }
