@@ -12,6 +12,7 @@ Status: accepted · 2026-10-16
    net, render, audio, ui   Lockstep multiplayer, draw lists, sound, interface (each on sim)
               ▲
    video (on audio)         Smacker films
+   editor (on sim, assets)  Scenario documents: editing steps with undo and redo, checks
    menus (on audio, ui,     The game's parts that need no platform: menus, settings files, build
           net, render)      tool, command sink, event presenter, video queue, map gestures
                             (sources in engine/app/src, tested without SDL)

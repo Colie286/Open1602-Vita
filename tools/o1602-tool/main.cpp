@@ -18,11 +18,12 @@
 //   o1602-tool render-world <file.szs|.gam> <out.png> [--zoom 0|1|2] [--rotation 0-3] [--time MS]
 //                           [--tile X,Y] [--size WxH] [--owners]
 //                                                        render the world map or a part of it
-//   o1602-tool export, new-world, bench, smk, bk2, state see usage()
+//   o1602-tool export, new-world, bench, scenario, smk, bk2, state see usage()
 //
 // The palette defaults to $ANNO1602_DIR/TOOLGFX/STADTFLD.COL.
 //
-// The commands live in formats.cpp, savegames.cpp, render.cpp and video.cpp (declared in tool.hpp).
+// The commands live in formats.cpp, savegames.cpp, render.cpp, scenario.cpp, templates.cpp and
+// video.cpp (declared in tool.hpp).
 
 #include <cstdio>
 #include <string>
@@ -69,6 +70,7 @@ int usage() {
         "                        CPU time of the game thread unless --wall, the fastest of N runs per tick;\n"
         "                        state hash, savegame, peak memory; default: new own world, 8 players, 600 min;\n"
         "                        without --world as large as a multiplayer game of that many players)\n"
+        "  o1602-tool scenario  info|convert|check ...  (Open1602's scenarios; o1602-tool scenario lists the options)\n"
         "  o1602-tool smk        <file.smk> [--png DIR] [--every N] [--wav TRACK OUT.wav]\n"
         "                        (Smacker video: header, decode all frames; frames as PNG, a track as WAVE)\n"
         "  o1602-tool bk2        <file.bk2> [--png DIR] [--every N] [--wav TRACK OUT.wav]\n"
@@ -169,6 +171,9 @@ int main(int argc, char** argv) {
     }
     if (command == "export") {
         return cmd_export(args);
+    }
+    if (command == "scenario") {
+        return cmd_scenario(args);
     }
     return usage();
 }

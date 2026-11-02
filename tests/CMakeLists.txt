@@ -16,6 +16,7 @@ add_executable(o1602_tests
     unit/test_ships.cpp
     unit/test_diplomacy.cpp
     unit/test_balance.cpp
+    unit/test_editor.cpp
     unit/test_computer_orders.cpp
     unit/test_factions.cpp
     unit/test_diplomacy_strip.cpp
@@ -127,7 +128,7 @@ add_executable(o1602_tests
     data/test_goods_data.cpp
     data/test_net_data.cpp
 )
-target_link_libraries(o1602_tests PRIVATE o1602::assets o1602::sim o1602::render o1602::audio o1602::ui o1602::video o1602::net o1602::menus o1602::script)
+target_link_libraries(o1602_tests PRIVATE o1602::assets o1602::sim o1602::render o1602::audio o1602::ui o1602::video o1602::net o1602::menus o1602::script o1602::editor)
 o1602_set_warnings(o1602_tests)
 # test_bink.cpp checks the Bink Audio transforms directly, which are internal to o1602_video.
 target_include_directories(o1602_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/video/src)
@@ -233,6 +234,18 @@ if(TARGET o1602-tool)
         STDERR "^error: [^\\n]*does not look like an Anno 1602 installation \\(missing haeuser.cod\\)\\n$"
         ARGS bench --minutes 1)
     set_tests_properties(tool:bench-without-data PROPERTIES ENVIRONMENT "ANNO1602_DIR=${_files}/no-installation")
+    # Scenarios: info reads Open1602's files alone, convert and check need the installation.
+    o1602_tool_test(scenario-usage 2 STDERR "^usage:\\n  o1602-tool scenario info " ARGS scenario)
+    o1602_tool_test(scenario-info-missing-file 1 STDERR "^error: [^\\n]*no-such-file.o1602\\n$"
+        ARGS scenario info "${_files}/no-such-file.o1602")
+    o1602_tool_test(scenario-info-not-own 1 STDERR "^error: not an Open1602 savegame\\n$"
+        ARGS scenario info "${_files}/world.gam")
+    o1602_tool_test(scenario-stars 2 STDERR "^error: --stars: 0 to 5\\n$"
+        ARGS scenario convert "${_files}/world.gam" "${_files}/out.o1602" --stars 6)
+    o1602_tool_test(scenario-check-without-data 1
+        STDERR "^error: [^\\n]*does not look like an Anno 1602 installation \\(missing haeuser.cod\\)\\n$"
+        ARGS scenario check "${_files}/world.gam")
+    set_tests_properties(tool:scenario-check-without-data PROPERTIES ENVIRONMENT "ANNO1602_DIR=${_files}/no-installation")
     o1602_tool_test(bench-two-files 2 STDERR "^usage:\\n" ARGS bench a.gam b.gam)
     # Arguments: a number that is none, an option without its value, a flag before a file.
     o1602_tool_test(bad-number 2 STDERR "^error: --minutes: '6O' is not a whole number\\n$" ARGS bench --minutes 6O)

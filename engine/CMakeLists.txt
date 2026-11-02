@@ -5,7 +5,7 @@
 #   assets -> core              sim -> assets               net -> sim (+ ENet)
 #   render -> sim, assets       audio -> sim, assets        video -> audio
 #   ui -> sim, assets           platform -> core (+ SDL3)   render_sdl -> render, platform, ui
-#   script -> sim, assets (+ Lua)
+#   script -> sim, assets (+ Lua)    editor -> sim, assets
 #   menus -> sim, assets, audio, render, ui, net
 #   app (open1602) -> sim, render_sdl, platform, audio, video, ui, net, menus, script
 #
@@ -25,6 +25,7 @@ add_subdirectory(audio)
 add_subdirectory(video)
 add_subdirectory(ui)
 add_subdirectory(script)
+add_subdirectory(editor)
 add_subdirectory(app/menus)
 
 if(O1602_BUILD_GAME)

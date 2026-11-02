@@ -16,6 +16,7 @@
 #include "o1602/sim/game_data.hpp"
 #include "o1602/sim/growth.hpp"
 #include "o1602/sim/houses.hpp"
+#include "o1602/sim/original_limits.hpp"
 #include "o1602/sim/savegame_extension.hpp"
 
 namespace o1602::sim {
@@ -25,18 +26,18 @@ using core::make_error;
 
 namespace {
 
-// Limits of the original (section 7).
-constexpr std::size_t kMaxIslands = 50;
-constexpr std::size_t kMaxOwnIslands = 255;  // island numbers are one byte
+// Limits of the original (section 7, original_limits.hpp).
+using original::kMaxCities;
+using original::kMaxDeposits;
+using original::kMaxIslands;
 /// Island coordinates are one byte in the original's records (INSELHAUS, SIEDLER, KONTOR2, HIRSCH2,
 /// craters, object refs), so an island is at most 255 tiles wide and high. Open1602 itself keeps
 /// 16 bits (SC-13): the limit binds only this export.
-constexpr std::uint32_t kMaxIslandSide = 255;
-constexpr std::size_t kMaxDeposits = 2;  // the slots of the island record
-constexpr std::size_t kMaxCities = 75;
-constexpr std::size_t kMaxShips = 150;
-constexpr std::size_t kMaxSoldiers = 400;
-constexpr std::size_t kMaxTowers = 350;
+using original::kMaxIslandSide;
+using original::kMaxShips;
+using original::kMaxSoldiers;
+using original::kMaxTowers;
+constexpr std::size_t kMaxOwnIslands = 255;  // island numbers are one byte
 constexpr std::size_t kTowerSize = 0x24;
 constexpr std::size_t kOriginalMissionSlots = 4;  // 4 x 0x88C
 constexpr std::size_t kCityNameMax = 23;

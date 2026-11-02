@@ -32,8 +32,9 @@ constexpr std::uint64_t kMaxSize = 1ULL << 30;  // 1 GiB
 constexpr std::uint64_t kMaxSizeWithoutMeta = 1ULL << 28;
 /// Beyond the map's tiles (MAPW, at most 20 bytes a tile), what the rest of a game may need.
 constexpr std::uint64_t kMaxSizeBeyondMap = 128ULL << 20;
-/// The prefix of the sections that holds META (it comes first and is small).
-constexpr std::size_t kHead = 4096;
+/// The prefix of the sections that holds META (it comes first and is small) and the stars and
+/// names of a scenario's SCNI behind it.
+constexpr std::size_t kHead = 16384;
 
 /// How large the sections of a game on a world of this size can be: a file promising more is
 /// damaged or made to cost memory (HI-11: a host's snapshot is such a file for its clients).
@@ -113,7 +114,7 @@ core::Result<core::Bytes> encode_game(const World& world, const assets::Building
         save::encode_sections(world, buildings, simulation, save::TileMode::Full, std::span<const std::uint8_t>{});
     // Before packing: a game too large to read back fails at once, not after seconds of deflate,
     // and with a message that says why (DS-4).
-    const SaveMeta meta{world.width(), world.height(), 0, {}};
+    const SaveMeta meta{world.width(), world.height(), 0, {}, std::nullopt};
     if (sections.size() > max_size_for(meta)) {
         return make_error(ErrorCode::LimitExceeded, "savegame: the game is too large (" +
                                                         std::to_string(sections.size() >> 20) + " MiB of " +

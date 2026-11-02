@@ -16,6 +16,7 @@
 #include "o1602/assets/package_scenarios.hpp"
 #include "o1602/assets/resident_classes.hpp"
 #include "o1602/assets/unlock_levels.hpp"
+#include "o1602/sim/limits.hpp"
 #include "o1602/sim/simulation.hpp"
 
 namespace o1602::sim::save {
@@ -139,6 +140,19 @@ constexpr std::uint32_t kScenario = tag("SCEN");
 /// The part of a package's campaign the game is (World::campaign_part()), only written for one.
 /// Optional: without it a won part opens no next part.
 constexpr std::uint32_t kCampaign = tag("CAMP");
+/// The description of an editor's scenario (World::scenario_info(), ADR 0013), only written for
+/// one, right after META so that a list of files finds it in the head. Optional: without it the file
+/// is an ordinary savegame.
+constexpr std::uint32_t kScenarioInfo = tag("SCNI");
+/// The scenario's named places and areas (World::markers()), only written when there are any.
+/// Optional: without them a script finds no marker.
+constexpr std::uint32_t kMarkers = tag("MARK");
+/// The scenario's own script (World::scenario_script()), only written when there is one. Required:
+/// the game would run without it.
+constexpr std::uint32_t kScenarioScript = tag("SLUA");
+/// The editor's own state (World::editor_state()), only written when there is any. Optional: the
+/// game ignores it.
+constexpr std::uint32_t kEditorState = tag("EDIT");
 /// SCRP version 2: each script's table `campaign` after its table `state`.
 constexpr std::uint16_t kScriptsWithCampaign = 2;
 
@@ -156,7 +170,7 @@ constexpr std::array kKnownSections = {
     kLedgers,       kBalance,        kBuildingValues,  kPackages,   kFigureValues,   kOwnBuildings,
     kGoods,         kClasses,        kLevels,          kUnlocked,   kGoodPictures,   kScripts,
     kClassPublic,   kUnitGroups,     kScenario,        kCampaign,   kComputerOrders, kOwnFigures,
-    kLevelMessages, kBlueprints};
+    kLevelMessages, kBlueprints,     kScenarioInfo,    kMarkers,    kScenarioScript, kEditorState};
 
 /// Section flag (the u16 after the version): the section holds state the game cannot do without, so
 /// a reader that cannot read it (unknown identifier or later version) must not load the file. Other
@@ -275,6 +289,71 @@ core::Status for_each_section(std::span<const std::uint8_t> data, std::vector<st
     return core::Ok{};
 }
 
+/// SCNI: stars, flags (bit 0 the original's limits), the names, author, version and the briefings
+/// (names and briefings each a list of language and text, UTF-8). Stars and names come first, so
+/// that the head of a file read for a list (read_meta) holds them.
+void write_scenario_info(Writer& o, const ScenarioInfo& info) {
+    const auto texts = [&](const std::vector<ScenarioText>& list) {
+        o.list(list, 8, [&](const ScenarioText& t) {
+            o.string(t.language);
+            o.string(t.text);
+        });
+    };
+    o.u8(info.stars);
+    o.u8(info.original_limits ? std::uint8_t{1} : std::uint8_t{0});
+    texts(info.names);
+    o.string(info.author);
+    o.string(info.version);
+    texts(info.briefings);
+}
+
+void read_scenario_info(Reader& in, ScenarioInfo& info) {
+    const auto texts = [&](std::vector<ScenarioText>& list) {
+        in.list(list, 8, [&](ScenarioText& t) {
+            in.string(t.language);
+            in.string(t.text);
+        });
+    };
+    std::uint8_t flags = 0;
+    in.u8(info.stars);
+    in.u8(flags);
+    texts(info.names);
+    in.string(info.author);
+    in.string(info.version);
+    texts(info.briefings);
+    info.original_limits = (flags & 1U) != 0;
+    if ((flags & ~1U) != 0 || !check_scenario_info(info).empty()) {
+        in.fail();
+    }
+}
+
+/// MARK: per marker its name, shape, x, y, width and height.
+void write_markers(Writer& o, const std::vector<ScenarioMarker>& markers) {
+    o.list(markers, 21, [&](const ScenarioMarker& m) {
+        o.string(m.name);
+        o.enum8(m.shape, ScenarioMarker::Shape::Last);
+        o.u32(m.x);
+        o.u32(m.y);
+        o.u32(m.width);
+        o.u32(m.height);
+    });
+}
+
+/// The markers' places are checked against the world in apply_decoded().
+void read_markers(Reader& in, std::vector<ScenarioMarker>& markers) {
+    in.list(markers, 21, [&](ScenarioMarker& m) {
+        in.string(m.name);
+        in.enum8(m.shape, ScenarioMarker::Shape::Last);
+        in.u32(m.x);
+        in.u32(m.y);
+        in.u32(m.width);
+        in.u32(m.height);
+    });
+    if (markers.empty() || !check_markers(markers, kMaxWorldSide, kMaxWorldSide).empty()) {
+        in.fail();
+    }
+}
+
 }  // namespace
 
 core::Bytes encode_sections(const World& world, const assets::BuildingTable& buildings, const Simulation* simulation,
@@ -301,6 +380,9 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
                 o.string(p != nullptr ? p->name : std::string());
             },
             Need::Optional);
+        if (const auto& info = world.scenario_info()) {
+            section(out, kScenarioInfo, [&](Writer& o) { write_scenario_info(o, *info); }, Need::Optional);
+        }
         section(
             out, kMap,
             [&](Writer& o) {
@@ -618,6 +700,15 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
             },
             Need::Optional);
     }
+    if (!world.markers().empty()) {
+        section(out, kMarkers, [&](Writer& o) { write_markers(o, world.markers()); }, Need::Optional);
+    }
+    if (!world.scenario_script().empty()) {
+        section(out, kScenarioScript, [&](Writer& o) { o.string(world.scenario_script()); });
+    }
+    if (!world.editor_state().empty() && tiles == TileMode::Full) {
+        section(out, kEditorState, [&](Writer& o) { o.u8s(world.editor_state()); }, Need::Optional);
+    }
     const auto has_groups = [](const UnitGroups& g) {
         return std::any_of(g.begin(), g.end(), [](const auto& members) { return !members.empty(); });
     };
@@ -697,6 +788,32 @@ std::optional<SaveMeta> read_meta(std::span<const std::uint8_t> sections) {
     meta.player = in.string();
     if (!in.ok()) {
         return std::nullopt;
+    }
+    // A scenario's SCNI follows META. The head may end inside it: the names come before the long
+    // texts, and what is cut off is left out.
+    const auto next = reader.u32();
+    (void)reader.u16();  // version
+    (void)reader.u16();  // flags
+    const auto next_size = reader.u32();
+    if (next && *next == kScenarioInfo && next_size) {
+        const auto rest = sections.subspan(sections.size() - reader.remaining());
+        core::ByteReader ir(rest.subspan(0, std::min<std::size_t>(rest.size(), *next_size)));
+        StateIn info_in(ir);
+        Reader info(info_in);
+        ScenarioInfo summary;
+        std::uint8_t flags = 0;
+        info.u8(summary.stars);
+        info.u8(flags);
+        info.list(summary.names, 8, [&](ScenarioText& t) {
+            info.string(t.language);
+            info.string(t.text);
+        });
+        if (!info_in.ok()) {
+            summary.names.clear();
+        }
+        summary.original_limits = (flags & 1U) != 0;
+        summary.stars = std::min(summary.stars, ScenarioInfo::kMaxStars);
+        meta.scenario = std::move(summary);
     }
     return meta;
 }
@@ -1045,6 +1162,36 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                     in.fail();
                 }
                 d.campaign_part = std::move(part);
+                break;
+            }
+            case kScenarioInfo: {
+                ScenarioInfo info;
+                read_scenario_info(in, info);
+                d.scenario_info = std::move(info);
+                break;
+            }
+            case kMarkers: {
+                std::vector<ScenarioMarker> markers;
+                read_markers(in, markers);
+                d.markers = std::move(markers);
+                break;
+            }
+            case kScenarioScript: {
+                std::string script;
+                in.string(script);
+                if (script.empty() || script.size() > kMaxScenarioScriptLength) {
+                    in.fail();
+                }
+                d.scenario_script = std::move(script);
+                break;
+            }
+            case kEditorState: {
+                std::vector<std::uint8_t> editor;
+                in.u8s(editor);
+                if (editor.empty() || editor.size() > kMaxEditorStateLength) {
+                    in.fail();
+                }
+                d.editor_state = std::move(editor);
                 break;
             }
             case kUnitGroups: {

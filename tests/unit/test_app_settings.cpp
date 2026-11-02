@@ -135,7 +135,7 @@ TEST_CASE("app settings: what a savegame's META says, as a line of the lists") {
     slots.set(20, "late", 1);
     CHECK(slots.meta.size() == slots.names.size());
     CHECK(app::slot_details(slots)[20].empty());  // no META read yet
-    slots.meta[20] = sim::SaveMeta{500, 350, (2 * 60 + 5) * 60'000ULL + 59'999, "Merlin"};
+    slots.meta[20] = sim::SaveMeta{500, 350, (2 * 60 + 5) * 60'000ULL + 59'999, "Merlin", std::nullopt};
     CHECK(app::save_time(slots.meta[20]->time_ms) == "2:05 h");
     CHECK(app::slot_details(slots)[20] == "Merlin, played 2:05 h, map 500 x 350");
     slots.meta[20]->player.clear();
