@@ -134,6 +134,10 @@ struct BuildPlan {
 /// single sites per minute, TB-9).
 void plan_build(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order, BuildPlan& plan);
 
+/// plan_build() as if gold and goods were plenty: where blueprints may go (sim/blueprints.hpp).
+void plan_blueprint(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order,
+                    BuildPlan& plan);
+
 /// What the construction changed, for the logistics, the renderer and the messages.
 struct ConstructionEvent {
     enum class Kind : std::uint8_t {

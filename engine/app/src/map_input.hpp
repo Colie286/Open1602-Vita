@@ -156,6 +156,9 @@ public:
     void plant_fields_at(std::uint16_t island, std::int32_t x, std::int32_t y);
     /// The answer to the question before the waiting orders.
     void answer(bool yes);
+    /// Blueprint mode on or off (U, the build menu's switch): the build and copy tools then place
+    /// blueprints. Switched on outside the build mode, it opens the build menu.
+    void toggle_blueprint();
     /// A building (or the demolish tool) was taken from the menu: the selected ships and units
     /// are let go, so a right click puts the building away instead of giving them an order.
     void drop_units();
@@ -200,6 +203,10 @@ private:
     void select_building_at_mouse(const Selection& before);
     /// The key "Plant all farm fields": the selected farm's field on the open ground it reaches.
     void plant_fields();
+    /// Shift+U: the local player's blueprints of the city under the mouse are built.
+    void build_blueprints();
+    /// A click on one of the local player's blueprints opens its window; false if there is none.
+    bool open_blueprint_at_mouse();
     /// G: closes the local player's gates to foreign soldiers, or opens them again.
     void toggle_gates();
     /// Closes the open pop-up of a build category, else lays the building in hand away (the

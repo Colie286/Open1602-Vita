@@ -18,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include "blueprint_window.hpp"
 #include "chat_window.hpp"
 #include "diplomacy_strip.hpp"
 #include "display_menu.hpp"
@@ -60,6 +61,7 @@ public:
             Build,         ///< build mode with `building`
             Demolish,      ///< build mode, the demolish tool
             Copy,          ///< build mode, the copy tool (Open1602)
+            Blueprint,     ///< blueprint mode on or off (Open1602)
             TurnBuilding,  ///< the building to place by `step` quarters
             ToolOff,       ///< another mode: no building tool
             OrientToRoad,  ///< buildings with a door turn to the road (`step` 1) or not (0)
@@ -178,6 +180,34 @@ public:
     /// The build menu opens next with this building picked in its category (a farm's field after
     /// looking at the farm). False if the menu has no such building.
     bool show_in_build_menu(std::uint32_t id) { return m_build && m_build->show(id); }
+    /// Blueprint mode is on: the build menu's title says so.
+    void set_blueprint_in_build_menu(bool on) {
+        if (m_build) {
+            m_build->set_blueprint(on);
+        }
+    }
+    /// The window of a blueprint (blueprint_window.hpp), opened by a click on one of the player's
+    /// blueprints at (island, x, y), its origin. The viewer fills its model every frame and takes
+    /// what was clicked.
+    void open_blueprint(std::uint16_t island, std::int32_t x, std::int32_t y) {
+        m_blueprint_at = BlueprintAt{island, x, y};
+    }
+    void close_blueprint() noexcept { m_blueprint_at.reset(); }
+    struct BlueprintAt {
+        std::uint16_t island = 0;
+        std::int32_t x = 0;
+        std::int32_t y = 0;
+    };
+    [[nodiscard]] const std::optional<BlueprintAt>& blueprint_open() const noexcept { return m_blueprint_at; }
+    void set_blueprint_model(BlueprintModel model) {
+        m_blueprint_model = std::move(model);
+        if (!m_blueprint_model.valid) {
+            m_blueprint_at.reset();
+        }
+    }
+    [[nodiscard]] std::vector<BlueprintWindow::Result> take_blueprint_clicks() {
+        return std::exchange(m_blueprint_clicks, {});
+    }
     /// The build menu shows a tool a key started (its title names it).
     void show_tool_in_build_menu(BuildPanel::Tool tool) {
         if (m_build) {
@@ -557,6 +587,11 @@ private:
     /// Top left of the window "Anzeige" on the screen (centred on the map).
     [[nodiscard]] ui::Rect display_rect() const;
     std::unique_ptr<ChatWindow> m_chat;
+    std::unique_ptr<BlueprintWindow> m_blueprint;
+    std::optional<BlueprintAt> m_blueprint_at;
+    BlueprintModel m_blueprint_model;
+    std::vector<BlueprintWindow::Result> m_blueprint_clicks;
+    [[nodiscard]] ui::Rect blueprint_rect() const;
     ChatModel m_chat_model;
     std::vector<ChatSay> m_chat_says;
     /// The chat window on the screen (at the lower left of the map).

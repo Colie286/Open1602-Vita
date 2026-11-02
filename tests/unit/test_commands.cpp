@@ -83,6 +83,16 @@ std::vector<sim::Command> every_kind() {
     all.emplace_back(sim::PlayerControl{1, true, 0xFEDC'BA98'7654'3210ULL});
     all.emplace_back(sim::GateOrder{1, true});
     all.emplace_back(sim::CartRequest{1, 2, 3, 40, 50, 41, 52});
+    sim::BlueprintOrder blueprint;
+    blueprint.player = 1;
+    blueprint.kind = sim::BlueprintOrder::Kind::Auto;
+    blueprint.island = 2;
+    blueprint.items = {{7, 3, -4, 1, 0}};
+    blueprint.from = {1, 2};
+    blueprint.to = {5, 6};
+    blueprint.city = 3;
+    blueprint.on = true;
+    all.emplace_back(blueprint);
     return all;
 }
 
@@ -127,7 +137,7 @@ TEST_CASE("commands: every kind of command goes to bytes and back") {
     REQUIRE(build.items.size() == 2);
     CHECK(build.items[0].y == -2);
     CHECK(build.orient_to_road);
-    const sim::Command& named = all[all.size() - 4];
+    const sim::Command& named = all[all.size() - 5];
     const auto rename = std::get<sim::PlayerRename>(*sim::decode_command(sim::encode_command(named)));
     CHECK(rename.name == "Merlin");
     sim::ShipCommand mount;
@@ -140,20 +150,27 @@ TEST_CASE("commands: every kind of command goes to bytes and back") {
     const auto sent = std::get<sim::CastleOrder>(*sim::decode_command(sim::encode_command(all_out)));
     CHECK(sent.op == sim::CastleOrder::Op::ReleaseAll);
     CHECK(sent.spot == sim::Target::spot(9, 8));
-    const auto gates = std::get<sim::GateOrder>(*sim::decode_command(sim::encode_command(all[all.size() - 2])));
+    const auto gates = std::get<sim::GateOrder>(*sim::decode_command(sim::encode_command(all[all.size() - 3])));
     CHECK(gates.player == 1);
     CHECK(gates.closed);
-    const auto control = std::get<sim::PlayerControl>(*sim::decode_command(sim::encode_command(all[all.size() - 3])));
+    const auto control = std::get<sim::PlayerControl>(*sim::decode_command(sim::encode_command(all[all.size() - 4])));
     CHECK(control.player == 1);
     CHECK(control.computer);
     CHECK(control.owner == 0xFEDC'BA98'7654'3210ULL);
-    const auto cart = std::get<sim::CartRequest>(*sim::decode_command(sim::encode_command(all.back())));
+    const auto cart = std::get<sim::CartRequest>(*sim::decode_command(sim::encode_command(all[all.size() - 2])));
     CHECK(cart.island == 2);
     CHECK(cart.city == 3);
     CHECK(cart.x == 40);
     CHECK(cart.y == 50);
     CHECK(cart.from_x == 41);
     CHECK(cart.from_y == 52);
+    const auto blueprint = std::get<sim::BlueprintOrder>(*sim::decode_command(sim::encode_command(all.back())));
+    CHECK(blueprint.kind == sim::BlueprintOrder::Kind::Auto);
+    REQUIRE(blueprint.items.size() == 1);
+    CHECK(blueprint.items[0].y == -4);
+    CHECK((blueprint.to == sim::TilePos{5, 6}));
+    CHECK(blueprint.city == 3);
+    CHECK(blueprint.on);
 
     // With the tick, as the network carries them, one after another.
     core::ByteWriter out;
@@ -438,9 +455,10 @@ TEST_CASE("commands: a player closes and opens his city gates") {
 }
 
 TEST_CASE("simulation: the steps of a tick run in the original's order (review point 28)") {
-    const std::vector<std::string_view> expected = {
-        "diplomacy", "growth",    "production", "cities", "city events", "houses",   "upkeep",    "disasters",
-        "islands",   "volcanoes", "computers",  "combat", "ships",       "soldiers", "logistics", "statistics"};
+    const std::vector<std::string_view> expected = {"diplomacy", "growth",     "production", "cities",  "city events",
+                                                    "houses",    "upkeep",     "disasters",  "islands", "volcanoes",
+                                                    "computers", "blueprints", "combat",     "ships",   "soldiers",
+                                                    "logistics", "statistics"};
     CHECK(sim::Simulation::tick_step_names() == expected);
 }
 

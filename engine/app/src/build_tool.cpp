@@ -291,6 +291,20 @@ std::optional<sim::BuildOrder> BuildTool::build_order(const sim::World& world, s
     return order;
 }
 
+std::optional<sim::BlueprintOrder> BuildTool::blueprint_order(const sim::World& world, sim::PlayerId player,
+                                                              const Spot& spot) const {
+    auto order = build_order(world, player, spot);
+    if (!order || order->ship) {
+        return std::nullopt;
+    }
+    sim::BlueprintOrder blueprints;
+    blueprints.player = player;
+    blueprints.kind = sim::BlueprintOrder::Kind::Place;
+    blueprints.island = order->island;
+    blueprints.items = std::move(order->items);
+    return blueprints;
+}
+
 std::optional<sim::DemolishOrder> BuildTool::demolish_order(sim::PlayerId player, const Spot& spot) const {
     if (m_mode != Mode::Demolish) {
         return std::nullopt;

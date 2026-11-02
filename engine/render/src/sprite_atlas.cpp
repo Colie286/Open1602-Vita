@@ -2,6 +2,7 @@
 #include "o1602/render/sprite_atlas.hpp"
 
 #include <algorithm>
+#include <array>
 #include <thread>
 
 namespace o1602::render {
@@ -262,6 +263,7 @@ void blit_draw_list(const std::vector<DrawCommand>& commands, const SpriteAtlas&
         const bool shadow = c.mode == DrawCommand::Mode::Shadow;
         const bool translucent = c.mode == DrawCommand::Mode::Translucent;
         const bool dimmed = c.mode == DrawCommand::Mode::Dimmed;
+        const bool tinted = c.mode == DrawCommand::Mode::Tinted;
         const std::uint32_t alpha = c.tint.a;
         for (std::int32_t y = y0; y < y1; ++y) {
             const std::uint8_t* src = &page[((std::size_t{r.y} + static_cast<std::size_t>(y)) * ps + r.x) * 4];
@@ -279,6 +281,12 @@ void blit_draw_list(const std::vector<DrawCommand>& commands, const SpriteAtlas&
                 } else if (translucent) {
                     for (int k = 0; k < 3; ++k) {
                         d[k] = static_cast<std::uint8_t>((d[k] * (255 - alpha) + s[k] * alpha) / 255);
+                    }
+                } else if (tinted) {
+                    const std::array<std::uint32_t, 3> t{c.tint.r, c.tint.g, c.tint.b};
+                    for (std::size_t k = 0; k < 3; ++k) {
+                        const std::uint32_t coloured = s[k] * t[k] / 255;
+                        d[k] = static_cast<std::uint8_t>((d[k] * (255 - alpha) + coloured * alpha) / 255);
                     }
                 } else if (dimmed) {
                     d[0] = static_cast<std::uint8_t>(s[0] * c.tint.r / 255);

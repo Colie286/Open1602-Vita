@@ -130,6 +130,9 @@ constexpr std::uint32_t kScripts = tag("SCRP");
 /// The groups the players stored (World::unit_groups()), only written when there are any and not
 /// for the game's fingerprint. Optional: without them the groups are empty.
 constexpr std::uint32_t kUnitGroups = tag("UGRP");
+/// The players' blueprints and the cities that build them by themselves (World::blueprints(),
+/// World::blueprint_auto()), only written when there are any. Optional: without them there are none.
+constexpr std::uint32_t kBlueprints = tag("BLUE");
 /// The scenario of a package the game was started from (World::package_scenario()), only written
 /// for one. Optional: without it the scenario's script does not run.
 constexpr std::uint32_t kScenario = tag("SCEN");
@@ -144,16 +147,16 @@ constexpr std::size_t kMaxScenarioIdLength = 2 * assets::kMaxPackageIdLength + 1
 
 /// Every section this version reads; others are of a later version.
 constexpr std::array kKnownSections = {
-    kRules,        kWorld,          kIslands,         kTiles,      kPlayers,        kCities,
-    kProductions,  kHouses,         kGrowth,          kCosts,      kShips,          kSoldiers,
-    kAnimals,      kDisasters,      kVolcanoes,       kSimulation, kFleet,          kEpochs,
-    kArmy,         kDiplomacy,      kExplored,        kMap,        kWorld2,         kMeta,
-    kMissions,     kPlayerState,    kCityState,       kOrigin,     kQueues,         kStances,
-    kScores,       kMaterialClocks, kPopulationMarks, kTutorial,   kGiveUps,        kFactions,
-    kLedgers,      kBalance,        kBuildingValues,  kPackages,   kFigureValues,   kOwnBuildings,
-    kGoods,        kClasses,        kLevels,          kUnlocked,   kGoodPictures,   kScripts,
-    kClassPublic,  kUnitGroups,     kScenario,        kCampaign,   kComputerOrders, kOwnFigures,
-    kLevelMessages};
+    kRules,         kWorld,          kIslands,         kTiles,      kPlayers,        kCities,
+    kProductions,   kHouses,         kGrowth,          kCosts,      kShips,          kSoldiers,
+    kAnimals,       kDisasters,      kVolcanoes,       kSimulation, kFleet,          kEpochs,
+    kArmy,          kDiplomacy,      kExplored,        kMap,        kWorld2,         kMeta,
+    kMissions,      kPlayerState,    kCityState,       kOrigin,     kQueues,         kStances,
+    kScores,        kMaterialClocks, kPopulationMarks, kTutorial,   kGiveUps,        kFactions,
+    kLedgers,       kBalance,        kBuildingValues,  kPackages,   kFigureValues,   kOwnBuildings,
+    kGoods,         kClasses,        kLevels,          kUnlocked,   kGoodPictures,   kScripts,
+    kClassPublic,   kUnitGroups,     kScenario,        kCampaign,   kComputerOrders, kOwnFigures,
+    kLevelMessages, kBlueprints};
 
 /// Section flag (the u16 after the version): the section holds state the game cannot do without, so
 /// a reader that cannot read it (unknown identifier or later version) must not load the file. Other
@@ -635,6 +638,28 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
             },
             Need::Optional);
     }
+    // Also for the game's fingerprint: every computer of a multiplayer game keeps the same ones.
+    if (!world.blueprints().empty() || !world.blueprint_auto().empty()) {
+        section(
+            out, kBlueprints,
+            [&](Writer& o) {
+                o.list(world.blueprints(), 17, [&](const Blueprint& b) {
+                    o.u8(b.player);
+                    o.u16(b.island);
+                    o.u32(b.building);
+                    o.i32(b.x);
+                    o.i32(b.y);
+                    o.u8(b.rotation);
+                    o.u8(b.anim_phase);
+                });
+                o.list(world.blueprint_auto(), 4, [&](const BlueprintAuto& a) {
+                    o.u8(a.player);
+                    o.u16(a.island);
+                    o.u8(a.city);
+                });
+            },
+            Need::Optional);
+    }
     if (simulation != nullptr) {
         section(
             out, kSimulation, [&](Writer& o) { simulation->save_state(o.out()); }, Need::Required,
@@ -1035,6 +1060,25 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                     }
                 });
                 d.unit_groups = std::move(groups);
+                break;
+            }
+            case kBlueprints: {
+                Decoded::BlueprintPart part;
+                in.list(part.blueprints, 17, [&](Blueprint& b) {
+                    in.u8(b.player);
+                    in.u16(b.island);
+                    in.u32(b.building);
+                    in.i32(b.x);
+                    in.i32(b.y);
+                    in.u8(b.rotation);
+                    in.u8(b.anim_phase);
+                });
+                in.list(part.autos, 4, [&](BlueprintAuto& a) {
+                    in.u8(a.player);
+                    in.u16(a.island);
+                    in.u8(a.city);
+                });
+                d.blueprints = std::move(part);
                 break;
             }
             case kPackages: {

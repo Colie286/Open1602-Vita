@@ -190,6 +190,8 @@ std::size_t SdlSpriteRenderer::draw(const std::vector<DrawCommand>& commands, do
             colour.a = c.tint.a / 255.0F;
         } else if (c.mode == DrawCommand::Mode::Dimmed) {
             colour = SDL_FColor{c.tint.r / 255.0F, c.tint.g / 255.0F, c.tint.b / 255.0F, 1.0F};
+        } else if (c.mode == DrawCommand::Mode::Tinted) {
+            colour = SDL_FColor{c.tint.r / 255.0F, c.tint.g / 255.0F, c.tint.b / 255.0F, c.tint.a / 255.0F};
         }
         const int base = static_cast<int>(m_vertices.size());
         m_vertices.push_back(SDL_Vertex{{x0, y0}, colour, {u0, v0}});

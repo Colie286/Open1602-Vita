@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <set>
 
 #include "o1602/assets/savegame.hpp"
@@ -809,7 +810,11 @@ BuildPlan plan_build(const World& world, const assets::BuildingTable& buildings,
     return plan;
 }
 
-void plan_build(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order, BuildPlan& plan) {
+namespace {
+
+/// plan_build(); without `pay` the order is checked as if gold and goods were plenty (blueprints).
+void plan_order(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order, BuildPlan& plan,
+                bool pay) {
     std::vector<PlannedBuild> items = std::move(plan.items);
     items.assign(order.items.size(), PlannedBuild{});
     plan = BuildPlan{};
@@ -865,6 +870,10 @@ void plan_build(const World& world, const assets::BuildingTable& buildings, cons
         available.cannons = usable(c->stock(m.cannons));
     }
     available.money = player != nullptr ? player->money : 0;
+    if (!pay) {
+        constexpr std::uint32_t kPlenty = std::numeric_limits<std::uint32_t>::max() / 2;
+        available = BuildBill{kPlenty, kPlenty, kPlenty, kPlenty, std::numeric_limits<std::int64_t>::max() / 2};
+    }
     const bool limited_player =
         player != nullptr && (player->role == PlayerRole::Human || player->role == PlayerRole::Computer);
 
@@ -1051,6 +1060,17 @@ void plan_build(const World& world, const assets::BuildingTable& buildings, cons
     }
     plan.bill = bill;
     plan.placed = placed;
+}
+
+}  // namespace
+
+void plan_build(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order, BuildPlan& plan) {
+    plan_order(world, buildings, order, plan, true);
+}
+
+void plan_blueprint(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order,
+                    BuildPlan& plan) {
+    plan_order(world, buildings, order, plan, false);
 }
 
 namespace {

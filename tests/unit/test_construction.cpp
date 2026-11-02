@@ -9,6 +9,7 @@
 
 #include "o1602/assets/cod_parser.hpp"
 #include "o1602/script/game_scripts.hpp"
+#include "o1602/sim/blueprints.hpp"
 #include "o1602/sim/construction.hpp"
 #include "o1602/sim/growth.hpp"
 #include "o1602/sim/save_game.hpp"
@@ -1097,4 +1098,120 @@ TEST_CASE("construction: scripts build, demolish and destroy as the game would, 
     CHECK(ship.order.kind == sim::Target::Kind::Position);
     CHECK(ship.order.x == 60);
     CHECK(ship.order.y == 61);
+}
+
+namespace {
+
+sim::BlueprintOrder blueprint_order(sim::BlueprintOrder::Kind kind, std::vector<sim::BuildItem> items = {}) {
+    sim::BlueprintOrder order;
+    order.player = 0;
+    order.kind = kind;
+    order.island = 0;
+    order.items = std::move(items);
+    return order;
+}
+
+}  // namespace
+
+TEST_CASE("blueprints: placed for free, only in an own city, never a Kontor; a newer one replaces an older") {
+    Island island;
+    island.found();
+    const std::int32_t money = island.world.players()[0].money;
+    auto place = blueprint_order(sim::BlueprintOrder::Kind::Place,
+                                 {{kHouse, 8, 13, 0, 0}, {kRoad, 9, 15, 0, 0}, {kHouse, 25, 25, 0, 0}});
+    CHECK(sim::execute_blueprints(island.world, island.buildings, place, island.names, &island.events) == 2);
+    CHECK(island.world.players()[0].money == money);
+    CHECK(island.at(8, 13)->id == kGround);  // nothing is built
+    REQUIRE(island.world.blueprints().size() == 2);
+    CHECK(sim::blueprint_city(island.world, island.world.blueprints()[0]) == 0);
+    CHECK(sim::blueprint_at(island.world, island.buildings, 0, 0, {8, 13}) == std::size_t{0});
+    CHECK(!sim::blueprint_at(island.world, island.buildings, 1, 0, {8, 13}));  // only its owner's
+    // Outside the city and Kontors are refused.
+    sim::BuildOrder check;
+    check.items = {{kHouse, 25, 25, 0, 0}, {kKontor, 5, 20, 0, 0}};
+    const sim::BuildPlan plan = sim::plan_blueprints(island.world, island.buildings, check);
+    CHECK(plan.items[0].refusal == sim::BuildRefusal::Territory);
+    CHECK(plan.items[1].refusal != sim::BuildRefusal::None);
+    // Costs count as for building.
+    const sim::BuildBill bill = sim::blueprint_costs(island.world, island.buildings, 0, 0, 0);
+    CHECK(bill.money == 15);
+    // A road over the house's blueprint replaces it.
+    place.items = {{kRoad, 8, 13, 0, 0}};
+    CHECK(sim::execute_blueprints(island.world, island.buildings, place, island.names, &island.events) == 1);
+    REQUIRE(island.world.blueprints().size() == 2);
+    CHECK(island.world.blueprints()[1].building == kRoad);
+    CHECK(island.world.blueprints()[1].x == 8);
+    // Remove takes a rectangle.
+    auto remove = blueprint_order(sim::BlueprintOrder::Kind::Remove);
+    remove.from = {9, 16};
+    remove.to = {9, 15};
+    CHECK(sim::execute_blueprints(island.world, island.buildings, remove, island.names, &island.events) == 1);
+    CHECK(island.world.blueprints().size() == 1);
+}
+
+TEST_CASE("blueprints: built in their order as the means reach; what is built over one takes its place") {
+    Island island;
+    island.found();
+    auto place = blueprint_order(sim::BlueprintOrder::Kind::Place,
+                                 {{kRoad, 8, 14, 0, 0}, {kRoad, 9, 14, 0, 0}, {kRoad, 10, 14, 0, 0}});
+    REQUIRE(sim::execute_blueprints(island.world, island.buildings, place, island.names, &island.events) == 3);
+    island.world.player(0)->money = 12;  // two roads
+    auto build = blueprint_order(sim::BlueprintOrder::Kind::Build);
+    build.city = 0;
+    CHECK(sim::execute_blueprints(island.world, island.buildings, build, island.names, &island.events) == 2);
+    CHECK(island.at(8, 14)->id == kRoad);
+    CHECK(island.at(9, 14)->id == kRoad);
+    REQUIRE(island.world.blueprints().size() == 1);
+    CHECK(island.world.blueprints()[0].x == 10);
+    // Building by hand over a blueprint drops it as well.
+    island.world.player(0)->money = 1000;
+    const std::size_t first = island.events.size();
+    REQUIRE(island.build({{kRoad, 10, 14, 0, 0}}).placed == 1);
+    sim::drop_covered_blueprints(island.world, island.buildings, std::span(island.events).subspan(first));
+    CHECK(island.world.blueprints().empty());
+}
+
+TEST_CASE("blueprints: a city builds them by itself, demolishing clears them, the game keeps them") {
+    Island island;
+    island.found();
+    assets::FigureTable figures;
+    sim::Simulation simulation(island.world, island.buildings, figures);
+    simulation.set_city_names(island.names);
+    simulation.submit(
+        blueprint_order(sim::BlueprintOrder::Kind::Place, {{kHouse, 8, 13, 0, 0}, {kRoad, 12, 15, 0, 0}}));
+    auto on = blueprint_order(sim::BlueprintOrder::Kind::Auto);
+    on.city = 0;
+    on.on = true;
+    simulation.submit(on);
+    simulation.tick();
+    REQUIRE(island.world.blueprints().size() == 2);
+    CHECK(sim::blueprint_auto(island.world, 0, 0, 0));
+    CHECK(island.at(8, 13)->id == kGround);
+    // Kept in the savegame, and part of the game's fingerprint.
+    const std::uint64_t hash = simulation.state_hash();
+    {
+        auto bytes = sim::write_game(island.world, island.buildings);
+        REQUIRE(bytes.ok());
+        auto loaded = sim::read_game(*bytes, island.buildings);
+        REQUIRE(loaded.ok());
+        CHECK(loaded->blueprints() == island.world.blueprints());
+        CHECK(loaded->blueprint_auto() == island.world.blueprint_auto());
+    }
+    // The demolish tool clears the road's blueprint.
+    simulation.submit(sim::DemolishOrder{0, 0, {12, 15}, {12, 15}});
+    simulation.tick();
+    REQUIRE(island.world.blueprints().size() == 1);
+    CHECK(simulation.state_hash() != hash);
+    // Within 5 s of game time the city builds the house.
+    for (std::uint32_t t = 0; t < sim::kBlueprintAutoMs / sim::Simulation::kTickMs; ++t) {
+        simulation.tick();
+    }
+    CHECK(island.at(8, 13)->id == kHouse);
+    CHECK(island.world.blueprints().empty());
+    // Not for another player's city.
+    auto foreign = on;
+    foreign.player = 1;
+    simulation.submit(foreign);
+    simulation.tick();
+    CHECK(!sim::blueprint_auto(island.world, 1, 0, 0));
 }

@@ -118,14 +118,15 @@ ui::BuildCategory BuildPanel::tools_category(std::int32_t button) const {
         ui::BuildButton b;
         b.id = static_cast<std::uint32_t>(t);
         b.picture = icon;
-        b.name = core::utf8_to_cp1252(ui::tr(name));
+        b.name = ui::tr(name);  // already Windows-1252
         return b;
     };
     ui::BuildButton demolish = tool(Tool::Demolish, "open1602:demolish", "build.tool.demolish");
     if (m_texts != nullptr && !m_texts->section("ABRISS").empty()) {
         demolish.text = 0;
     }
-    tools.rows.push_back({demolish, tool(Tool::Copy, "open1602:copy", "build.tool.copy")});
+    tools.rows.push_back({demolish, tool(Tool::Copy, "open1602:copy", "build.tool.copy"),
+                          tool(Tool::Blueprint, "open1602:blueprint", "build.tool.blueprint")});
     return tools;
 }
 
@@ -156,6 +157,7 @@ bool BuildPanel::show(std::uint32_t id) {
     m_popup.reset();  // an open pop-up (the tools') belongs to the category left
     m_bau.set_selected(m_category, false);
     m_category = c->button;
+    m_building_category = m_category;
     m_bau.set_selected(m_category, true);
     m_picked[m_category] = c->index_of(id).value_or(0);
     return true;
@@ -196,13 +198,32 @@ std::optional<BuildPanel::Action> BuildPanel::mouse(std::int32_t x, std::int32_t
                 const auto index = static_cast<std::size_t>(e.id - ui::kPopupSlot);
                 if (c != nullptr && c->demolish) {
                     // The tools' pop-up: the tool picked.
-                    if (const auto tool = m_tools.at(index)) {
+                    if (const auto tool = m_tools.at(index); tool && static_cast<Tool>(*tool) == Tool::Blueprint) {
+                        // A switch: the menu goes back to what is in hand, the copy tool or the
+                        // building shown last.
+                        action = Action{Action::Kind::Blueprint, 0, 0};
+                        if (m_tool != Tool::Copy) {
+                            // No building shown yet in this game: the menu's first category.
+                            if (m_menu->category(m_building_category) == nullptr) {
+                                for (const ui::BuildCategory& other : m_menu->categories) {
+                                    if (!other.demolish) {
+                                        m_building_category = other.button;
+                                        break;
+                                    }
+                                }
+                            }
+                            m_bau.set_selected(m_category, false);
+                            m_category = m_building_category;
+                            m_bau.set_selected(m_category, true);
+                        }
+                    } else if (tool) {
                         m_tool = static_cast<Tool>(*tool);
                         action = Action{m_tool == Tool::Copy ? Action::Kind::Copy : Action::Kind::Demolish, 0, 0};
                     }
                 } else if (c != nullptr) {
                     if (const auto id = c->at(index); id && available(*id)) {
                         m_picked[m_popup_category] = index;
+                        m_building_category = m_popup_category;
                         action = Action{Action::Kind::Pick, *id, 0};
                     }
                 }
@@ -229,6 +250,7 @@ std::optional<BuildPanel::Action> BuildPanel::mouse(std::int32_t x, std::int32_t
                     m_tools = tools_category(c->button);
                     open_popup(m_tools, [](std::uint32_t) { return true; }, x, y);
                 } else {
+                    m_building_category = e.id;
                     open_popup(*c, available, x, y);
                 }
             }
@@ -273,10 +295,12 @@ void BuildPanel::refresh(const assets::BuildingTable& buildings, const Available
     // Title: the building's name, "Abreißen", or nothing.
     if (category != nullptr && category->demolish) {
         const ui::BuildCategory tools = tools_category(category->button);
-        m_bau.set_text(kTitle, name_of(tools, static_cast<std::size_t>(m_tool)));
+        const std::string name = name_of(tools, static_cast<std::size_t>(m_tool));
+        m_bau.set_text(kTitle, m_blueprint && m_tool == Tool::Copy ? ui::tr("build.blueprint.title", {name}) : name);
         m_bau.set_visible(kTitle, true);
     } else if (b != nullptr && category != nullptr) {
-        m_bau.set_text(kTitle, name_of(*category, category->index_of(*id).value_or(0)));
+        const std::string name = name_of(*category, category->index_of(*id).value_or(0));
+        m_bau.set_text(kTitle, m_blueprint ? ui::tr("build.blueprint.title", {name}) : name);
         m_bau.set_visible(kTitle, true);
     } else {
         m_bau.set_visible(kTitle, false);

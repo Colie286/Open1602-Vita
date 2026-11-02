@@ -160,6 +160,26 @@ TEST_CASE("build tool: no order unless the matching mode is on") {
     CHECK(!tool.dragging());
 }
 
+TEST_CASE("build tool: blueprint mode orders the same buildings as blueprints, and outlives a change of tool") {
+    const Map m;
+    app::BuildTool tool(m.buildings);
+    tool.set_mode(app::BuildTool::Mode::Build);
+    REQUIRE(tool.select(kField));
+    CHECK(!tool.blueprint());
+    tool.set_blueprint(true);
+    tool.press({0, 7, 2});
+    const auto build = tool.build_order(m.world, 0, {0, 5, 4});
+    const auto blueprints = tool.blueprint_order(m.world, 0, {0, 5, 4});
+    REQUIRE(build.has_value());
+    REQUIRE(blueprints.has_value());
+    CHECK(blueprints->kind == sim::BlueprintOrder::Kind::Place);
+    CHECK(blueprints->island == build->island);
+    REQUIRE(blueprints->items.size() == build->items.size());
+    CHECK(blueprints->items.back().x == build->items.back().x);
+    tool.set_mode(app::BuildTool::Mode::Copy);
+    CHECK(tool.blueprint());
+}
+
 TEST_CASE("build tool: a field is dragged over a rectangle, a click places one") {
     const Map m;
     app::BuildTool tool(m.buildings);

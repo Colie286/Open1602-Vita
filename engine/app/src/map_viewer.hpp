@@ -219,6 +219,8 @@ private:
     /// The end screen of a decided game, when it is due (EventPresenter::end_screen_due). Called
     /// every frame the game runs.
     void check_end_screen(std::uint64_t now);
+    /// The window of a blueprint: what it shows, and its clicks as commands.
+    void update_blueprint_window();
     /// The score sheets: the final screen of a decided game, or the "Bewertung" of a running one.
     void show_end_screen(sim::GameOutcome outcome, bool view_only);
     /// The high score list takes every human still playing, and `defeated` (who is
@@ -578,6 +580,7 @@ private:
     /// Mouse and keys on the map, the selection (after the window, the sound and the panel).
     std::unique_ptr<MapInput> m_input;
     std::vector<render::TileMark> m_tile_marks;  ///< red ground under what cannot be built, a dragged field
+    render::SpriteTints m_sprite_tints;          ///< the blueprints and the blueprint preview, this frame
     render::TileLighting m_lighting;             ///< tiles drawn darker this frame
     /// The circles of the clicked building (catchment_circles), kept while the selection and the
     /// buildings stay the same: for a type without production entries (towers) they come from a

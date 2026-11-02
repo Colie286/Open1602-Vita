@@ -213,6 +213,17 @@ struct TileMark {
     bool on_top = false;
 };
 
+/// Tiles whose buildings are drawn in a colour (Open1602's blueprints): each sprite of such a tile
+/// has its colours multiplied by `colour` and is drawn with its opacity (DrawCommand::Mode::Tinted),
+/// the whole building, roof included.
+struct SpriteTints {
+    assets::Rgba colour{255, 255, 255, 255};
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> tiles;  ///< world tiles, sorted
+    [[nodiscard]] bool contains(std::uint32_t x, std::uint32_t y) const noexcept {
+        return std::binary_search(tiles.begin(), tiles.end(), std::pair{x, y});
+    }
+};
+
 /// Colour of the hatching over an area dragged out for fields or trees (History Edition).
 inline constexpr assets::Rgba kDragHatch{202, 172, 52, 255};
 
@@ -381,6 +392,8 @@ struct WorldLayers {
     const std::vector<TileMark>* tile_marks = nullptr;
     /// Tiles drawn darker (while building, or around a clicked building).
     const TileLighting* lighting = nullptr;
+    /// Tiles whose buildings are drawn tinted (blueprints).
+    const SpriteTints* sprite_tints = nullptr;
     /// Flags, smoke and status icons of buildings (collect_building_figures). Smoke and icons need
     /// the atlas bases of their sheets (`sheet_base`) and follow the buildings' production state.
     const std::vector<BuildingFigure>* building_figures = nullptr;

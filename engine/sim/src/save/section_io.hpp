@@ -80,6 +80,12 @@ struct Decoded {
     std::optional<std::vector<ScriptState>> script_states;
     /// The groups the players stored (UGRP).
     std::optional<std::vector<UnitGroups>> unit_groups;
+    /// The blueprints (BLUE).
+    struct BlueprintPart {
+        std::vector<Blueprint> blueprints;
+        std::vector<BlueprintAuto> autos;
+    };
+    std::optional<BlueprintPart> blueprints;
     std::optional<std::string> package_scenario;
     std::optional<World::CampaignPart> campaign_part;
     /// The goods the packages added (GOOD).

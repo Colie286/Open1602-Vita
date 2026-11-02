@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "o1602/assets/building_table.hpp"
+#include "o1602/sim/blueprints.hpp"
 #include "o1602/sim/construction.hpp"
 #include "o1602/sim/drag_path.hpp"
 #include "o1602/sim/world.hpp"
@@ -129,6 +130,15 @@ public:
     /// nullptr if it is nothing the player can build.
     [[nodiscard]] const assets::BuildingType* orderable(const assets::BuildingType& placed) const noexcept;
 
+    /// Blueprint mode (Open1602): what the build and copy tools place becomes the player's
+    /// blueprints instead of buildings (sim::BlueprintOrder), to be built later. Stays as it is
+    /// when the tool changes.
+    [[nodiscard]] bool blueprint() const noexcept { return m_blueprint; }
+    void set_blueprint(bool on) noexcept { m_blueprint = on; }
+    /// The order of the current drag (or a click at `spot`) as blueprints: build_order() placed as
+    /// sim::BlueprintOrder::Kind::Place. Nothing for a Kontor founded from a ship.
+    [[nodiscard]] std::optional<sim::BlueprintOrder> blueprint_order(const sim::World& world, sim::PlayerId player,
+                                                                     const Spot& spot) const;
     /// One line for the window title.
     [[nodiscard]] std::string describe() const;
 
@@ -139,6 +149,7 @@ private:
     std::uint8_t m_rotation = 0;
     Mode m_mode = Mode::Off;
     bool m_orient_to_road = false;
+    bool m_blueprint = false;
     std::optional<std::uint32_t> m_ship;  ///< the ship that founds, chosen in its window
     std::optional<Spot> m_drag_start;
     std::optional<Layout> m_layout;                       ///< the copy tool's piece in hand

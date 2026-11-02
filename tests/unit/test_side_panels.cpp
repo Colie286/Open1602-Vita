@@ -232,6 +232,32 @@ TEST_CASE("side panel build menu: a category's pop-up picks a building, an unava
     CHECK(b.panel.current(b.available) == kBakery);
 }
 
+TEST_CASE("side panel build menu: the blueprint switch goes back to the building in hand and names it") {
+    Build b;
+    (void)b.press(kWorkshops);
+    REQUIRE(b.release_on(1).has_value());  // the smith
+    (void)b.press(kDemolishButton);
+    REQUIRE(b.panel.popup_open());
+    const auto a = b.release_on(2);
+    REQUIRE(a.has_value());
+    CHECK(a->kind == BuildPanel::Action::Kind::Blueprint);
+    CHECK(!b.panel.popup_open());
+    CHECK(!b.panel.demolish());
+    CHECK(b.panel.current(b.available) == kSmith);
+    b.panel.set_blueprint(true);
+    b.refresh();
+    CHECK(shows(b.panel.panel(), "Blueprint: Schmied"));
+    b.panel.set_blueprint(false);
+    b.refresh();
+    CHECK(!shows(b.panel.panel(), "Blueprint: Schmied"));
+    // With the copy tool in hand the menu stays at the tools.
+    (void)b.press(kDemolishButton);
+    REQUIRE(b.release_on(1).has_value());
+    (void)b.press(kDemolishButton);
+    REQUIRE(b.release_on(2).has_value());
+    CHECK(b.panel.copy());
+}
+
 TEST_CASE("side panel build menu: demolish, rotate and orient to the road") {
     Build b;
     // The demolish button opens the tools' pop-up (Open1602): demolish and copy.

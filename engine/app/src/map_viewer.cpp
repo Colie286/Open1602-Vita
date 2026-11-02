@@ -18,6 +18,7 @@
 #include <span>
 #include <string_view>
 #include <system_error>
+#include <tuple>
 #include <utility>
 
 #include "diagnostics.hpp"
@@ -132,6 +133,11 @@ bool touches_own_land(const sim::IslandMap& map, const sim::PlannedBuild& item, 
 constexpr std::uint64_t kShortOfMeansBlinkMs = 300;
 /// The tint over what the copy tool's drag would take into the hand.
 constexpr assets::Rgba kCopyMark{96, 160, 232, 110};
+/// How the local player's blueprints are drawn: translucent, the ground showing through, as
+/// planned buildings look in later Anno games.
+constexpr assets::Rgba kBlueprintTint{255, 255, 255, 150};
+/// And a light blue over their ground, which tells them apart from what stands there.
+constexpr assets::Rgba kBlueprintMark{90, 150, 255, 100};
 /// Real time a frame may spend on ticks; the rest of the frame draws.
 constexpr int kTickBudgetMs = 25;
 /// The status line under a still mouse is worked out again this often (FB-1).
@@ -931,6 +937,7 @@ int MapViewer::run() {
                 if (m_hud) {
                     // What the windows of the panel ordered (scuttling and disbanding ask first).
                     m_input->submit_orders(m_hud->take_commands(), false);
+                    update_blueprint_window();
                     apply_options();
                 }
                 update(delta);
@@ -1441,6 +1448,17 @@ void MapViewer::render() {
         m_pending_bill.reset();
         m_tile_marks.clear();
         layers.tile_marks = &m_tile_marks;
+        m_sprite_tints.colour = kBlueprintTint;
+        m_sprite_tints.tiles.clear();
+        layers.sprite_tints = &m_sprite_tints;
+        // A tile of an island whose building is drawn as a blueprint: translucent, on blue ground.
+        const auto tint = [&](std::uint16_t island, std::uint32_t x, std::uint32_t y) {
+            const sim::WorldIsland& isl = m_state->world.islands()[island];
+            m_sprite_tints.tiles.emplace_back(isl.x + x, isl.y + y);
+            render::TileMark mark{island, static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y), kBlueprintMark};
+            mark.on_top = true;
+            m_tile_marks.push_back(mark);
+        };
         // First, so that the build preview's marks lie over it.
         add_fertility_marks();
         m_lighting = tile_lighting();
@@ -1448,7 +1466,10 @@ void MapViewer::render() {
         if (m_tool.places()) {
             if (const auto spot = m_input->spot_at_mouse()) {
                 if (const auto order = m_tool.build_order(m_state->world, m_local_player, *spot)) {
-                    const sim::BuildPlan plan = sim::plan_build(m_state->world, m_buildings, *order);
+                    // Blueprints are placed as the buildings would be, without paying.
+                    const bool blueprint = m_tool.blueprint() && !order->ship;
+                    const sim::BuildPlan plan = blueprint ? sim::plan_blueprints(m_state->world, m_buildings, *order)
+                                                          : sim::plan_build(m_state->world, m_buildings, *order);
                     m_pending_bill = plan.shown;
                     sim::IslandMap& map = m_state->world.island(order->island).map;
                     // A field or forest being dragged: its whole rectangle hatched on the ground,
@@ -1527,6 +1548,9 @@ void MapViewer::render() {
                                 const auto tx = static_cast<std::uint32_t>(item.x) + i;
                                 const auto ty = static_cast<std::uint32_t>(item.y) + j;
                                 saved.push_back(Saved{order->island, tx, ty, map.top(tx, ty)});
+                                if (blueprint) {
+                                    tint(order->island, tx, ty);  // what becomes a blueprint, in its colour
+                                }
                             }
                         }
                         const sim::MapCell& at =
@@ -1559,7 +1583,23 @@ void MapViewer::render() {
                             }
                         }
                     }
-                    if (m_tool.mode() == BuildTool::Mode::Copy) {
+                    if (blueprint) {
+                        // How much becomes a blueprint, and what it will cost once built; or why
+                        // not, for one building.
+                        const auto planned =
+                            std::ranges::count_if(plan.items, [](const sim::PlannedBuild& item) { return item.ok(); });
+                        if (planned != 0 || order->items.size() > 1) {
+                            sim::BuildBill later;
+                            for (const sim::PlannedBuild& item : plan.items) {
+                                if (item.ok() && item.type != nullptr) {
+                                    later.add(item.type->build_cost);
+                                }
+                            }
+                            m_tool_status = ui::tr("build.blueprint.cost",
+                                                   {std::to_string(planned), std::to_string(order->items.size()),
+                                                    std::to_string(later.money)});
+                        }
+                    } else if (m_tool.mode() == BuildTool::Mode::Copy) {
                         // A copied piece rarely fits whole: how much of it would be built, its price
                         // and, where the means run out, what is missing.
                         m_tool_status =
@@ -1606,6 +1646,104 @@ void MapViewer::render() {
                 }
             }
         }
+        // The local player's blueprints (only theirs, as later Anno games show them): drawn into
+        // the map like the preview, tinted blue, where the preview does not stand. Put back with it.
+        if (!m_state->world.blueprints().empty()) {
+            std::vector<std::pair<std::uint16_t, sim::TilePos>> taken;
+            taken.reserve(saved.size());
+            for (const Saved& c : saved) {
+                taken.emplace_back(c.island,
+                                   sim::TilePos{static_cast<std::int32_t>(c.x), static_cast<std::int32_t>(c.y)});
+            }
+            std::sort(taken.begin(), taken.end(), [](const auto& a, const auto& b) {
+                return std::tie(a.first, a.second.x, a.second.y) < std::tie(b.first, b.second.x, b.second.y);
+            });
+            const auto is_taken = [&](std::uint16_t island, std::int32_t x, std::int32_t y) {
+                return std::binary_search(taken.begin(), taken.end(), std::pair{island, sim::TilePos{x, y}},
+                                          [](const auto& a, const auto& b) {
+                                              return std::tie(a.first, a.second.x, a.second.y) <
+                                                     std::tie(b.first, b.second.x, b.second.y);
+                                          });
+            };
+            // The demolish tool's drag also takes the blueprints in it: hatched like the buildings.
+            std::optional<sim::DemolishOrder> demolish;
+            if (m_tool.mode() == BuildTool::Mode::Demolish) {
+                if (const auto spot = m_input->spot_at_mouse()) {
+                    demolish = m_tool.demolish_order(m_local_player, *spot);
+                }
+            }
+            std::vector<std::pair<std::uint16_t, sim::TilePos>> fitted;
+            for (const sim::Blueprint& b : m_state->world.blueprints()) {
+                const assets::BuildingType* type = m_buildings.by_id(b.building);
+                if (b.player != m_local_player || type == nullptr || b.island >= m_state->world.islands().size()) {
+                    continue;
+                }
+                sim::IslandMap& map = m_state->world.island(b.island).map;
+                std::uint32_t w = 1;
+                std::uint32_t h = 1;
+                sim::rotated_size(*type, b.rotation, w, h);
+                bool free = map.contains(b.x, b.y) && map.contains(b.x + static_cast<std::int32_t>(w) - 1,
+                                                                   b.y + static_cast<std::int32_t>(h) - 1);
+                const bool doomed =
+                    demolish && demolish->island == b.island && b.x <= std::max(demolish->from.x, demolish->to.x) &&
+                    b.y <= std::max(demolish->from.y, demolish->to.y) &&
+                    b.x + static_cast<std::int32_t>(w) - 1 >= std::min(demolish->from.x, demolish->to.x) &&
+                    b.y + static_cast<std::int32_t>(h) - 1 >= std::min(demolish->from.y, demolish->to.y);
+                bool covered = false;  // what the tool would place lies over it: it gives way
+                for (std::uint32_t j = 0; free && j < h; ++j) {
+                    for (std::uint32_t i = 0; free && i < w; ++i) {
+                        covered =
+                            is_taken(b.island, b.x + static_cast<std::int32_t>(i), b.y + static_cast<std::int32_t>(j));
+                        free = !covered;
+                    }
+                }
+                if (covered) {
+                    // Its whole ground hatched, as what the demolish tool takes.
+                    for (std::uint32_t j = 0; j < h; ++j) {
+                        for (std::uint32_t i = 0; i < w; ++i) {
+                            render::TileMark mark{
+                                b.island, static_cast<std::uint16_t>(b.x + static_cast<std::int32_t>(i)),
+                                static_cast<std::uint16_t>(b.y + static_cast<std::int32_t>(j)), render::kDragHatch};
+                            mark.hatched = true;
+                            mark.on_top = true;
+                            m_tile_marks.push_back(mark);
+                        }
+                    }
+                }
+                if (!free) {
+                    continue;
+                }
+                for (std::uint32_t j = 0; j < h; ++j) {
+                    for (std::uint32_t i = 0; i < w; ++i) {
+                        const auto tx = static_cast<std::uint32_t>(b.x) + i;
+                        const auto ty = static_cast<std::uint32_t>(b.y) + j;
+                        saved.push_back(Saved{b.island, tx, ty, map.top(tx, ty)});
+                        tint(b.island, tx, ty);
+                        if (doomed) {
+                            render::TileMark mark{b.island, static_cast<std::uint16_t>(tx),
+                                                  static_cast<std::uint16_t>(ty), render::kDragHatch};
+                            mark.hatched = true;
+                            mark.on_top = true;
+                            m_tile_marks.push_back(mark);
+                        }
+                    }
+                }
+                const sim::MapCell& at = map.top(static_cast<std::uint32_t>(b.x), static_cast<std::uint32_t>(b.y));
+                const assets::BuildingType* shown = type;
+                if (const assets::BuildingType* ripe = sim::ripe_record(m_buildings, *type)) {
+                    shown = ripe;  // a field or tree grown, as the preview shows it
+                }
+                (void)map.build(*shown, b.x, b.y, b.rotation, b.anim_phase, at.owner, at.city);
+                if (shown->kreuz_base > 0) {
+                    fitted.emplace_back(b.island, sim::TilePos{b.x, b.y});
+                }
+            }
+            // Roads and walls of blueprints join each other; the real ones beside them stay as they are.
+            for (const auto& [island, t] : fitted) {
+                sim::fit_connection(m_state->world, m_buildings, island, t.x, t.y);
+            }
+        }
+        std::sort(m_sprite_tints.tiles.begin(), m_sprite_tints.tiles.end());
         render::build_world_draw_list(m_state->world, m_buildings, m_clock, m_camera.view(), m_camera.viewport(),
                                       layers, m_commands, m_draw_scratch);
         preview.restore();
@@ -2331,6 +2469,13 @@ void MapViewer::apply_hud(const Hud::Action& action) {
         case Hud::Action::Kind::Copy:
             m_tool.set_mode(BuildTool::Mode::Copy);
             m_input->drop_units();
+            break;
+        case Hud::Action::Kind::Blueprint:
+            // The switch in the tools' pop-up: the build menu went back to what is in hand.
+            m_input->toggle_blueprint();
+            if (const auto rearm = m_hud->set_mode(Hud::kModeBuild)) {
+                apply_hud(*rearm);
+            }
             break;
         case Hud::Action::Kind::TurnBuilding:
             m_tool.rotate(action.step);
@@ -3849,6 +3994,75 @@ std::size_t MapViewer::humans() const {
         n += p.role == sim::PlayerRole::Human && p.status != sim::PlayerStatus::Absent ? 1U : 0U;
     }
     return n;
+}
+
+void MapViewer::update_blueprint_window() {
+    const auto& at = m_hud->blueprint_open();
+    if (!at) {
+        (void)m_hud->take_blueprint_clicks();
+        return;
+    }
+    const sim::World& world = m_state->world;
+    const auto index = sim::blueprint_at(world, m_buildings, m_local_player, at->island, {at->x, at->y});
+    BlueprintModel model;
+    const sim::Blueprint* b = index ? &world.blueprints()[*index] : nullptr;
+    if (b == nullptr || b->x != at->x || b->y != at->y) {
+        m_hud->set_blueprint_model(model);  // built, removed or replaced: the window closes
+        return;
+    }
+    model.valid = true;
+    const assets::BuildingType* type = m_buildings.by_id(b->building);
+    if (type != nullptr) {
+        model.cost.add(type->build_cost);
+        if (const ui::BuildCategory* c = ui::build_menu().category_of(type->id); c != nullptr && m_hud->texts()) {
+            model.name = c->name(c->index_of(type->id).value_or(0), m_hud->texts()->section(c->names));
+        }
+    }
+    const std::uint8_t city_index = sim::blueprint_city(world, *b);
+    if (const sim::City* city = world.city(b->island, city_index)) {
+        model.city = city->name;
+    }
+    model.city_count = static_cast<std::size_t>(std::ranges::count_if(world.blueprints(), [&](const sim::Blueprint& o) {
+        return o.player == m_local_player && o.island == b->island && sim::blueprint_city(world, o) == city_index;
+    }));
+    model.city_cost = sim::blueprint_costs(world, m_buildings, m_local_player, b->island, city_index);
+    model.automatic = sim::blueprint_auto(world, m_local_player, b->island, city_index);
+    // What was clicked, as commands: they reach every computer of the game.
+    std::vector<sim::Command> orders;
+    for (const BlueprintWindow::Result r : m_hud->take_blueprint_clicks()) {
+        sim::BlueprintOrder order;
+        order.player = m_local_player;
+        order.island = b->island;
+        switch (r) {
+            case BlueprintWindow::Result::Build:
+                order.kind = sim::BlueprintOrder::Kind::Build;
+                order.from = {b->x, b->y};
+                order.to = order.from;
+                break;
+            case BlueprintWindow::Result::BuildCity:
+                order.kind = sim::BlueprintOrder::Kind::Build;
+                order.city = city_index;
+                break;
+            case BlueprintWindow::Result::Automatic:
+                order.kind = sim::BlueprintOrder::Kind::Auto;
+                order.city = city_index;
+                order.on = !model.automatic;
+                break;
+            case BlueprintWindow::Result::Remove:
+                order.kind = sim::BlueprintOrder::Kind::Remove;
+                order.from = {b->x, b->y};
+                order.to = order.from;
+                break;
+            case BlueprintWindow::Result::None:
+            case BlueprintWindow::Result::Close:
+                continue;
+        }
+        orders.emplace_back(std::move(order));
+    }
+    if (!orders.empty()) {
+        m_input->submit_orders(std::move(orders), true);
+    }
+    m_hud->set_blueprint_model(std::move(model));
 }
 
 void MapViewer::check_end_screen(std::uint64_t now) {

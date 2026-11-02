@@ -47,6 +47,8 @@ constexpr std::pair<KeyAction, std::string_view> kNames[] = {
     {KeyAction::PickBuilding, "pick_building"},
     {KeyAction::DemolishTool, "demolish_tool"},
     {KeyAction::CopyTool, "copy_tool"},
+    {KeyAction::BlueprintMode, "blueprint_mode"},
+    {KeyAction::BuildBlueprints, "build_blueprints"},
     {KeyAction::PlantFields, "plant_fields"},
     {KeyAction::ToggleGates, "toggle_gates"},
     {KeyAction::GroupStore, "group_store"},

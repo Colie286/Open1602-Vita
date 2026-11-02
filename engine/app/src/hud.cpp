@@ -312,6 +312,7 @@ Hud::Hud(SDL_Renderer* renderer, const assets::GameDirectory& game, const assets
         m_display = std::make_unique<DisplayMenu>(style);
         m_question_form.set_style(style);
         m_chat = std::make_unique<ChatWindow>(style);
+        m_blueprint = std::make_unique<BlueprintWindow>(style);
         // The window "Warenbilanz" as a parchment: ink on sandstone, the grounds at half strength.
         GoodsStyle goods;
         goods.form.translucent = true;
@@ -661,6 +662,10 @@ bool Hud::back() {
         m_chat->close();
         return true;
     }
+    if (m_blueprint_at) {
+        m_blueprint_at.reset();
+        return true;
+    }
     if (m_display_open) {
         m_display_open = false;
         return true;
@@ -786,6 +791,9 @@ ui::Rect Hud::layout(std::int32_t width, std::int32_t height, double ui_scale) {
     if (m_chat) {
         m_chat->set_scale(scale);
     }
+    if (m_blueprint) {
+        m_blueprint->set_scale(scale);
+    }
     if (m_goods) {
         m_goods->set_scale(scale);
     }
@@ -801,8 +809,8 @@ bool Hud::covers(std::int32_t x, std::int32_t y) const noexcept {
     // "Anzeige" all of them.
     // A question takes all of them: nothing behind it answers the mouse.
     return m_menu_active || m_question.has_value() || m_display_open || m_goods_open ||
-           (chat_open() && chat_rect().contains(x, y)) || m_regions.side_panel.contains(x, y) ||
-           m_regions.status_bar.contains(x, y) ||
+           (chat_open() && chat_rect().contains(x, y)) || (m_blueprint_at && blueprint_rect().contains(x, y)) ||
+           m_regions.side_panel.contains(x, y) || m_regions.status_bar.contains(x, y) ||
            (m_options_model.mission_window && m_tutor && m_regions.tutor.contains(x, y));
 }
 
@@ -963,6 +971,15 @@ ui::Rect Hud::chat_rect() const {
     const auto gap = static_cast<std::int32_t>(8 * s);
     const ui::Rect& v = m_regions.game_view;
     return {v.x + gap, std::max(v.y, v.y + v.h - h - gap), w, h};
+}
+
+ui::Rect Hud::blueprint_rect() const {
+    // Over the upper left of the map, where it hides little of what the player builds.
+    const double s = m_blueprint ? m_blueprint->scale() : m_regions.scale;
+    const auto gap = static_cast<std::int32_t>(8 * s);
+    const ui::Rect& v = m_regions.game_view;
+    return {v.x + gap, v.y + gap, static_cast<std::int32_t>(BlueprintWindow::kWidth * s),
+            static_cast<std::int32_t>(BlueprintWindow::kHeight * s)};
 }
 
 bool Hud::open_chat() {
@@ -1403,6 +1420,19 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
         }
         return std::nullopt;
     }
+    if (m_blueprint_at && m_blueprint && !m_menu_active && !m_question && !m_help && button == ui::MouseButton::Left) {
+        // The blueprint's window takes the clicks on it; the map beside it stays usable.
+        const ui::Rect r = blueprint_rect();
+        const BlueprintWindow::Result result = m_blueprint->mouse(x - r.x, y - r.y, down, m_blueprint_model);
+        if (result == BlueprintWindow::Result::Close) {
+            m_blueprint_at.reset();
+        } else if (result != BlueprintWindow::Result::None) {
+            m_blueprint_clicks.push_back(result);
+        }
+        if (r.contains(x, y)) {
+            return std::nullopt;
+        }
+    }
     if (chat_open() && !m_menu_active && !m_question && !m_help && button == ui::MouseButton::Left) {
         // The chat takes the clicks on it; the map beside it stays usable.
         const ui::Rect r = chat_rect();
@@ -1516,6 +1546,9 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
                     break;
                 case BuildPanel::Action::Kind::Copy:
                     action = Action{Action::Kind::Copy};
+                    break;
+                case BuildPanel::Action::Kind::Blueprint:
+                    action = Action{Action::Kind::Blueprint};
                     break;
                 case BuildPanel::Action::Kind::Rotate:
                     action = Action{Action::Kind::TurnBuilding};
@@ -2024,6 +2057,11 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
             m_renderer->draw(m_chat->draw_recent(m_multiplayer_model.chat, now_ms, m_renderer->fonts(m_chat->scale())),
                              v.x + gap, v.y + v.h - gap, m_chat->scale());
         }
+    }
+    if (m_blueprint_at && m_blueprint && m_blueprint_model.valid) {
+        const ui::Rect r = blueprint_rect();
+        m_renderer->draw(m_blueprint->draw(m_blueprint_model, m_renderer->fonts(m_blueprint->scale())), r.x, r.y,
+                         m_blueprint->scale());
     }
     if (m_display_open && m_display) {
         const ui::Rect r = display_rect();

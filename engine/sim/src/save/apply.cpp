@@ -229,6 +229,10 @@ core::Status apply_decoded(World& world, Decoded& d) {
     if (d.package_scenario) {
         world.set_package_scenario(std::move(*d.package_scenario));
     }
+    if (d.blueprints) {
+        world.blueprints() = std::move(d.blueprints->blueprints);
+        world.blueprint_auto() = std::move(d.blueprints->autos);
+    }
     if (d.unit_groups) {
         world.set_unit_groups(std::move(*d.unit_groups));
     }

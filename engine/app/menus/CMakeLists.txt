@@ -10,6 +10,7 @@
 
 add_library(o1602_menus
     ../src/app_settings.cpp
+    ../src/blueprint_window.cpp
     ../src/build_tool.cpp
     ../src/catchment_view.cpp
     ../src/chat_window.cpp

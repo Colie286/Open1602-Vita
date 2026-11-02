@@ -308,6 +308,20 @@ void io(A& a, T& t)
     a(t.another);
 }
 
+template <class A, class T>
+void io(A& a, T& t)
+    requires std::is_same_v<std::remove_const_t<T>, BlueprintOrder>
+{
+    a(t.player);
+    a.enumeration(t.kind, BlueprintOrder::Kind::Auto);
+    a(t.island);
+    a(t.items);
+    a(t.from);
+    a(t.to);
+    a(t.city);
+    a(t.on);
+}
+
 class Writer {
 public:
     explicit Writer(core::ByteWriter& out) noexcept : m_out(out) {}

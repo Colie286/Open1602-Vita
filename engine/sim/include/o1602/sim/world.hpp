@@ -417,6 +417,26 @@ struct GroupMember {
 /// A player's stored groups, keys 1 .. 9 and 0.
 using UnitGroups = std::array<std::vector<GroupMember>, 10>;
 
+/// A building a player planned without paying for it (Open1602, as in later Anno games): it holds
+/// its place for its owner, who alone sees it, until it is built (sim/blueprints.hpp).
+struct Blueprint {
+    PlayerId player = kNoPlayer;
+    std::uint16_t island = 0;
+    std::uint32_t building = 0;  ///< HAUS Id, as a BuildItem's
+    std::int32_t x = 0;          ///< footprint origin on the island
+    std::int32_t y = 0;
+    std::uint8_t rotation = 0;
+    std::uint8_t anim_phase = 0;
+    friend bool operator==(const Blueprint&, const Blueprint&) = default;
+};
+/// A city whose blueprints its owner lets build by themselves as soon as they can be paid.
+struct BlueprintAuto {
+    PlayerId player = kNoPlayer;
+    std::uint16_t island = 0;
+    std::uint8_t city = 0;
+    friend bool operator==(const BlueprintAuto&, const BlueprintAuto&) = default;
+};
+
 /// The world map: open sea with islands placed on it (the original keeps one 4-byte cell per
 /// world tile: island number, local x, local y, colour table - see rendering.md). The size is a
 /// property of the map; the original always uses 500 x 350 tiles and at most 255 islands
@@ -687,6 +707,12 @@ public:
         }
         m_unit_groups[player] = std::move(groups);
     }
+    /// The players' blueprints in the order they were placed (sim/blueprints.hpp), and the cities
+    /// that build theirs by themselves; saved with the game (section BLUE).
+    [[nodiscard]] const std::vector<Blueprint>& blueprints() const noexcept { return m_blueprints; }
+    [[nodiscard]] std::vector<Blueprint>& blueprints() noexcept { return m_blueprints; }
+    [[nodiscard]] const std::vector<BlueprintAuto>& blueprint_auto() const noexcept { return m_blueprint_auto; }
+    [[nodiscard]] std::vector<BlueprintAuto>& blueprint_auto() noexcept { return m_blueprint_auto; }
     /// Game settings saved with the game, which a Simulation of it uses (ADR 0008).
     [[nodiscard]] const std::optional<Rules>& saved_rules() const noexcept { return m_saved_rules; }
     void set_saved_rules(std::optional<Rules> rules) noexcept { m_saved_rules = rules; }
@@ -812,6 +838,8 @@ private:
     std::string m_package_scenario;
     std::optional<CampaignPart> m_campaign_part;
     std::vector<UnitGroups> m_unit_groups;
+    std::vector<Blueprint> m_blueprints;
+    std::vector<BlueprintAuto> m_blueprint_auto;
     std::optional<Rules> m_saved_rules;
     OriginalBugs m_original_bugs;
     bool m_fertile_fields = false;

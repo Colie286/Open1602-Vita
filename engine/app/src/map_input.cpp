@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <span>
 #include <string_view>
 #include <tuple>
@@ -194,6 +195,8 @@ void MapInput::setup_keys() {
     general(chord(SDLK_KP_ENTER), KeyAction::Chat);
     general(chord(SDLK_DELETE), KeyAction::DemolishTool);
     general(chord(SDLK_C, true), KeyAction::CopyTool);
+    general(chord(SDLK_U), KeyAction::BlueprintMode);  // "Umriss"
+    general(chord(SDLK_U, false, true), KeyAction::BuildBlueprints);
     general(chord(SDLK_F), KeyAction::PlantFields);  // "Felder"
     general(chord(SDLK_G), KeyAction::ToggleGates);  // "Gates"; with units selected G holds them
     // Groups: keys 1 .. 9, 0 are groups 0 .. 9.
@@ -231,6 +234,8 @@ void MapInput::setup_keys() {
     building(chord(SDLK_C), KeyAction::PickBuilding);
     building(chord(SDLK_DELETE), KeyAction::DemolishTool);
     building(chord(SDLK_C, true), KeyAction::CopyTool);
+    building(chord(SDLK_U), KeyAction::BlueprintMode);
+    building(chord(SDLK_U, false, true), KeyAction::BuildBlueprints);
     building(chord(SDLK_F), KeyAction::PlantFields);
     // Orders to the selected units
     // None of these means anything in general (no clash with W A S D).
@@ -615,13 +620,21 @@ void MapInput::run_action(const ui::KeyBinding& b) {
             if (m_hud && m_hud->mode() != Hud::kModeBuild) {
                 set_mode(Hud::kModeBuild);
             }
-            m_tool.set_mode(m_tool.mode() == BuildTool::Mode::Copy ? BuildTool::Mode::Off : BuildTool::Mode::Copy);
-            if (m_hud && m_tool.mode() == BuildTool::Mode::Copy) {
+            // Always starts it afresh (the piece in hand goes), so that the menu's title, which names
+            // the copy tool, never names a tool put away; Escape puts it away.
+            m_tool.set_mode(BuildTool::Mode::Copy);
+            if (m_hud) {
                 m_hud->show_tool_in_build_menu(BuildPanel::Tool::Copy);
             }
             if (m_tool.active()) {
                 drop_units();
             }
+            break;
+        case KeyAction::BlueprintMode:
+            toggle_blueprint();
+            break;
+        case KeyAction::BuildBlueprints:
+            build_blueprints();
             break;
         case KeyAction::PlantFields:
             plant_fields();
@@ -940,6 +953,11 @@ void MapInput::handle_event(const SDL_Event& event) {
                     // The copy tool's drag ends: the piece goes into the hand (nothing if it
                     // holds nothing of the player's own).
                     (void)m_tool.take_layout(world(), local(), *spot);
+                } else if (spot && m_tool.blueprint() && m_tool.places()) {
+                    // Blueprint mode: the buildings become blueprints, paid for when built.
+                    if (auto order = m_tool.blueprint_order(world(), local(), *spot)) {
+                        m_commands.submit(std::move(*order));
+                    }
                 } else if (spot) {
                     if (auto order = m_tool.build_order(world(), local(), *spot)) {
                         // A Kontor founded from a ship is the only one there: the tool is put away
@@ -1488,7 +1506,68 @@ void MapInput::map_left_up(double x, double y, std::uint16_t mod, int clicks) {
         selection_changed(false);
         leave_military_mode();
     }
+    if (open_blueprint_at_mouse()) {
+        return;
+    }
     select_building_at_mouse(before);
+}
+
+void MapInput::toggle_blueprint() {
+    m_tool.set_blueprint(!m_tool.blueprint());
+    if (m_hud) {
+        m_hud->set_blueprint_in_build_menu(m_tool.blueprint());
+        if (m_tool.blueprint() && m_hud->mode() != Hud::kModeBuild) {
+            set_mode(Hud::kModeBuild);
+        }
+    }
+}
+
+void MapInput::build_blueprints() {
+    const auto spot = spot_at_mouse();
+    if (!spot) {
+        return;
+    }
+    const sim::IslandMap& map = world().islands()[spot->island].map;
+    if (!map.contains(spot->x, spot->y)) {
+        return;
+    }
+    sim::BlueprintOrder order;
+    order.player = local();
+    order.kind = sim::BlueprintOrder::Kind::Build;
+    order.island = spot->island;
+    order.city = map.top(static_cast<std::uint32_t>(spot->x), static_cast<std::uint32_t>(spot->y)).city;
+    if (order.city == sim::MapCell::kNoCity) {
+        // Beside the city's land: the city of the player's nearest blueprint on the island.
+        std::int64_t best = std::numeric_limits<std::int64_t>::max();
+        for (const sim::Blueprint& b : world().blueprints()) {
+            if (b.player != local() || b.island != spot->island) {
+                continue;
+            }
+            const std::int64_t dx = b.x - spot->x;
+            const std::int64_t dy = b.y - spot->y;
+            if (dx * dx + dy * dy < best) {
+                best = dx * dx + dy * dy;
+                order.city = sim::blueprint_city(world(), b);
+            }
+        }
+    }
+    if (order.city != sim::MapCell::kNoCity) {
+        submit({std::move(order)}, true, false);
+    }
+}
+
+bool MapInput::open_blueprint_at_mouse() {
+    const auto spot = spot_at_mouse();
+    if (!m_hud || !spot) {
+        return false;
+    }
+    const auto index = sim::blueprint_at(world(), m_buildings, local(), spot->island, {spot->x, spot->y});
+    if (!index) {
+        return false;
+    }
+    const sim::Blueprint& b = world().blueprints()[*index];
+    m_hud->open_blueprint(b.island, b.x, b.y);
+    return true;
 }
 
 void MapInput::map_order(double x, double y, bool queue, bool on_object) {

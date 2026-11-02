@@ -552,6 +552,14 @@ CommandResult Simulation::execute(const Command& command) {
             execute_demolish(*m_world, *m_buildings, *demolish, m_construction_events.sink(), m_rules.refund_share());
         result.demolished = d.removed;
         result.refund = d.refund;
+        // The demolish tool also clears the player's blueprints.
+        BlueprintOrder clear;
+        clear.player = demolish->player;
+        clear.kind = BlueprintOrder::Kind::Remove;
+        clear.island = demolish->island;
+        clear.from = demolish->from;
+        clear.to = demolish->to;
+        execute_blueprints(*m_world, *m_buildings, clear, m_city_names, nullptr);
     } else if (const auto* order = std::get_if<ShipOrder>(&command)) {
         result.accepted = m_fleet.order(*order);
         if (result.accepted && order->attack) {
@@ -597,6 +605,9 @@ CommandResult Simulation::execute(const Command& command) {
         result.accepted = gate_order(*gates);
     } else if (const auto* cart = std::get_if<CartRequest>(&command)) {
         result.accepted = m_fleet.request_cart(*cart) != 0;
+    } else if (const auto* blueprint = std::get_if<BlueprintOrder>(&command)) {
+        result.accepted =
+            execute_blueprints(*m_world, *m_buildings, *blueprint, m_city_names, m_construction_events.sink()) != 0;
     }
     handle(m_construction_events.events(), first);
     return result;
@@ -769,6 +780,10 @@ bool towers_affected(const ConstructionEvent& e) {
 
 void Simulation::handle(const std::vector<ConstructionEvent>& events, std::size_t first) {
     bool storage = false;
+    // Whatever is placed over a blueprint takes its place.
+    if (first < events.size()) {
+        drop_covered_blueprints(*m_world, *m_buildings, std::span(events).subspan(first));
+    }
     // S-002: figures of a building that is gone end their trip; what they carry is lost and what
     // they reserved is released. All removals up to the next founded city at once (TB-22).
     std::vector<std::uint32_t> removed;
@@ -858,7 +873,7 @@ std::span<const Simulation::TickStep> Simulation::tick_steps() noexcept {
     // The original runs its subsystems in this order: growth first, production, then the cities
     // and houses, ..., the computer players after the players' tick and the figures last.
     // Changing the order changes the game.
-    static constexpr std::array<TickStep, 16> kSteps = {{
+    static constexpr std::array<TickStep, 17> kSteps = {{
         {"diplomacy", &Simulation::diplomacy_step},
         {"growth", &Simulation::growth_step},
         {"production", &Simulation::production_step},
@@ -870,6 +885,7 @@ std::span<const Simulation::TickStep> Simulation::tick_steps() noexcept {
         {"islands", &Simulation::islands_step},
         {"volcanoes", &Simulation::volcanoes_step},
         {"computers", &Simulation::computers_step},
+        {"blueprints", &Simulation::blueprints_step},  // Open1602's own: the players' builders
         {"combat", &Simulation::combat_step},
         {"ships", &Simulation::ships_step},
         {"soldiers", &Simulation::soldiers_step},
@@ -1012,6 +1028,15 @@ void Simulation::city_events_step() {
         m_logistics.spawn_robber(r);
     }
     m_robbers.clear();
+}
+
+void Simulation::blueprints_step() {
+    if (m_time_ms % kBlueprintAutoMs != 0 || m_world->blueprint_auto().empty()) {
+        return;
+    }
+    const std::size_t first = m_construction_events.size();
+    build_auto_blueprints(*m_world, *m_buildings, m_city_names, m_construction_events.sink());
+    handle(m_construction_events.events(), first);
 }
 
 void Simulation::statistics_step() {

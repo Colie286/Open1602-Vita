@@ -84,6 +84,8 @@ information fit in and the controls follow today's real-time strategy games (202
 | C | pipette: the building under the mouse as the building order (a grown house as the first house) |
 | Delete | demolish tool |
 | Ctrl+C | copy tool (Open1602): drag over a piece of the own city, or click a building, and it hangs at the mouse to be built again elsewhere; R turns it |
+| U | blueprint mode on or off (Open1602): what the build and copy tools place becomes the player's blueprints, built later |
+| Shift+U | build the player's blueprints of the city under the mouse |
 | Escape | put the tool away (the copy tool: first the piece in hand) |
 | Right-click | put the tool away and return to the player status (the copy tool: only the piece in hand) |
 
@@ -91,6 +93,15 @@ The build menu's demolish button opens a pop-up with the tools, like the other c
 and the copy tool (Open1602's icons). A copied piece is built as one order: roads and walls first,
 then the buildings, then the fields, so what the means do not reach is the end of the order. Houses
 come as the first house; fields and trees only with a building of the piece that harvests them.
+
+The pop-up's third entry switches blueprint mode (as later Anno games): placed buildings and copied
+pieces become blueprints, free of cost, only in the player's own cities and never a Kontor. Only
+their owner sees them, as blue outlines; the demolish tool removes them; anything built over one
+takes its place. A click on a blueprint opens its window: its costs and those of all blueprints of
+its city, "Build", "Build all in this city", whether the city builds them by itself (every 5 s of
+game time, as far as it can pay, in the order they were placed) and "Remove". Every change is a
+command, so all computers of a multiplayer game keep the same blueprints; they are saved with the
+game.
 
 **Settings dialogs** (start dialog of a game, window „Anzeige“)
 
