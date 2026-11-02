@@ -1,0 +1,4 @@
+# The neutral factions (factions.md): in large games a pirate nest for every three players.
+["anno1602:pirates"]
+nests.per = 3
+nests.max = 5

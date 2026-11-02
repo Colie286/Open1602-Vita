@@ -49,6 +49,7 @@ add_executable(o1602_tests
     unit/test_display_settings.cpp
     unit/test_command_sink.cpp
     unit/test_event_presenter.cpp
+    unit/test_example_package.cpp
     unit/test_fertility_view.cpp
     unit/test_catchment_view.cpp
     unit/test_messages.cpp
@@ -134,7 +135,8 @@ o1602_set_warnings(o1602_tests)
 target_include_directories(o1602_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/video/src)
 # Stored savegames of earlier versions (DS-3), read by test_save_game.cpp.
 target_compile_definitions(o1602_tests PRIVATE O1602_TEST_SAVES="${CMAKE_CURRENT_SOURCE_DIR}/unit/saves"
-                                               O1602_TEST_SOUNDS="${CMAKE_CURRENT_SOURCE_DIR}/unit/sounds")
+                                               O1602_TEST_SOUNDS="${CMAKE_CURRENT_SOURCE_DIR}/unit/sounds"
+                                               O1602_EXAMPLE_MODS="${PROJECT_SOURCE_DIR}/data/mods")
 o1602_utf8_manifest(o1602_tests)  # UTF-8 paths and arguments on Windows, as in the game
 # Tests dereference lookup results (world.player(0)->money) right after creating them; a null there
 # crashes the test, which reports it as failed. GCC's -Wnull-dereference flags every such line at -O2,
@@ -238,6 +240,14 @@ if(TARGET o1602-tool)
         set_tests_properties(tool:${_command}-o1602-without-data PROPERTIES
             ENVIRONMENT "ANNO1602_DIR=${_files}/no-installation")
     endforeach()
+    o1602_tool_test(check-mod-without-data 1
+        STDERR "^error: [^\\n]*does not look like an Anno 1602 installation \\(missing haeuser.cod\\)\\n$"
+        ARGS check-mod "${PROJECT_SOURCE_DIR}/data/mods")
+    set_tests_properties(tool:check-mod-without-data PROPERTIES
+        ENVIRONMENT "ANNO1602_DIR=${_files}/no-installation")
+    o1602_tool_test(check-mod-no-folder 1
+        STDERR "^error: [^\\n]*: no folder of packages\\n$"
+        ARGS check-mod "${_files}/missing")
     o1602_tool_test(bench-without-data 1
         STDERR "^error: [^\\n]*does not look like an Anno 1602 installation \\(missing haeuser.cod\\)\\n$"
         ARGS bench --minutes 1)

@@ -1,0 +1,6 @@
+# Values of buildings, the original's and this package's (values.md).
+["anno1602:bakery"]
+produce = 2                   # twice the bread
+
+["example:lighthouse"]
+health = 50

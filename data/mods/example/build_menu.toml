@@ -1,0 +1,14 @@
+# The build menu (build-menu.md): the lighthouse among the harbour buildings, the pepper farm among
+# the farms.
+[lighthouse]
+building = "example:lighthouse"
+category = 31007
+row = 3
+icon = 90
+name = "Leuchtturm"
+
+[pepper_farm]
+building = "example:pepper_farm"
+category = 31006
+icon = "example:pepper"
+name = "Pfefferplantage"

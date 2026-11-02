@@ -1,0 +1,5 @@
+# The example package of Open1602: one file of each kind a package can have, each used once.
+# docs/modding/README.md walks through it; docs/modding/packages.md lists the files.
+name = "Example"
+version = "1.0"
+description = "Pepper, a lighthouse with a horn, a cog and a small scenario: every file of a package once."

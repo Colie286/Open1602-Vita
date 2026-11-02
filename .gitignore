@@ -70,3 +70,6 @@ __pycache__/
 # Local inputs and outputs (savegames, videos, screenshots), see docs/requests.md
 /inputs/
 /outputs/
+
+# The example package's map is Open1602's own (docs/modding/README.md)
+!/data/mods/example/**/*.o1602

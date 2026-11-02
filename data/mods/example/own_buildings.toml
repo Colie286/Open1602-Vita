@@ -1,0 +1,15 @@
+# Buildings of this package (own-buildings.md).
+
+# A pepper farm: the tobacco plantation's values, making pepper, worked by the pepper pickers.
+[pepper_farm]
+like = "anno1602:tobacco_plantation"
+ware = "example:pepper"
+raw = ""
+figure = "example:pepper_picker"
+
+# A lighthouse: the watchtower's values, drawn with this package's image, with a horn when built.
+[lighthouse]
+like = "anno1602:watchtower"
+gfx = "example:lighthouse"
+build_sound = "example:horn"
+level = "example:harbour"

@@ -1,0 +1,5 @@
+# Unlock levels (levels.md): the harbour level opens the lighthouse at 300 merchants.
+[harbour]
+class = "anno1602:merchants"
+min_inhabitants = 300
+message = "example:harbour_open"

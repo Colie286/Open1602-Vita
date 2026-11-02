@@ -398,6 +398,9 @@ int cmd_new_world(const Args& args) {
         volcano_islands += island.craters.empty() ? 0U : 1U;
     }
     std::printf("islands with a volcano %zu\n", volcano_islands);
+    if (own_format && args.flag("--without-original")) {
+        world->set_source(nullptr);  // no section ORIG: a map to pass on holds nothing of the original's files
+    }
     auto bytes = own_format ? sim::write_game(*world, *buildings) : sim::write_savegame(*world, *buildings);
     if (!bytes) {
         return fail(bytes.error());

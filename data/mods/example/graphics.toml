@@ -1,0 +1,10 @@
+# Images of this package (graphics.md). Their sprites get numbers from 40000 on.
+[lighthouse]
+image = "gfx/lighthouse.png"  # four sprites of 64 x 128 pixels, one per frame of the light
+width = 64
+height = 128
+
+[cog]
+image = "gfx/cog.png"         # 48 sprites of 64 x 64 pixels: the ship's 8 directions in each of its frames
+width = 64
+height = 64

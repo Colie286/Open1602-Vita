@@ -80,6 +80,11 @@ A map saved by Open1602 (`.o1602`) keeps the packages it was saved with
 ([packages.md](packages.md#which-packages-a-game-uses)): save it with the package turned on, so its
 buildings and goods are part of the map.
 
+A map made by `o1602-tool new-world <map.o1602> --without-original` (with `--island-shapes own` and
+`--villages none`) holds nothing of the original's files: islands of their own shape and no copy of
+the original's scenario it starts from (section `ORIG`). The example package's map
+(`data/mods/example/maps/harbour.o1602`) is made so.
+
 ## Own scenarios
 
 Scenarios that come without a package, such as maps made with the original's editor or shared by

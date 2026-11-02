@@ -1,0 +1,6 @@
+# Values of figures, the original's and this package's (values.md).
+["anno1602:swordsman"]
+health = 30
+
+["example:pepper_picker"]
+max_carry = 2

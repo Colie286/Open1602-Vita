@@ -1,0 +1,3 @@
+# Build orders of the computer players (computer-players.md): the aristocrats also build a theatre.
+[aristocrats]
+append = "theatre 1"

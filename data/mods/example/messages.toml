@@ -1,0 +1,21 @@
+# Messages of the status bar (messages.md).
+
+# Sent by levels.toml when the harbour level is reached.
+[harbour_open]
+like = 0x3C
+text = "The merchants of {city} want a lighthouse."
+text.de = "Die Kaufleute von {city} wünschen einen Leuchtturm."
+
+# Sent by script.lua for every hundredth building of a player.
+[milestone]
+text = "{name} has placed {count} buildings and gets 1000 gold."
+text.de = "{name} hat {count} Gebäude errichtet und erhält 1000 Gold."
+icon = "example:pepper"
+kind = "events"
+sound = "sounds/horn.flac"
+
+# Sent by harbour.lua when the scenario starts.
+[welcome]
+like = 0x3C
+text = "Welcome to the harbour. The coast needs a light."
+text.de = "Willkommen im Hafen. Die Küste braucht ein Licht."

@@ -24,6 +24,7 @@ package's own is in [open-work.md](open-work.md).
     figures.toml       values of the original's figures (values.md)
     computers.toml     build orders of the computer players (computer-players.md)
     own_buildings.toml buildings of the package's own (own-buildings.md)
+    own_figures.toml   figures of the package's own (own-figures.md)
     goods.toml         trade goods of the package's own (goods.md)
     classes.toml       classes of inhabitants, changed and new (classes.md)
     levels.toml        unlock levels, changed and new (levels.md)

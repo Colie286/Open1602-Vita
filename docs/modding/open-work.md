@@ -44,13 +44,12 @@ building table), and islands wider or higher than 255 tiles get native villages,
 
 ### Recommendations
 
-- An **example package** in the repository (for instance `data/mods/example`) that uses every file
-  of the table above once, loaded by a test with and without the original's data. It shows a modder
-  how the files fit together and catches a format change that breaks packages.
-- A **first page for modders** (`docs/modding/README.md`): how to make a package step by step, with
-  links to the guides, instead of starting from this list.
-- A **package check** in `o1602-tool` (e.g. `o1602-tool check-mod <folder>`) that reads a package
-  as the game does and lists every warning, without starting the game.
+Done on 2026-11-02: the **example package** [`data/mods/example`](../../data/mods/example), which
+uses every file of a package once and which the tests load with and without the original's data;
+the **first page for modders**, [README.md](README.md); and the **package check**
+`o1602-tool check-mod <mods folder>`, which reads the packages as the game does and lists every
+problem without starting the game.
+
 - Next item to work on: soldiers and ships of a package's own (item 2), because players see it
   most; then the computers' core tables (item 5), so that computers play a package's content as well
   as the original's.

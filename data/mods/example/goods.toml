@@ -1,0 +1,7 @@
+# A trade good of this package: example:pepper (goods.md).
+[pepper]
+price = 70                    # base price per ton
+icon = "anno1602:spices"      # the original's icon where a game lacks this package
+picture = "example:pepper"    # the icon of icons.toml
+name.en = "Pepper"
+name.de = "Pfeffer"

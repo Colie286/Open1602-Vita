@@ -1,0 +1,12 @@
+# A scenario of this package (scenarios.md). Its map is an own world saved by Open1602.
+[harbour]
+file = "maps/harbour.o1602"
+script = "harbour.lua"
+stars = 1
+money = 30000
+name.en = "The Harbour"
+name.de = "Der Hafen"
+briefing.en = "Grow pepper and light the coast. Build a lighthouse and keep 20 t of pepper."
+briefing.de = "Baut Pfeffer an und erleuchtet die Küste. Baut einen Leuchtturm und lagert 20 t Pfeffer."
+goal.inhabitants = 500
+goal.goods.pepper = 20

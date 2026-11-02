@@ -1,0 +1,8 @@
+# A campaign of this package's scenarios (scenarios.md).
+[coast]
+name.en = "The Coast"
+name.de = "Die Küste"
+briefing.en = "One harbour, then the next."
+stars = 1
+carry.money = true
+part.1 = "harbour"

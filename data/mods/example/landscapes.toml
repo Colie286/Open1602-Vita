@@ -1,0 +1,7 @@
+# Kinds of island world for new games (landscapes.md).
+[atolls]
+like = "archipelago"
+title = "Atolls"
+title.de = "Atolle"
+land = 10
+max = 40
