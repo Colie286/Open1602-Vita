@@ -5,11 +5,13 @@
 // through site search, build orders and roads, run the same every time and through a savegame.
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -363,6 +365,85 @@ TEST_CASE("ai arena: a computer builds its shipyard at the open sea, not at a la
     }
     REQUIRE(yard.has_value());
     CHECK(yard->x >= 43);  // its water side on the beach of column 46, not on the lake's (column 41)
+}
+
+TEST_CASE("ai arena: a computer's shipyard builds ships of a package of the type it wants too") {
+    Arena a(true);
+    // A ship of a package beside each type the small yard builds.
+    const assets::FigureType model = *a.figures.get(21);
+    const std::array<assets::FigureType, 2> ship_and_wreck{model, model};
+    const auto cog = a.figures.add_ship(ship_and_wreck, 0);
+    const auto galley = a.figures.add_ship(ship_and_wreck, 2);
+    REQUIRE(cog.ok());
+    REQUIRE(galley.ok());
+    sim::Simulation s(a.world, a.buildings, a.figures);
+    REQUIRE(a.cities_of(kFirst) == 0);
+    for (int minute = 0; minute < 10 && a.cities_of(kFirst) == 0; ++minute) {
+        run(s, 60'000);
+    }
+    REQUIRE(a.cities_of(kFirst) == 1);
+    run(s, 60'000);
+    // A weaving hut in the city makes the computer want a yard, the loss of its ship makes it ask.
+    std::uint16_t island = 0;
+    std::uint8_t index = 0;
+    for (const sim::City& c : a.world.cities()) {
+        if (c.owner == kFirst) {
+            island = c.island;
+            index = c.index;
+        }
+    }
+    bool weaving = false;
+    for (std::int32_t y = 0; y < 50 && !weaving; ++y) {
+        for (std::int32_t x = 0; x < 50 && !weaving; ++x) {
+            sim::BuildOrder order;
+            order.player = kFirst;
+            order.island = island;
+            order.items.push_back(sim::BuildItem{kWebstube, x, y, 0, 0});
+            const sim::BuildPlan plan = sim::plan_build(a.world, a.buildings, order);
+            if (plan.city == index && plan.items.front().ok()) {
+                weaving = sim::execute_build(a.world, a.buildings, order, {}, nullptr).items.front().ok();
+            }
+        }
+    }
+    REQUIRE(weaving);
+    a.world.erase_ships([](const sim::Ship& ship) { return ship.owner == kFirst; });
+    std::optional<sim::TilePos> yard;
+    for (int minute = 0; minute < 15 && !yard; ++minute) {
+        run(s, 60'000);
+        const sim::IslandMap& map = a.world.islands()[island].map;
+        for (std::uint32_t y = 0; y < map.height() && !yard; ++y) {
+            for (std::uint32_t x = 0; x < map.width() && !yard; ++x) {
+                const sim::TilePos at{static_cast<std::int32_t>(x), static_cast<std::int32_t>(y)};
+                const auto b = sim::building_at(a.world, a.buildings, island, at);
+                if (b && b->type->id == kYard && b->origin.x == at.x && b->origin.y == at.y) {
+                    yard = at;
+                }
+            }
+        }
+    }
+    REQUIRE(yard.has_value());
+    std::set<std::uint32_t> ordered;
+    for (int minute = 0; minute < 40 && ordered.size() < 2; ++minute) {
+        for (int k = 0; k < 6; ++k) {
+            run(s, 10'000);
+            for (const sim::CostBuilding& b : a.world.cost_buildings()) {
+                if (b.kind == sim::CostBuilding::Kind::Shipyard && b.order != sim::CostBuilding::kNoOrder) {
+                    const std::uint32_t built = sim::yard_ship(b);
+                    // The original's ship of the order's type or the package's beside it.
+                    CHECK(a.figures.ship_type_of(built) == std::optional<std::uint8_t>{b.order});
+                    ordered.insert(built);
+                }
+            }
+        }
+        // Money for more ships.
+        for (std::size_t p = 0; p < a.world.players().size(); ++p) {
+            sim::Player* player = a.world.player(static_cast<sim::PlayerId>(p));
+            player->money = std::max(player->money, 50'000);
+        }
+    }
+    REQUIRE(!ordered.empty());
+    // The dice of this game pick the package's ship of the type (the galley, beside KRIEG1).
+    CHECK((ordered.count(*cog) + ordered.count(*galley)) != 0);
 }
 
 TEST_CASE("ai arena: two runs of the same game stay the same, minute by minute") {

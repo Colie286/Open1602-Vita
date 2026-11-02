@@ -96,7 +96,9 @@ them once looks the same for every player.
 A soldier takes four figure numbers in a row, from the top down as every figure of a package. On
 board a ship a soldier of a package fills a hold as the original's units do; the hold shows the
 original's unit of its kind (`Kind`) and keeps which soldier it holds (version 6 of `FLEE`,
-[o1602-save.md](../formats/o1602-save.md)). Computers train only the original's units so far.
+[o1602-save.md](../formats/o1602-save.md)). Computers train one too, as often as the original's
+unit of its kind (`Kind`), and count it as that unit; the original's computers (`--ai classic`) train
+only theirs.
 
 ## Ships
 
@@ -123,8 +125,8 @@ name.de = "Kogge"
 
 `icon`, `name.<language>` and `tint` work as for soldiers. A shipyard keeps which ship of a
 package it builds (version 7 of `FLEE`, [o1602-save.md](../formats/o1602-save.md)). A script sets
-one down with `game.add_ship` ([scripts.md](scripts.md)). Computers build only the original's ships
-so far.
+one down with `game.add_ship` ([scripts.md](scripts.md)). Computers build one too, as often as the
+original's ship of its type; the original's computers (`--ai classic`) build only theirs.
 
 ## Numbers and savegames
 

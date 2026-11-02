@@ -14,7 +14,7 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 | Item | What a package can do |
 |---|---|
 | 1. Packages | a manifest with version, dependencies (version ranges) and load order; packages as folders or zip archives; the packages a game uses are kept in its savegame and checked in multiplayer, where the host sends missing ones; the main menu's screen "Mods" |
-| 2. Content | change 16 values of the original's buildings and 10 of its figures; add buildings and figures of its own, each copying one of the original, and replace another package's building |
+| 2. Content | change 16 values of the original's buildings and 10 of its figures; add buildings and figures of its own, each copying one of the original, and replace another package's building; soldiers that castles train and ships that shipyards build, which computers train and build too |
 | 3. Goods, classes, levels | add trade goods, change the original's classes and add up to eight in all with their needs and public buildings, change and add unlock levels with messages of their own |
 | 4. Graphics and sound | PNG images for buildings, figures, ships and icons; music and sounds as WAV, Ogg Vorbis or FLAC for messages, buildings and figures; Smacker and Bink 2 videos for messages |
 | 5. Computer players | they build the chains of a package's goods; their stage orders, public buildings, cheat amounts and when a city moves on are data |
@@ -27,7 +27,6 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 
 | Item | What is missing | Size |
 |---|---|---|
-| 2 | computers that train a package's soldiers and build a package's ships (soldiers and ships of a package's own are done) | medium: the AI's unit and ship choice |
 | 4 | videos in a modern format (today only Smacker and Bink 2) | medium: a decoder in `third_party` (e.g. a royalty-free format such as AV1 or VP9 in WebM) |
 | 5 | the original's 32 rows of needs (`kNeeds`), its 55 fixed building slots of a city, which building of the original produces what (`producer_slot`), the first colony's crop by the computer's slot (`first_crop`) and the four unit families and ship types the computers build, all still compiled in | large: the AI's core tables |
 | 9 | climates of a package's own, with their ground, forest and crops (today north and south) | large: climate tables, the generator, fertility and the start dialog |
@@ -50,9 +49,8 @@ the **first page for modders**, [README.md](README.md); and the **package check*
 `o1602-tool check-mod <mods folder>`, which reads the packages as the game does and lists every
 problem without starting the game.
 
-- Next item to work on: soldiers and ships of a package's own (item 2), because players see it
-  most; then the computers' core tables (item 5), so that computers play a package's content as well
-  as the original's.
+- Next item to work on: the computers' core tables (item 5), so that computers play a package's
+  content as well as the original's.
 
 ## What a mod can do today
 
@@ -151,8 +149,10 @@ ship's hold carries it, and a game keeps it (`FLEE` version 6). Ships of a packa
 2026-11-02 ([own-figures.md](own-figures.md#ships)): a figure whose `like` names a ship of the
 shipyards is a ship and its wreck; shipyards build it beside the ship it copies, and a game keeps
 the order (`FLEE` version 7). Graphics of packages in player colour are templates
-([flags.md](flags.md#graphics-of-packages-in-player-colour)). Still open: computers that train a
-package's soldiers and build a package's ships.
+([flags.md](flags.md#graphics-of-packages-in-player-colour)). Computers train a package's soldiers
+and build a package's ships since 2026-11-02: as often as the original's of the same kind or type,
+by the dice of the computers ([own-figures.md](own-figures.md#soldiers)); the original's computers
+(`--ai classic`) know only theirs.
 
 ### 3. Free goods list, resident classes and unlock levels (section 2; MD-2, MD-3, MD-8)
 
