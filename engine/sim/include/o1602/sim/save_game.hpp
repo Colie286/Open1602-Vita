@@ -43,6 +43,9 @@ struct SaveMeta {
     std::uint32_t height = 0;
     std::uint64_t time_ms = 0;  ///< game time
     std::string player;         ///< name of the first human player (Windows-1252)
+    /// A scenario of the editor (section SCNI after META): its stars, flags and names; author,
+    /// version and briefings are left empty. Nothing for a savegame.
+    std::optional<ScenarioInfo> scenario;
 };
 
 /// What the header of a savegame says, for a list of savegames.

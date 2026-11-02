@@ -31,6 +31,7 @@
 #include "o1602/sim/production.hpp"
 #include "o1602/sim/random.hpp"
 #include "o1602/sim/rules.hpp"
+#include "o1602/sim/scenario_data.hpp"
 #include "o1602/sim/script_state.hpp"
 #include "o1602/sim/ship.hpp"
 #include "o1602/sim/soldier.hpp"
@@ -715,6 +716,21 @@ public:
     [[nodiscard]] std::vector<Blueprint>& blueprints() noexcept { return m_blueprints; }
     [[nodiscard]] const std::vector<BlueprintAuto>& blueprint_auto() const noexcept { return m_blueprint_auto; }
     [[nodiscard]] std::vector<BlueprintAuto>& blueprint_auto() noexcept { return m_blueprint_auto; }
+    /// The description of a scenario of the editor (section SCNI, ADR 0013); nothing for a
+    /// savegame or a file of the original. Starting a game from a scenario drops it.
+    [[nodiscard]] const std::optional<ScenarioInfo>& scenario_info() const noexcept { return m_scenario_info; }
+    void set_scenario_info(std::optional<ScenarioInfo> info) noexcept { m_scenario_info = std::move(info); }
+    /// The named places and areas of the scenario (section MARK), which its script finds by name.
+    [[nodiscard]] const std::vector<ScenarioMarker>& markers() const noexcept { return m_markers; }
+    void set_markers(std::vector<ScenarioMarker> markers) noexcept { m_markers = std::move(markers); }
+    /// The scenario's own Lua script (section SLUA), empty if none; it stays with a game started
+    /// from the scenario, so that it runs on after loading.
+    [[nodiscard]] const std::string& scenario_script() const noexcept { return m_scenario_script; }
+    void set_scenario_script(std::string script) noexcept { m_scenario_script = std::move(script); }
+    /// What the editor keeps of its own (section EDIT: view, bookmarks); the game ignores it and
+    /// starting a game drops it.
+    [[nodiscard]] const std::vector<std::uint8_t>& editor_state() const noexcept { return m_editor_state; }
+    void set_editor_state(std::vector<std::uint8_t> state) noexcept { m_editor_state = std::move(state); }
     /// Game settings saved with the game, which a Simulation of it uses (ADR 0008).
     [[nodiscard]] const std::optional<Rules>& saved_rules() const noexcept { return m_saved_rules; }
     void set_saved_rules(std::optional<Rules> rules) noexcept { m_saved_rules = rules; }
@@ -843,6 +859,10 @@ private:
     std::vector<Blueprint> m_blueprints;
     std::vector<BlueprintAuto> m_blueprint_auto;
     std::optional<Rules> m_saved_rules;
+    std::optional<ScenarioInfo> m_scenario_info;
+    std::vector<ScenarioMarker> m_markers;
+    std::string m_scenario_script;
+    std::vector<std::uint8_t> m_editor_state;
     OriginalBugs m_original_bugs;
     bool m_fertile_fields = false;
     std::vector<CostBuilding> m_cost_buildings;

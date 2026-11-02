@@ -87,6 +87,10 @@ struct Decoded {
     };
     std::optional<BlueprintPart> blueprints;
     std::optional<std::string> package_scenario;
+    std::optional<ScenarioInfo> scenario_info;               ///< SCNI
+    std::optional<std::vector<ScenarioMarker>> markers;      ///< MARK
+    std::optional<std::string> scenario_script;              ///< SLUA
+    std::optional<std::vector<std::uint8_t>> editor_state;  ///< EDIT
     std::optional<World::CampaignPart> campaign_part;
     /// The goods the packages added (GOOD).
     std::optional<assets::Goods> goods;

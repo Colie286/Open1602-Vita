@@ -707,6 +707,28 @@ sim::World make_world(const assets::BuildingTable& buildings, bool wide) {
         const sim::City& city = world.cities()[c];
         v(world.city(city.island, city.index)->ships_gave_up);
     }
+    // The editor's sections (SCNI, MARK, SLUA, EDIT) came later still; the narrow world is no
+    // scenario and has none of them.
+    if (wide) {
+        sim::ScenarioInfo info;
+        info.names = {{"en", "Two Coasts"}, {"de", "Zwei K\xc3\xbcsten"}};
+        info.briefings = {{"en", "Found two cities.\nKeep them fed."}};
+        info.stars = v.next<std::uint8_t>() % (sim::ScenarioInfo::kMaxStars + 1);
+        info.author = "Merlin";
+        info.version = "1.2";
+        info.original_limits = true;
+        world.set_scenario_info(info);
+        sim::ScenarioMarker harbour{"harbour", sim::ScenarioMarker::Shape::Point, 0, 0, 1, 1};
+        harbour.x = v.next<std::uint32_t>() % 400;
+        harbour.y = v.next<std::uint32_t>() % 300;
+        world.set_markers({harbour, {"north_coast", sim::ScenarioMarker::Shape::Area, 10, 20, 30, 40}});
+        world.set_scenario_script("function on_start()\n  print('hello')\nend\n");
+        std::vector<std::uint8_t> editor(24);
+        for (std::uint8_t& b : editor) {
+            v(b);
+        }
+        world.set_editor_state(editor);
+    }
     return world;
 }
 
@@ -808,6 +830,7 @@ constexpr Golden kSaveNarrow[] = {
 
 constexpr Golden kSaveWide[] = {
     {"META", 1, 0, 38, 0xB89CD646},
+    {"SCNI", 1, 0, 111, 0x88CEF8A7},
     {"MAPW", 2, 1, 5724, 0x3F3E2223},
     {"RULE", 1, 1, 76, 0xC489E870},
     {"WRLD", 1, 1, 419, 0x3DED0795},
@@ -837,6 +860,9 @@ constexpr Golden kSaveWide[] = {
     {"QUEU", 1, 1, 148, 0x58163040},
     {"STNC", 1, 1, 28, 0x6CE6EFC4},
     {"ORIG", 1, 0, 54, 0x7AEE655B},
+    {"MARK", 1, 0, 64, 0xB6F559EA},
+    {"SLUA", 1, 1, 45, 0x668C6608},
+    {"EDIT", 1, 0, 28, 0xA5E4FCD5},
     {"SIMU", 1, 1, 40, 0xFA8DCE43},
 };
 
@@ -901,6 +927,8 @@ constexpr Golden kChunkWide[] = {
     {"XPLR", 1, 1, 67, 0x743711C9},
     {"QUEU", 1, 1, 148, 0x58163040},
     {"STNC", 1, 1, 28, 0x6CE6EFC4},
+    {"MARK", 1, 0, 64, 0xB6F559EA},
+    {"SLUA", 1, 1, 45, 0x668C6608},
     {"SIMU", 1, 1, 40, 0xFA8DCE43},
 };
 // clang-format on

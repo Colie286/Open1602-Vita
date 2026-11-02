@@ -47,6 +47,7 @@ add_library(o1602_sim
     src/save/ships.cpp
     src/save/world.cpp
     src/savegame_extension.cpp
+    src/scenario_data.cpp
     src/score.cpp
     src/victory.cpp
     src/save_game.cpp

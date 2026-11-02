@@ -30,6 +30,9 @@ core::Status check(const World& w, const Decoded& d) {
     if (d.islands && d.islands->size() != w.islands().size()) {
         return bad("islands do not match");
     }
+    if (d.markers && !check_markers(*d.markers, w.width(), w.height()).empty()) {
+        return bad("a marker lies outside the world");
+    }
     if (d.islands) {
         for (std::size_t i = 0; i < w.islands().size(); ++i) {
             if ((*d.islands)[i].number != w.islands()[i].header.number) {
@@ -228,6 +231,18 @@ core::Status apply_decoded(World& world, Decoded& d) {
     }
     if (d.package_scenario) {
         world.set_package_scenario(std::move(*d.package_scenario));
+    }
+    if (d.scenario_info) {
+        world.set_scenario_info(std::move(d.scenario_info));
+    }
+    if (d.markers) {
+        world.set_markers(std::move(*d.markers));
+    }
+    if (d.scenario_script) {
+        world.set_scenario_script(std::move(*d.scenario_script));
+    }
+    if (d.editor_state) {
+        world.set_editor_state(std::move(*d.editor_state));
     }
     if (d.blueprints) {
         world.blueprints() = std::move(d.blueprints->blueprints);
