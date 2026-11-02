@@ -1595,9 +1595,43 @@ std::vector<std::uint8_t> Generator::village_records(const Slot& slot, const Sta
     if (!slot.village_file) {
         return out;
     }
+    // A village moved onto an island of its own shape takes only its buildings and roads along;
+    // the forest and fields around them in the native template stay behind (place_village). Their
+    // growth records stay behind with them, or they would land on whatever tile of the island lies
+    // there, or beyond its edge. A growing tile is a single tile: the record must lie on a tile of
+    // the village.
+    const bool growth = std::strcmp(chunk.name, "ROHWACHS2") == 0;
+    std::vector<bool> on_village;
+    std::size_t village_width = 0;
+    std::size_t village_height = 0;
+    if (growth && slot.own_shape && slot.village && !slot.village->layers.empty()) {
+        village_width = slot.base.header.width;
+        village_height = slot.base.header.height;
+        on_village.assign(village_width * village_height, false);
+        for (const assets::IslandTile& t : slot.village->layers.front()) {
+            const assets::BuildingType* b = m_buildings.by_id(t.cod_id());
+            const bool turned = (t.rotation() & 1U) != 0;
+            const std::size_t sx = b == nullptr ? 1U : (turned ? b->size_y : b->size_x);
+            const std::size_t sy = b == nullptr ? 1U : (turned ? b->size_x : b->size_y);
+            for (std::size_t y = t.y; y < std::size_t{t.y} + sy && y < village_height; ++y) {
+                for (std::size_t x = t.x; x < std::size_t{t.x} + sx && x < village_width; ++x) {
+                    on_village[y * village_width + x] = true;
+                }
+            }
+        }
+    }
     const auto add = [&](std::vector<std::uint8_t> record) {
         if (record.size() < 3) {
             return;
+        }
+        if (village_width != 0) {
+            const std::int64_t x = std::int64_t{record[1]} + slot.village_dx;
+            const std::int64_t y = std::int64_t{record[2]} + slot.village_dy;
+            if (x < 0 || y < 0 || static_cast<std::size_t>(x) >= village_width ||
+                static_cast<std::size_t>(y) >= village_height ||
+                !on_village[static_cast<std::size_t>(y) * village_width + static_cast<std::size_t>(x)]) {
+                return;
+            }
         }
         record[0] = slot.plan.number;  // the handlers take the island being made
         if (!city && std::strcmp(chunk.name, "MARKT2") != 0) {

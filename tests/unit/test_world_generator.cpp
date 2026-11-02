@@ -52,6 +52,7 @@ constexpr std::uint32_t kBaseFertility = 0x1181;  // grain, grass, trees, fish o
 
 // Island tiles (haeuser.cod id - 20000).
 constexpr std::uint16_t kGroundTile = 101;
+constexpr std::uint16_t kForestTile = 102;
 constexpr std::uint16_t kVillageTile = 533;  // 20533, a building of the fake table
 constexpr std::uint16_t kBigMountainTile = 1101;
 constexpr std::uint16_t kSmallMountainTile = 1102;
@@ -218,20 +219,31 @@ struct TilePos {
 constexpr TilePos kVillageRecord{6, 5};
 
 /// A native template: as large as its template, only the village part (as NordNat and SuedNat
-/// are): a block of 6 x 5 tiles of buildings, and a growth record (ROHWACHS2) on its tile (6, 5).
+/// are): a block of 6 x 5 tiles of buildings in forest, and growth records (ROHWACHS2) on its
+/// tile (6, 5) and on the trees in the corners of the template, away from the village.
 std::vector<std::uint8_t> village_file(std::uint8_t climate, std::uint8_t size, std::uint16_t number) {
     std::vector<std::uint8_t> file = template_file(climate, size, number, false);
     std::vector<std::uint8_t> header(file.begin() + 20, file.begin() + 20 + 116);
+    const auto s = static_cast<std::uint8_t>(side(size));
+    const std::array<TilePos, 2> trees = {TilePos{0, 0},
+                                          TilePos{static_cast<std::uint8_t>(s - 1), static_cast<std::uint8_t>(s - 1)}};
     std::vector<std::uint8_t> tiles;
+    for (const TilePos& t : trees) {
+        add_tile(tiles, kForestTile, t.x, t.y);
+    }
     for (std::uint32_t y = 4; y < 9; ++y) {
         for (std::uint32_t x = 5; x < 11; ++x) {
             add_tile(tiles, kVillageTile, x, y);
         }
     }
+    std::vector<std::uint8_t> growth = {0, kVillageRecord.x, kVillageRecord.y, 0, 0, 0, 0, 0};
+    for (const TilePos& t : trees) {
+        growth.insert(growth.end(), {0, t.x, t.y, 0, 0, 0, 0, 0});
+    }
     std::vector<std::uint8_t> out;
     o1602::test::put_chunk(out, "INSEL5", header);
     o1602::test::put_chunk(out, "INSELHAUS", tiles);
-    o1602::test::put_chunk(out, "ROHWACHS2", {0, kVillageRecord.x, kVillageRecord.y, 0, 0, 0, 0, 0});
+    o1602::test::put_chunk(out, "ROHWACHS2", growth);
     return out;
 }
 
@@ -1266,18 +1278,22 @@ TEST_CASE("world generator: islands of their own shape instead of templates, wit
                             }
                         }
                         CHECK(count == 30);
+                        // The records of the template's trees, which stayed behind, did not.
                         bool moved = false;
+                        std::size_t records = 0;
                         for (const assets::Chunk& c : w->file.chunks()) {
                             if (c.name != "ROHWACHS2") {
                                 continue;
                             }
                             const auto data = w->file.payload(c);
                             for (std::size_t o = 0; o + 8 <= data.size(); o += 8) {
+                                records += data[o] == island.header.number ? 1U : 0U;
                                 moved = moved || (data[o] == island.header.number && data[o + 1] == x0 + 1 &&
                                                   data[o + 2] == y0 + 1);
                             }
                         }
                         CHECK(moved);
+                        CHECK(records == 1);
                     }
                     std::size_t sea = 0;
                     for (std::uint32_t y = 0; y < island.map.height(); ++y) {
