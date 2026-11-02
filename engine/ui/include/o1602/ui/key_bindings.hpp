@@ -53,6 +53,7 @@ enum class KeyAction : std::uint16_t {
     RotateBuildingBack,  ///< the other way round (History Edition)
     PickBuilding,
     DemolishTool,
+    CopyTool,     ///< a piece of the city to build again elsewhere (Open1602)
     PlantFields,  ///< the selected farm's field on all open ground in its catchment (History Edition text)
     ToggleGates,  ///< closes or opens all own city gates to foreign soldiers (Open1602)
     // Selection

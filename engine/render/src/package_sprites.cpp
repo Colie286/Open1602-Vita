@@ -137,12 +137,18 @@ bool PlacedSources::pixels(std::uint32_t i, std::vector<std::uint8_t>& rgba) con
 
 IconPixels package_icon_pixels(const assets::PackageIcon& icon, double scale) {
     IconPixels out;
-    const auto bytes = core::read_file(icon.file);
-    if (!bytes) {
-        out.error = core::path_to_utf8(icon.file) + ": " + bytes.error().message;
-        return out;
+    std::vector<std::uint8_t> read;
+    std::span<const std::uint8_t> file(icon.data, icon.data != nullptr ? icon.size : 0);
+    if (icon.data == nullptr) {
+        auto bytes = core::read_file(icon.file);
+        if (!bytes) {
+            out.error = core::path_to_utf8(icon.file) + ": " + bytes.error().message;
+            return out;
+        }
+        read = std::move(*bytes);
+        file = read;
     }
-    auto png = core::decode_png(*bytes);
+    auto png = core::decode_png(file);
     if (!png) {
         out.error = core::path_to_utf8(icon.file) + ": " + png.error().message;
         return out;

@@ -130,6 +130,8 @@ bool touches_own_land(const sim::IslandMap& map, const sim::PlannedBuild& item, 
 /// A building in the build tool that only lacks gold or goods blinks: shown for this long, then
 /// hidden for as long, as in the original.
 constexpr std::uint64_t kShortOfMeansBlinkMs = 300;
+/// The tint over what the copy tool's drag would take into the hand.
+constexpr assets::Rgba kCopyMark{96, 160, 232, 110};
 /// Real time a frame may spend on ticks; the rest of the frame draws.
 constexpr int kTickBudgetMs = 25;
 /// The status line under a still mouse is worked out again this often (FB-1).
@@ -190,7 +192,7 @@ struct ModRules {
 /// The icons of `packages` (icons.toml), numbered in their load order.
 std::vector<assets::PackageIcon> load_package_icons(std::span<const assets::ModPackage> packages,
                                                     std::vector<std::string>& problems) {
-    std::vector<assets::PackageIcon> icons;
+    std::vector<assets::PackageIcon> icons = ui::builtin_icons();  // Open1602's own first
     for (const assets::ModPackage& package : packages) {
         if (const auto bytes = core::read_file(package.folder / assets::kIconsFile)) {
             const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
@@ -1226,7 +1228,7 @@ std::optional<render::TileLighting> MapViewer::building_lighting(const Selection
 render::TileLighting MapViewer::tile_lighting() const {
     const Selection* clicked =
         m_hud && m_hud->selection().kind == Selection::Kind::Building ? &m_hud->selection() : nullptr;
-    const bool building = m_tool.mode() == BuildTool::Mode::Build || (m_hud && m_hud->mode() == Hud::kModeBuild);
+    const bool building = m_tool.places() || (m_hud && m_hud->mode() == Hud::kModeBuild);
     if (building) {
         // A building clicked before opening the build menu stays selected, and its circle stays
         // lit whatever is placed: the fields of a farm, another sheep farm beside its pasture,
@@ -1443,7 +1445,7 @@ void MapViewer::render() {
         add_fertility_marks();
         m_lighting = tile_lighting();
         layers.lighting = &m_lighting;
-        if (m_tool.mode() == BuildTool::Mode::Build) {
+        if (m_tool.places()) {
             if (const auto spot = m_input->spot_at_mouse()) {
                 if (const auto order = m_tool.build_order(m_state->world, m_local_player, *spot)) {
                     const sim::BuildPlan plan = sim::plan_build(m_state->world, m_buildings, *order);
@@ -1557,9 +1559,37 @@ void MapViewer::render() {
                             }
                         }
                     }
-                    if (m_tool_status.empty()) {
+                    if (m_tool.mode() == BuildTool::Mode::Copy) {
+                        // A copied piece rarely fits whole: how much of it would be built, its price
+                        // and, where the means run out, what is missing.
+                        m_tool_status =
+                            ui::tr("build.copy.cost", {std::to_string(plan.placed), std::to_string(order->items.size()),
+                                                       std::to_string(plan.bill.money)});
+                        for (const sim::PlannedBuild& item : plan.items) {
+                            if (item.refusal == sim::BuildRefusal::Money || item.refusal == sim::BuildRefusal::Tools ||
+                                item.refusal == sim::BuildRefusal::Wood || item.refusal == sim::BuildRefusal::Bricks ||
+                                item.refusal == sim::BuildRefusal::Cannons) {
+                                m_tool_status += " - " + refusal_text(item.refusal);
+                                break;
+                            }
+                        }
+                    } else if (m_tool_status.empty()) {
                         m_tool_status = ui::tr("build.cost", {std::to_string(plan.bill.money)});
                     }
+                }
+            }
+        }
+        if (m_tool.copy_selecting()) {
+            // The copy tool's drag: what would go into the hand is tinted, over the buildings.
+            if (const auto spot = m_input->spot_at_mouse()) {
+                for (const sim::TilePos& t : m_tool.copy_preview(m_state->world, m_local_player, *spot)) {
+                    render::TileMark mark{spot->island, static_cast<std::uint16_t>(t.x),
+                                          static_cast<std::uint16_t>(t.y), kCopyMark};
+                    mark.on_top = true;
+                    m_tile_marks.push_back(mark);
+                }
+                if (m_tool_status.empty()) {
+                    m_tool_status = ui::tr("build.copy.select");
                 }
             }
         }
@@ -1616,8 +1646,7 @@ void MapViewer::render() {
         }
         m_hud->set_rotation(m_camera.view().rotation);
         m_hud->set_building_rotation(m_tool.rotation());
-        m_hud->set_build_tool(m_tool.mode() == BuildTool::Mode::Build && m_tool.selected() != nullptr,
-                              m_tool.mode() == BuildTool::Mode::Build && m_tool_short_of_wood);
+        m_hud->set_build_tool(m_tool.places(), m_tool.places() && m_tool_short_of_wood);
         if (m_hud->mode() == Hud::kModeInfo && (now >= m_figures_ms + 1000 || now < m_figures_ms)) {
             // The player status: sums over all cities and units, once a second is enough.
             m_player_figures = sim::player_figures(m_state->world, m_buildings, m_figures, m_local_player);
@@ -2297,6 +2326,10 @@ void MapViewer::apply_hud(const Hud::Action& action) {
             break;
         case Hud::Action::Kind::Demolish:
             m_tool.set_mode(BuildTool::Mode::Demolish);
+            m_input->drop_units();
+            break;
+        case Hud::Action::Kind::Copy:
+            m_tool.set_mode(BuildTool::Mode::Copy);
             m_input->drop_units();
             break;
         case Hud::Action::Kind::TurnBuilding:

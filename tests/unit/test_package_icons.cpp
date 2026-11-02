@@ -265,3 +265,17 @@ TEST_CASE("icons: a message shows an icon of a package") {
     CHECK(t.get(*t.find("more:b"))->picture.empty());
     CHECK(t.get(*t.find("more:b"))->icon == app::MessageIcon::Fire);
 }
+
+TEST_CASE("package icons: Open1602's own icons are compiled in and come first") {
+    const std::vector<assets::PackageIcon> icons = ui::builtin_icons();
+    for (const char* id : {"open1602:demolish", "open1602:copy"}) {
+        const assets::PackageIcon* icon = assets::find_package_icon(icons, id);
+        REQUIRE(icon != nullptr);
+        CHECK(icon->data != nullptr);
+        CHECK(icon->width > 0);
+        CHECK(icon->width <= 53);  // the build menu's pop-up slot
+        CHECK(icon->height <= 50);
+        CHECK(icon->sprite >= assets::kFirstPackageIcon);
+        CHECK(icon->sprite < assets::kFirstPackageIcon + static_cast<std::int32_t>(icons.size()));
+    }
+}

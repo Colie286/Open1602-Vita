@@ -113,6 +113,7 @@ keys.action.rotate_building = Gebäude drehen
 keys.action.rotate_building_back = Gebäude andersherum drehen
 keys.action.pick_building = Gebäude unter der Maus wählen
 keys.action.demolish_tool = Abreißen
+keys.action.copy_tool = Bereich kopieren
 keys.action.plant_fields = Alle Farmfelder bepflanzen
 keys.action.toggle_gates = Alle Stadttore öffnen/schließen
 keys.action.group_store = Gruppe festlegen
@@ -363,6 +364,10 @@ title.multiplayer_waiting = warte auf Mitspieler
 
 # Status line while building
 build.cost = {1} Gold
+build.tool.demolish = Abreißen
+build.tool.copy = Bereich kopieren
+build.copy.select = Bereich über die eigene Stadt ziehen oder ein Gebäude anklicken
+build.copy.cost = {1} von {2} Teilen werden gebaut, {3} Gold
 build.refusal.ok = kann gebaut werden
 build.refusal.unknown = unbekanntes Gebäude
 build.refusal.outside_island = außerhalb der Insel

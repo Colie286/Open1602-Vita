@@ -4,7 +4,9 @@
 #include <algorithm>
 #include <cstdlib>
 
+#include "o1602/sim/command_io.hpp"
 #include "o1602/sim/game_data.hpp"
+#include "o1602/sim/growth.hpp"
 #include "o1602/sim/logistics.hpp"
 #include "o1602/ui/build_menu.hpp"
 
@@ -69,10 +71,17 @@ BuildTool::BuildTool(const assets::BuildingTable& buildings) : m_buildings(&buil
     std::stable_sort(m_list.begin(), m_list.end(), [](const assets::BuildingType* a, const assets::BuildingType* b) {
         return a->build_gfx < b->build_gfx;
     });
+    for (const assets::BuildingType* b : m_list) {
+        if (b->prod_kind == sim::prod::kHouse && !b->native &&
+            (m_first_house == nullptr || b->resident_class < m_first_house->resident_class)) {
+            m_first_house = b;
+        }
+    }
 }
 
 void BuildTool::set_mode(Mode mode) noexcept {
     m_mode = mode;
+    m_layout.reset();
     if (mode != Mode::Build) {
         m_ship.reset();
     }
@@ -81,6 +90,24 @@ void BuildTool::set_mode(Mode mode) noexcept {
 
 void BuildTool::rotate(int step) noexcept {
     m_rotation = static_cast<std::uint8_t>((m_rotation + step) & 3);
+    if (m_layout) {
+        m_layout->rotate(step);
+    }
+}
+
+void BuildTool::Layout::rotate(int step) {
+    for (int turns = step & 3; turns > 0; --turns) {
+        // A quarter: the tile (x, y) goes to (height - 1 - y, x), east to south as a building's
+        // rotation turns its door (sim::door_tile); a footprint w x h turns into h x w.
+        for (Item& item : items) {
+            const std::int32_t x = item.x;
+            item.x = height - item.y - item.height;
+            item.y = x;
+            std::swap(item.width, item.height);
+            item.rotation = static_cast<std::uint8_t>((item.rotation + 1) & 3);
+        }
+        std::swap(width, height);
+    }
 }
 
 bool BuildTool::select(std::uint32_t id) noexcept {
@@ -129,6 +156,24 @@ bool BuildTool::hatched_drag() const noexcept {
 
 std::optional<sim::BuildOrder> BuildTool::build_order(const sim::World& world, sim::PlayerId player,
                                                       const Spot& spot) const {
+    if (m_mode == Mode::Copy) {
+        if (!m_layout || m_layout->items.empty()) {
+            return std::nullopt;
+        }
+        // The layout hangs at the mouse by its middle; it keeps its own rotations (no turning
+        // towards a road), and what does not fit or cannot be paid stays unbuilt.
+        sim::BuildOrder order;
+        order.player = player;
+        order.island = spot.island;
+        order.orient_to_road = false;
+        const std::int32_t ox = spot.x - (m_layout->width - 1) / 2;
+        const std::int32_t oy = spot.y - (m_layout->height - 1) / 2;
+        order.items.reserve(m_layout->items.size());
+        for (const Layout::Item& item : m_layout->items) {
+            order.items.push_back(sim::BuildItem{item.building, ox + item.x, oy + item.y, item.rotation, 0});
+        }
+        return order;
+    }
     const assets::BuildingType* b = selected();
     if (m_mode != Mode::Build || b == nullptr) {
         return std::nullopt;
@@ -280,7 +325,192 @@ std::vector<sim::TilePos> BuildTool::demolish_preview(const sim::World& world, s
     return removed;
 }
 
+const assets::BuildingType* BuildTool::orderable(const assets::BuildingType& placed) const noexcept {
+    const auto listed = [&](const assets::BuildingType* t) {
+        return t != nullptr && std::find(m_list.begin(), m_list.end(), t) != m_list.end();
+    };
+    // A tree variant of a forest in the list: the order carries the variant (build_order).
+    const auto variant_of_listed = [&](const assets::BuildingType* t) -> const assets::BuildingType* {
+        if (t == nullptr) {
+            return nullptr;
+        }
+        for (const assets::BuildingType* b : m_list) {
+            if (b->kind == sim::kind::kForest && b->rand_count > 1 && b->rand_add > 0 && t->record >= b->record &&
+                (t->record - b->record) % b->rand_add == 0 && (t->record - b->record) / b->rand_add < b->rand_count) {
+                return t;
+            }
+        }
+        return nullptr;
+    };
+    const assets::BuildingType* t = &placed;
+    if (t->land_record != assets::BuildingType::kNoRecord) {
+        t = m_buildings->by_record(t->land_record);  // a wall or tower on the beach
+        if (t == nullptr) {
+            return nullptr;
+        }
+    }
+    if (t->kreuz_base > 0 && (t->kind == sim::kind::kRoad || t->kind == sim::kind::kWall)) {
+        // A crossing, curve or end of a road or wall: its straight piece.
+        if (const assets::BuildingType* base = m_buildings->by_record(static_cast<std::uint32_t>(t->kreuz_base));
+            base != nullptr && base->kind == t->kind) {
+            t = base;
+        }
+    }
+    // A crop as it was sown: a ripe one's growing record, a withered one's too.
+    if (const assets::BuildingType* ripe = sim::ripe_of_withered(*m_buildings, *t)) {
+        t = ripe;
+    }
+    if (const assets::BuildingType* growing = sim::growing_record(*m_buildings, *t)) {
+        t = growing;
+    }
+    if (t->destroyed || t->kind == sim::kind::kHq || t->kind == sim::kind::kRuin || t->native) {
+        return nullptr;
+    }
+    if (t->prod_kind == sim::prod::kHouse) {
+        // Houses grow up by themselves: a grown one is ordered as the first house, even where the
+        // building table gives the higher ones a menu icon and costs.
+        return m_first_house;
+    }
+    if (listed(t)) {
+        return t;
+    }
+    return variant_of_listed(t);
+}
+
+BuildTool::Layout BuildTool::copy_layout(const sim::World& world, sim::PlayerId player, const Spot& spot) const {
+    Layout layout;
+    if (spot.island >= world.islands().size()) {
+        return layout;
+    }
+    const Spot start = m_drag_start && m_drag_start->island == spot.island ? *m_drag_start : spot;
+    const sim::IslandMap& map = world.islands()[spot.island].map;
+    const std::int32_t x0 = std::max(std::min(start.x, spot.x), 0);
+    const std::int32_t y0 = std::max(std::min(start.y, spot.y), 0);
+    const std::int32_t x1 = std::min(std::max(start.x, spot.x), static_cast<std::int32_t>(map.width()) - 1);
+    const std::int32_t y1 = std::min(std::max(start.y, spot.y), static_cast<std::int32_t>(map.height()) - 1);
+    struct Found {
+        const assets::BuildingType* order = nullptr;
+        sim::BuildingAt at;
+        int group = 0;  // 0 roads and walls, 1 buildings, 2 fields and trees
+    };
+    std::vector<Found> found;
+    std::vector<sim::TilePos> seen;
+    for (std::int32_t y = y0; y <= y1; ++y) {
+        for (std::int32_t x = x0; x <= x1; ++x) {
+            const auto at = sim::building_at(world, *m_buildings, spot.island, {x, y});
+            if (!at || at->type == nullptr) {
+                continue;
+            }
+            // A big building is met on each of its tiles: once is enough.
+            if (at->width * at->height > 1) {
+                if (std::find(seen.begin(), seen.end(), at->origin) != seen.end()) {
+                    continue;
+                }
+                seen.push_back(at->origin);
+            }
+            const sim::MapCell& cell =
+                map.top(static_cast<std::uint32_t>(at->origin.x), static_cast<std::uint32_t>(at->origin.y));
+            if (cell.owner != player) {
+                continue;
+            }
+            const assets::BuildingType* order = orderable(*at->type);
+            if (order == nullptr) {
+                continue;
+            }
+            int group = 1;
+            if (order->prod_kind == sim::prod::kGrowing) {
+                group = 2;
+            } else if (order->kind == sim::kind::kRoad || order->kind == sim::kind::kWall) {
+                group = 0;
+            }
+            found.push_back(Found{order, *at, group});
+        }
+    }
+    // Fields and trees only for a building of the piece that harvests them.
+    const auto harvested = [&](const assets::BuildingType& crop) {
+        const std::uint8_t ware = sim::crop_ware(*m_buildings, crop);
+        return ware != 0 &&
+               std::ranges::any_of(found, [&](const Found& f) { return f.group == 1 && f.at.type->raw_ware == ware; });
+    };
+    std::erase_if(found, [&](const Found& f) { return f.group == 2 && !harvested(*f.order); });
+    // Roads and walls first (gold only, so a lack of goods does not leave the buildings without
+    // them), then the buildings, then the fields: what the means do not reach is the end of the order.
+    std::stable_sort(found.begin(), found.end(), [](const Found& a, const Found& b) { return a.group < b.group; });
+    if (found.size() > sim::kMaxCommandItems) {
+        found.resize(sim::kMaxCommandItems);
+    }
+    if (found.empty()) {
+        return layout;
+    }
+    std::int32_t min_x = found.front().at.origin.x;
+    std::int32_t min_y = found.front().at.origin.y;
+    std::int32_t max_x = min_x;
+    std::int32_t max_y = min_y;
+    for (const Found& f : found) {
+        min_x = std::min(min_x, f.at.origin.x);
+        min_y = std::min(min_y, f.at.origin.y);
+        max_x = std::max(max_x, f.at.origin.x + static_cast<std::int32_t>(f.at.width) - 1);
+        max_y = std::max(max_y, f.at.origin.y + static_cast<std::int32_t>(f.at.height) - 1);
+    }
+    layout.from = {min_x, min_y};
+    layout.width = max_x - min_x + 1;
+    layout.height = max_y - min_y + 1;
+    layout.items.reserve(found.size());
+    for (const Found& f : found) {
+        // A copied house starts as the first house, whose footprint may differ: it keeps the
+        // corner of the one it stood for.
+        std::uint32_t w = 1;
+        std::uint32_t h = 1;
+        sim::rotated_size(*f.order, f.at.rotation, w, h);
+        layout.items.push_back(Layout::Item{f.order->id, f.at.origin.x - min_x, f.at.origin.y - min_y, f.at.rotation,
+                                            static_cast<std::int32_t>(w), static_cast<std::int32_t>(h)});
+    }
+    return layout;
+}
+
+bool BuildTool::take_layout(const sim::World& world, sim::PlayerId player, const Spot& spot) {
+    if (m_mode != Mode::Copy) {
+        return false;
+    }
+    Layout layout = copy_layout(world, player, spot);
+    m_drag_start.reset();
+    if (layout.items.empty()) {
+        return false;
+    }
+    m_layout = std::move(layout);
+    return true;
+}
+
+std::vector<sim::TilePos> BuildTool::copy_preview(const sim::World& world, sim::PlayerId player,
+                                                  const Spot& spot) const {
+    std::vector<sim::TilePos> tiles;
+    if (!copy_selecting() || spot.island >= world.islands().size()) {
+        return tiles;
+    }
+    const sim::IslandMap& map = world.islands()[spot.island].map;
+    const Layout layout = copy_layout(world, player, spot);
+    if (layout.items.empty()) {
+        return tiles;
+    }
+    for (const Layout::Item& item : layout.items) {
+        for (std::int32_t j = 0; j < item.height; ++j) {
+            for (std::int32_t i = 0; i < item.width; ++i) {
+                const std::int32_t x = layout.from.x + item.x + i;
+                const std::int32_t y = layout.from.y + item.y + j;
+                if (map.contains(x, y)) {
+                    tiles.push_back({x, y});
+                }
+            }
+        }
+    }
+    return tiles;
+}
+
 std::string BuildTool::describe() const {
+    if (m_mode == Mode::Copy) {
+        return m_layout ? "copy (" + std::to_string(m_layout->items.size()) + " buildings in hand)"
+                        : "copy (drag over a piece of the city)";
+    }
     if (m_mode == Mode::Demolish) {
         return "demolish (drag: roads, fields, trees; click: buildings)";
     }

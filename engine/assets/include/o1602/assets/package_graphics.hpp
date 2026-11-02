@@ -69,6 +69,9 @@ struct PackageIcon {
     std::filesystem::path file;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
+    /// Open1602's own icons are compiled into the program: the PNG's bytes instead of `file`.
+    const unsigned char* data = nullptr;
+    std::size_t size = 0;
 
     friend bool operator==(const PackageIcon&, const PackageIcon&) = default;
 };

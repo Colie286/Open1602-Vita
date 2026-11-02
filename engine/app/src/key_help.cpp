@@ -87,6 +87,7 @@ KeyHelpPlace key_help_place(KeyAction action) noexcept {
         case KeyAction::RotateBuildingBack:
         case KeyAction::PickBuilding:
         case KeyAction::DemolishTool:
+        case KeyAction::CopyTool:
         case KeyAction::PlantFields:
         case KeyAction::ToggleGates:
             return {2, 0};

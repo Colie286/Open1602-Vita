@@ -193,6 +193,7 @@ void MapInput::setup_keys() {
     general(chord(SDLK_RETURN), KeyAction::Chat);
     general(chord(SDLK_KP_ENTER), KeyAction::Chat);
     general(chord(SDLK_DELETE), KeyAction::DemolishTool);
+    general(chord(SDLK_C, true), KeyAction::CopyTool);
     general(chord(SDLK_F), KeyAction::PlantFields);  // "Felder"
     general(chord(SDLK_G), KeyAction::ToggleGates);  // "Gates"; with units selected G holds them
     // Groups: keys 1 .. 9, 0 are groups 0 .. 9.
@@ -229,6 +230,7 @@ void MapInput::setup_keys() {
     building(chord(SDLK_R, false, true), KeyAction::RotateBuildingBack);
     building(chord(SDLK_C), KeyAction::PickBuilding);
     building(chord(SDLK_DELETE), KeyAction::DemolishTool);
+    building(chord(SDLK_C, true), KeyAction::CopyTool);
     building(chord(SDLK_F), KeyAction::PlantFields);
     // Orders to the selected units
     // None of these means anything in general (no clash with W A S D).
@@ -579,11 +581,16 @@ void MapInput::run_action(const ui::KeyBinding& b) {
             m_tool.rotate(-1);
             break;
         case KeyAction::PickBuilding:
-            // The pipette: the building under the mouse becomes the order.
+            // The pipette: the building under the mouse becomes the order, as the player can order
+            // it (a grown house as the first house, a road crossing as a road, a ripe field sown).
             if (const auto spot = spot_at_mouse()) {
-                if (const auto at = sim::building_at(world(), m_buildings, spot->island, {spot->x, spot->y})) {
+                const auto at = sim::building_at(world(), m_buildings, spot->island, {spot->x, spot->y});
+                if (const assets::BuildingType* pick = at ? m_tool.orderable(*at->type) : nullptr) {
+                    if (m_hud) {
+                        (void)m_hud->show_in_build_menu(pick->id);  // the panel shows what is in hand
+                    }
                     set_mode(Hud::kModeBuild);
-                    if (m_tool.select(at->type->id)) {
+                    if (m_tool.select(pick->id)) {
                         m_tool.set_mode(BuildTool::Mode::Build);
                         drop_units();
                     }
@@ -596,6 +603,22 @@ void MapInput::run_action(const ui::KeyBinding& b) {
             }
             m_tool.set_mode(m_tool.mode() == BuildTool::Mode::Demolish ? BuildTool::Mode::Off
                                                                        : BuildTool::Mode::Demolish);
+            if (m_hud && m_tool.mode() == BuildTool::Mode::Demolish) {
+                m_hud->show_tool_in_build_menu(BuildPanel::Tool::Demolish);
+            }
+            if (m_tool.active()) {
+                drop_units();
+            }
+            break;
+        case KeyAction::CopyTool:
+            // The copy tool (Open1602): a piece of the city to build again elsewhere.
+            if (m_hud && m_hud->mode() != Hud::kModeBuild) {
+                set_mode(Hud::kModeBuild);
+            }
+            m_tool.set_mode(m_tool.mode() == BuildTool::Mode::Copy ? BuildTool::Mode::Off : BuildTool::Mode::Copy);
+            if (m_hud && m_tool.mode() == BuildTool::Mode::Copy) {
+                m_hud->show_tool_in_build_menu(BuildPanel::Tool::Copy);
+            }
             if (m_tool.active()) {
                 drop_units();
             }
@@ -894,6 +917,9 @@ void MapInput::handle_event(const SDL_Event& event) {
                     !(m_hud && (m_hud->modal() || m_hud->menu_active()))) {
                     if (m_original_mouse) {
                         cancel_action();
+                    } else if (m_tool.mode() == BuildTool::Mode::Copy && m_tool.layout()) {
+                        // The copied piece goes away; the copy tool and the build menu stay.
+                        m_tool.drop_layout();
                     } else if (m_hud && m_hud->picking() && m_hud->step_back()) {
                         // Choosing a route stop on the map: the right click ends the choice, the
                         // ship does not sail off.
@@ -908,7 +934,11 @@ void MapInput::handle_event(const SDL_Event& event) {
                     }
                 }
             } else if (event.button.button == SDL_BUTTON_LEFT && m_tool.dragging()) {
-                if (const auto spot = spot_at_mouse()) {
+                if (const auto spot = spot_at_mouse(); spot && m_tool.copy_selecting()) {
+                    // The copy tool's drag ends: the piece goes into the hand (nothing if it
+                    // holds nothing of the player's own).
+                    (void)m_tool.take_layout(world(), local(), *spot);
+                } else if (spot) {
                     if (auto order = m_tool.build_order(world(), local(), *spot)) {
                         // A Kontor founded from a ship is the only one there: the tool is put away
                         // once it can be built (the ship's window gave it).
@@ -1144,6 +1174,10 @@ void MapInput::drop_units() {
 
 bool MapInput::cancel_build_step() {
     if (m_hud && m_hud->close_build_popup()) {
+        return true;
+    }
+    if (m_tool.mode() == BuildTool::Mode::Copy && m_tool.layout()) {
+        m_tool.drop_layout();  // the piece in hand goes first, the copy tool stays
         return true;
     }
     if (m_tool.active()) {

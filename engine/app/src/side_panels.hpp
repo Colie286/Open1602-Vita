@@ -31,7 +31,7 @@ class BuildPanel {
 public:
     /// What a click asks for.
     struct Action {
-        enum class Kind : std::uint8_t { Pick, Demolish, Rotate, OrientToRoad };
+        enum class Kind : std::uint8_t { Pick, Demolish, Rotate, OrientToRoad, Copy };
         Kind kind = Kind::Pick;
         std::uint32_t building = 0;  ///< Pick: HAUS Id
         int step = 0;                ///< Rotate: -1 left, +1 right; OrientToRoad: 1 on, 0 off
@@ -53,10 +53,22 @@ public:
     [[nodiscard]] std::int32_t popup_category() const noexcept { return m_popup ? m_popup_category : 0; }
     void close_popup() noexcept { m_popup.reset(); }
 
-    /// The building of the open category (nothing: demolish, or nothing available there). Picks
+    /// The building of the open category (nothing: the tools, or nothing available there). Picks
     /// another available one if the remembered one is not (the original keeps it, S-014).
     [[nodiscard]] std::optional<std::uint32_t> current(const Available& available);
+    /// The tools' category is open with the demolish tool picked.
     [[nodiscard]] bool demolish() const noexcept;
+    /// The tools' category is open with the copy tool picked (Open1602).
+    [[nodiscard]] bool copy() const noexcept;
+
+    /// The tools under the demolish button (Open1602): its pop-up offers them instead of starting
+    /// the demolish tool at once, as later Anno games do.
+    enum class Tool : std::uint8_t { Demolish, Copy };
+    /// Shows the tools' category with `tool` picked: a key started the tool (Delete, Ctrl+C).
+    void show_tool(Tool tool);
+    /// The tools' pop-up as a category of the menu: icons "open1602:<tool>", names in the
+    /// language of the game (Windows-1252, as the original's; demolish by its own text).
+    [[nodiscard]] ui::BuildCategory tools_category(std::int32_t button) const;
     /// Shows a building's category with it picked (a plantation's field, 0x004331B0).
     /// False if the menu has no such building.
     bool show(std::uint32_t id);
@@ -85,6 +97,8 @@ private:
     std::int32_t m_gfx_ware = 192;
     std::int32_t m_category = 0;
     std::map<std::int32_t, std::size_t> m_picked;  ///< remembered position per category
+    Tool m_tool = Tool::Demolish;                  ///< the tool picked last in the tools' pop-up
+    ui::BuildCategory m_tools;                     ///< that pop-up's icons
     std::optional<ui::Panel> m_popup;
     std::int32_t m_popup_category = 0;
 };

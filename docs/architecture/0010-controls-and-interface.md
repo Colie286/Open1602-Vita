@@ -81,10 +81,16 @@ information fit in and the controls follow today's real-time strategy games (202
 | R | rotate building |
 | Shift+R | rotate building the other way (History Edition) |
 | hold Shift | keep building after placing |
-| C | pipette: the building under the mouse as the building order |
+| C | pipette: the building under the mouse as the building order (a grown house as the first house) |
 | Delete | demolish tool |
-| Escape | put the tool away |
-| Right-click | put the tool away and return to the player status |
+| Ctrl+C | copy tool (Open1602): drag over a piece of the own city, or click a building, and it hangs at the mouse to be built again elsewhere; R turns it |
+| Escape | put the tool away (the copy tool: first the piece in hand) |
+| Right-click | put the tool away and return to the player status (the copy tool: only the piece in hand) |
+
+The build menu's demolish button opens a pop-up with the tools, like the other categories: demolish
+and the copy tool (Open1602's icons). A copied piece is built as one order: roads and walls first,
+then the buildings, then the fields, so what the means do not reach is the end of the order. Houses
+come as the first house; fields and trees only with a building of the piece that harvests them.
 
 **Settings dialogs** (start dialog of a game, window „Anzeige“)
 

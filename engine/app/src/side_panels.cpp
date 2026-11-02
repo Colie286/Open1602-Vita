@@ -7,6 +7,7 @@
 
 #include "banner_graphic.hpp"
 
+#include "o1602/core/text.hpp"
 #include "o1602/sim/game_data.hpp"
 #include "o1602/ui/localization.hpp"
 #include "o1602/ui/package_icons.hpp"
@@ -87,7 +88,45 @@ std::string BuildPanel::name_of(const ui::BuildCategory& category, std::size_t i
 
 bool BuildPanel::demolish() const noexcept {
     const ui::BuildCategory* c = m_menu->category(m_category);
-    return c != nullptr && c->demolish;
+    return c != nullptr && c->demolish && m_tool == Tool::Demolish;
+}
+
+bool BuildPanel::copy() const noexcept {
+    const ui::BuildCategory* c = m_menu->category(m_category);
+    return c != nullptr && c->demolish && m_tool == Tool::Copy;
+}
+
+void BuildPanel::show_tool(Tool tool) {
+    for (const ui::BuildCategory& c : m_menu->categories) {
+        if (c.demolish) {
+            m_popup.reset();
+            m_bau.set_selected(m_category, false);
+            m_category = c.button;
+            m_bau.set_selected(m_category, true);
+            m_tool = tool;
+            return;
+        }
+    }
+}
+
+ui::BuildCategory BuildPanel::tools_category(std::int32_t button) const {
+    ui::BuildCategory tools;
+    tools.button = button;
+    tools.demolish = true;
+    tools.names = "ABRISS";  // "Abreißen" in the game's own language
+    const auto tool = [](Tool t, const char* icon, const char* name) {
+        ui::BuildButton b;
+        b.id = static_cast<std::uint32_t>(t);
+        b.picture = icon;
+        b.name = core::utf8_to_cp1252(ui::tr(name));
+        return b;
+    };
+    ui::BuildButton demolish = tool(Tool::Demolish, "open1602:demolish", "build.tool.demolish");
+    if (m_texts != nullptr && !m_texts->section("ABRISS").empty()) {
+        demolish.text = 0;
+    }
+    tools.rows.push_back({demolish, tool(Tool::Copy, "open1602:copy", "build.tool.copy")});
+    return tools;
 }
 
 std::optional<std::uint32_t> BuildPanel::current(const Available& available) {
@@ -114,6 +153,7 @@ bool BuildPanel::show(std::uint32_t id) {
     if (c == nullptr) {
         return false;
     }
+    m_popup.reset();  // an open pop-up (the tools') belongs to the category left
     m_bau.set_selected(m_category, false);
     m_category = c->button;
     m_bau.set_selected(m_category, true);
@@ -154,7 +194,13 @@ std::optional<BuildPanel::Action> BuildPanel::mouse(std::int32_t x, std::int32_t
                        e.id < ui::kPopupSlot + 1000) {
                 const ui::BuildCategory* c = m_menu->category(m_popup_category);
                 const auto index = static_cast<std::size_t>(e.id - ui::kPopupSlot);
-                if (c != nullptr) {
+                if (c != nullptr && c->demolish) {
+                    // The tools' pop-up: the tool picked.
+                    if (const auto tool = m_tools.at(index)) {
+                        m_tool = static_cast<Tool>(*tool);
+                        action = Action{m_tool == Tool::Copy ? Action::Kind::Copy : Action::Kind::Demolish, 0, 0};
+                    }
+                } else if (c != nullptr) {
                     if (const auto id = c->at(index); id && available(*id)) {
                         m_picked[m_popup_category] = index;
                         action = Action{Action::Kind::Pick, *id, 0};
@@ -179,7 +225,9 @@ std::optional<BuildPanel::Action> BuildPanel::mouse(std::int32_t x, std::int32_t
             m_bau.set_selected(m_category, true);
             if (const ui::BuildCategory* c = m_menu->category(e.id)) {
                 if (c->demolish) {
-                    action = Action{Action::Kind::Demolish, 0, 0};
+                    // Open1602: the tools in a pop-up like the buildings' (demolish, copy).
+                    m_tools = tools_category(c->button);
+                    open_popup(m_tools, [](std::uint32_t) { return true; }, x, y);
                 } else {
                     open_popup(*c, available, x, y);
                 }
@@ -201,7 +249,9 @@ std::optional<std::string> BuildPanel::help(const std::vector<std::string>& leis
     if (m_popup) {
         const auto id = m_popup->hovered();
         if (id && *id >= ui::kPopupSlot && *id < ui::kPopupSlot + 1000) {
-            if (const ui::BuildCategory* c = m_menu->category(m_popup_category)) {
+            if (const ui::BuildCategory* c = m_menu->category(m_popup_category); c != nullptr && c->demolish) {
+                return name_of(m_tools, static_cast<std::size_t>(*id - ui::kPopupSlot));
+            } else if (c != nullptr) {
                 return name_of(*c, static_cast<std::size_t>(*id - ui::kPopupSlot));
             }
         }
@@ -222,8 +272,8 @@ void BuildPanel::refresh(const assets::BuildingTable& buildings, const Available
     const assets::BuildingType* b = id ? buildings.by_id(*id) : nullptr;
     // Title: the building's name, "Abreißen", or nothing.
     if (category != nullptr && category->demolish) {
-        const auto& names = m_texts != nullptr ? m_texts->section("ABRISS") : std::vector<std::string>{};
-        m_bau.set_text(kTitle, names.empty() ? std::string() : names[0]);
+        const ui::BuildCategory tools = tools_category(category->button);
+        m_bau.set_text(kTitle, name_of(tools, static_cast<std::size_t>(m_tool)));
         m_bau.set_visible(kTitle, true);
     } else if (b != nullptr && category != nullptr) {
         m_bau.set_text(kTitle, name_of(*category, category->index_of(*id).value_or(0)));

@@ -3,6 +3,13 @@
 
 #include <utility>
 
+#include "o1602/core/embedded_file.hpp"
+#include "o1602/core/png_reader.hpp"
+
+namespace o1602::ui::interface_icons {
+extern const core::EmbeddedFile kEmbeddedFiles[];
+}  // namespace o1602::ui::interface_icons
+
 namespace o1602::ui {
 
 namespace {
@@ -13,6 +20,25 @@ std::vector<assets::PackageIcon>& icons() {
 }
 
 }  // namespace
+
+std::vector<assets::PackageIcon> builtin_icons() {
+    std::vector<assets::PackageIcon> list;
+    for (const core::EmbeddedFile* f = interface_icons::kEmbeddedFiles; f->name != nullptr; ++f) {
+        const auto size = core::png_size(std::span<const std::uint8_t>(f->data, f->size));
+        if (!size) {
+            continue;  // checked by the tests; a broken file is left out
+        }
+        assets::PackageIcon icon;
+        icon.id = std::string("open1602:") + f->name;
+        icon.sprite = assets::kFirstPackageIcon + static_cast<std::int32_t>(list.size());
+        icon.width = size->width;
+        icon.height = size->height;
+        icon.data = f->data;
+        icon.size = f->size;
+        list.push_back(std::move(icon));
+    }
+    return list;
+}
 
 void set_package_icons(std::vector<assets::PackageIcon> list) {
     icons() = std::move(list);

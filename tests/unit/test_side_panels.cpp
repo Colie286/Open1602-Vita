@@ -234,9 +234,27 @@ TEST_CASE("side panel build menu: a category's pop-up picks a building, an unava
 
 TEST_CASE("side panel build menu: demolish, rotate and orient to the road") {
     Build b;
+    // The demolish button opens the tools' pop-up (Open1602): demolish and copy.
     auto a = b.press(kDemolishButton);
+    CHECK(!a.has_value());
+    CHECK(b.panel.popup_open());
+    a = b.release_on(1);
+    REQUIRE(a.has_value());
+    CHECK(a->kind == BuildPanel::Action::Kind::Copy);
+    CHECK(b.panel.copy());
+    CHECK(!b.panel.demolish());
+    (void)b.press(kDemolishButton);
+    a = b.release_on(0);
     REQUIRE(a.has_value());
     CHECK(a->kind == BuildPanel::Action::Kind::Demolish);
+    CHECK(b.panel.demolish());
+    CHECK(!b.panel.copy());
+    // A key starts a tool: the menu shows it.
+    (void)b.press(kWorkshops);
+    b.panel.show_tool(BuildPanel::Tool::Copy);
+    CHECK(!b.panel.popup_open());
+    CHECK(b.panel.copy());
+    b.panel.show_tool(BuildPanel::Tool::Demolish);
     CHECK(b.panel.demolish());
     CHECK(!b.panel.current(b.available).has_value());
     bool consumed = false;

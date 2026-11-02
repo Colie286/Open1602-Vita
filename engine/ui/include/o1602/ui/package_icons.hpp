@@ -17,6 +17,10 @@
 
 namespace o1602::ui {
 
+/// Open1602's own icons ("open1602:<name>", data/icons/ui/<name>.png, compiled in), numbered from
+/// kFirstPackageIcon; the packages' icons follow them.
+[[nodiscard]] std::vector<assets::PackageIcon> builtin_icons();
+
 /// Makes `icons` the packages' icons. Call it on the main thread, before the interface is drawn
 /// with them; until then there are none.
 void set_package_icons(std::vector<assets::PackageIcon> icons);
