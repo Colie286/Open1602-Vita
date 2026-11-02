@@ -210,6 +210,19 @@ TEST_CASE("endless setup: the values reach the rules and the world") {
     CHECK(!read.rules.fertile_fields);
     CHECK(app::setup_item_offered(app::SetupScope::Scenario, SetupItem::FertileFields));
     CHECK(!EndlessSetup::original().rules.fertile_fields);
+    // Moving buildings: free by default, like building anew or off on choice, off in the original.
+    CHECK(s.rules.moving == sim::Moving::Free);
+    CHECK(value_of(s, SetupItem::Moving) == ui::tr("setup.moving.free"));
+    app::choose(s, SetupItem::Moving, 1);
+    CHECK(s.rules.moving == sim::Moving::Rebuild);
+    CHECK(value_of(s, SetupItem::Moving) == ui::tr("setup.moving.rebuild"));
+    CHECK(app::write_setup(s).find("endless.moving = rebuild\n") != std::string::npos);
+    app::read_setup(read, app::write_setup(s));
+    CHECK(read.rules.moving == sim::Moving::Rebuild);
+    CHECK(app::read_setup_line(read, "moving", "off"));
+    CHECK(read.rules.moving == sim::Moving::Off);
+    CHECK(app::setup_item_offered(app::SetupScope::Scenario, SetupItem::Moving));
+    CHECK(EndlessSetup::original().rules.moving == sim::Moving::Off);
 
     // The world's items count only for a world of its own.
     CHECK(!app::setup_item_used(s, SetupItem::Players));

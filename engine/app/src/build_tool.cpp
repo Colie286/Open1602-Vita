@@ -82,6 +82,7 @@ BuildTool::BuildTool(const assets::BuildingTable& buildings) : m_buildings(&buil
 void BuildTool::set_mode(Mode mode) noexcept {
     m_mode = mode;
     m_layout.reset();
+    m_move.reset();
     if (mode != Mode::Build) {
         m_ship.reset();
     }
@@ -520,7 +521,44 @@ std::vector<sim::TilePos> BuildTool::copy_preview(const sim::World& world, sim::
     return tiles;
 }
 
+sim::MoveRefusal BuildTool::take_move(const sim::World& world, const assets::BuildingTable& buildings,
+                                      sim::PlayerId player, const Spot& spot) {
+    m_drag_start.reset();
+    if (m_mode != Mode::Move) {
+        return sim::MoveRefusal::Nothing;
+    }
+    const sim::MovablePiece piece = sim::movable_at(world, buildings, player, spot.island, {spot.x, spot.y});
+    if (piece.ok()) {
+        m_move = MoveHand{spot.island, piece.origin, piece.type};
+        m_rotation = piece.rotation;
+    }
+    return piece.refusal;
+}
+
+std::optional<sim::MoveOrder> BuildTool::move_order(sim::PlayerId player, const Spot& spot) const {
+    if (m_mode != Mode::Move || !m_move || m_move->type == nullptr || spot.island != m_move->island) {
+        return std::nullopt;
+    }
+    std::uint32_t w = 1;
+    std::uint32_t h = 1;
+    sim::rotated_size(*m_move->type, m_rotation, w, h);
+    sim::MoveOrder order;
+    order.player = player;
+    order.island = m_move->island;
+    order.from = m_move->origin;
+    order.x = spot.x - (static_cast<std::int32_t>(w) - 1) / 2;
+    order.y = spot.y - (static_cast<std::int32_t>(h) - 1) / 2;
+    order.rotation = m_rotation;
+    order.orient_to_road = m_orient_to_road;
+    return order;
+}
+
 std::string BuildTool::describe() const {
+    if (m_mode == Mode::Move) {
+        return m_move ? "move (building " + std::to_string(m_move->type != nullptr ? m_move->type->id : 0) +
+                            " in hand, rotation " + std::to_string(m_rotation) + ")"
+                      : "move (click a building of your own)";
+    }
     if (m_mode == Mode::Copy) {
         return m_layout ? "copy (" + std::to_string(m_layout->items.size()) + " buildings in hand)"
                         : "copy (drag over a piece of the city)";

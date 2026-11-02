@@ -59,6 +59,7 @@ struct EndlessSetup {
 enum class SetupItem : std::uint8_t {
     // Economy
     Refund,
+    Moving,  ///< Rules::moving
     TraderPrices,
     TraderReach,
     OreVeins,

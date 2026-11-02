@@ -935,6 +935,9 @@ void MapInput::handle_event(const SDL_Event& event) {
                     } else if (m_tool.mode() == BuildTool::Mode::Copy && m_tool.layout()) {
                         // The copied piece goes away; the copy tool and the build menu stay.
                         m_tool.drop_layout();
+                    } else if (m_tool.mode() == BuildTool::Mode::Move && m_tool.move_hand()) {
+                        // The building in hand stays where it stands; the move tool stays.
+                        m_tool.drop_move();
                     } else if (m_hud && m_hud->picking() && m_hud->step_back()) {
                         // Choosing a route stop on the map: the right click ends the choice, the
                         // ship does not sail off.
@@ -953,6 +956,15 @@ void MapInput::handle_event(const SDL_Event& event) {
                     // The copy tool's drag ends: the piece goes into the hand (nothing if it
                     // holds nothing of the player's own).
                     (void)m_tool.take_layout(world(), local(), *spot);
+                } else if (spot && m_tool.move_selecting()) {
+                    // The move tool picks up the building clicked (nothing if it may not move).
+                    (void)m_tool.take_move(world(), m_buildings, local(), *spot);
+                } else if (spot && m_tool.mode() == BuildTool::Mode::Move) {
+                    // The building in hand goes where the mouse is; the tool waits for the next.
+                    if (auto order = m_tool.move_order(local(), *spot)) {
+                        m_commands.submit(std::move(*order));
+                        m_tool.drop_move();
+                    }
                 } else if (spot && m_tool.blueprint() && m_tool.places()) {
                     // Blueprint mode: the buildings become blueprints, paid for when built.
                     if (auto order = m_tool.blueprint_order(world(), local(), *spot)) {
@@ -1198,6 +1210,10 @@ bool MapInput::cancel_build_step() {
     }
     if (m_tool.mode() == BuildTool::Mode::Copy && m_tool.layout()) {
         m_tool.drop_layout();  // the piece in hand goes first, the copy tool stays
+        return true;
+    }
+    if (m_tool.mode() == BuildTool::Mode::Move && m_tool.move_hand()) {
+        m_tool.drop_move();  // the building in hand stays where it was, the move tool stays
         return true;
     }
     if (m_tool.active()) {

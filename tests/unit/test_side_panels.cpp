@@ -258,6 +258,26 @@ TEST_CASE("side panel build menu: the blueprint switch goes back to the building
     CHECK(b.panel.copy());
 }
 
+TEST_CASE("side panel build menu: the move tool is the fourth tool, offered where the game allows it") {
+    Build b;
+    (void)b.press(kDemolishButton);
+    REQUIRE(b.panel.popup_open());
+    const auto a = b.release_on(3);
+    REQUIRE(a.has_value());
+    CHECK(a->kind == BuildPanel::Action::Kind::Move);
+    CHECK(b.panel.moving());
+    CHECK(!b.panel.copy());
+    b.refresh();
+    CHECK(shows(b.panel.panel(), "Move buildings"));
+    // Off in the game's settings: the icon picks nothing.
+    b.panel.set_moving(false);
+    (void)b.press(kDemolishButton);
+    REQUIRE(b.release_on(1).has_value());  // the copy tool
+    (void)b.press(kDemolishButton);
+    CHECK(!b.release_on(3).has_value());
+    CHECK(b.panel.copy());
+}
+
 TEST_CASE("side panel build menu: demolish, rotate and orient to the road") {
     Build b;
     // The demolish button opens the tools' pop-up (Open1602): demolish and copy.

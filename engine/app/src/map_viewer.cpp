@@ -104,10 +104,29 @@ std::string refusal_text(sim::BuildRefusal refusal) {
                 return "build.refusal.cannons";
             case sim::BuildRefusal::ShipTooFar:
                 return "build.refusal.ship_too_far";
+            case sim::BuildRefusal::Immovable:
+                return "build.refusal.immovable";
         }
         return "build.refusal.unknown";
     }();
     return ui::tr(key);
+}
+
+/// Why a building cannot be moved, as the status line says it.
+std::string_view move_refusal_key(sim::MoveRefusal refusal) {
+    switch (refusal) {
+        case sim::MoveRefusal::Holds:
+            return "build.move.holds";
+        case sim::MoveRefusal::Busy:
+            return "build.move.busy";
+        case sim::MoveRefusal::Disaster:
+            return "build.move.disaster";
+        case sim::MoveRefusal::None:
+        case sim::MoveRefusal::Nothing:
+        case sim::MoveRefusal::NoBuilding:
+            break;
+    }
+    return "build.move.select";
 }
 
 /// Whether any tile of `item` lies in a city of `player` (the original's edge rule could take it).
@@ -938,6 +957,7 @@ int MapViewer::run() {
                     // What the windows of the panel ordered (scuttling and disbanding ask first).
                     m_input->submit_orders(m_hud->take_commands(), false);
                     update_blueprint_window();
+                    m_hud->set_moving_in_build_menu(m_state->simulation.rules().moving != sim::Moving::Off);
                     apply_options();
                 }
                 update(delta);
@@ -1631,6 +1651,13 @@ void MapViewer::render() {
                 if (m_tool_status.empty()) {
                     m_tool_status = ui::tr("build.copy.select");
                 }
+            }
+        }
+        if (m_tool.mode() == BuildTool::Mode::Move) {
+            if (const auto spot = m_input->spot_at_mouse()) {
+                preview_move(*spot, [&](std::uint16_t island, std::uint32_t x, std::uint32_t y) {
+                    saved.push_back(Saved{island, x, y, m_state->world.island(island).map.top(x, y)});
+                });
             }
         }
         if (m_tool.mode() == BuildTool::Mode::Demolish) {
@@ -2468,6 +2495,10 @@ void MapViewer::apply_hud(const Hud::Action& action) {
             break;
         case Hud::Action::Kind::Copy:
             m_tool.set_mode(BuildTool::Mode::Copy);
+            m_input->drop_units();
+            break;
+        case Hud::Action::Kind::Move:
+            m_tool.set_mode(BuildTool::Mode::Move);
             m_input->drop_units();
             break;
         case Hud::Action::Kind::Blueprint:
@@ -3994,6 +4025,105 @@ std::size_t MapViewer::humans() const {
         n += p.role == sim::PlayerRole::Human && p.status != sim::PlayerStatus::Absent ? 1U : 0U;
     }
     return n;
+}
+
+void MapViewer::preview_move(const BuildTool::Spot& spot,
+                             const std::function<void(std::uint16_t island, std::uint32_t x, std::uint32_t y)>& keep) {
+    sim::World& world = m_state->world;
+    const auto mark_tiles = [&](std::uint16_t island, const sim::MovablePiece& piece, assets::Rgba colour,
+                                bool hatched) {
+        for (std::uint32_t j = 0; j < piece.height; ++j) {
+            for (std::uint32_t i = 0; i < piece.width; ++i) {
+                render::TileMark mark{island, static_cast<std::uint16_t>(piece.origin.x + static_cast<std::int32_t>(i)),
+                                      static_cast<std::uint16_t>(piece.origin.y + static_cast<std::int32_t>(j)),
+                                      colour};
+                mark.hatched = hatched;
+                mark.on_top = true;
+                m_tile_marks.push_back(mark);
+            }
+        }
+    };
+    const std::optional<BuildTool::MoveHand>& hand = m_tool.move_hand();
+    if (!hand) {
+        // What a click would pick up is tinted; what may not move says why.
+        const sim::MovablePiece piece =
+            sim::movable_at(world, m_buildings, m_local_player, spot.island, {spot.x, spot.y});
+        if (piece.ok()) {
+            mark_tiles(spot.island, piece, kCopyMark, false);
+        } else if (piece.refusal != sim::MoveRefusal::Nothing && piece.refusal != sim::MoveRefusal::NoBuilding) {
+            mark_tiles(spot.island, piece, render::kDragHatch, true);
+            m_tool_status = ui::tr(move_refusal_key(piece.refusal));
+        }
+        if (m_tool_status.empty()) {
+            m_tool_status = ui::tr("build.move.select");
+        }
+        return;
+    }
+    const auto order = m_tool.move_order(m_local_player, spot);
+    const sim::MovablePiece piece = sim::movable_at(world, m_buildings, m_local_player, hand->island, hand->origin);
+    if (!order || !piece.ok()) {
+        return;
+    }
+    const sim::Rules& rules = m_state->simulation.rules();
+    const bool pay = rules.moving == sim::Moving::Rebuild;
+    const sim::BuildPlan plan = sim::plan_move(world, m_buildings, *order, pay);
+    if (plan.items.size() != 1 || plan.items[0].type == nullptr) {
+        return;
+    }
+    const sim::PlannedBuild& item = plan.items[0];
+    m_pending_bill = pay ? plan.shown : sim::BuildBill{};
+    // The building leaves its old place, which shows its ground.
+    sim::IslandMap& map = world.island(order->island).map;
+    for (std::uint32_t j = 0; j < piece.height; ++j) {
+        for (std::uint32_t i = 0; i < piece.width; ++i) {
+            const auto x = static_cast<std::uint32_t>(piece.origin.x) + i;
+            const auto y = static_cast<std::uint32_t>(piece.origin.y) + j;
+            keep(order->island, x, y);
+            map.restore_ground(x, y);
+        }
+    }
+    const bool short_of_means = item.refusal == sim::BuildRefusal::Money || item.refusal == sim::BuildRefusal::Tools ||
+                                item.refusal == sim::BuildRefusal::Wood || item.refusal == sim::BuildRefusal::Bricks ||
+                                item.refusal == sim::BuildRefusal::Cannons;
+    const bool blink_off = (platform::ticks_ms() / kShortOfMeansBlinkMs) % 2 == 1;
+    std::uint32_t w = 1;
+    std::uint32_t h = 1;
+    sim::rotated_size(*item.type, item.rotation, w, h);
+    bool inside = true;
+    for (std::uint32_t j = 0; j < h; ++j) {
+        for (std::uint32_t i = 0; i < w; ++i) {
+            const std::int32_t tx = item.x + static_cast<std::int32_t>(i);
+            const std::int32_t ty = item.y + static_cast<std::int32_t>(j);
+            if (!map.contains(tx, ty)) {
+                inside = false;
+                continue;
+            }
+            if (!item.ok() && !short_of_means) {
+                render::TileMark mark{order->island, static_cast<std::uint16_t>(tx), static_cast<std::uint16_t>(ty),
+                                      render::kDragHatch};
+                mark.hatched = true;
+                mark.on_top = true;
+                m_tile_marks.push_back(mark);
+            }
+        }
+    }
+    if (inside && (item.ok() || (short_of_means && !blink_off))) {
+        for (std::uint32_t j = 0; j < h; ++j) {
+            for (std::uint32_t i = 0; i < w; ++i) {
+                keep(order->island, static_cast<std::uint32_t>(item.x) + i, static_cast<std::uint32_t>(item.y) + j);
+            }
+        }
+        const sim::MapCell at = map.top(static_cast<std::uint32_t>(item.x), static_cast<std::uint32_t>(item.y));
+        (void)map.build(*item.type, item.x, item.y, item.rotation, item.anim_phase, at.owner, at.city);
+    }
+    if (!item.ok()) {
+        m_tool_status = refusal_text(item.refusal);
+    } else if (pay) {
+        const auto back = static_cast<std::int64_t>(piece.type->build_cost.money) * rules.refund_share() / 100;
+        m_tool_status = ui::tr("build.move.cost", {std::to_string(plan.bill.money), std::to_string(back)});
+    } else {
+        m_tool_status = ui::tr("build.move.free");
+    }
 }
 
 void MapViewer::update_blueprint_window() {

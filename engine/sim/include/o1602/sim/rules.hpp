@@ -21,6 +21,14 @@ enum class Refund : std::uint8_t {
     Full,     ///< all the building's costs
 };
 
+/// Whether and how players move their buildings (Open1602, as in later Anno games). The original
+/// has no such thing.
+enum class Moving : std::uint8_t {
+    Free,     ///< a building moves for nothing, keeping its level, stock and production
+    Rebuild,  ///< as if built anew: the full costs at the new place, the demolish refund for the old
+    Off,      ///< not at all, as in the original
+};
+
 /// How often droughts come. The original takes it from the difficulty of
 /// the game; the rows are its drought tables.
 enum class Droughts : std::uint8_t {
@@ -240,6 +248,9 @@ struct Rules {
     /// Share for Refund::Partial, in percent (1..100). 50 by default: a wrong building costs half
     /// its price, moving one stays affordable.
     std::uint8_t refund_percent = 50;
+    /// Moving buildings (the tool in the demolish button's menu): free by default, off with the
+    /// original's settings.
+    Moving moving = Moving::Free;
 
     /// L-001: ships per player, shipyard orders included. 0 = unlimited; the original allows 33,
     /// Open1602 100.
@@ -322,6 +333,7 @@ struct Rules {
         r.guarantee_resources = false;
         r.max_game_speed = 4;
         r.demolish_refund = Refund::None;
+        r.moving = Moving::Off;
         r.droughts = Droughts::Game;
         r.volcanoes = Volcanoes::Game;
         r.pirates = Pirates::Game;

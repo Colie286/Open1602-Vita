@@ -93,7 +93,27 @@ std::vector<sim::Command> every_kind() {
     blueprint.city = 3;
     blueprint.on = true;
     all.emplace_back(blueprint);
+    sim::MoveOrder move;
+    move.player = 1;
+    move.island = 2;
+    move.from = {3, 4};
+    move.x = -5;
+    move.y = 6;
+    move.rotation = 3;
+    move.orient_to_road = false;
+    all.emplace_back(move);
     return all;
+}
+
+/// The command of kind T in `all`, after going to bytes and back.
+template <class T>
+T round_trip(const std::vector<sim::Command>& all) {
+    for (const sim::Command& c : all) {
+        if (std::holds_alternative<T>(c)) {
+            return std::get<T>(*sim::decode_command(sim::encode_command(c)));
+        }
+    }
+    return T{};
 }
 
 struct Game {
@@ -137,8 +157,7 @@ TEST_CASE("commands: every kind of command goes to bytes and back") {
     REQUIRE(build.items.size() == 2);
     CHECK(build.items[0].y == -2);
     CHECK(build.orient_to_road);
-    const sim::Command& named = all[all.size() - 5];
-    const auto rename = std::get<sim::PlayerRename>(*sim::decode_command(sim::encode_command(named)));
+    const auto rename = round_trip<sim::PlayerRename>(all);
     CHECK(rename.name == "Merlin");
     sim::ShipCommand mount;
     mount.op = sim::ShipCommand::Op::MountCannon;
@@ -150,32 +169,39 @@ TEST_CASE("commands: every kind of command goes to bytes and back") {
     const auto sent = std::get<sim::CastleOrder>(*sim::decode_command(sim::encode_command(all_out)));
     CHECK(sent.op == sim::CastleOrder::Op::ReleaseAll);
     CHECK(sent.spot == sim::Target::spot(9, 8));
-    const auto gates = std::get<sim::GateOrder>(*sim::decode_command(sim::encode_command(all[all.size() - 3])));
+    const auto gates = round_trip<sim::GateOrder>(all);
     CHECK(gates.player == 1);
     CHECK(gates.closed);
-    const auto control = std::get<sim::PlayerControl>(*sim::decode_command(sim::encode_command(all[all.size() - 4])));
+    const auto control = round_trip<sim::PlayerControl>(all);
     CHECK(control.player == 1);
     CHECK(control.computer);
     CHECK(control.owner == 0xFEDC'BA98'7654'3210ULL);
-    const auto cart = std::get<sim::CartRequest>(*sim::decode_command(sim::encode_command(all[all.size() - 2])));
+    const auto cart = round_trip<sim::CartRequest>(all);
     CHECK(cart.island == 2);
     CHECK(cart.city == 3);
     CHECK(cart.x == 40);
     CHECK(cart.y == 50);
     CHECK(cart.from_x == 41);
     CHECK(cart.from_y == 52);
-    const auto blueprint = std::get<sim::BlueprintOrder>(*sim::decode_command(sim::encode_command(all.back())));
+    const auto blueprint = round_trip<sim::BlueprintOrder>(all);
     CHECK(blueprint.kind == sim::BlueprintOrder::Kind::Auto);
     REQUIRE(blueprint.items.size() == 1);
     CHECK(blueprint.items[0].y == -4);
     CHECK((blueprint.to == sim::TilePos{5, 6}));
     CHECK(blueprint.city == 3);
     CHECK(blueprint.on);
+    const auto move = round_trip<sim::MoveOrder>(all);
+    CHECK(move.island == 2);
+    CHECK((move.from == sim::TilePos{3, 4}));
+    CHECK(move.x == -5);
+    CHECK(move.y == 6);
+    CHECK(move.rotation == 3);
+    CHECK(!move.orient_to_road);
 
     // With the tick, as the network carries them, one after another.
     core::ByteWriter out;
     sim::write_scheduled(out, {1234567890123ULL, all[0]});
-    sim::write_scheduled(out, {7, named});
+    sim::write_scheduled(out, {7, sim::Command{sim::PlayerRename{1, "Merlin"}}});
     const auto stream = out.take();
     core::ByteReader in(stream);
     const auto first = sim::read_scheduled(in);

@@ -26,6 +26,7 @@ if they change during a game, then only via a command
 | Setting | Values | Original | Default |
 |---|---|---|---|
 | Refund on demolition (`demolish_refund`, `refund_percent`) | none, partial (1–100 %, preset 50 %), full | none | none |
+| Moving buildings (`moving`) | free: the building goes to a new place in its city and keeps its level, inhabitants, stock and production; like building anew: the same, but the full costs are paid at the new place and the refund on demolition comes back for the old; off. Kontors, markets, towers, castles, a shipyard building or repairing a ship, burning or plague-struck buildings and ruins do not move | off (the original has no such tool) | free |
 | Ships per player (`max_ships_per_player`, L-001) | number, 0 = unlimited | 33 | 100 |
 | Units per player (`max_army`, L-008) | number, 0 = unlimited | 100 | 250 |
 | Guarantee raw materials (`guarantee_resources`, S-019) | yes/no | no | yes |

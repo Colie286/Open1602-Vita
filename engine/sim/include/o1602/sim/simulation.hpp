@@ -120,7 +120,7 @@ struct GateOrder {
 using Command = std::variant<BuildOrder, DemolishOrder, ShipOrder, CargoTransfer, RouteEdit, TradeSetting,
                              ShipyardOrder, ExploreOrder, DiplomacyOrder, SoldierOrder, SoldierCommand, CastleOrder,
                              UnloadOrder, ProductionSwitch, CityOrder, ShipCommand, GameSpeedOrder, PlayerRename,
-                             PlayerControl, GateOrder, CartRequest, BlueprintOrder>;
+                             PlayerControl, GateOrder, CartRequest, BlueprintOrder, MoveOrder>;
 
 /// What became of a command.
 struct CommandResult {
@@ -128,7 +128,8 @@ struct CommandResult {
     bool late = false;               ///< refused: its tick had already run when it arrived
     std::optional<BuildPlan> build;  ///< build orders: what was built and why the rest was not
     std::size_t demolished = 0;      ///< demolish orders: buildings removed
-    BuildBill refund;                ///< demolish orders: what came back (Rules::demolish_refund)
+    BuildBill refund;                ///< demolish and move orders: what came back (Rules::demolish_refund)
+    BuildBill paid;                  ///< move orders with Moving::Rebuild: the costs at the new place
     bool accepted = false;           ///< all other orders: carried out
     std::uint32_t moved = 0;         ///< cargo transfers: goods moved, 1/32 t
 };

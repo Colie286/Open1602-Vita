@@ -1215,3 +1215,122 @@ TEST_CASE("blueprints: a city builds them by itself, demolishing clears them, th
     simulation.tick();
     CHECK(!sim::blueprint_auto(island.world, 1, 0, 0));
 }
+
+namespace {
+
+sim::MoveOrder move_order(sim::TilePos from, std::int32_t x, std::int32_t y, std::uint8_t rotation = 0) {
+    sim::MoveOrder order;
+    order.player = 0;
+    order.island = 0;
+    order.from = from;
+    order.x = x;
+    order.y = y;
+    order.rotation = rotation;
+    order.orient_to_road = false;
+    return order;
+}
+
+}  // namespace
+
+TEST_CASE("moving: a house takes its inhabitants along, also onto its own old place") {
+    Island island;
+    island.found();
+    REQUIRE(island.build({{kHouse, 8, 13, 0, 0}}).placed == 1);
+    sim::House* house = island.world.house(0, 8, 13);
+    REQUIRE(house != nullptr);
+    house->inhabitants64 = 5 * 64;
+    island.world.city(0, 0)->inhabitants[0] = 5;
+    const std::int32_t money = island.world.players()[0].money;
+    // Free: one tile to the east, over half of where it stands.
+    CHECK(sim::movable_at(island.world, island.buildings, 0, 0, {9, 14}).ok());
+    const sim::MoveResult moved =
+        sim::execute_move(island.world, island.buildings, move_order({9, 14}, 9, 13), false, 0, &island.events);
+    CHECK(moved.moved);
+    CHECK(island.world.players()[0].money == money);
+    CHECK(island.at(8, 13)->id == kGround);
+    CHECK(island.at(9, 13)->id == kHouse);
+    CHECK(island.world.house(0, 8, 13) == nullptr);
+    REQUIRE(island.world.house(0, 9, 13) != nullptr);
+    CHECK(island.world.house(0, 9, 13)->inhabitants() == 5);
+    CHECK(island.world.city(0, 0)->inhabitants[0] == 5);
+    CHECK(island.world.houses().size() == 1);
+}
+
+TEST_CASE("moving: Kontors and markets stay, nothing leaves its city, the world is kept while planning") {
+    Island island;
+    island.found();
+    REQUIRE(island.build({{kMarket, 8, 13, 0, 0}, {kHouse, 8, 16, 0, 0}}).placed == 2);
+    CHECK(sim::movable_at(island.world, island.buildings, 0, 0, {5, 10}).refusal == sim::MoveRefusal::Holds);
+    CHECK(sim::movable_at(island.world, island.buildings, 0, 0, {8, 13}).refusal == sim::MoveRefusal::Holds);
+    CHECK(sim::movable_at(island.world, island.buildings, 0, 0, {12, 12}).refusal == sim::MoveRefusal::NoBuilding);
+    CHECK(sim::movable_at(island.world, island.buildings, 1, 0, {8, 16}).refusal == sim::MoveRefusal::Nothing);
+    // Out of the city, onto the market: refused, and the map is as it was.
+    CHECK(sim::plan_move(island.world, island.buildings, move_order({8, 16}, 26, 26), false).items[0].refusal ==
+          sim::BuildRefusal::Territory);
+    CHECK(sim::plan_move(island.world, island.buildings, move_order({8, 16}, 8, 14), false).items[0].refusal ==
+          sim::BuildRefusal::Terrain);
+    CHECK(sim::plan_move(island.world, island.buildings, move_order({5, 10}, 12, 12), false).items[0].refusal ==
+          sim::BuildRefusal::Immovable);
+    CHECK(island.at(8, 16)->id == kHouse);
+    CHECK(island.world.house(0, 8, 16) != nullptr);
+    CHECK(
+        !sim::execute_move(island.world, island.buildings, move_order({8, 16}, 8, 14), false, 0, &island.events).moved);
+    CHECK(island.at(8, 16)->id == kHouse);
+}
+
+TEST_CASE("moving: as if built anew, the costs at the new place and the demolish refund for the old") {
+    Island island;
+    island.found();
+    REQUIRE(island.build({{kPlantation, 8, 13, 0, 0}}).placed == 1);
+    const auto index = island.world.production_index(0, 8, 13);
+    REQUIRE(index);
+    island.world.productions()[*index].stock = 3 * 32;
+    island.world.productions()[*index].raw = 32;
+    const std::int32_t money = island.world.players()[0].money;
+    const sim::MoveResult moved =
+        sim::execute_move(island.world, island.buildings, move_order({8, 13}, 12, 13), true, 50, &island.events);
+    REQUIRE(moved.moved);
+    CHECK(moved.paid.money == 20);
+    CHECK(moved.refund.money == 10);
+    CHECK(island.world.players()[0].money == money - 10);
+    // The stock and the raw material went along.
+    const sim::Production* p = island.world.production(0, 12, 13);
+    REQUIRE(p != nullptr);
+    CHECK(p->stock == 3 * 32);
+    CHECK(p->raw == 32);
+    CHECK(island.world.production(0, 8, 13) == nullptr);
+}
+
+TEST_CASE("moving: the game setting, the command and the savegame") {
+    Island island;
+    island.found();
+    REQUIRE(island.build({{kHouse, 8, 13, 0, 0}}).placed == 1);
+    CHECK(sim::Rules::open1602().moving == sim::Moving::Free);
+    CHECK(sim::Rules::original().moving == sim::Moving::Off);
+    assets::FigureTable figures;
+    sim::Rules off;
+    off.moving = sim::Moving::Off;
+    {
+        sim::World copy = island.world;
+        sim::Simulation simulation(copy, island.buildings, figures, off);
+        simulation.submit(move_order({8, 13}, 12, 13));
+        simulation.tick();
+        CHECK(copy.house(0, 8, 13) != nullptr);  // not with the setting off
+    }
+    sim::Simulation simulation(island.world, island.buildings, figures);
+    simulation.submit(move_order({8, 13}, 12, 13));
+    simulation.tick();
+    CHECK(island.world.house(0, 12, 13) != nullptr);
+    for (const sim::Moving moving : {sim::Moving::Free, sim::Moving::Rebuild, sim::Moving::Off}) {
+        sim::World world(60, 40);
+        sim::Rules rules;
+        rules.moving = moving;
+        world.set_saved_rules(rules);
+        auto bytes = sim::write_game(world, island.buildings);
+        REQUIRE(bytes.ok());
+        auto loaded = sim::read_game(*bytes, island.buildings);
+        REQUIRE(loaded.ok());
+        REQUIRE(loaded->saved_rules().has_value());
+        CHECK(loaded->saved_rules()->moving == moving);
+    }
+}

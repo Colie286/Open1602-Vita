@@ -362,3 +362,39 @@ TEST_CASE("build tool: the copy tool takes a piece of the own city and builds it
     CHECK(!tool.take_layout(m.world, 0, {0, 18, 18}));
     CHECK(tool.copy_selecting());
 }
+
+TEST_CASE("build tool: the move tool picks up an own building and hangs it at the mouse by its middle") {
+    Map m;
+    sim::City city;
+    city.island = 0;
+    city.index = 0;
+    city.owner = 0;
+    m.world.add_city(std::move(city));
+    sim::IslandMap& map = m.world.island(0).map;
+    REQUIRE(map.build(*m.buildings.by_id(kFarm), 4, 4, 1, 0, 0, 0).ok());
+    REQUIRE(map.build(*m.buildings.by_id(kRoad), 9, 9, 0, 0, 0, 0).ok());
+
+    app::BuildTool tool(m.buildings);
+    tool.set_mode(app::BuildTool::Mode::Move);
+    CHECK(tool.move_selecting());
+    CHECK(!tool.move_order(0, {0, 10, 10}).has_value());
+    // A road is no building to move, another player's farm not the player's.
+    CHECK(tool.take_move(m.world, m.buildings, 0, {0, 9, 9}) == sim::MoveRefusal::NoBuilding);
+    CHECK(tool.take_move(m.world, m.buildings, 1, {0, 5, 5}) == sim::MoveRefusal::Nothing);
+    CHECK(tool.move_selecting());
+    REQUIRE(tool.take_move(m.world, m.buildings, 0, {0, 5, 5}) == sim::MoveRefusal::None);
+    REQUIRE(tool.move_hand().has_value());
+    CHECK((tool.move_hand()->origin == sim::TilePos{4, 4}));
+    CHECK(tool.rotation() == 1);  // it keeps its rotation
+    const auto order = tool.move_order(0, {0, 12, 12});
+    REQUIRE(order.has_value());
+    CHECK((order->from == sim::TilePos{4, 4}));
+    CHECK(order->x == 12);  // a 2 x 2 building: the mouse on its upper left middle tile
+    CHECK(order->y == 12);
+    CHECK(order->rotation == 1);
+    CHECK(!tool.move_order(0, {1, 12, 12}).has_value());  // not onto another island
+    tool.drop_move();
+    CHECK(tool.move_selecting());
+    tool.set_mode(app::BuildTool::Mode::Build);
+    CHECK(!tool.move_hand().has_value());
+}

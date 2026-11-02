@@ -31,7 +31,7 @@ class BuildPanel {
 public:
     /// What a click asks for.
     struct Action {
-        enum class Kind : std::uint8_t { Pick, Demolish, Rotate, OrientToRoad, Copy, Blueprint };
+        enum class Kind : std::uint8_t { Pick, Demolish, Rotate, OrientToRoad, Copy, Blueprint, Move };
         Kind kind = Kind::Pick;
         std::uint32_t building = 0;  ///< Pick: HAUS Id
         int step = 0;                ///< Rotate: -1 left, +1 right; OrientToRoad: 1 on, 0 off
@@ -65,12 +65,18 @@ public:
     /// the demolish tool at once, as later Anno games do. Blueprint is a switch, not a tool: picked,
     /// it turns blueprint mode on or off (Action::Kind::Blueprint) and the menu goes back to the
     /// building (or the copy tool) in hand.
-    enum class Tool : std::uint8_t { Demolish, Copy, Blueprint };
+    /// Move is offered only where the game's settings allow it (set_moving).
+    enum class Tool : std::uint8_t { Demolish, Copy, Blueprint, Move };
     /// Shows the tools' category with `tool` picked: a key started the tool (Delete, Ctrl+C).
     void show_tool(Tool tool);
     /// The tools' pop-up as a category of the menu: icons "open1602:<tool>", names in the
     /// language of the game (Windows-1252, as the original's; demolish by its own text).
     [[nodiscard]] ui::BuildCategory tools_category(std::int32_t button) const;
+    /// Whether the game's settings let buildings move (sim::Rules::moving): the move tool is
+    /// greyed out in the pop-up otherwise.
+    void set_moving(bool allowed) noexcept { m_moving = allowed; }
+    /// The tools' category is open with the move tool picked (Open1602).
+    [[nodiscard]] bool moving() const noexcept;
     /// Blueprint mode is on: the title says that what is placed becomes a blueprint.
     void set_blueprint(bool on) noexcept { m_blueprint = on; }
     /// Shows a building's category with it picked (a plantation's field).
@@ -102,6 +108,7 @@ private:
     std::int32_t m_category = 0;
     std::int32_t m_building_category = 0;  ///< the last category of buildings shown
     bool m_blueprint = false;
+    bool m_moving = true;
     std::map<std::int32_t, std::size_t> m_picked;  ///< remembered position per category
     Tool m_tool = Tool::Demolish;                  ///< the tool picked last in the tools' pop-up
     ui::BuildCategory m_tools;                     ///< that pop-up's icons

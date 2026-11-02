@@ -322,6 +322,19 @@ void io(A& a, T& t)
     a(t.on);
 }
 
+template <class A, class T>
+void io(A& a, T& t)
+    requires std::is_same_v<std::remove_const_t<T>, MoveOrder>
+{
+    a(t.player);
+    a(t.island);
+    a(t.from);
+    a(t.x);
+    a(t.y);
+    a(t.rotation);
+    a(t.orient_to_road);
+}
+
 class Writer {
 public:
     explicit Writer(core::ByteWriter& out) noexcept : m_out(out) {}

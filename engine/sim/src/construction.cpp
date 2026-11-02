@@ -699,6 +699,8 @@ const char* refusal_name(BuildRefusal r) noexcept {
             return "not enough cannons";
         case BuildRefusal::ShipTooFar:
             return "the ship is too far away";
+        case BuildRefusal::Immovable:
+            return "the building cannot be moved";
     }
     return "?";
 }
@@ -812,9 +814,18 @@ BuildPlan plan_build(const World& world, const assets::BuildingTable& buildings,
 
 namespace {
 
-/// plan_build(); without `pay` the order is checked as if gold and goods were plenty (blueprints).
+/// How plan_order() checks an order.
+struct PlanOptions {
+    /// Without it the order is checked as if gold and goods were plenty (blueprints).
+    bool pay = true;
+    /// A building being moved: it is counted already (no limits, no lock) and upgrades nothing.
+    bool move = false;
+};
+
+/// plan_build(), plan_blueprint() and plan_move().
 void plan_order(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order, BuildPlan& plan,
-                bool pay) {
+                PlanOptions options) {
+    const bool pay = options.pay;
     std::vector<PlannedBuild> items = std::move(plan.items);
     items.assign(order.items.size(), PlannedBuild{});
     plan = BuildPlan{};
@@ -888,6 +899,9 @@ void plan_order(const World& world, const assets::BuildingTable& buildings, cons
         if (!counted(infra)) {
             return order.items.size();
         }
+        if (options.move) {
+            return order.items.size();
+        }
         const auto left = [](std::uint32_t allowed, std::uint32_t built) -> std::size_t {
             return allowed > built ? allowed - built : 0;
         };
@@ -922,7 +936,7 @@ void plan_order(const World& world, const assets::BuildingTable& buildings, cons
             out.refusal = BuildRefusal::ForeignCity;  // S-006: no building in other players' cities
             continue;
         }
-        if (limited_player && !player->unlocked(type->infra)) {
+        if (limited_player && !options.move && !player->unlocked(type->infra)) {
             out.refusal = BuildRefusal::Locked;  // S-014: checked here, not only in the menu
             continue;
         }
@@ -932,7 +946,7 @@ void plan_order(const World& world, const assets::BuildingTable& buildings, cons
         // keeps its origin and rotation. Open1602 accepts only buildings of the same Kind (D-006:
         // the gold mine shares the weavers' family in haeuser.cod); like the original it allows
         // steps down (S-036).
-        if (type->upgrade) {
+        if (type->upgrade && !options.move) {
             if (const auto old = building_at(world, buildings, order.island, {item.x, item.y});
                 old && old->type->kreuz_base == type->kreuz_base && old->type->id != type->id &&
                 old->type->kind == type->kind && old->city == planner.city && planner.city != MapCell::kNoCity) {
@@ -1065,12 +1079,12 @@ void plan_order(const World& world, const assets::BuildingTable& buildings, cons
 }  // namespace
 
 void plan_build(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order, BuildPlan& plan) {
-    plan_order(world, buildings, order, plan, true);
+    plan_order(world, buildings, order, plan, PlanOptions{});
 }
 
 void plan_blueprint(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order,
                     BuildPlan& plan) {
-    plan_order(world, buildings, order, plan, false);
+    plan_order(world, buildings, order, plan, PlanOptions{.pay = false});
 }
 
 namespace {
@@ -1991,6 +2005,62 @@ void fit_connection(World& world, const assets::BuildingTable& buildings, std::u
     builder.fit(x, y);
 }
 
+namespace {
+
+/// Game setting: a share of a building's costs comes back when it goes (the original gives nothing).
+/// Goods go into the city's warehouse while there is room; what does not fit is lost.
+void refund(World& world, const assets::BuildingTable& buildings, std::uint16_t island, PlayerId player,
+            const assets::BuildingType& type, std::uint8_t city_index, std::uint32_t percent, BuildBill& given) {
+    const assets::BuildingTable::Materials& m = buildings.materials();
+    const auto& cost = ordered_cost(buildings, type);
+    const auto share = [&](std::uint32_t amount) {
+        return static_cast<std::uint32_t>(std::uint64_t{amount} * percent / 100);
+    };
+    if (City* city = world.city(island, city_index)) {
+        const auto give = [&](std::uint8_t ware, std::uint32_t amount, std::uint32_t& booked) {
+            if (amount == 0) {
+                return;
+            }
+            city->ensure_ware(ware);
+            std::uint32_t room = amount;
+            if (city->capacity != 0) {
+                room = city->capacity > city->goods[ware] ? city->capacity - city->goods[ware] : 0;
+            }
+            const std::uint32_t added = std::min(amount, room);
+            city->goods[ware] += added;
+            city->book(ware, GoodsFlow::Returned, added);
+            booked += added;
+        };
+        give(m.tools, share(cost.tools), given.tools);
+        give(m.wood, share(cost.wood), given.wood);
+        give(m.bricks, share(cost.bricks), given.bricks);
+        give(m.cannons, share(cost.cannons), given.cannons);
+    }
+    if (Player* p = world.player(player); p != nullptr && cost.money > 0) {
+        const auto gold = static_cast<std::int32_t>(std::int64_t{cost.money} * percent / 100);
+        p->money = money_plus(p->money, std::int64_t{gold});
+        given.money += gold;
+    }
+}
+
+/// Takes the goods of a bill from the city's warehouse.
+void take_from_city(City& city, const assets::BuildingTable& buildings, const BuildBill& bill) {
+    const assets::BuildingTable::Materials& m = buildings.materials();
+    const auto take = [&](std::uint8_t ware, std::uint32_t amount) {
+        if (ware < city.goods.size()) {
+            const std::uint32_t taken = std::min(city.goods[ware], amount);
+            city.goods[ware] -= taken;
+            city.book(ware, GoodsFlow::Construction, taken);
+        }
+    };
+    take(m.tools, bill.tools);
+    take(m.wood, bill.wood);
+    take(m.bricks, bill.bricks);
+    take(m.cannons, bill.cannons);
+}
+
+}  // namespace
+
 BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, const BuildOrder& order,
                         const std::vector<std::string>& city_names, std::vector<ConstructionEvent>* events) {
     BuildPlan plan = plan_build(world, buildings, order);
@@ -2094,17 +2164,7 @@ BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, co
         take(m.wood, plan.bill.wood);
         take(m.bricks, plan.bill.bricks);
     } else if (City* c = world.city(order.island, city)) {
-        const auto take = [&](std::uint8_t ware, std::uint32_t amount) {
-            if (ware < c->goods.size()) {
-                const std::uint32_t taken = std::min(c->goods[ware], amount);
-                c->goods[ware] -= taken;
-                c->book(ware, GoodsFlow::Construction, taken);
-            }
-        };
-        take(m.tools, plan.bill.tools);
-        take(m.wood, plan.bill.wood);
-        take(m.bricks, plan.bill.bricks);
-        take(m.cannons, plan.bill.cannons);
+        take_from_city(*c, buildings, plan.bill);
     }
     if (Player* p = world.player(order.player)) {
         p->money = money_plus(p->money, -std::int64_t{plan.bill.money});
@@ -2283,7 +2343,6 @@ DemolishResult execute_demolish(World& world, const assets::BuildingTable& build
         return result;
     }
     refund_percent = std::min<std::uint32_t>(refund_percent, 100);
-    const assets::BuildingTable::Materials& m = buildings.materials();
     Builder builder(world, buildings, order.island, events);
     for (const TilePos& o : origins) {
         const auto b = building_at(world, buildings, order.island, o);
@@ -2291,37 +2350,7 @@ DemolishResult execute_demolish(World& world, const assets::BuildingTable& build
             continue;
         }
         if (refund_percent != 0) {
-            // Game setting: a share of the costs comes back (the original gives nothing). Goods
-            // go into the city's warehouse while there is room; what does not fit is lost.
-            const auto& cost = ordered_cost(buildings, *b->type);
-            const auto share = [&](std::uint32_t amount) {
-                return static_cast<std::uint32_t>(std::uint64_t{amount} * refund_percent / 100);
-            };
-            if (City* city = world.city(order.island, b->city)) {
-                const auto give = [&](std::uint8_t ware, std::uint32_t amount, std::uint32_t& booked) {
-                    if (amount == 0) {
-                        return;
-                    }
-                    city->ensure_ware(ware);
-                    std::uint32_t room = amount;
-                    if (city->capacity != 0) {
-                        room = city->capacity > city->goods[ware] ? city->capacity - city->goods[ware] : 0;
-                    }
-                    const std::uint32_t added = std::min(amount, room);
-                    city->goods[ware] += added;
-                    city->book(ware, GoodsFlow::Returned, added);
-                    booked += added;
-                };
-                give(m.tools, share(cost.tools), result.refund.tools);
-                give(m.wood, share(cost.wood), result.refund.wood);
-                give(m.bricks, share(cost.bricks), result.refund.bricks);
-                give(m.cannons, share(cost.cannons), result.refund.cannons);
-            }
-            if (Player* p = world.player(order.player); p != nullptr && cost.money > 0) {
-                const auto gold = static_cast<std::int32_t>(std::int64_t{cost.money} * refund_percent / 100);
-                p->money = money_plus(p->money, std::int64_t{gold});
-                result.refund.money += gold;
-            }
+            refund(world, buildings, order.island, order.player, *b->type, b->city, refund_percent, result.refund);
         }
         const Footprint f{o.x, o.y, b->width, b->height};
         builder.remove(*b);
@@ -2329,6 +2358,195 @@ DemolishResult execute_demolish(World& world, const assets::BuildingTable& build
         ++result.removed;
     }
     builder.finish();
+    return result;
+}
+
+MovablePiece movable_at(const World& world, const assets::BuildingTable& buildings, PlayerId player,
+                        std::uint16_t island, TilePos tile) {
+    MovablePiece piece;
+    if (island >= world.islands().size()) {
+        return piece;
+    }
+    const auto b = building_at(world, buildings, island, tile);
+    const City* city = b ? world.city(island, b->city) : nullptr;
+    if (city == nullptr || city->owner != player) {
+        return piece;
+    }
+    piece.type = b->type;
+    piece.origin = b->origin;
+    piece.rotation = b->rotation;
+    piece.city = b->city;
+    piece.width = b->width;
+    piece.height = b->height;
+    const IslandMap& map = world.islands()[island].map;
+    if (map.contains(b->origin.x, b->origin.y)) {
+        piece.anim_phase =
+            map.top(static_cast<std::uint32_t>(b->origin.x), static_cast<std::uint32_t>(b->origin.y)).anim_phase;
+    }
+    const assets::BuildingType& t = *b->type;
+    static constexpr std::array<std::int32_t, 5> kMovable = {kind::kBuilding, kind::kBeachHouse, kind::kMine,
+                                                             kind::kMill, kind::kHarbour};
+    const auto ox = static_cast<std::uint16_t>(b->origin.x);
+    const auto oy = static_cast<std::uint16_t>(b->origin.y);
+    if (t.destroyed) {
+        piece.refusal = MoveRefusal::NoBuilding;
+    } else if (t.prod_kind == prod::kKontor || t.prod_kind == prod::kMarket || t.prod_kind == prod::kTower ||
+               t.prod_kind == prod::kMilitary || t.kind == kind::kHq || t.kind == kind::kTower ||
+               t.kind == kind::kTowerBeach) {
+        piece.refusal = MoveRefusal::Holds;
+    } else if (std::find(kMovable.begin(), kMovable.end(), t.kind) == kMovable.end()) {
+        piece.refusal = MoveRefusal::NoBuilding;
+    } else if (std::any_of(world.disasters().begin(), world.disasters().end(),
+                           [&](const Disaster& d) { return d.island == island && d.x == ox && d.y == oy; })) {
+        piece.refusal = MoveRefusal::Disaster;
+    } else if (std::any_of(world.cost_buildings().begin(), world.cost_buildings().end(), [&](const CostBuilding& c) {
+                   return c.island == island && c.x == ox && c.y == oy && c.kind == CostBuilding::Kind::Shipyard &&
+                          (c.order != CostBuilding::kNoOrder || c.repair_ship != 0);
+               })) {
+        piece.refusal = MoveRefusal::Busy;
+    } else {
+        piece.refusal = MoveRefusal::None;
+    }
+    return piece;
+}
+
+BuildOrder move_build_order(const MovablePiece& piece, const MoveOrder& order) {
+    BuildOrder build;
+    build.player = order.player;
+    build.island = order.island;
+    build.orient_to_road = order.orient_to_road;
+    if (piece.type != nullptr) {
+        build.items.push_back(BuildItem{piece.type->id, order.x, order.y, order.rotation, piece.anim_phase});
+    }
+    return build;
+}
+
+BuildPlan plan_move(World& world, const assets::BuildingTable& buildings, const MoveOrder& order, bool pay) {
+    BuildPlan plan;
+    const MovablePiece piece = movable_at(world, buildings, order.player, order.island, order.from);
+    if (!piece.ok()) {
+        plan.items.assign(1, PlannedBuild{});
+        plan.items[0].refusal = BuildRefusal::Immovable;
+        plan.items[0].type = piece.type;
+        plan.items[0].x = order.x;
+        plan.items[0].y = order.y;
+        plan.items[0].rotation = static_cast<std::uint8_t>(order.rotation & 3U);
+        return plan;
+    }
+    // The building is lifted off its tiles while planning, so that it may go where it stands now,
+    // and put back as it was.
+    IslandMap& map = world.island(order.island).map;
+    std::vector<MapCell> lifted;
+    lifted.reserve(std::size_t{piece.width} * piece.height);
+    const auto each_tile = [&](auto&& f) {
+        for (std::uint32_t j = 0; j < piece.height; ++j) {
+            for (std::uint32_t i = 0; i < piece.width; ++i) {
+                f(static_cast<std::uint32_t>(piece.origin.x) + i, static_cast<std::uint32_t>(piece.origin.y) + j);
+            }
+        }
+    };
+    each_tile([&](std::uint32_t x, std::uint32_t y) {
+        lifted.push_back(map.top(x, y));
+        map.restore_ground(x, y);
+    });
+    plan_order(world, buildings, move_build_order(piece, order), plan, PlanOptions{.pay = pay, .move = true});
+    std::size_t next = 0;
+    each_tile([&](std::uint32_t x, std::uint32_t y) { map.set_top_cell(x, y, lifted[next++]); });
+    // Only within its own city: its people, goods and roads are there.
+    if (!plan.items.empty() && plan.items[0].ok() && plan.city != piece.city) {
+        plan.items[0].refusal = BuildRefusal::Territory;
+        plan.placed = 0;
+        plan.bill = BuildBill{};
+    }
+    return plan;
+}
+
+MoveResult execute_move(World& world, const assets::BuildingTable& buildings, const MoveOrder& order, bool pay,
+                        std::uint32_t refund_percent, std::vector<ConstructionEvent>* events) {
+    MoveResult result;
+    const BuildPlan plan = plan_move(world, buildings, order, pay);
+    if (plan.items.size() != 1 || !plan.items[0].ok()) {
+        return result;
+    }
+    const MovablePiece piece = movable_at(world, buildings, order.player, order.island, order.from);
+    const auto old = building_at(world, buildings, order.island, piece.origin);
+    if (!old) {
+        return result;
+    }
+    const PlannedBuild& item = plan.items[0];
+    const std::uint8_t city = piece.city;
+    const auto ox = static_cast<std::uint16_t>(piece.origin.x);
+    const auto oy = static_cast<std::uint16_t>(piece.origin.y);
+    const auto nx = static_cast<std::uint16_t>(item.x);
+    const auto ny = static_cast<std::uint16_t>(item.y);
+    // What the building holds and takes along: its inhabitants, and an idle shipyard's material.
+    std::optional<House> house;
+    if (const House* h = world.house(order.island, ox, oy)) {
+        house = *h;
+    }
+    std::optional<CostBuilding> cost_building;
+    for (const CostBuilding& c : world.cost_buildings()) {
+        if (c.island == order.island && c.x == ox && c.y == oy) {
+            cost_building = c;
+        }
+    }
+    if (pay) {
+        refund(world, buildings, order.island, order.player, *piece.type, city,
+               std::min<std::uint32_t>(refund_percent, 100), result.refund);
+    }
+    Builder builder(world, buildings, order.island, events);
+    const std::optional<Production> kept = builder.remove(*old);
+    builder.restore_ground(Footprint{piece.origin.x, piece.origin.y, piece.width, piece.height}, city);
+    (void)builder.unregister(footprint_of(*item.type, item.x, item.y, item.rotation));
+    const std::uint32_t rnd = world.random(RandomStream::Construction).below(32);
+    // Its production state goes along as with an upgrade (stock, raw material, the running cycle).
+    builder.register_building(*item.type, item.x, item.y, city, rnd, kept);
+    if (house) {
+        if (House* h = world.house(order.island, nx, ny)) {
+            const std::uint32_t added = h->inhabitants();
+            House moved = *house;
+            moved.island = order.island;
+            moved.x = nx;
+            moved.y = ny;
+            moved.city = city;
+            *h = moved;
+            if (City* c = world.city(order.island, city);
+                c != nullptr && moved.resident_class < c->inhabitants.size()) {
+                std::uint32_t& count = c->inhabitants[moved.resident_class];
+                count = count - std::min(count, added) + moved.inhabitants();
+            }
+        }
+    }
+    if (cost_building) {
+        for (CostBuilding& c : world.cost_buildings()) {
+            if (c.island == order.island && c.x == nx && c.y == ny) {
+                CostBuilding moved = *cost_building;
+                moved.x = nx;
+                moved.y = ny;
+                c = std::move(moved);
+            }
+        }
+    }
+    builder.write(*item.type, item.x, item.y, item.rotation, item.anim_phase, city);
+    ConstructionEvent e;
+    e.kind = ConstructionEvent::Kind::Placed;
+    e.x = item.x;
+    e.y = item.y;
+    e.city = city;
+    e.type = item.type;
+    e.production = world.production_index(order.island, nx, ny);
+    builder.emit(e);
+    if (pay) {
+        if (City* c = world.city(order.island, city)) {
+            take_from_city(*c, buildings, plan.bill);
+        }
+        if (Player* p = world.player(order.player)) {
+            p->money = money_plus(p->money, -std::int64_t{plan.bill.money});
+        }
+        result.paid = plan.bill;
+    }
+    builder.finish();
+    result.moved = true;
     return result;
 }
 

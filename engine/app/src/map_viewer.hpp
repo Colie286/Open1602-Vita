@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -221,6 +222,11 @@ private:
     void check_end_screen(std::uint64_t now);
     /// The window of a blueprint: what it shows, and its clicks as commands.
     void update_blueprint_window();
+    /// The move tool at `spot`: the building it would pick up, or the one in hand drawn where it
+    /// would go and taken off its old place, with the status line. Every tile changed in the map
+    /// goes to `keep` first, which puts it back after drawing.
+    void preview_move(const BuildTool::Spot& spot,
+                      const std::function<void(std::uint16_t island, std::uint32_t x, std::uint32_t y)>& keep);
     /// The score sheets: the final screen of a decided game, or the "Bewertung" of a running one.
     void show_end_screen(sim::GameOutcome outcome, bool view_only);
     /// The high score list takes every human still playing, and `defeated` (who is

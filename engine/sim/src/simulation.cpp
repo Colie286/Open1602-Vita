@@ -608,6 +608,15 @@ CommandResult Simulation::execute(const Command& command) {
     } else if (const auto* blueprint = std::get_if<BlueprintOrder>(&command)) {
         result.accepted =
             execute_blueprints(*m_world, *m_buildings, *blueprint, m_city_names, m_construction_events.sink()) != 0;
+    } else if (const auto* move = std::get_if<MoveOrder>(&command)) {
+        if (m_rules.moving != Moving::Off) {
+            const bool pay = m_rules.moving == Moving::Rebuild;
+            const MoveResult moved = execute_move(*m_world, *m_buildings, *move, pay, pay ? m_rules.refund_share() : 0,
+                                                  m_construction_events.sink());
+            result.accepted = moved.moved;
+            result.paid = moved.paid;
+            result.refund = moved.refund;
+        }
     }
     handle(m_construction_events.events(), first);
     return result;

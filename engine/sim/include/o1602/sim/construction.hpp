@@ -54,6 +54,7 @@ enum class BuildRefusal : std::uint8_t {
     Bricks,
     Cannons,
     ShipTooFar,  ///< founding from a ship: the ship is more than 16 tiles away
+    Immovable,   ///< moving: the building cannot be moved (movable_at)
 };
 
 [[nodiscard]] const char* refusal_name(BuildRefusal refusal) noexcept;
@@ -224,6 +225,71 @@ struct DemolishResult {
 /// the goods into the warehouse of the building's city as far as there is room.
 DemolishResult execute_demolish(World& world, const assets::BuildingTable& buildings, const DemolishOrder& order,
                                 std::vector<ConstructionEvent>* events, std::uint32_t refund_percent = 0);
+
+/// Moving a building (Open1602, as in later Anno games; Rules::moving): the player's building at
+/// `from` goes to `x`, `y`, turned to `rotation`, on the same island and in the same city.
+struct MoveOrder {
+    PlayerId player = kNoPlayer;
+    std::uint16_t island = 0;
+    TilePos from;        ///< any tile of the building
+    std::int32_t x = 0;  ///< the new footprint origin
+    std::int32_t y = 0;
+    std::uint8_t rotation = 0;
+    bool orient_to_road = true;  ///< as BuildOrder::orient_to_road
+};
+
+/// Why a building cannot be moved at all, wherever it would go.
+enum class MoveRefusal : std::uint8_t {
+    None,
+    Nothing,     ///< no building of the player there
+    Holds,       ///< Kontor, market, tower or castle: it holds land or soldiers
+    NoBuilding,  ///< ruins, roads, walls, fields, trees and terrain
+    Busy,        ///< a shipyard building or repairing a ship
+    Disaster,    ///< burning or struck by the plague
+};
+
+/// The building a player would pick up to move: its origin, record, rotation and city.
+struct MovablePiece {
+    MoveRefusal refusal = MoveRefusal::Nothing;
+    const assets::BuildingType* type = nullptr;
+    TilePos origin;
+    std::uint8_t rotation = 0;
+    std::uint8_t anim_phase = 0;
+    std::uint8_t city = MapCell::kNoCity;
+    std::uint32_t width = 1;  ///< footprint as turned
+    std::uint32_t height = 1;
+
+    [[nodiscard]] bool ok() const noexcept { return refusal == MoveRefusal::None; }
+};
+
+/// Whether the building on `tile` is one `player` may move. Houses, workshops, farms, mines, mills,
+/// public buildings and idle shipyards move; Kontors, markets, towers, castles, ruins and the pieces
+/// of roads, walls and fields do not.
+[[nodiscard]] MovablePiece movable_at(const World& world, const assets::BuildingTable& buildings, PlayerId player,
+                                      std::uint16_t island, TilePos tile);
+
+/// The order as a build order of the building alone: what the build tool's preview shows.
+[[nodiscard]] BuildOrder move_build_order(const MovablePiece& piece, const MoveOrder& order);
+
+/// Where the building would stand and what it would cost: plan_build() of it as if it were gone
+/// from its old place, without the limits of castles, cathedrals and monuments (it is counted
+/// already) and without upgrading a building there; with `pay` false gold and goods do not count.
+/// The world is changed while planning and put back exactly as it was. One item; refused
+/// (Territory) if the building would leave its city.
+[[nodiscard]] BuildPlan plan_move(World& world, const assets::BuildingTable& buildings, const MoveOrder& order,
+                                  bool pay);
+
+struct MoveResult {
+    bool moved = false;
+    BuildBill paid;    ///< Moving::Rebuild: the costs at the new place
+    BuildBill refund;  ///< Moving::Rebuild: what came back for the old place (Rules::demolish_refund)
+};
+
+/// Moves the building: it keeps its level, inhabitants, stock and production; figures on their way
+/// to or from it end their trip, as when it is demolished. With `pay` the player pays as for a new
+/// building and gets `refund_percent` of its costs back, as for a demolished one.
+MoveResult execute_move(World& world, const assets::BuildingTable& buildings, const MoveOrder& order, bool pay,
+                        std::uint32_t refund_percent, std::vector<ConstructionEvent>* events);
 
 /// Writes a building onto the tiles the way the original does after its checks:
 /// walls and towers on the beach become their beach variant, roads, walls and bridges fit their

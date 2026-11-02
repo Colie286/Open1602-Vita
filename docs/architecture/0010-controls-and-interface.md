@@ -87,7 +87,7 @@ information fit in and the controls follow today's real-time strategy games (202
 | U | blueprint mode on or off (Open1602): what the build and copy tools place becomes the player's blueprints, built later |
 | Shift+U | build the player's blueprints of the city under the mouse |
 | Escape | put the tool away (the copy tool: first the piece in hand) |
-| Right-click | put the tool away and return to the player status (the copy tool: only the piece in hand) |
+| Right-click | put the tool away and return to the player status (the copy and move tools: only what is in hand) |
 
 The build menu's demolish button opens a pop-up with the tools, like the other categories: demolish
 and the copy tool (Open1602's icons). A copied piece is built as one order: roads and walls first,
@@ -102,6 +102,14 @@ its city, "Build", "Build all in this city", whether the city builds them by its
 game time, as far as it can pay, in the order they were placed) and "Remove". Every change is a
 command, so all computers of a multiplayer game keep the same blueprints; they are saved with the
 game.
+
+The fourth entry is the move tool (as later Anno games; the game setting "Moving buildings"): a
+click picks up one of the player's buildings, which then hangs at the mouse by its middle, turns
+with the building keys and goes where the next click puts it, within its city and also over its
+own old place. It keeps its level, inhabitants, stock and production; free by default, or paid as
+a new building with the demolish refund for the old place. Kontors, markets, towers, castles, a
+shipyard at work and burning or plague-struck buildings stay; the status line says why. A right
+click puts the building in hand back.
 
 **Settings dialogs** (start dialog of a game, window „Anzeige“)
 

@@ -61,6 +61,7 @@ public:
             Build,         ///< build mode with `building`
             Demolish,      ///< build mode, the demolish tool
             Copy,          ///< build mode, the copy tool (Open1602)
+            Move,          ///< build mode, the move tool (Open1602)
             Blueprint,     ///< blueprint mode on or off (Open1602)
             TurnBuilding,  ///< the building to place by `step` quarters
             ToolOff,       ///< another mode: no building tool
@@ -184,6 +185,12 @@ public:
     void set_blueprint_in_build_menu(bool on) {
         if (m_build) {
             m_build->set_blueprint(on);
+        }
+    }
+    /// Whether the game lets buildings move (sim::Rules::moving): the build menu offers the tool.
+    void set_moving_in_build_menu(bool allowed) {
+        if (m_build) {
+            m_build->set_moving(allowed);
         }
     }
     /// The window of a blueprint (blueprint_window.hpp), opened by a click on one of the player's

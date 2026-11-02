@@ -10,6 +10,10 @@
 // layout: a drag over it (or a click on one building) picks up its buildings, roads, walls and
 // fields, which then hang at the mouse, turn with the building keys and are built as one order
 // wherever the player clicks, as often as wanted.
+//
+// The move tool (Open1602, as in later Anno games; sim::Rules::moving) picks up one building of the
+// player with a click; it then hangs at the mouse by its middle, turns with the building keys and
+// goes where the next click puts it (sim::MoveOrder).
 #pragma once
 
 #include <cstdint>
@@ -27,7 +31,7 @@ namespace o1602::app {
 
 class BuildTool {
 public:
-    enum class Mode : std::uint8_t { Off, Build, Demolish, Copy };
+    enum class Mode : std::uint8_t { Off, Build, Demolish, Copy, Move };
 
     explicit BuildTool(const assets::BuildingTable& buildings);
 
@@ -111,6 +115,25 @@ public:
     [[nodiscard]] bool places() const noexcept {
         return (m_mode == Mode::Build && selected() != nullptr) || (m_mode == Mode::Copy && m_layout.has_value());
     }
+
+    /// The building the move tool holds: where it stands and what it is.
+    struct MoveHand {
+        std::uint16_t island = 0;
+        sim::TilePos origin;
+        const assets::BuildingType* type = nullptr;
+    };
+    /// The move tool still waits for the building to move.
+    [[nodiscard]] bool move_selecting() const noexcept { return m_mode == Mode::Move && !m_move; }
+    [[nodiscard]] const std::optional<MoveHand>& move_hand() const noexcept { return m_move; }
+    /// Picks up the player's building at `spot` (sim::movable_at); it keeps its rotation. The
+    /// refusal if it cannot be moved, and nothing goes into the hand.
+    sim::MoveRefusal take_move(const sim::World& world, const assets::BuildingTable& buildings, sim::PlayerId player,
+                               const Spot& spot);
+    /// Puts the building down where it stands: the move tool waits for another.
+    void drop_move() noexcept { m_move.reset(); }
+    /// The order that moves the building in hand to the mouse, which holds it by its middle; nothing
+    /// off its island.
+    [[nodiscard]] std::optional<sim::MoveOrder> move_order(sim::PlayerId player, const Spot& spot) const;
     [[nodiscard]] const std::optional<Layout>& layout() const noexcept { return m_layout; }
     /// The layout the drag of the copy tool (or a click at `spot`) covers: the player's own
     /// buildings that have a tile in the rectangle, as the build tool would order them. Houses
@@ -153,6 +176,7 @@ private:
     std::optional<std::uint32_t> m_ship;  ///< the ship that founds, chosen in its window
     std::optional<Spot> m_drag_start;
     std::optional<Layout> m_layout;                       ///< the copy tool's piece in hand
+    std::optional<MoveHand> m_move;                       ///< the move tool's building in hand
     const assets::BuildingType* m_first_house = nullptr;  ///< what a copied or picked house is built as
     std::uint32_t m_variant_seed = 0;  ///< picks the trees' variants, the same for every frame of a drag
 };

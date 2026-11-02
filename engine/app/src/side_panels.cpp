@@ -96,6 +96,11 @@ bool BuildPanel::copy() const noexcept {
     return c != nullptr && c->demolish && m_tool == Tool::Copy;
 }
 
+bool BuildPanel::moving() const noexcept {
+    const ui::BuildCategory* c = m_menu->category(m_category);
+    return c != nullptr && c->demolish && m_tool == Tool::Move;
+}
+
 void BuildPanel::show_tool(Tool tool) {
     for (const ui::BuildCategory& c : m_menu->categories) {
         if (c.demolish) {
@@ -126,7 +131,8 @@ ui::BuildCategory BuildPanel::tools_category(std::int32_t button) const {
         demolish.text = 0;
     }
     tools.rows.push_back({demolish, tool(Tool::Copy, "open1602:copy", "build.tool.copy"),
-                          tool(Tool::Blueprint, "open1602:blueprint", "build.tool.blueprint")});
+                          tool(Tool::Blueprint, "open1602:blueprint", "build.tool.blueprint"),
+                          tool(Tool::Move, "open1602:move", "build.tool.move")});
     return tools;
 }
 
@@ -216,9 +222,12 @@ std::optional<BuildPanel::Action> BuildPanel::mouse(std::int32_t x, std::int32_t
                             m_category = m_building_category;
                             m_bau.set_selected(m_category, true);
                         }
-                    } else if (tool) {
+                    } else if (tool && (static_cast<Tool>(*tool) != Tool::Move || m_moving)) {
                         m_tool = static_cast<Tool>(*tool);
-                        action = Action{m_tool == Tool::Copy ? Action::Kind::Copy : Action::Kind::Demolish, 0, 0};
+                        const auto kind = m_tool == Tool::Copy   ? Action::Kind::Copy
+                                          : m_tool == Tool::Move ? Action::Kind::Move
+                                                                 : Action::Kind::Demolish;
+                        action = Action{kind, 0, 0};
                     }
                 } else if (c != nullptr) {
                     if (const auto id = c->at(index); id && available(*id)) {
@@ -248,7 +257,9 @@ std::optional<BuildPanel::Action> BuildPanel::mouse(std::int32_t x, std::int32_t
                 if (c->demolish) {
                     // Open1602: the tools in a pop-up like the buildings' (demolish, copy).
                     m_tools = tools_category(c->button);
-                    open_popup(m_tools, [](std::uint32_t) { return true; }, x, y);
+                    open_popup(
+                        m_tools, [this](std::uint32_t id) { return static_cast<Tool>(id) != Tool::Move || m_moving; },
+                        x, y);
                 } else {
                     m_building_category = e.id;
                     open_popup(*c, available, x, y);

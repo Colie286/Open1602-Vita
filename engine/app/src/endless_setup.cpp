@@ -149,6 +149,7 @@ constexpr std::array<std::string_view, 5> kDroughtNames = {"game", "off", "rare"
 constexpr std::array<std::string_view, 3> kVolcanoNames = {"game", "off", "on"};
 constexpr std::array<std::string_view, 3> kPirateNames = {"game", "off", "on"};
 constexpr std::array<std::string_view, 3> kComputerNames = {"game", "off", "on"};
+constexpr std::array<std::string_view, 3> kMovingNames = {"free", "rebuild", "off"};  // sim::Moving
 constexpr std::array<std::string_view, 3> kOreVeinNames = {"game", "finite", "endless"};
 constexpr std::array<std::string_view, 2> kPirateNestNames = {"one", "per4"};
 constexpr std::array<std::string_view, 2> kTraderReachNames = {"original", "per4"};
@@ -373,6 +374,8 @@ std::size_t setup_choices(SetupItem item) noexcept {
     switch (item) {
         case SetupItem::Refund:
             return kRefundPercents.size() + 2;
+        case SetupItem::Moving:
+            return kMovingNames.size();
         case SetupItem::Ships:
             return kShips.size();
         case SetupItem::Units:
@@ -498,6 +501,8 @@ std::size_t setup_choice(const EndlessSetup& setup, SetupItem item) noexcept {
             std::copy(kRefundPercents.begin(), kRefundPercents.end(), percents.begin());
             return 1 + nearest(percents, std::max<std::uint32_t>(r.refund_percent, 1));
         }
+        case SetupItem::Moving:
+            return std::min<std::size_t>(static_cast<std::size_t>(r.moving), kMovingNames.size() - 1);
         case SetupItem::TraderPrices:
             return r.trader_prices == sim::TraderPrices::Market ? 1 : 0;
         case SetupItem::TraderReach:
@@ -644,6 +649,9 @@ void choose(EndlessSetup& setup, SetupItem item, std::size_t choice) {
                 r.demolish_refund = sim::Refund::Partial;
                 r.refund_percent = kRefundPercents[choice - 1];
             }
+            break;
+        case SetupItem::Moving:
+            r.moving = static_cast<sim::Moving>(choice);
             break;
         case SetupItem::TraderPrices:
             r.trader_prices = choice == 1 ? sim::TraderPrices::Market : sim::TraderPrices::Original;
@@ -988,6 +996,7 @@ bool setup_item_offered(SetupScope scope, SetupItem item) noexcept {
     // A scenario's world is given: no world of its own, and its deposits are as its author placed them.
     switch (item) {
         case SetupItem::Refund:
+        case SetupItem::Moving:
         case SetupItem::TraderPrices:
         case SetupItem::TraderReach:
         case SetupItem::OreVeins:
@@ -1063,6 +1072,7 @@ EndlessSetup multiplayer_setup(EndlessSetup setup, std::uint8_t players) {
 std::string setup_label(SetupItem item) {
     static constexpr std::array<std::string_view, kSetupItems> kKeys = {
         "setup.refund",
+        "setup.moving",
         "setup.trader",
         "setup.trader_reach",
         "setup.ore_veins",
@@ -1143,6 +1153,11 @@ std::string setup_value(SetupItem item, std::size_t choice) {
                 return ui::tr("setup.refund.full");
             }
             return ui::tr("setup.refund.partial", {std::to_string(kRefundPercents[choice - 1])});
+        case SetupItem::Moving: {
+            static constexpr std::array<std::string_view, 3> kKeys = {"setup.moving.free", "setup.moving.rebuild",
+                                                                      "setup.off"};
+            return ui::tr(kKeys[choice]);
+        }
         case SetupItem::TraderPrices:
             return ui::tr(choice == 1 ? "setup.trader.market" : "setup.trader.original");
         case SetupItem::TraderReach:
@@ -1434,6 +1449,10 @@ bool read_setup_line(EndlessSetup& setup, std::string_view key, std::string_view
             r.demolish_refund = sim::Refund::Partial;
             r.refund_percent = static_cast<std::uint8_t>(*n);
         }
+    } else if (key == "moving") {
+        if (const auto i = name_index(kMovingNames, value)) {
+            r.moving = static_cast<sim::Moving>(*i);
+        }
     } else if (key == "trader_prices") {
         if (value == "market" || value == "original") {
             r.trader_prices = value == "market" ? sim::TraderPrices::Market : sim::TraderPrices::Original;
@@ -1576,6 +1595,7 @@ std::string write_setup(const EndlessSetup& setup, std::string_view prefix) {
         out += '\n';
     };
     line("refund", std::to_string(r.refund_share()));
+    line("moving", kMovingNames[std::min<std::size_t>(static_cast<std::size_t>(r.moving), kMovingNames.size() - 1)]);
     line("trader_prices", r.trader_prices == sim::TraderPrices::Market ? "market" : "original");
     line("trader_reach", kTraderReachNames[std::min<std::size_t>(static_cast<std::size_t>(r.trader_reach), 1)]);
     line("ore_veins", kOreVeinNames[std::min<std::size_t>(static_cast<std::size_t>(r.ore_veins), 2)]);

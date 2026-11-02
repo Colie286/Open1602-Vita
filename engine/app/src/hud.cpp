@@ -721,6 +721,9 @@ std::optional<Hud::Action> Hud::build_tool_action() {
     if (m_build->copy()) {
         return Action{Action::Kind::Copy};
     }
+    if (m_build->moving()) {
+        return Action{Action::Kind::Move};
+    }
     const BuildPanel::Available available =
         m_available ? m_available : BuildPanel::Available([](std::uint32_t) { return true; });
     if (const auto id = m_build->current(available)) {
@@ -1546,6 +1549,9 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
                     break;
                 case BuildPanel::Action::Kind::Copy:
                     action = Action{Action::Kind::Copy};
+                    break;
+                case BuildPanel::Action::Kind::Move:
+                    action = Action{Action::Kind::Move};
                     break;
                 case BuildPanel::Action::Kind::Blueprint:
                     action = Action{Action::Kind::Blueprint};
