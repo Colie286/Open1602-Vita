@@ -588,7 +588,7 @@ void MapViewer::draw_editor_marks() {
         }
         ui::DrawItem d;
         d.kind = ui::DrawItem::Kind::Text;
-        d.block = 1;
+        d.block = 0;  // the normal font: larger than the small one of the corner's lines
         d.colour = 0;
         d.align = ui::Align::Centre;
         d.x = ix;

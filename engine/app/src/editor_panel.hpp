@@ -138,9 +138,6 @@ public:
     /// The longest name a scenario can be saved under.
     static constexpr std::size_t kMaxName = 60;
 
-    /// Lines of the check list on one page.
-    static constexpr std::size_t kCheckRows = 9;
-
     enum class Page : std::uint8_t { Document, New, Open, SaveAs, Selection, View, Check };
 
     explicit EditorPanel(ui::FormStyle style = {}) : m_form(style) {}
@@ -210,7 +207,8 @@ private:
     std::int32_t m_height = 400;
     std::string m_text;  ///< the name being typed
     EditorNewMap m_new;
-    std::size_t m_first = 0;  ///< the first file shown on the page "Open", the first line on "Check"
+    std::size_t m_first = 0;      ///< the first file shown on the page "Open", the first line on "Check"
+    std::size_t m_page_rows = 1;  ///< lines of the check list on its page as laid out last
 };
 
 }  // namespace o1602::app

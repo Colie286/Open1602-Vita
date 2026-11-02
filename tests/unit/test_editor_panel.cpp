@@ -255,7 +255,7 @@ TEST_CASE("editor panel: the overlays go on and off, the check list goes through
     EditorModel m = document();
     CHECK(!click(panel, m, "Overlays").has_value());
     CHECK(panel.page() == EditorPanel::Page::View);
-    auto r = click(panel, m, "Numbers of the islands");
+    auto r = click(panel, m, "Island numbers");
     REQUIRE(r.has_value());
     CHECK(r->kind == EditorRequest::Kind::Overlay);
     CHECK(r->index == static_cast<std::size_t>(app::EditorOverlay::IslandNumbers));

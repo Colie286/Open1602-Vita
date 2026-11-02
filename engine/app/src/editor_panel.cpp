@@ -166,15 +166,15 @@ void EditorPanel::layout(const EditorModel& model) {
 
 void EditorPanel::layout_document(const EditorModel& model) {
     ui::Form& f = m_form;
-    std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.title"), Align::Left, Tone::Heading);
-    y += 30;
+    std::int32_t y = m_top + 4;
+    f.label(Rect{kX, y, kW, 24}, ui::tr("editor.title"), Align::Left, Tone::Heading);
+    y += 26;
     std::string file = model.file.empty() ? ui::tr("editor.untitled") : model.file;
     if (model.modified) {
         file += " *";
     }
-    f.paragraph(Rect{kX, y, kW, 2 * kLine}, file, Tone::Normal, 20);
-    y += 2 * kLine;
+    f.label(Rect{kX, y, kW, kLine}, file);
+    y += kLine;
     f.entry(Rect{kX, y, kW, kLine}, ui::tr("editor.map_size"),
             ui::tr("editor.size", {count(model.width), count(model.height)}), Tone::Dim);
     y += kLine;
@@ -186,10 +186,17 @@ void EditorPanel::layout_document(const EditorModel& model) {
     }
     y += kLine;
     f.entry(Rect{kX, y, kW, kLine}, ui::tr("editor.players"), count(model.players), Tone::Dim);
-    y += kLine + 10;
+    y += kLine + 4;
+    // The buttons share what is left above two lines of the notice: as high as the game's in a
+    // large window, lower in a small one, so that the last stays in the panel.
+    constexpr std::int32_t kButtons = 9;
+    constexpr std::int32_t kNoticeRoom = 2 * 20 + 6;
+    const std::int32_t bottom = m_top + m_height - 4;
+    const std::int32_t pitch = std::clamp((bottom - kNoticeRoom - y) / kButtons, 22, kButtonH + kGap);
+    const std::int32_t gap = std::min(kGap, std::max(2, pitch / 8));
     const auto full = [&](Id id, const char* text, bool enabled = true) {
-        f.button(id, Rect{kX, y, kW, kButtonH}, ui::tr(text), enabled);
-        y += kButtonH + kGap;
+        f.button(id, Rect{kX, y, kW, pitch - gap}, ui::tr(text), enabled);
+        y += pitch;
     };
     full(kNew, "editor.new");
     full(kOpen, "editor.open");
@@ -201,8 +208,7 @@ void EditorPanel::layout_document(const EditorModel& model) {
     full(kCheck, "editor.check");
     full(kClose, "editor.close");
     if (!model.notice.empty()) {
-        const std::int32_t bottom = m_top + m_height - 6;
-        f.paragraph(Rect{kX, y + 4, kW, std::max(0, bottom - y - 4)}, model.notice,
+        f.paragraph(Rect{kX, y + 2, kW, std::max(0, bottom - y - 2)}, model.notice,
                     model.notice_is_error ? Tone::Warning : Tone::Dim, 20);
     }
 }
@@ -336,28 +342,37 @@ void EditorPanel::layout_check(const EditorModel& model) {
     std::int32_t y = m_top + 6;
     f.label(Rect{kX, y, kW, 28}, ui::tr("editor.check.title"), Align::Left, Tone::Heading);
     y += 32;
+    // Each line gets three lines of text, a heading two; as many as the room holds above the
+    // buttons, the rest on the next pages.
+    constexpr std::int32_t kItem = 3 * 20;
+    constexpr std::int32_t kHeading = 2 * 20 + 2;
+    const std::int32_t bottom = m_top + m_height - 2 * (kButtonH + kGap) - 6;
     const std::size_t n = model.check.size();
-    m_first = std::min(m_first, n > kCheckRows ? n - kCheckRows : 0);
-    constexpr std::int32_t kItem = 40;  // two lines of 20
-    for (std::size_t i = m_first; i < n && i < m_first + kCheckRows; ++i) {
+    m_first = std::min(m_first, n == 0 ? 0 : n - 1);
+    std::size_t i = m_first;
+    for (; i < n; ++i) {
         const EditorCheckLine& line = model.check[i];
         using Kind = EditorCheckLine::Kind;
-        if (line.kind == Kind::Heading) {
-            f.label(Rect{kX, y, kW, kLine}, line.text, Align::Left, Tone::Heading);
-            y += kLine;
-            continue;
+        const std::int32_t h = line.kind == Kind::Heading ? kHeading : kItem;
+        if (y + h > bottom && i > m_first) {
+            break;
         }
-        const Tone tone = line.kind == Kind::Error || line.kind == Kind::Warning ? Tone::Warning
-                          : line.kind == Kind::Fine                              ? Tone::Normal
-                                                                                 : Tone::Dim;
-        f.paragraph(Rect{kX + 8, y, kW - 8, kItem}, line.text, tone, 20);
-        y += kItem;
+        if (line.kind == Kind::Heading) {
+            f.paragraph(Rect{kX, y, kW, kHeading - 2}, line.text, Tone::Heading, 20);
+        } else {
+            const Tone tone = line.kind == Kind::Error || line.kind == Kind::Warning ? Tone::Warning
+                              : line.kind == Kind::Fine                              ? Tone::Normal
+                                                                                     : Tone::Dim;
+            f.paragraph(Rect{kX + 8, y, kW - 8, kItem}, line.text, tone, 20);
+        }
+        y += h;
     }
+    m_page_rows = std::max<std::size_t>(1, i - m_first);
     y += 4;
-    if (n > kCheckRows) {
+    if (m_first > 0 || i < n) {
         const std::int32_t half = (kW - kGap) / 2;
         f.button(kPrevious, Rect{kX, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
-        f.button(kNext, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.next"), m_first + kCheckRows < n);
+        f.button(kNext, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.next"), i < n);
         y += kButtonH + kGap;
     }
     f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
@@ -443,12 +458,13 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
         case kStore:
             return commit_name();
         case kPrevious: {
-            const std::size_t rows = m_page == Page::Check ? kCheckRows : kRows;
+            // The check list goes back by the lines its page shows (they differ in height).
+            const std::size_t rows = m_page == Page::Check ? m_page_rows : kRows;
             m_first = m_first > rows ? m_first - rows : 0;
             return std::nullopt;
         }
         case kNext:
-            m_first += m_page == Page::Check ? kCheckRows : kRows;
+            m_first += m_page == Page::Check ? m_page_rows : kRows;
             return std::nullopt;
         default:
             break;
