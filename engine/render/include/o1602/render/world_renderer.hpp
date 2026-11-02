@@ -258,6 +258,8 @@ public:
     [[nodiscard]] static TileLighting territory(sim::PlayerId player);
     /// Only the land of `player` inside the circle `area` (world tiles) stays lit.
     [[nodiscard]] static TileLighting circle(sim::PlayerId player, const sim::Catchment& area);
+    /// All land dimmed, `player`'s too: only what harbour() adds stays lit (another owner's Kontor).
+    [[nodiscard]] static TileLighting harbours_only(sim::PlayerId player);
 
     /// Lights the land inside the circle `area` (world tiles) too, besides the circles lit so far.
     TileLighting& add_circle(const sim::Catchment& area);

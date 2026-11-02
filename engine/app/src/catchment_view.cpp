@@ -88,4 +88,32 @@ std::optional<CatchmentCircles> catchment_circles(const sim::World& world, const
     return out;
 }
 
+std::optional<sim::TilePos> foreign_trade_kontor(const sim::World& world, const assets::BuildingTable& buildings,
+                                                 sim::PlayerId player, std::uint16_t island, std::uint16_t x,
+                                                 std::uint16_t y) {
+    if (player == sim::kNoPlayer || island >= world.islands().size()) {
+        return std::nullopt;
+    }
+    const sim::IslandMap& map = world.islands()[island].map;
+    if (!map.contains(x, y)) {
+        return std::nullopt;
+    }
+    const sim::MapCell& cell = map.top(x, y);
+    if (cell.empty() || cell.owner == player || cell.owner == sim::kNoPlayer) {
+        return std::nullopt;
+    }
+    const sim::SubTile t = map.sub_tile(buildings, x, y);
+    if (t.building == nullptr ||
+        (t.building->prod_kind != sim::prod::kKontor && t.building->prod_kind != sim::prod::kMarket)) {
+        return std::nullopt;
+    }
+    const sim::City* city = world.city(island, cell.city);
+    if (city == nullptr || !city->warehouse_x || !city->warehouse_y ||
+        !world.diplomacy().may_trade(player, city->owner)) {
+        return std::nullopt;
+    }
+    // Ships trade at the city's Kontor, also when its market place was clicked.
+    return sim::TilePos{*city->warehouse_x, *city->warehouse_y};
+}
+
 }  // namespace o1602::app

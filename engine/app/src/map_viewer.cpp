@@ -1306,6 +1306,15 @@ render::TileLighting MapViewer::tile_lighting() const {
         if (auto l = building_lighting(*clicked)) {
             return *l;
         }
+        // Another owner's Kontor with a trade treaty, a native village's too: the water where the
+        // player's ships trade with it, as in the original.
+        if (const auto kontor = foreign_trade_kontor(m_state->world, m_buildings, m_local_player, clicked->island,
+                                                     clicked->x, clicked->y)) {
+            render::TileLighting l = render::TileLighting::harbours_only(m_local_player);
+            l.harbour(m_state->world, m_buildings, clicked->island, static_cast<std::uint32_t>(kontor->x),
+                      static_cast<std::uint32_t>(kontor->y));
+            return l;
+        }
     }
     return {};
 }

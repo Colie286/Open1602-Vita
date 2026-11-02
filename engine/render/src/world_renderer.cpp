@@ -226,6 +226,13 @@ TileLighting TileLighting::circle(sim::PlayerId player, const sim::Catchment& ar
     return l;
 }
 
+TileLighting TileLighting::harbours_only(sim::PlayerId player) {
+    TileLighting l;
+    l.m_kind = Kind::Circle;  // without a circle: no land lit
+    l.m_player = player;
+    return l;
+}
+
 TileLighting& TileLighting::add_circle(const sim::Catchment& area) {
     m_kind = Kind::Circle;
     m_lit.emplace_back().set(area);

@@ -20,6 +20,7 @@ constexpr std::uint32_t kChapel = 20201;
 constexpr std::uint32_t kTavern = 20202;
 constexpr std::uint32_t kTower = 20203;
 constexpr std::uint32_t kHouse = 20204;
+constexpr std::uint32_t kKontor = 20205;
 
 assets::BuildingTable make_buildings() {
     const assets::CodPredefinedSymbol types[] = {{"HAUS", 1}};
@@ -34,6 +35,8 @@ assets::BuildingTable make_buildings() {
         "  Objekt: HAUS_PRODTYP\n    Kind: 16\n    Radius: 5\n  EndObj\n"
         "  @Nummer: 4\n  Id: 20204\n  Kind: 14\n  Gfx: 40\n  Size: 2, 2\n"
         "  Objekt: HAUS_PRODTYP\n    Kind: 13\n    Radius: 8\n  EndObj\n"
+        "  @Nummer: 5\n  Id: 20205\n  Kind: 14\n  Gfx: 50\n  Size: 2, 2\n"
+        "  Objekt: HAUS_PRODTYP\n    Kind: 8\n    Radius: 8\n  EndObj\n"
         "EndObj\n",
         types);
     auto table = assets::BuildingTable::from_cod(doc);
@@ -43,7 +46,8 @@ assets::BuildingTable make_buildings() {
 
 /// An island of 40 x 10 tiles of the player 0, with chapels at x = 0, 10 and 20 (the one at 20
 /// another player's), a tavern at 30, towers at x = 5 and 15 and a house at 25, all in row 2.
-/// Chapels, taverns and houses are listed among the productions, towers are not.
+/// Chapels, taverns and houses are listed among the productions, towers are not. Player 1's city 0
+/// has its Kontor at x = 34.
 sim::World make_world(const assets::BuildingTable& buildings) {
     sim::World world{100, 100};
     std::vector<sim::Player> players(2);
@@ -72,7 +76,15 @@ sim::World make_world(const assets::BuildingTable& buildings) {
     put(kTower, 5, 0, false);
     put(kTower, 15, 0, false);
     put(kHouse, 25, 0, true);
+    REQUIRE(map.place(*buildings.by_id(kKontor), 34, 2, 0, 0, 1, 0).ok());
     REQUIRE(world.add_island(sim::WorldIsland{assets::IslandHeader{}, std::move(map), 10, 10}).ok());
+    sim::City city;
+    city.island = 0;
+    city.index = 0;
+    city.owner = 1;
+    city.warehouse_x = 34;
+    city.warehouse_y = 2;
+    world.add_city(std::move(city));
     return world;
 }
 
@@ -161,4 +173,32 @@ TEST_CASE("catchment view: the harbours of several buildings keep the water lit 
     l.harbour(world, buildings, 0, 10, 2);
     CHECK(!l.dimmed(10, 9, nullptr));  // both
     CHECK(!l.dimmed(20, 9, nullptr));
+}
+
+TEST_CASE("catchment view: another owner's Kontor with a trade treaty lights the water its ships trade at") {
+    const assets::BuildingTable buildings = make_buildings();
+    sim::World world = make_world(buildings);
+    // No trade treaty between the two players: nothing.
+    world.diplomacy().relation(0, 1).trade = sim::Treaty::None;
+    CHECK(!app::foreign_trade_kontor(world, buildings, 0, 0, 34, 2).has_value());
+    // With one (as with the natives from the start of a game): any tile of the Kontor gives its origin.
+    world.diplomacy().relation(0, 1).trade = sim::Treaty::Signed;
+    const auto kontor = app::foreign_trade_kontor(world, buildings, 0, 0, 35, 3);
+    REQUIRE(kontor.has_value());
+    CHECK((*kontor == sim::TilePos{34, 2}));
+    // Not the owner's own Kontor (its circle does that), not other buildings, not open ground.
+    CHECK(!app::foreign_trade_kontor(world, buildings, 1, 0, 34, 2).has_value());
+    CHECK(!app::foreign_trade_kontor(world, buildings, 0, 0, 20, 2).has_value());  // player 1's chapel
+    CHECK(!app::foreign_trade_kontor(world, buildings, 0, 0, 3, 7).has_value());
+    CHECK(!app::foreign_trade_kontor(world, buildings, sim::kNoPlayer, 0, 34, 2).has_value());
+
+    // Lit: only the water within the ships' reach of the Kontor (the island at world tiles (10, 10)).
+    render::TileLighting l = render::TileLighting::harbours_only(0);
+    l.harbour(world, buildings, 0, static_cast<std::uint32_t>(kontor->x), static_cast<std::uint32_t>(kontor->y));
+    CHECK(!l.dimmed(44, 9, nullptr));  // the sea just north of the Kontor
+    CHECK(l.dimmed(20, 9, nullptr));   // the sea far from it
+    sim::MapCell own;
+    own.sprite = 100;
+    own.owner = 0;
+    CHECK(l.dimmed(10, 12, &own));  // the player's land stays dark
 }
