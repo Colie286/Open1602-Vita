@@ -23,6 +23,15 @@ constexpr std::uint32_t kDangerDiagonal = 716;
 constexpr std::uint8_t kClassSoft = 1;
 constexpr std::uint8_t kClassDanger = 2;
 constexpr std::uint32_t kInfinite = 0xFFFFFFFFU;
+/// Longer than the dearest step, so that the ring of buckets never wraps onto waiting cells.
+constexpr std::uint32_t kBuckets = 1024;
+static_assert(kBuckets >
+              std::max({kStraight, kDiagonal, kSoftStraight, kSoftDiagonal, kDangerStraight, kDangerDiagonal}));
+/// A cell taken from the buckets with its cost.
+struct Open {
+    std::uint32_t cost;
+    std::uint32_t cell;
+};
 
 // Neighbour order of the original's wavefront: the diagonals NW, NE, SW, SE first, then N, S, W, E.
 constexpr std::uint8_t kOrder[8] = {7, 1, 5, 3, 0, 4, 6, 2};
@@ -239,20 +248,28 @@ SeaCourse SeaPlanner::plan(const SeaMap& sea, const SeaPlan& r) {
         return course;
     }
 
-    // Dijkstra with a binary heap; ties in insertion order.
-    m_heap.clear();
-    std::uint32_t seq = 0;
+    // Dijkstra over a ring of buckets; ties in insertion order.
+    m_buckets.resize(kBuckets);
+    for (std::vector<std::uint32_t>& bucket : m_buckets) {
+        bucket.clear();
+    }
+    std::uint32_t current = 0;  // cost of the bucket being emptied
+    std::size_t next = 0;       // first cell of that bucket not taken yet
+    std::size_t waiting = 0;    // cells in all buckets not taken yet
     const auto push = [&](std::uint32_t cost, std::size_t cell) {
-        m_heap.push_back(Node{cost, seq++, static_cast<std::uint32_t>(cell)});
-        std::push_heap(m_heap.begin(), m_heap.end(),
-                       [](const Node& a, const Node& b) { return a.cost != b.cost ? a.cost > b.cost : a.seq > b.seq; });
+        m_buckets[cost % kBuckets].push_back(static_cast<std::uint32_t>(cell));
+        ++waiting;
     };
     const auto pop = [&]() {
-        std::pop_heap(m_heap.begin(), m_heap.end(),
-                      [](const Node& a, const Node& b) { return a.cost != b.cost ? a.cost > b.cost : a.seq > b.seq; });
-        const Node n = m_heap.back();
-        m_heap.pop_back();
-        return n;
+        std::vector<std::uint32_t>* bucket = &m_buckets[current % kBuckets];
+        while (next == bucket->size()) {
+            bucket->clear();
+            next = 0;
+            ++current;
+            bucket = &m_buckets[current % kBuckets];
+        }
+        --waiting;
+        return Open{current, (*bucket)[next++]};
     };
     m_cost[start] = 0;
     push(0, start);
@@ -260,8 +277,8 @@ SeaCourse SeaPlanner::plan(const SeaMap& sea, const SeaPlan& r) {
     std::optional<std::size_t> edge;  // best visited cell on the window edge towards the aim point
     std::int32_t edge_distance = sea_distance(r.aim_x - r.start_x, r.aim_y - r.start_y);
     const bool aim_outside = !inside(r.aim_x, r.aim_y);
-    while (!m_heap.empty()) {
-        const Node n = pop();
+    while (waiting != 0) {
+        const Open n = pop();
         if ((m_state[n.cell] & kVisited) != 0) {
             continue;
         }

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <functional>
 #include <utility>
 #include <vector>
 
@@ -79,14 +80,36 @@ std::int32_t tile_of(std::int32_t pos) noexcept {
 
 }  // namespace
 
-bool building_in_reach(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
-                       std::uint32_t bx, std::uint32_t by, std::int32_t wx, std::int32_t wy) {
+namespace {
+
+/// The water a ship reaches a building from: a circle round the centre of its footprint.
+struct ReachArea {
+    std::int32_t cx = 0;  ///< world tile of the centre
+    std::int32_t cy = 0;
+    std::int32_t odd_w = 0;  ///< 1 when the footprint is even wide: the half tile counts to the far side
+    std::int32_t odd_h = 0;
+
+    [[nodiscard]] bool contains(std::int32_t wx, std::int32_t wy) const {
+        std::int32_t dx = wx - cx;
+        std::int32_t dy = wy - cy;
+        if (dx > 0) {
+            dx -= odd_w;
+        }
+        if (dy > 0) {
+            dy -= odd_h;
+        }
+        return in_circle(dx, dy, kReach);
+    }
+};
+
+std::optional<ReachArea> reach_area(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
+                                    std::uint32_t bx, std::uint32_t by) {
     if (island >= world.islands().size()) {
-        return false;
+        return std::nullopt;
     }
     const WorldIsland& isl = world.islands()[island];
     if (!isl.map.contains(static_cast<std::int32_t>(bx), static_cast<std::int32_t>(by))) {
-        return false;
+        return std::nullopt;
     }
     const MapCell& cell = isl.map.top(bx, by);
     const assets::BuildingType* b = cell.empty() ? nullptr : buildings.by_sprite(cell.sprite);
@@ -96,17 +119,17 @@ bool building_in_reach(const World& world, const assets::BuildingTable& building
         rotated_size(*b, cell.rotation, w, h);
     }
     // Centre of the footprint; buildings of even size count the half tile towards the far side.
-    const auto cx = static_cast<std::int32_t>(isl.x + bx + (w - 1) / 2);
-    const auto cy = static_cast<std::int32_t>(isl.y + by + (h - 1) / 2);
-    std::int32_t dx = wx - cx;
-    std::int32_t dy = wy - cy;
-    if (dx > 0) {
-        dx -= static_cast<std::int32_t>((w - 1) & 1U);
-    }
-    if (dy > 0) {
-        dy -= static_cast<std::int32_t>((h - 1) & 1U);
-    }
-    return in_circle(dx, dy, kReach);
+    return ReachArea{static_cast<std::int32_t>(isl.x + bx + (w - 1) / 2),
+                     static_cast<std::int32_t>(isl.y + by + (h - 1) / 2), static_cast<std::int32_t>((w - 1) & 1U),
+                     static_cast<std::int32_t>((h - 1) & 1U)};
+}
+
+}  // namespace
+
+bool building_in_reach(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
+                       std::uint32_t bx, std::uint32_t by, std::int32_t wx, std::int32_t wy) {
+    const std::optional<ReachArea> area = reach_area(world, buildings, island, bx, by);
+    return area && area->contains(wx, wy);
 }
 
 std::optional<std::size_t> kontor_in_reach(const World& world, const assets::BuildingTable& buildings, std::int32_t wx,
@@ -539,30 +562,57 @@ namespace {
 /// the Kontor reach, where the original's ship stops too, up to the beach; the original then never
 /// arrives (exactly the tile) and gives the order up (S-071). Without water there, anywhere in
 /// the reach.
+/// A position as a goal: the tile itself when it is water, otherwise the water tiles nearest to it
+/// within reach (all of them when there is none).
+struct PositionGoal {
+    std::int32_t tx = 0;
+    std::int32_t ty = 0;
+    bool water = false;
+    std::int32_t nearest = -1;  ///< squared distance of the nearest water within reach, -1 none
+
+    static PositionGoal of(const SeaMap& sea, const Target& t) {
+        PositionGoal g;
+        g.tx = static_cast<std::int32_t>(t.x);
+        g.ty = static_cast<std::int32_t>(t.y);
+        g.water = sea.sailable(g.tx, g.ty);
+        if (g.water) {
+            return g;
+        }
+        constexpr auto r = static_cast<std::int32_t>(kReach);
+        for (std::int32_t dy = -r; dy <= r; ++dy) {
+            for (std::int32_t dx = -r; dx <= r; ++dx) {
+                const std::int32_t d = dx * dx + dy * dy;
+                if ((g.nearest < 0 || d < g.nearest) && in_circle(dx, dy, kReach) &&
+                    sea.sailable(g.tx + dx, g.ty + dy)) {
+                    g.nearest = d;
+                }
+            }
+        }
+        return g;
+    }
+
+    bool operator()(std::int32_t x, std::int32_t y) const {
+        if (water) {
+            return x == tx && y == ty;
+        }
+        if (!in_circle(x - tx, y - ty, kReach)) {
+            return false;
+        }
+        const std::int32_t d = (x - tx) * (x - tx) + (y - ty) * (y - ty);
+        return nearest < 0 || d <= nearest;
+    }
+};
+
 bool reached(const World& world, const assets::BuildingTable& buildings, const SeaMap& sea, const Target& t,
              std::int32_t x, std::int32_t y) {
     switch (t.kind) {
         case Target::Kind::Position: {
             const auto tx = static_cast<std::int32_t>(t.x);
             const auto ty = static_cast<std::int32_t>(t.y);
-            if (sea.sailable(tx, ty)) {
-                return x == tx && y == ty;
+            if (!sea.sailable(tx, ty) && !in_circle(x - tx, y - ty, kReach)) {
+                return false;  // spares looking for the nearest water
             }
-            if (!in_circle(x - tx, y - ty, kReach)) {
-                return false;
-            }
-            std::int32_t nearest = -1;
-            constexpr auto r = static_cast<std::int32_t>(kReach);
-            for (std::int32_t dy = -r; dy <= r; ++dy) {
-                for (std::int32_t dx = -r; dx <= r; ++dx) {
-                    const std::int32_t d = dx * dx + dy * dy;
-                    if ((nearest < 0 || d < nearest) && in_circle(dx, dy, kReach) && sea.sailable(tx + dx, ty + dy)) {
-                        nearest = d;
-                    }
-                }
-            }
-            const std::int32_t d = (x - tx) * (x - tx) + (y - ty) * (y - ty);
-            return nearest < 0 || d <= nearest;
+            return PositionGoal::of(sea, t)(x, y);
         }
         case Target::Kind::City: {
             const City* c = world.city(t.island, t.city);
@@ -585,6 +635,61 @@ bool reached(const World& world, const assets::BuildingTable& buildings, const S
             break;
     }
     return false;
+}
+
+/// `reached` for one target as a test of many tiles: what does not depend on the tile is looked
+/// up once (the course search asks for every tile it visits). The world must not change while
+/// the test is in use.
+std::function<bool(std::int32_t, std::int32_t)> goal_of(const World& world, const assets::BuildingTable& buildings,
+                                                        const SeaMap& sea, const Target& t) {
+    const auto none = [](std::int32_t, std::int32_t) { return false; };
+    switch (t.kind) {
+        case Target::Kind::Position:
+            return PositionGoal::of(sea, t);
+        case Target::Kind::City: {
+            const City* c = world.city(t.island, t.city);
+            if (c == nullptr || !c->warehouse_x || !c->warehouse_y) {
+                return none;
+            }
+            const std::optional<ReachArea> area =
+                reach_area(world, buildings, t.island, *c->warehouse_x, *c->warehouse_y);
+            if (!area) {
+                return none;
+            }
+            return [a = *area](std::int32_t x, std::int32_t y) { return a.contains(x, y); };
+        }
+        case Target::Kind::Building: {
+            const std::optional<ReachArea> area = reach_area(world, buildings, t.island, t.x, t.y);
+            if (!area) {
+                return none;
+            }
+            return [a = *area](std::int32_t x, std::int32_t y) { return a.contains(x, y); };
+        }
+        case Target::Kind::Ship: {
+            const Ship* s = world.ship(t.ship);
+            if (s == nullptr) {
+                return none;
+            }
+            return [sx = s->x, sy = s->y](std::int32_t x, std::int32_t y) {
+                return sea_distance(sx - x, sy - y) < kShipNear;
+            };
+        }
+        case Target::Kind::Soldier: {
+            const Soldier* s = world.soldier(t.ship);
+            if (s == nullptr) {
+                return none;
+            }
+            return [sx = s->pos_x / kPosUnit, sy = s->pos_y / kPosUnit](std::int32_t x, std::int32_t y) {
+                return sea_distance(sx - x, sy - y) < kShipNear;
+            };
+        }
+        case Target::Kind::Spot:
+            return [cx = static_cast<std::int32_t>(t.x / 2), cy = static_cast<std::int32_t>(t.y / 2)](
+                       std::int32_t x, std::int32_t y) { return in_circle(x - cx, y - cy, kReach); };
+        case Target::Kind::None:
+            break;
+    }
+    return none;
 }
 
 }  // namespace
@@ -904,8 +1009,7 @@ Fleet::Planned Fleet::plan(Ship& ship, std::int32_t radius) {
         r.danger.push_back(
             SeaPlan::Danger{tx - kTowerReach + 1, ty - kTowerReach + 1, tx + kTowerReach, ty + kTowerReach});
     }
-    const Target target = ship.target;
-    r.goal = [&](std::int32_t x, std::int32_t y) { return reached(*m_world, *m_buildings, m_sea, target, x, y); };
+    r.goal = goal_of(*m_world, *m_buildings, m_sea, ship.target);
     SeaCourse course = m_planner.plan(m_sea, r);
     if (course.path.empty() && !course.reached_goal && !r.ships.empty()) {
         // No way: whether only the ships nearby close it, e.g. one lying in a narrow inlet (S-121).

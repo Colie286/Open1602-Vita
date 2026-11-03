@@ -179,7 +179,11 @@ private:
         std::uint32_t seq;
         std::uint32_t cell;
     };
-    std::vector<Node> m_heap;
+    /// Open cells by cost, a ring of buckets (Dial's algorithm): every step costs less than the
+    /// ring is long, so the cells waiting at one time never share a bucket with another cost.
+    /// Each bucket is first in, first out, so equal costs leave in the order they came, as from
+    /// a heap ordered by cost and then by arrival.
+    std::vector<std::vector<std::uint32_t>> m_buckets;
 
     /// Plans a route over the regions of the coarse map from the start to the regions near the
     /// aim; on success `m_route_step` holds 1, 2, ... for the regions along it.
