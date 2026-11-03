@@ -157,6 +157,22 @@ std::optional<std::uint32_t> BuildPanel::current(const Available& available) {
     return std::nullopt;
 }
 
+BuildPanel::Action BuildPanel::shown_action(const Available& available) {
+    if (demolish()) {
+        return Action{Action::Kind::Demolish, 0, 0};
+    }
+    if (copy()) {
+        return Action{Action::Kind::Copy, 0, 0};
+    }
+    if (moving()) {
+        return Action{Action::Kind::Move, 0, 0};
+    }
+    if (const auto id = current(available)) {
+        return Action{Action::Kind::Pick, *id, 0};
+    }
+    return Action{Action::Kind::Off, 0, 0};
+}
+
 bool BuildPanel::show(std::uint32_t id) {
     const ui::BuildCategory* c = m_menu->category_of(id);
     if (c == nullptr) {
@@ -257,6 +273,7 @@ std::optional<BuildPanel::Action> BuildPanel::mouse(std::int32_t x, std::int32_t
         consumed = true;
         if (e.kind == ui::PanelEvent::Kind::Pressed && e.id >= 31001 && e.id <= 31008) {
             // The categories answer the press (Menuflg): demolish at once, the others open their icons.
+            const bool other = e.id != m_category;
             m_bau.set_selected(m_category, false);
             m_category = e.id;
             m_bau.set_selected(m_category, true);
@@ -270,6 +287,12 @@ std::optional<BuildPanel::Action> BuildPanel::mouse(std::int32_t x, std::int32_t
                 } else {
                     m_building_category = e.id;
                     open_popup(*c, available, x, y);
+                }
+                if (other) {
+                    // What the panel shows is what the map builds: the category's remembered
+                    // building (or tool) is in hand at once, also when the pop-up closes without
+                    // a pick or the map is clicked while it is open.
+                    action = shown_action(available);
                 }
             }
         } else if (e.kind == ui::PanelEvent::Kind::Clicked && (e.id == kRotateLeft || e.id == kRotateRight)) {

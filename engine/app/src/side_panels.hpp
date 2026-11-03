@@ -31,9 +31,9 @@ class BuildPanel {
 public:
     /// What a click asks for.
     struct Action {
-        enum class Kind : std::uint8_t { Pick, Demolish, Rotate, OrientToRoad, Copy, Blueprint, Move, Templates };
+        enum class Kind : std::uint8_t { Pick, Demolish, Rotate, OrientToRoad, Copy, Blueprint, Move, Templates, Off };
         Kind kind = Kind::Pick;
-        std::uint32_t building = 0;  ///< Pick: HAUS Id
+        std::uint32_t building = 0;  ///< Pick: HAUS Id (Off: nothing of the category available)
         int step = 0;                ///< Rotate: -1 left, +1 right; OrientToRoad: 1 on, 0 off
     };
     /// Whether the local player may pick a building (sim::building_available).
@@ -97,6 +97,8 @@ public:
     [[nodiscard]] const ui::Panel* popup() const noexcept { return m_popup ? &*m_popup : nullptr; }
 
 private:
+    /// What the open category puts in hand: its remembered building or tool, Off if nothing.
+    [[nodiscard]] Action shown_action(const Available& available);
     void open_popup(const ui::BuildCategory& category, const Available& available, std::int32_t x, std::int32_t y);
     [[nodiscard]] std::string name_of(const ui::BuildCategory& category, std::size_t index) const;
 

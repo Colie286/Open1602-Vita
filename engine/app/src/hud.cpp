@@ -1667,6 +1667,9 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
                 case BuildPanel::Action::Kind::Templates:
                     action = Action{Action::Kind::Templates};
                     break;
+                case BuildPanel::Action::Kind::Off:
+                    action = Action{Action::Kind::ToolOff};
+                    break;
                 case BuildPanel::Action::Kind::Rotate:
                     action = Action{Action::Kind::TurnBuilding};
                     action->step = a->step;

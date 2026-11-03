@@ -31,6 +31,9 @@ constexpr std::uint32_t kBakery = 20503;
 constexpr std::uint32_t kSmith = 20511;
 constexpr std::int32_t kDemolishButton = 31001;
 constexpr std::int32_t kWorkshops = 31002;
+constexpr std::uint32_t kDirtRoad = 20000;
+constexpr std::uint32_t kStoneRoad = 20001;
+constexpr std::int32_t kRoads = 31003;
 
 /// A layout of `ids`, each a 20x10 box of its own place; `extra` adds fields to a gadget.
 assets::GadgetLayout layout(const std::vector<std::int32_t>& ids, const std::map<std::int32_t, std::string>& extra) {
@@ -82,7 +85,11 @@ ui::BuildMenuDefinition menu() {
     workshops.button = kWorkshops;
     workshops.names = "WERK";
     workshops.rows = {{ui::BuildButton{kBakery, 5, 0, {}, {}}, ui::BuildButton{kSmith, 6, 1, {}, {}}}};
-    m.categories = {demolish, workshops};
+    ui::BuildCategory roads;
+    roads.button = kRoads;
+    roads.names = "WEG";
+    roads.rows = {{ui::BuildButton{kDirtRoad, 7, 0, {}, {}}, ui::BuildButton{kStoneRoad, 8, 1, {}, {}}}};
+    m.categories = {demolish, workshops, roads};
     m.default_category = kWorkshops;
     return m;
 }
@@ -232,6 +239,41 @@ TEST_CASE("side panel build menu: a category's pop-up picks a building, an unava
     CHECK(b.panel.current(b.available) == kBakery);
 }
 
+TEST_CASE("side panel build menu: another category puts its building in hand when pressed") {
+    Build b;
+    (void)b.press(kWorkshops);
+    REQUIRE(b.release_on(1).has_value());  // the smith in hand
+    // The roads' category: the panel shows its remembered road, so the map builds that one too,
+    // whether an icon is picked, the pop-up closes beside the icons, or the map is clicked.
+    auto a = b.press(kRoads);
+    REQUIRE(a.has_value());
+    CHECK(a->kind == BuildPanel::Action::Kind::Pick);
+    CHECK(a->building == kDirtRoad);
+    CHECK(b.panel.popup_open());
+    CHECK(b.panel.current(b.available) == kDirtRoad);
+    bool consumed = false;
+    (void)b.panel.mouse(600, 600, false, b.available, consumed);  // the mouse moves beside the icons
+    (void)b.panel.mouse(600, 600, true, b.available, consumed);
+    CHECK(!b.panel.popup_open());
+    CHECK(b.panel.current(b.available) == kDirtRoad);
+    // The same category again changes nothing in hand; its pop-up picks as before.
+    CHECK(!b.press(kRoads).has_value());
+    a = b.release_on(1);
+    REQUIRE(a.has_value());
+    CHECK(a->building == kStoneRoad);
+    // Back to the workshops: the smith remembered there is in hand again.
+    a = b.press(kWorkshops);
+    REQUIRE(a.has_value());
+    CHECK(a->kind == BuildPanel::Action::Kind::Pick);
+    CHECK(a->building == kSmith);
+    REQUIRE(b.release_on(1).has_value());  // the smith again, the pop-up closes
+    // Nothing of a category available: the tool is put away.
+    b.locked = {kDirtRoad, kStoneRoad};
+    a = b.press(kRoads);
+    REQUIRE(a.has_value());
+    CHECK(a->kind == BuildPanel::Action::Kind::Off);
+}
+
 TEST_CASE("side panel build menu: the blueprint switch goes back to the building in hand and names it") {
     Build b;
     (void)b.press(kWorkshops);
@@ -303,9 +345,11 @@ TEST_CASE("side panel build menu: the templates are the fifth tool and take the 
 
 TEST_CASE("side panel build menu: demolish, rotate and orient to the road") {
     Build b;
-    // The demolish button opens the tools' pop-up (Open1602): demolish and copy.
+    // The demolish button opens the tools' pop-up (Open1602): demolish and copy. The tool
+    // remembered there (demolish) is in hand at once.
     auto a = b.press(kDemolishButton);
-    CHECK(!a.has_value());
+    REQUIRE(a.has_value());
+    CHECK(a->kind == BuildPanel::Action::Kind::Demolish);
     CHECK(b.panel.popup_open());
     a = b.release_on(1);
     REQUIRE(a.has_value());
