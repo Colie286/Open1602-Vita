@@ -70,7 +70,7 @@ bool trades_there(const assets::BuildingType* b) {
 }  // namespace
 
 std::vector<std::size_t> cities_near_cart(const World& world, const assets::BuildingTable& buildings, std::int32_t wx,
-                                          std::int32_t wy) {
+                                          std::int32_t wy, std::int32_t reach) {
     std::vector<std::size_t> out;
     const auto island = island_of(world, wx, wy);
     if (!island) {
@@ -79,8 +79,8 @@ std::vector<std::size_t> cities_near_cart(const World& world, const assets::Buil
     const WorldIsland& isl = world.islands()[*island];
     const std::int32_t lx = wx - static_cast<std::int32_t>(isl.x);
     const std::int32_t ly = wy - static_cast<std::int32_t>(isl.y);
-    for (std::int32_t dy = -kCartReach; dy <= kCartReach; ++dy) {
-        for (std::int32_t dx = -kCartReach; dx <= kCartReach; ++dx) {
+    for (std::int32_t dy = -reach; dy <= reach; ++dy) {
+        for (std::int32_t dx = -reach; dx <= reach; ++dx) {
             if (!trades_there(building_on(isl.map, buildings, lx + dx, ly + dy))) {
                 continue;
             }
@@ -276,15 +276,20 @@ bool Fleet::plan_cart(Ship& ship) {
         m_cart_paths.open_footprint(b->origin, b->width, b->height);
     }
     const auto goal_near = [&](std::int32_t x, std::int32_t y, std::int32_t reach) {
+        bool any = false;
         for (std::int32_t dy = -reach; dy <= reach; ++dy) {
             for (std::int32_t dx = -reach; dx <= reach; ++dx) {
                 const TilePos q{x + dx, y + dy};
-                if (m_cart_paths.cell(q) == PathFinder::Cell::Walkable) {
+                if (m_cart_paths.cell(q) == PathFinder::Cell::Walkable ||
+                    m_cart_paths.cell(q) == PathFinder::Cell::Goal) {
                     m_cart_paths.set(q, PathFinder::Cell::Goal);
+                    any = true;
                 }
             }
         }
+        return any;
     };
+    std::vector<TilePos> city_tiles;  // the target city's markets and Kontor
     for (std::uint32_t y = 0; y < map.height(); ++y) {
         for (std::uint32_t x = 0; x < map.width(); ++x) {
             const MapCell& c = map.top(x, y);
@@ -302,8 +307,19 @@ bool Fleet::plan_cart(Ship& ship) {
             }
             if (ship.target.kind == Target::Kind::City && trades_there(b) && c.city == ship.target.city &&
                 *island == ship.target.island) {
-                goal_near(p.x, p.y, kCartReach);
+                city_tiles.push_back(p);
             }
+        }
+    }
+    // A city: next to its market or Kontor, where the window offers the exchange by hand; where no
+    // tile there can be driven to, within the reach of a route stop.
+    bool beside = false;
+    for (const TilePos& p : city_tiles) {
+        beside = goal_near(p.x, p.y, kCartHandReach) || beside;
+    }
+    if (!beside) {
+        for (const TilePos& p : city_tiles) {
+            goal_near(p.x, p.y, kCartReach);
         }
     }
     if (ship.target.kind == Target::Kind::Position) {
@@ -311,7 +327,7 @@ bool Fleet::plan_cart(Ship& ship) {
         if (m_cart_paths.cell(t) == PathFinder::Cell::Walkable) {
             m_cart_paths.set(t, PathFinder::Cell::Goal);
         } else {
-            goal_near(t.x, t.y, 1);
+            (void)goal_near(t.x, t.y, 1);
         }
     }
     const TilePos start{ship.x - ox, ship.y - oy};

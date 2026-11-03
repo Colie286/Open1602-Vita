@@ -749,10 +749,11 @@ private:
         // sails off from the yard, and is repaired on the way.
         const bool remote_repair = c.world().original_bugs().remote_repair;
         if (ship.cart()) {
-            // A trade cart within 2 tiles of a market or Kontor: its own city's first, else one it
-            // may trade with (TRADER.GAD 59004, 59003).
+            // A trade cart on a tile touching a market or Kontor: its own city's first, else one it
+            // may trade with (TRADER.GAD 59004, 59003), as in the original.
             if (!k.moving) {
-                for (const std::size_t index : sim::cities_near_cart(w, c.buildings, ship.x, ship.y)) {
+                for (const std::size_t index :
+                     sim::cities_near_cart(w, c.buildings, ship.x, ship.y, sim::kCartHandReach)) {
                     const sim::City& city = w.cities()[index];
                     if (city.owner == ship.owner) {
                         k.city = std::make_pair(city.island, city.index);

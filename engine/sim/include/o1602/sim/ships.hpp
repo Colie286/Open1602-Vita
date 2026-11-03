@@ -74,13 +74,17 @@ inline constexpr std::uint32_t kCartHoldCapacity = 10 * 32;
 /// How near a trade cart must be to a market or Kontor to trade there: 2 tiles from
 /// any tile of it.
 inline constexpr std::int32_t kCartReach = 2;
+/// A trade cart exchanges or trades goods by hand (its window's buttons) only on a tile that
+/// touches the market or Kontor, as in the original.
+inline constexpr std::int32_t kCartHandReach = 1;
 /// Stops of a trade cart's route (SHIP4 +0x052 holds four for a cart).
 inline constexpr std::uint8_t kCartStops = 4;
 
-/// The cities whose market or Kontor a trade cart on the world tile (wx, wy) reaches, as indices
-/// into World::cities(), in the order of that list.
+/// The cities whose market or Kontor a trade cart on the world tile (wx, wy) reaches within
+/// `reach` tiles, as indices into World::cities(), in the order of that list.
 [[nodiscard]] std::vector<std::size_t> cities_near_cart(const World& world, const assets::BuildingTable& buildings,
-                                                        std::int32_t wx, std::int32_t wy);
+                                                        std::int32_t wx, std::int32_t wy,
+                                                        std::int32_t reach = kCartReach);
 
 /// The first trade cart of `player` on `island` (one per player and island as in the original; more
 /// with Rules::more_carts), nullptr if it has none.

@@ -313,10 +313,17 @@ TEST_CASE("carts: at its own market it exchanges goods, three holds of 10 t") {
     CHECK(fleet.transfer(sim::CargoTransfer{0, id, kWood, true, 50 * kTon}) == 30 * kTon);
     CHECK(land.world.ship(id)->load(kWood) == 30 * kTon);
     CHECK(west.goods[kWood] == 20 * kTon);
+    // Two tiles from the market: a route stop reaches it, the exchange by hand only from a tile
+    // that touches it, as in the original.
     REQUIRE(fleet.order(sim::ShipOrder{0, id, sim::Target::position(25, 14)}));
     run(fleet, land.world, 20000);
     CHECK(sim::cities_near_cart(land.world, land.buildings, land.world.ship(id)->x, land.world.ship(id)->y) ==
           std::vector<std::size_t>{0});
+    CHECK(sim::cities_near_cart(land.world, land.buildings, 25, 14, sim::kCartHandReach).empty());
+    CHECK(fleet.transfer(sim::CargoTransfer{0, id, kWood, false, 10 * kTon}) == 0);
+    REQUIRE(fleet.order(sim::ShipOrder{0, id, sim::Target::position(24, 14)}));
+    run(fleet, land.world, 20000);
+    REQUIRE(land.world.ship(id)->x == 24);
     CHECK(fleet.transfer(sim::CargoTransfer{0, id, kWood, false, 10 * kTon}) == 10 * kTon);
     CHECK(west.goods[kWood] == 30 * kTon);
     // Away from both: nothing.
@@ -338,6 +345,9 @@ TEST_CASE("carts: a foreign Kontor trades only with a trade treaty, at its price
     REQUIRE(fleet.order(sim::ShipOrder{0, id, sim::Target::city_of(0, 1)}));
     const auto events = run(fleet, land.world, 40000);
     CHECK(count(events, sim::ShipEvent::Kind::Arrived) == 1);
+    // Sent to the city, it stops beside the Kontor, where the window offers the trade.
+    CHECK(sim::cities_near_cart(land.world, land.buildings, land.world.ship(id)->x, land.world.ship(id)->y,
+                                sim::kCartHandReach) == std::vector<std::size_t>{1});
     CHECK(fleet.transfer(sim::CargoTransfer{0, id, kWood, true, 10 * kTon}) == 0);
     land.world.diplomacy().relation(0, 1).trade = sim::Treaty::Signed;
     land.world.diplomacy().relation(1, 0).trade = sim::Treaty::Signed;

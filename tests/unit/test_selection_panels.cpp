@@ -967,8 +967,8 @@ TEST_CASE("selection panels: the trade cart button asks where a cart goes, then 
     CHECK(request->from_x == t.world.islands()[0].x + 4);  // out of the building of this window
     CHECK(request->from_y == t.world.islands()[0].y + 0);
     out.clear();
-    // With a cart on the island it selects the cart and looks at it.
-    sim::Ship cart = sim::make_ship("Altair", 9, 7, sim::figure::kTradeCart, kLocal);
+    // With a cart on the island it selects the cart and looks at it (on a tile touching the Kontor).
+    sim::Ship cart = sim::make_ship("Altair", 9, 6, sim::figure::kTradeCart, kLocal);
     cart.cargo.resize(3);
     t.world.add_ship(cart);
     const std::uint32_t id = t.world.ships().back().id;
@@ -980,7 +980,7 @@ TEST_CASE("selection panels: the trade cart button asks where a cart goes, then 
     CHECK(jump->kind == SelectionPanel::Request::Kind::SelectShip);
     CHECK(jump->ship == id);
     CHECK(jump->x == 9.0);  // where the cart is, not the map's corner
-    CHECK(jump->y == 7.0);
+    CHECK(jump->y == 6.0);
 
     // Open1602: with Shift another cart while the player has more Kontors and markets than carts
     // there (two places here: the Kontor counted twice).
@@ -998,7 +998,7 @@ TEST_CASE("selection panels: the trade cart button asks where a cart goes, then 
     CHECK(std::get<sim::CartRequest>(out[0]).another);
     out.clear();
     // With two carts each click jumps to the next, the nearest to the Kontor first.
-    sim::Ship second = sim::make_ship("Beteigeuze", 6, 5, sim::figure::kTradeCart, kLocal);
+    sim::Ship second = sim::make_ship("Beteigeuze", 8, 6, sim::figure::kTradeCart, kLocal);
     second.cargo.resize(3);
     t.world.add_ship(second);
     const std::uint32_t near = t.world.ships().back().id;

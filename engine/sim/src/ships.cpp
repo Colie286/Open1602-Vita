@@ -1572,9 +1572,9 @@ std::uint32_t Fleet::transfer(const CargoTransfer& t) {
     // The Kontor the ship lies at: the player's own first, else one it may trade with.
     std::optional<std::size_t> found;
     if (ship->cart()) {
-        // A cart at a market or Kontor of its own city exchanges goods, at a foreign one it trades
-        // with a trade treaty (TRADER.GAD 59004 and 59003).
-        for (const std::size_t i : cities_near_cart(*m_world, *m_buildings, ship->x, ship->y)) {
+        // A cart next to a market or Kontor of its own city exchanges goods, at a foreign one it
+        // trades with a trade treaty (TRADER.GAD 59004 and 59003).
+        for (const std::size_t i : cities_near_cart(*m_world, *m_buildings, ship->x, ship->y, kCartHandReach)) {
             const City& c = m_world->cities()[i];
             if (c.owner == ship->owner) {
                 found = i;
