@@ -343,6 +343,10 @@ ship.cannons_unmount = {1} (Shift+click: all that fit into the hold)
 # The castle's send-out arrow ({1}: its help line from the game's texts)
 # The city window's trade cart button while another cart is allowed ({1}: its help line from the game's texts)
 city.cart_more = {1} (Shift+click: another trade cart)
+# The status line over a trade cart on the map
+unit.trade_cart = Trade cart
+# The name frame of a trade cart's window
+cart.name_help = Name of the trade cart
 castle.release = {1} (Shift+click: all trained units, lined up around the spot)
 player.colour.orange = Orange player
 player.colour.purple = Purple player

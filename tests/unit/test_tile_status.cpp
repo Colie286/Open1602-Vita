@@ -10,6 +10,7 @@
 #include "o1602/sim/ship.hpp"
 #include "o1602/sim/soldier.hpp"
 #include "o1602/sim/world.hpp"
+#include "o1602/ui/localization.hpp"
 
 using namespace o1602;
 
@@ -166,6 +167,7 @@ TEST_CASE("tile status: ships by their owner, land units by their kind") {
     for (sim::PlayerId p = 0; p < 3; ++p) {
         world.add_ship(sim::make_ship("", 10, 10, 0, p));
     }
+    world.add_ship(sim::make_ship("", 12, 10, assets::figure::kTradeCart, kMe));  // a trade cart
     world.add_soldier(sim::make_soldier(5, 5, 1, kMe));
     world.add_soldier(sim::make_soldier(6, 5, 2, 3));
 
@@ -179,6 +181,8 @@ TEST_CASE("tile status: ships by their owner, land units by their kind") {
     CHECK(ship(0) == "Schiff");
     CHECK(ship(1) == "Piratenschiff");
     CHECK(ship(2) == "Freier Händler");
+    CHECK(ship(3) == ui::tr("unit.trade_cart"));  // not "Schiff"
+    CHECK(ship(3) != "Schiff");
     CHECK(soldier(0) == "Musketier");
     CHECK(soldier(1) == "Eingeborenenkrieger");  // whatever its figure
     CHECK(app::unit_status(world, ui::UnitRef{ui::UnitRef::Kind::Ship, 999}, *figures, texts).empty());

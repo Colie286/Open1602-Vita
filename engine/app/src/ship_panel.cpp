@@ -446,6 +446,10 @@ public:
             return std::nullopt;
         }
         const auto line = [&](std::size_t n) { return std::optional<std::string>(help_line(c, n)); };
+        // The name frame: the game's line names a ship, a trade cart has its own.
+        const auto name_line = [&]() {
+            return ship->cart() ? std::optional<std::string>(ui::tr("cart.name_help")) : line(10);
+        };
         // Holds: their goods, the soldiers' kind, or empty.
         const auto hold_text = [&](std::size_t h) -> std::optional<std::string> {
             if (h >= ship->cargo.size()) {
@@ -457,7 +461,7 @@ public:
             // TRADER.GAD (LEISTE 166 to 169; the route switch as the ship's).
             switch (id) {
                 case kCartName:
-                    return line(10);
+                    return name_line();
                 case kCartTrade:
                     return line(167);
                 case kCartTransfer:
@@ -542,7 +546,7 @@ public:
                 case 45008:
                     return line(165);
                 case 45122:
-                    return line(10);
+                    return name_line();
                 case 45124:
                     return line(11);
                 default:
@@ -577,7 +581,7 @@ public:
             case 33002:
                 return line(natives ? 48 : 46);
             case 33122:
-                return line(10);
+                return name_line();
             case 33124:
                 return line(11);
             default:

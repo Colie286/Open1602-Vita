@@ -61,7 +61,8 @@ public:
     void toggle(const sim::World& world, const UnitRef& ref);
     /// The rectangle: the player's own units if there are any (else the
     /// foreign one with the largest part inside, alone); of the kind of the one with the largest part
-    /// inside. `additive` (Shift) adds them to a selection of the same owner and kind.
+    /// inside. `additive` (Shift) adds them to a selection of the same owner and kind. A trade cart
+    /// is taken alone when it has the largest part inside, and never joins ships or soldiers.
     void box(const sim::World& world, std::vector<UnitCandidate> candidates, sim::PlayerId local, bool additive);
     /// All of `candidates` (the units on screen) of the same owner and type as `like`.
     void select_alike(const sim::World& world, const std::vector<UnitCandidate>& candidates, const UnitRef& like);

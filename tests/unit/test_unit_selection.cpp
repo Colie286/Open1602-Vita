@@ -42,6 +42,10 @@ struct Field {
         world.add_ship(sim::make_ship("S", x, y, 21, owner, 0));
         return {UnitRef::Kind::Ship, world.ships().back().id};
     }
+    UnitRef cart(std::uint32_t x, std::uint32_t y, sim::PlayerId owner = 0) {
+        world.add_ship(sim::make_ship("C", x, y, assets::figure::kTradeCart, owner, 0));
+        return {UnitRef::Kind::Ship, world.ships().back().id};
+    }
     UnitRef soldier(std::uint32_t x, std::uint32_t y, std::uint16_t figure = 1, sim::PlayerId owner = 0) {
         world.add_soldier(sim::make_soldier(x, y, figure, owner));
         return {UnitRef::Kind::Soldier, world.soldiers().back().id};
@@ -78,6 +82,31 @@ TEST_CASE("unit selection: the rectangle takes own units of the kind with the la
     CHECK(sel.size() == 1);
     CHECK(sel.units()[0] == s2);
     sel.toggle(f.world, ship);  // another kind: alone
+    CHECK(sel.units() == std::vector<UnitRef>{ship});
+}
+
+TEST_CASE("unit selection: the rectangle takes a trade cart alone, never with ships or soldiers") {
+    Field f;
+    const UnitRef cart = f.cart(10, 10);
+    const UnitRef ship = f.ship(30, 30);
+    const UnitRef s1 = f.soldier(12, 10);
+    ui::UnitSelection sel;
+    // Only the cart in the rectangle: it is selected.
+    sel.box(f.world, {{cart, 40}}, 0, false);
+    CHECK(sel.units() == std::vector<UnitRef>{cart});
+    // The cart has the largest part: the cart alone, not the ship beside it.
+    sel.box(f.world, {{cart, 100}, {ship, 50}, {s1, 20}}, 0, false);
+    CHECK(sel.units() == std::vector<UnitRef>{cart});
+    // A ship has the largest part: the ships without the cart.
+    sel.box(f.world, {{cart, 100}, {ship, 150}}, 0, false);
+    CHECK(sel.units() == std::vector<UnitRef>{ship});
+    // Shift adds to the ships, but not the cart: a rectangle over the cart alone changes nothing.
+    sel.box(f.world, {{cart, 100}}, 0, true);
+    CHECK(sel.units() == std::vector<UnitRef>{ship});
+    // Shift + click: the cart does not join the ships, it is selected alone, and a ship not with it.
+    sel.toggle(f.world, cart);
+    CHECK(sel.units() == std::vector<UnitRef>{cart});
+    sel.toggle(f.world, ship);
     CHECK(sel.units() == std::vector<UnitRef>{ship});
 }
 

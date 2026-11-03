@@ -30,7 +30,7 @@ namespace o1602::app {
                                       const assets::TextTable& texts, std::span<const sim::Climate> climates = {});
 
 /// The status line over a ship or a land unit: "Schiff", "Piratenschiff" or "Freier Händler" by
-/// its owner, a unit by its kind ([FIGKIND] "Infanterist" ...), the natives' warriors
+/// its owner, a trade cart "Fahrender Händler", a unit by its kind ([FIGKIND] "Infanterist" ...), the natives' warriors
 /// "Eingeborenenkrieger". Empty for a unit that is gone.
 [[nodiscard]] std::string unit_status(const sim::World& world, const ui::UnitRef& unit,
                                       const assets::FigureTable& figures, const assets::TextTable& texts);

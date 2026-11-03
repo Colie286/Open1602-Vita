@@ -124,6 +124,9 @@ std::string unit_status(const sim::World& world, const ui::UnitRef& unit, const 
         if (s == nullptr) {
             return {};
         }
+        if (s->cart()) {
+            return ui::tr("unit.trade_cart");  // the game's texts have no line for it
+        }
         switch (behaviour(s->owner)) {
             case sim::FactionBehaviour::Pirates:
                 return line(texts, "LEISTE", kLeistePirateShip);

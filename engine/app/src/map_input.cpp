@@ -1484,7 +1484,7 @@ std::optional<std::array<double, 4>> MapInput::unit_box(const ui::UnitRef& ref) 
 }
 
 std::vector<ui::UnitCandidate> MapInput::without_carts(std::vector<ui::UnitCandidate> units) const {
-    // A trade cart is picked by a click on it alone: it does not go with ships or soldiers.
+    // A trade cart does not go with ships or soldiers into "all of this kind on screen".
     std::erase_if(units, [&](const ui::UnitCandidate& c) {
         const sim::Ship* s = c.ref.kind == ui::UnitRef::Kind::Ship ? world().ship(c.ref.id) : nullptr;
         return s != nullptr && s->cart();
@@ -1689,7 +1689,7 @@ void MapInput::map_left_up(double x, double y, std::uint16_t mod, int clicks) {
         return;
     }
     if (m_press.rubber_band() && m_press.at()) {
-        m_units.box(world(), without_carts(units_in(m_press.at()->first, m_press.at()->second, x, y)), local(), shift);
+        m_units.box(world(), units_in(m_press.at()->first, m_press.at()->second, x, y), local(), shift);
         selection_changed(true);
         return;
     }
