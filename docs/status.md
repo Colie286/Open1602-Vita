@@ -179,7 +179,7 @@ are listed in 2.1.
 | What | Dependency | Source |
 |---|---|---|
 | Flag menu with free RGB colour as in Anno 1503 | Interface | [ADR 0007](architecture/0007-extensibility-and-modding.md) |
-| Mod support: soldiers and ships of a package's own, videos in a modern format, the computers' core tables (needs, slots, producers, first crop, unit families) and climates of a package's own; smaller adjustments and recommendations in the summary of open-work.md | M8 | [open-work.md](modding/open-work.md#summary) |
+| Mod support: videos in a modern format (the last open item; everything else is done, see the summary of open-work.md) | M8 | [open-work.md](modding/open-work.md#summary) |
 | Replays from the session's frames | M6 | [ADR 0011](architecture/0011-multiplayer-lockstep.md) |
 | Ideas: full refund shortly after building; own road pathfinding alongside that of the original; pirate distance of the difficulty level as a setting (S-068) | open, decision needed | – |
 
