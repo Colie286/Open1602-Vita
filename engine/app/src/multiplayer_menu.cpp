@@ -237,6 +237,12 @@ std::vector<sim::BannerId> player_banners() {
 std::string banner_name(std::string_view id) {
     const std::size_t colon = id.find(':');
     const std::string_view colour = colon == std::string_view::npos ? id : id.substr(colon + 1);
+    // A generated colour beyond the twelve with a name (render::BannerTable::add_more_players).
+    constexpr std::string_view kNumbered = "colour";
+    if (colour.size() > kNumbered.size() && colour.substr(0, kNumbered.size()) == kNumbered &&
+        std::all_of(colour.begin() + kNumbered.size(), colour.end(), [](char c) { return c >= '0' && c <= '9'; })) {
+        return ui::tr("net.colour.number", {std::string(colour.substr(kNumbered.size()))});
+    }
     const std::string key = "net.colour." + std::string(colour);
     const std::string& text = ui::tr(key);
     return text != key ? text : std::string(colour);

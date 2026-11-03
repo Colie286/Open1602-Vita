@@ -591,3 +591,39 @@ TEST_CASE("banners: players five to twelve get colours of their own, apart from 
     banners.add_more_players();  // only once
     CHECK(banners.size() == sim::kFirstExtraBanner + sim::kMaxPlayers - sim::kOriginalPlayers);
 }
+
+TEST_CASE("banners: the colours beyond the twelve are generated, apart and the same every time") {
+    std::set<std::tuple<std::uint8_t, std::uint8_t, std::uint8_t>> colours;
+    for (const assets::Rgba& c : render::BannerTable::kDefaultColours) {
+        colours.emplace(c.r, c.g, c.b);
+    }
+    for (std::size_t k = 0; k < 240; ++k) {
+        const assets::Rgba c = render::BannerTable::generated_colour(k);
+        CHECK(c.a == 255);
+        CHECK(colours.emplace(c.r, c.g, c.b).second);  // none twice, none of the hand-picked
+        CHECK(render::BannerTable::generated_colour(k) == c);
+    }
+    // Red at full saturation and value: the first step at hue 25 is orange-red.
+    const assets::Rgba first = render::BannerTable::generated_colour(0);
+    CHECK(first.r == 235);
+    CHECK(first.b < first.g);
+}
+
+TEST_CASE("deposits: who knows one is a set of player slots without an upper limit") {
+    assets::SlotSet set;
+    CHECK(set.empty());
+    CHECK(set == assets::SlotSet(0));
+    set.insert(3);
+    CHECK(set == assets::SlotSet(0x8));
+    set.insert(100);
+    CHECK(set.contains(3));
+    CHECK(set.contains(100));
+    CHECK(!set.contains(99));
+    CHECK(!set.contains(1000));
+    CHECK(set.word_count() == 4);
+    CHECK(set.word(3) == 1U << 4);
+    CHECK(set.word(9) == 0);
+    // Trailing zero words do not count: equal sets compare equal.
+    CHECK(assets::SlotSet::from_words({0x8, 0, 0}) == assets::SlotSet(0x8));
+    CHECK(assets::SlotSet::from_words({0, 0}).empty());
+}

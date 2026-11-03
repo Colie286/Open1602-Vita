@@ -54,7 +54,7 @@ struct Decoded {
     /// Explored crops and known deposits for every player (INSEL5 keeps seven slots and 8 bits).
     struct ExplorePart {
         std::vector<bool> explored;
-        std::vector<std::uint32_t> deposit_masks;
+        std::vector<assets::SlotSet> deposit_masks;
     };
     std::optional<std::vector<ExplorePart>> explored;
     struct TileOverride {
@@ -330,6 +330,9 @@ inline constexpr std::uint16_t kPackageUnits = 6;
 /// FLEE version 7: every shipyard also names the ship of a package it builds
 /// (CostBuilding::order_figure, 0 for the original's). The writer takes it only when a yard builds one.
 inline constexpr std::uint16_t kPackageShips = 7;
+/// XPLR version 2: who knows a deposit as a list of 32-bit words (assets::SlotSet), not one word, for
+/// games of more than 32 players. The writer takes it only when a player beyond the 32nd knows one.
+inline constexpr std::uint16_t kWideDepositKnowledge = 2;
 
 /// HOUS version 2: every house's public buildings in reach (House::services) as 64 bits, not 16, for
 /// the public buildings of packages' own kinds from bit 16 on. The writer takes it only when a
@@ -382,8 +385,10 @@ void write_epochs(Writer& out, const World& w, std::uint16_t version);
 [[nodiscard]] std::uint16_t islands_version(const World& w);
 void write_islands(Writer& out, const World& w, std::uint16_t version);
 [[nodiscard]] std::vector<Decoded::IslandPart> read_islands(Reader& in, std::uint16_t version);
-void write_explored(Writer& out, const World& w);
-[[nodiscard]] std::vector<Decoded::ExplorePart> read_explored(Reader& in);
+/// The version of XPLR: kWideDepositKnowledge if a player beyond the 32nd knows a deposit, else 1.
+[[nodiscard]] std::uint16_t explored_version(const World& w);
+void write_explored(Writer& out, const World& w, std::uint16_t version);
+[[nodiscard]] std::vector<Decoded::ExplorePart> read_explored(Reader& in, std::uint16_t version);
 
 // players.cpp: PLAY, PSTA, MISN, SCOR, DIPL.
 void write_players(Writer& out, const World& w);

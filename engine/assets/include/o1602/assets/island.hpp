@@ -1,16 +1,87 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "o1602/assets/chunk_file.hpp"
 #include "o1602/core/result.hpp"
 
 namespace o1602::assets {
+
+/// A set of player slots, bit p = slot p, with no upper limit: as many 32-bit words as the highest
+/// slot needs. The original keeps such sets in one byte (8 slots); Open1602 is not bound to its
+/// number of players (ADR 0007). Trailing zero words are never kept, so equal sets compare equal.
+class SlotSet {
+public:
+    SlotSet() = default;
+    /// Slots 0..31 from the bits of `low`, as in the original's byte or Open1602's first word.
+    SlotSet(std::uint32_t low) noexcept : m_low(low) {}  // NOLINT(google-explicit-constructor): a byte of the files
+    /// From the words of word(0), word(1), ...
+    [[nodiscard]] static SlotSet from_words(const std::vector<std::uint32_t>& words) {
+        SlotSet set(words.empty() ? 0U : words[0]);
+        std::size_t last = words.size();
+        while (last > 1 && words[last - 1] == 0) {
+            --last;
+        }
+        if (last > 1) {
+            set.m_high = std::make_shared<const std::vector<std::uint32_t>>(
+                words.begin() + 1, words.begin() + static_cast<std::ptrdiff_t>(last));
+        }
+        return set;
+    }
+
+    [[nodiscard]] bool contains(std::size_t slot) const noexcept { return (word(slot / 32) >> (slot % 32) & 1U) != 0; }
+    void insert(std::size_t slot) {
+        const std::uint32_t bit = 1U << (slot % 32);
+        const std::size_t w = slot / 32;
+        if (w == 0) {
+            m_low |= bit;
+            return;
+        }
+        // Copied on change: copies of the set share the words.
+        std::vector<std::uint32_t> high = m_high != nullptr ? *m_high : std::vector<std::uint32_t>{};
+        if (w > high.size()) {
+            high.resize(w, 0);
+        }
+        high[w - 1] |= bit;
+        m_high = std::make_shared<const std::vector<std::uint32_t>>(std::move(high));
+    }
+    [[nodiscard]] bool empty() const noexcept { return m_low == 0 && m_high == nullptr; }
+    /// The bits of slots 32 i .. 32 i + 31; 0 beyond the last word.
+    [[nodiscard]] std::uint32_t word(std::size_t i) const noexcept {
+        if (i == 0) {
+            return m_low;
+        }
+        return m_high != nullptr && i - 1 < m_high->size() ? (*m_high)[i - 1] : 0U;
+    }
+    /// The words up to the last that is not 0 (0 for the empty set).
+    [[nodiscard]] std::size_t word_count() const noexcept {
+        if (m_high != nullptr) {
+            return m_high->size() + 1;
+        }
+        return m_low != 0 ? 1 : 0;
+    }
+
+    friend bool operator==(const SlotSet& a, const SlotSet& b) noexcept {
+        if (a.m_low != b.m_low || a.word_count() != b.word_count()) {
+            return false;
+        }
+        return a.m_high == b.m_high || (a.m_high != nullptr && b.m_high != nullptr && *a.m_high == *b.m_high);
+    }
+
+private:
+    std::uint32_t m_low = 0;  ///< slots 0..31, the only ones of every game so far
+    /// Slots from 32 on, without trailing zero words; null for none. Shared, so that copying a deposit
+    /// stays as cheap as before (and GCC 13 sees no vector copy in every deposit's copy).
+    std::shared_ptr<const std::vector<std::uint32_t>> m_high;
+};
 
 /// Fields of the INSEL3 / INSEL4 / INSEL5 chunk that are verified so far. See docs/formats/scp.md.
 struct IslandHeader {
@@ -39,8 +110,8 @@ struct IslandHeader {
         std::uint16_t x = 0;    ///< origin tile of the mountain it lies in (one byte in the original's)
         std::uint16_t y = 0;
         /// Byte 3: bit p = player slot p knows the deposit (explored it, or a computer bound it to
-        /// a mountain of its own. 32 bits in Open1602.
-        std::uint32_t mask = 0;
+        /// a mountain of its own). Any number of slots in Open1602.
+        SlotSet mask;
         std::uint8_t kind = 0;     ///< 0 big vein, 1 small vein
         std::uint16_t amount = 0;  ///< left, 1/32 t
     };

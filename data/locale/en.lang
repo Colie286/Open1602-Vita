@@ -315,6 +315,7 @@ net.colour.magenta = Magenta
 net.colour.grey = Grey
 net.colour.purple = Purple
 net.colour.brown = Brown
+net.colour.number = Colour {1}
 net.refused.version = The host has another version of Open1602.
 net.refused.content = The host has other game data.
 net.refused.full = No free slot.

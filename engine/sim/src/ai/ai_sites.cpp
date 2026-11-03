@@ -1334,9 +1334,7 @@ std::int32_t Engine::mountain_walk(AiPlayer& p, std::int32_t x, std::int32_t y, 
                 if (!commit) {
                     return steps;
                 }
-                if (p.player < 32) {
-                    dep.mask |= 1U << p.player;
-                }
+                dep.mask.insert(p.player);
                 if (w == ware::kOre) {
                     const assets::BuildingType* deep = by_id(id::kOreMineDeep);
                     p.search.building =

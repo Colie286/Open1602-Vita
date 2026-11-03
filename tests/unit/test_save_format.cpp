@@ -194,7 +194,7 @@ sim::World make_world(const assets::BuildingTable& buildings, bool wide) {
             v(d.ware);
             d.x = v.next<std::uint8_t>();
             d.y = v.next<std::uint8_t>();
-            v(d.mask);
+            d.mask = v.next<std::uint32_t>();
             v(d.kind);
             v(d.amount);
             island.header.deposits.push_back(d);

@@ -102,9 +102,9 @@ private:
     }
 };
 
-/// Whether player `p` knows the deposit (explored it). Up to 32 players.
+/// Whether player `p` knows the deposit (explored it). Any number of players.
 [[nodiscard]] inline bool deposit_known(const assets::IslandHeader::Deposit& d, PlayerId p) noexcept {
-    return p < 32 && (d.mask >> p & 1U) != 0;
+    return d.mask.contains(p);
 }
 
 /// Whether `name` can name a player, a city or a ship (the renames of PlayerRename, CityOrder and

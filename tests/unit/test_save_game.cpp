@@ -312,6 +312,35 @@ TEST_CASE("save game: fight counters beyond 65 535 come back whole, smaller ones
     CHECK(loaded->players()[0].soldiers_lost == 0xFFFFFFFFU);
 }
 
+TEST_CASE("save game: who knows a deposit comes back for any player, XPLR 2 only beyond the 32nd") {
+    const auto buildings = make_buildings();
+    sim::World world = make_world(buildings);
+    {
+        auto narrow = sim::write_game(world, buildings, nullptr, sim::SaveOptions{false});
+        REQUIRE(narrow.ok());
+        CHECK(section_version(*narrow, "XPLR") == 1);
+    }
+    assets::SlotSet& known = world.island(0).header.deposits[0].mask;
+    known.insert(40);
+    known.insert(70);
+    auto bytes = sim::write_game(world, buildings, nullptr, sim::SaveOptions{false});
+    REQUIRE(bytes.ok());
+    CHECK(section_version(*bytes, "XPLR") == 2);
+    auto loaded = sim::read_game(*bytes, buildings);
+    REQUIRE(loaded.ok());
+    const assets::IslandHeader::Deposit& d = loaded->islands()[0].header.deposits[0];
+    CHECK(d.mask == world.islands()[0].header.deposits[0].mask);
+    CHECK(sim::deposit_known(d, 0));
+    CHECK(sim::deposit_known(d, 8));
+    CHECK(sim::deposit_known(d, 40));
+    CHECK(sim::deposit_known(d, 70));
+    CHECK(!sim::deposit_known(d, 39));
+    CHECK(!sim::deposit_known(d, 200));
+    auto again = sim::write_game(*loaded, buildings, nullptr, sim::SaveOptions{false});
+    REQUIRE(again.ok());
+    CHECK(*again == *bytes);
+}
+
 TEST_CASE("save game: craters and deer spots beyond 255 tiles come back whole (SC-13)") {
     const auto buildings = make_buildings();
     // A world that fits 8 bits keeps version 1 of ISLE and VOLC: the bytes of earlier versions.

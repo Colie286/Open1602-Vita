@@ -338,6 +338,9 @@ constexpr std::uint16_t max_version(std::uint32_t id) noexcept {
     if (id == kFactions) {
         return kScriptedFactions;
     }
+    if (id == kExplored) {
+        return kWideDepositKnowledge;
+    }
     return id == kIslands || id == kVolcanoes ? kWideCoordinates : 1;
 }
 
@@ -959,7 +962,8 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
     section(out, kEpochs, [&](Writer& o) { write_epochs(o, world, epochs_at); }, Need::Required, epochs_at);
     section(out, kArmy, [&](Writer& o) { write_army(o, world); });
     section(out, kDiplomacy, [&](Writer& o) { write_diplomacy(o, world); });
-    section(out, kExplored, [&](Writer& o) { write_explored(o, world); });
+    const std::uint16_t explored_at = explored_version(world);
+    section(out, kExplored, [&](Writer& o) { write_explored(o, world, explored_at); }, Need::Required, explored_at);
     section(out, kQueues, [&](Writer& o) { write_queues(o, world); });
     section(out, kStances, [&](Writer& o) { write_stances(o, world); });
     if (tiles == TileMode::Full && origin == Origin::Keep && world.source() != nullptr) {
@@ -1796,7 +1800,7 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                 d.diplomacy = read_diplomacy(in);
                 break;
             case kExplored:
-                d.explored = read_explored(in);
+                d.explored = read_explored(in, version);
                 break;
             case kAnimals:
                 d.animals = read_animals(in);

@@ -95,7 +95,7 @@ older readers, marked optional.
 | `FLEE` | ships in full (position in 1/4096 tile, course, holds with price, trade route, destinations with the original's reference, the trader's goods), next ship number, discovered islands, trade settings and affection of the cities, shipyard fields (order, build points, wood, cloth, tick, repair, failed launches: a byte that was reserved and 0 before); `SHIP` remains for older readers |
 | `ARMY` | soldiers in full (position in 1/4096 tile, hit points, home, destination, planning, clocks, patrol, path), next soldier number, cannon towers, building damage, shots in flight, weapons and slots of the castles |
 | `EPOC` | phase of the island epochs and, per island, the phase last seen |
-| `XPLR` | exploring: per island "growing explored" per player, and per deposit the player mask (32 bit) |
+| `XPLR` | exploring: per island "growing explored" per player, and per deposit who knows it (bit p = player p; version 1 one u32, version 2 a list of u32 words for more than 32 players) |
 | `DIPL` | diplomacy: per player pair peace, trade, time of war, tribute, trade and damage; per player all 32 events and the culprit |
 | `QUEU` | command chains: per ship, then per soldier with a queue, the id and up to 16 waiting destinations (Shift+right-click) |
 | `STNC` | per ship, then per soldier with a stance, the id and the flags attack move (bit 0) and hold position (bit 1) (ADR 0010) |
@@ -129,6 +129,7 @@ three (one per hold of the ship, Open1602's page of a stop), the same record per
 `PSTA` version 3: version 2 with a boolean per player after the switches: the player closed his city gates to foreign soldiers (Open1602's own; the writer takes it only when a player did).
 `PSTA` version 4: version 3 with a u64 per player after the gates: who played it last (`Player::owner`, a verifier of the player ID of that person's installation, 0 for nobody; Open1602's own, the writer takes it only when a player has one).
 `PSTA` version 5: version 4 with a u8 per player after the owner: the cheats it unlocked with a code (`Player::cheats`: 0 none, 1 the code 2061, 2 the code 512, which also works with more than one person; the writer takes it only when a player has unlocked them).
+`XPLR` version 2: per deposit who knows it as a list of u32 words (u32 count, then the words; bit p of word w = player 32 w + p) instead of one u32 (`assets::SlotSet`; Open1602's own, the writer takes it only when a player beyond the 32nd knows a deposit, which a game of `sim::kMaxPlayers` = 12 never has).
 `MAPW` (own savegame only) version 2: see [o1602-save.md](o1602-save.md).
 
 The writer takes version 3 of `ISLE`, version 2 of `EPOC` and version 4 of `FLEE` only when an

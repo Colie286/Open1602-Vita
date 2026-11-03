@@ -493,7 +493,7 @@ private:
                 r[o] = d.ware;
                 r[o + 1] = static_cast<std::uint8_t>(d.x);  // fits: check()
                 r[o + 2] = static_cast<std::uint8_t>(d.y);
-                r[o + 3] = static_cast<std::uint8_t>(d.mask);
+                r[o + 3] = static_cast<std::uint8_t>(d.mask.word(0));  // the first 8 players
                 r[o + 4] = d.kind;
                 put16(r, o + 6, d.amount);
             } else {

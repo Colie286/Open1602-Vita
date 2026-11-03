@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "o1602/render/banner.hpp"
 
+#include <cstdlib>
 #include <random>
+#include <string>
 
 namespace o1602::render {
 
@@ -51,7 +53,24 @@ BannerTable BannerTable::original(const assets::FigureTable* figures, const Bann
     return table;
 }
 
-static_assert(BannerTable::kDefaultColours.size() == sim::kMaxPlayers, "a colour of its own for every player");
+assets::Rgba BannerTable::generated_colour(std::size_t k) noexcept {
+    // Integer HSV: hue in degrees, saturation and value of 255.
+    struct Step {
+        int saturation;
+        int value;
+    };
+    static constexpr std::array<Step, 3> kSteps = {{{210, 235}, {255, 165}, {140, 255}}};
+    const int hue = static_cast<int>((25 + 137 * k) % 360);  // 137 degrees: the golden angle
+    const Step step = kSteps[k % kSteps.size()];
+    const int chroma = step.value * step.saturation / 255;
+    const int x = chroma * (60 - std::abs(hue % 120 - 60)) / 60;
+    const int m = step.value - chroma;
+    const std::array<std::array<int, 3>, 6> sectors = {
+        {{chroma, x, 0}, {x, chroma, 0}, {0, chroma, x}, {0, x, chroma}, {x, 0, chroma}, {chroma, 0, x}}};
+    const std::array<int, 3>& rgb = sectors[static_cast<std::size_t>(hue / 60)];
+    return {static_cast<std::uint8_t>(rgb[0] + m), static_cast<std::uint8_t>(rgb[1] + m),
+            static_cast<std::uint8_t>(rgb[2] + m), 255};
+}
 
 void BannerTable::add_more_players() {
     if (m_banners.size() != sim::kFirstExtraBanner) {
@@ -61,7 +80,7 @@ void BannerTable::add_more_players() {
         const char* id;
         std::size_t colour;  ///< in kDefaultColours
     };
-    static constexpr std::array<More, sim::kMaxPlayers - sim::kOriginalPlayers> kMore = {{
+    static constexpr std::array<More, 8> kMore = {{
         {"open1602:orange", 5},
         {"open1602:green", 4},
         {"open1602:teal", 7},
@@ -71,8 +90,14 @@ void BannerTable::add_more_players() {
         {"open1602:purple", 6},
         {"open1602:brown", 10},
     }};
-    for (const More& m : kMore) {
-        add_colour(m.id, kDefaultColours[m.colour]);
+    static_assert(sim::kOriginalPlayers + kMore.size() == kDefaultColours.size());
+    for (std::size_t n = sim::kOriginalPlayers; n < sim::kMaxPlayers; ++n) {
+        const std::size_t more = n - sim::kOriginalPlayers;
+        if (more < kMore.size()) {
+            add_colour(kMore[more].id, kDefaultColours[kMore[more].colour]);
+        } else {
+            add_colour("open1602:colour" + std::to_string(n + 1), generated_colour(n - kDefaultColours.size()));
+        }
     }
 }
 

@@ -9,6 +9,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -109,6 +110,9 @@ public:
     /// Colours offered for new banners: the four of the original and eight more that stay
     /// distinguishable on land, water and the minimap (the menu also allows any RGB colour).
     static const std::array<assets::Rgba, 12> kDefaultColours;
+    /// The colour of the k-th banner beyond kDefaultColours (k from 0), for a sim::kMaxPlayers above
+    /// twelve: hues a golden angle apart in three steps of brightness, the same on every platform.
+    [[nodiscard]] static assets::Rgba generated_colour(std::size_t k) noexcept;
     /// The former name (LC-20).
     [[deprecated("use kDefaultColours")]] static inline const std::array<assets::Rgba, 12>& kDefaultColors =
         kDefaultColours;
@@ -121,7 +125,8 @@ public:
     sim::BannerId add(Banner banner);
     /// The banners of the fifth player on (sim::kFirstExtraBanner), after the original's seven:
     /// the eight colours after the original's four, those that stand out best on the minimap's
-    /// land and are furthest from the natives' brown first.
+    /// land and are furthest from the natives' brown first; from the thirteenth player on (a higher
+    /// sim::kMaxPlayers) generated_colour().
     void add_more_players();
     /// A banner with the generic flag in `colour`; its riders get a horse and its interface art a coat
     /// of arms pattern picked from `id`.

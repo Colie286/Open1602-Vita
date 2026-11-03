@@ -290,6 +290,7 @@ net.colour.magenta = Magenta
 net.colour.grey = Grau
 net.colour.purple = Violett
 net.colour.brown = Braun
+net.colour.number = Farbe {1}
 net.refused.version = Der Gastgeber hat eine andere Version von Open1602.
 net.refused.content = Der Gastgeber hat andere Spieldaten.
 net.refused.full = Kein Platz mehr frei.

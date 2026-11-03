@@ -147,10 +147,8 @@ void World::explore_islands() {
         for (std::size_t p = 0; p < m_players.size(); ++p) {
             const auto id = static_cast<PlayerId>(p);
             isl.explore(id);
-            if (p < 32) {
-                for (auto& d : isl.header.deposits) {
-                    d.mask |= 1U << p;
-                }
+            for (auto& d : isl.header.deposits) {
+                d.mask.insert(p);
             }
         }
     }

@@ -118,10 +118,10 @@ void Fleet::explore_step(Ship& ship) {
         std::uint32_t left = n == kGoldStep ? 2U : 1U;
         auto& deposits = isl.header.deposits;
         for (auto it = deposits.rbegin(); it != deposits.rend() && left != 0; ++it) {
-            if (it->ware != ware || deposit_known(*it, p) || p >= 32) {
+            if (it->ware != ware || deposit_known(*it, p)) {
                 continue;
             }
-            it->mask |= 1U << p;
+            it->mask.insert(p);
             --left;
             ShipEvent e{ShipEvent::Kind::DepositFound, ship.id, p, *found};
             e.ware = ware;

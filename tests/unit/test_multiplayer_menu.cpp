@@ -679,7 +679,9 @@ TEST_CASE("multiplayer menu: a banner for every player, each slot its own") {
     }
     CHECK(app::banner_name("anno1602:red") == "Red");
     CHECK(app::banner_name("open1602:magenta") == "Magenta");
-    CHECK(app::banner_name("mymod:gold") == "gold");  // no text: its id
+    CHECK(app::banner_name("mymod:gold") == "gold");              // no text: its id
+    CHECK(app::banner_name("open1602:colour13") == "Colour 13");  // generated beyond the twelve
+    CHECK(app::banner_name("mymod:colours") == "colours");
     const ui::Catalogue english = ui::builtin_catalogue("en");
     const ui::Catalogue german = ui::builtin_catalogue("de");
     for (const render::Banner& b : table.banners()) {
