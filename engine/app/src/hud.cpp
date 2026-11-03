@@ -315,6 +315,7 @@ Hud::Hud(SDL_Renderer* renderer, const assets::GameDirectory& game, const assets
         m_blueprint = std::make_unique<BlueprintWindow>(style);
         m_templates = std::make_unique<TemplateWindow>(style);
         m_editor = std::make_unique<EditorPanel>(style);
+        m_chrome = std::make_unique<EditorChrome>(style);
         // The templates' views from above: land, buildings, houses, roads, fields, forest.
         TemplateColours colours;
         colours.ground = ui::nearest_colour(palette, 125, 150, 70);
@@ -688,6 +689,9 @@ bool Hud::back() {
         m_templates->close();
         return true;
     }
+    if (m_editing && m_chrome && !m_menu_active && m_chrome->close_menu()) {
+        return true;
+    }
     if (m_editing && m_editor && !m_menu_active && m_editor->back()) {
         return true;
     }
@@ -805,7 +809,21 @@ ui::Rect Hud::layout(std::int32_t width, std::int32_t height, double ui_scale) {
     m_menu_scale =
         std::min(static_cast<double>(width) / ui::kDesignWidth, static_cast<double>(height) / ui::kDesignHeight);
     const double scale = std::isfinite(ui_scale) && ui_scale > 0.0 ? std::min(ui_scale, m_menu_scale) : m_menu_scale;
+    m_layout_w = width;
+    m_layout_h = height;
+    m_layout_scale = ui_scale;
     m_regions = ui::screen_regions(width, height, scale);
+    if (m_editing && m_chrome) {
+        // The editor's own frame: a wider column on the right, its own status line below the map;
+        // the menu and tool bars lie over the map's top and left edge.
+        const auto column = static_cast<std::int32_t>(EditorChrome::kColumn * scale);
+        const auto bar = static_cast<std::int32_t>(EditorChrome::kStatusH * scale);
+        m_regions.side_panel = {width - column, 0, column, height};
+        m_regions.status_bar = {0, height - bar, width - column, bar};
+        m_regions.tutor = {};
+        m_regions.game_view = {0, 0, width - column, height - bar};
+        m_chrome->set_screen(width, height, scale);
+    }
     m_ctrl.set_scale(scale);
     m_leist.set_scale(scale);
     if (m_build) {
@@ -849,6 +867,9 @@ bool Hud::covers(std::int32_t x, std::int32_t y) const noexcept {
     // The mission's window takes the clicks inside it; the menu and the window
     // "Anzeige" all of them.
     // A question takes all of them: nothing behind it answers the mouse.
+    if (m_editing && m_chrome && m_chrome->covers(x, y)) {
+        return true;
+    }
     return m_menu_active || m_question.has_value() || m_display_open || m_goods_open ||
            (chat_open() && chat_rect().contains(x, y)) || (m_blueprint_at && blueprint_rect().contains(x, y)) ||
            (templates_open() && templates_rect().contains(x, y)) || m_regions.side_panel.contains(x, y) ||
@@ -857,7 +878,14 @@ bool Hud::covers(std::int32_t x, std::int32_t y) const noexcept {
 }
 
 void Hud::set_editing(bool on) {
+    const bool changed = m_editing != on;
     m_editing = on;
+    if (changed && m_layout_w > 0) {
+        (void)layout(m_layout_w, m_layout_h, m_layout_scale);
+    }
+    if (m_chrome) {
+        (void)m_chrome->close_menu();
+    }
     // The modes' buttons are greyed while the editor runs (clicks on them are ignored there).
     for (const std::int32_t mode : {kModeBuild, kModeMilitary, kModeInfo, kModeOptions}) {
         m_ctrl.set_disabled(mode, on);
@@ -872,17 +900,37 @@ void Hud::place_editor_panel() {
     if (!m_editor) {
         return;
     }
-    // Below the head: the lowest of the modes' buttons, as the game's panels begin there.
-    std::int32_t top = 0;
-    for (const std::int32_t mode : {kModeBuild, kModeMilitary, kModeInfo, kModeOptions}) {
-        if (const assets::Gadget* g = m_ctrl.layout().find(mode)) {
-            top = std::max(top, g->pos[1] + g->size[1]);
-        }
-    }
+    // Below the minimap at the column's top.
     const double s = m_regions.scale;
+    const ui::Rect map = minimap_rect();
+    const std::int32_t top = map.w > 0 ? static_cast<std::int32_t>((map.y + map.h - m_regions.side_panel.y) / s) : 0;
     const auto height = static_cast<std::int32_t>(m_regions.side_panel.h / std::max(s, 0.01));
     m_editor->set_scale(s);
-    m_editor->set_room(top + 8, std::max(0, height - top - 16));
+    m_editor->set_room(top + 12, std::max(0, height - top - 20));
+}
+
+void Hud::editor_tool(EditorTool tool) {
+    if (!m_editor || m_editor->typing()) {
+        return;
+    }
+    if (m_chrome) {
+        (void)m_chrome->close_menu();
+    }
+    if (auto r = m_editor->choose_tool(tool, m_editor_model)) {
+        m_editor_requests.push_back(std::move(*r));
+    }
+}
+
+void Hud::editor_command(EditorCommand command) {
+    if (!m_editor) {
+        return;
+    }
+    if (m_chrome) {
+        (void)m_chrome->close_menu();
+    }
+    if (auto r = m_editor->command(command, m_editor_model)) {
+        m_editor_requests.push_back(std::move(*r));
+    }
 }
 
 ui::Rect Hud::minimap_rect() const {
@@ -891,6 +939,13 @@ ui::Rect Hud::minimap_rect() const {
         return {};
     }
     const double s = m_regions.scale;
+    if (m_editing) {
+        // At the top of the editor's column, in its middle.
+        const auto w = static_cast<std::int32_t>(g->size[0] * s);
+        const auto h = static_cast<std::int32_t>(g->size[1] * s);
+        return {m_regions.side_panel.x + (m_regions.side_panel.w - w) / 2,
+                m_regions.side_panel.y + ui::to_pixels(12, s), w, h};
+    }
     return {m_regions.side_panel.x + ui::to_pixels(g->pos[0], s), m_regions.side_panel.y + ui::to_pixels(g->pos[1], s),
             static_cast<std::int32_t>(g->size[0] * s), static_cast<std::int32_t>(g->size[1] * s)};
 }
@@ -1545,6 +1600,25 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
             return std::nullopt;
         }
     }
+    if (m_editing && m_chrome && !m_menu_active && !m_help && !m_question && !m_end_active) {
+        // The editor's bars first: their buttons, and an open menu that a press beside closes.
+        if (button == ui::MouseButton::Left) {
+            bool taken = false;
+            const std::optional<EditorTool> active = m_editor ? m_editor->active_tool(m_editor_model) : std::nullopt;
+            const EditorChrome::Result r = m_chrome->mouse(x, y, down, m_editor_model, m_chrome_model, active, taken);
+            if (r.tool) {
+                editor_tool(*r.tool);
+            }
+            if (r.command) {
+                editor_command(*r.command);
+            }
+            if (taken) {
+                return std::nullopt;
+            }
+        } else if (m_chrome->covers(x, y)) {
+            return std::nullopt;
+        }
+    }
     if (button != ui::MouseButton::Left && m_editing && !m_menu_active && !m_help && !m_question && !m_end_active &&
         m_editor) {
         // The right button goes back through the values of the editor's panel, and does nothing else.
@@ -1742,8 +1816,9 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
             m_option_events.push_back(std::move(e));
         }
     }
-    const auto ctrl = m_ctrl.mouse(x - panel.x, y - panel.y, down);
-    const auto leist = m_leist.mouse(x - bar.x, y - bar.y, down);
+    // The editor's column has no compass, zoom, modes or messages of the game.
+    const auto ctrl = m_editing ? decltype(m_ctrl.mouse(0, 0, false)){} : m_ctrl.mouse(x - panel.x, y - panel.y, down);
+    const auto leist = m_editing ? decltype(m_leist.mouse(0, 0, false)){} : m_leist.mouse(x - bar.x, y - bar.y, down);
     for (const ui::PanelEvent& e : ctrl) {
         if (e.kind != ui::PanelEvent::Kind::Clicked) {
             continue;
@@ -2016,11 +2091,16 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
             status = diplomacy::offer_text(m_offers[k], player_name(*from));
         }
     }
-    m_ctrl.set_graphic(kCompass, kGfxCompass + m_rotation, 0);
-    m_renderer->draw(m_ctrl.draw(m_renderer->fonts(s)), m_regions.side_panel.x, m_regions.side_panel.y, s);
-    // A window taller than the panel's art (narrower than 4:3, or a smaller interface): the
-    // parchment goes on to the bottom, where the art's lower edge (5 rows) closes it.
-    m_renderer->draw_lengthened(0, kGfxTafel, m_regions.side_panel, s, 5);
+    if (m_editing && m_chrome) {
+        // The editor's column instead of the game's panel: its own ground under the minimap.
+        m_renderer->draw(m_chrome->draw_back(m_renderer->fonts(s), minimap_rect()), 0, 0, s);
+    } else {
+        m_ctrl.set_graphic(kCompass, kGfxCompass + m_rotation, 0);
+        m_renderer->draw(m_ctrl.draw(m_renderer->fonts(s)), m_regions.side_panel.x, m_regions.side_panel.y, s);
+        // A window taller than the panel's art (narrower than 4:3, or a smaller interface): the
+        // parchment goes on to the bottom, where the art's lower edge (5 rows) closes it.
+        m_renderer->draw_lengthened(0, kGfxTafel, m_regions.side_panel, s, 5);
+    }
     // The mode's panel below the head, and its help texts.
     const BuildPanel::Available available =
         m_available ? m_available : BuildPanel::Available([](std::uint32_t) { return true; });
@@ -2183,6 +2263,17 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
             }
         }
         SDL_SetRenderClipRect(m_sdl, nullptr);
+    }
+    if (m_editing && m_chrome) {
+        // The editor's bars over the map's edges, its status line below it.
+        EditorChromeModel chrome = m_chrome_model;
+        chrome.status = m_editor_model.notice.empty() ? m_status : m_editor_model.notice;
+        chrome.status_error = !m_editor_model.notice.empty() && m_editor_model.notice_is_error;
+        const std::optional<EditorTool> active = m_editor ? m_editor->active_tool(m_editor_model) : std::nullopt;
+        m_renderer->draw(m_chrome->draw(m_editor_model, chrome, active, m_renderer->fonts(s)), 0, 0, s);
+        draw_question();
+        draw_help();
+        return;
     }
     // A status bar wider than its art (wide windows): the art widened, the line at its right end.
     m_renderer->draw_widened(0, kGfxLeiste, m_regions.status_bar, s);

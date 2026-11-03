@@ -2873,6 +2873,14 @@ void MapViewer::update_title(double fps) {
         m_window->set_title("Open1602" + session_title());
         return;
     }
+    if (m_editor && !m_debug_title) {
+        // The editor's world does not run: its map's name and whether it has unsaved changes.
+        m_title_real_ms = 0;
+        const std::string name =
+            m_editor->source_name.empty() ? ui::tr("editor.untitled") : core::cp1252_to_utf8(m_editor->source_name);
+        m_window->set_title(ui::tr("title.editor", {name}) + (m_editor->document.modified() ? " *" : ""));
+        return;
+    }
     std::string title = m_debug_title ? debug_title(fps) : "Open1602 - " + game_title();
     const std::uint64_t seconds = m_state->simulation.game_time_ms() / 1000;
     char clock[32];

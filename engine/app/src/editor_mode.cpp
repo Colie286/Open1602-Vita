@@ -204,6 +204,7 @@ core::Status MapViewer::enter_editor(sim::World world, const std::filesystem::pa
     if (m_hud) {
         m_hud->close_menu();
         m_hud->set_editing(true);
+        lay_out();  // the editor's frame: the map's room is another
     }
     std::fprintf(stderr, "editor: %s, %ux%u, %zu islands\n",
                  file.empty() ? "new map" : core::path_to_utf8(file).c_str(), m_state->world.width(),
@@ -330,6 +331,7 @@ void MapViewer::leave_editor() {
     m_input->set_editor(false);
     if (m_hud) {
         m_hud->set_editing(false);
+        lay_out();
         m_hud->open_menu();
     } else {
         m_running = false;
@@ -465,6 +467,12 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         // The dice preview shows a roll, not the document: the plan back before anything else.
         if (request.kind == Kind::RandomRoll || request.kind == Kind::RandomPreviewEnd) {
             editor_rules_request(request);
+            return;
+        }
+        if (request.kind == Kind::ShowKeys) {
+            if (m_input) {
+                m_input->show_key_help();
+            }
             return;
         }
         if (request.kind != Kind::New && request.kind != Kind::Open && request.kind != Kind::Close) {
@@ -610,6 +618,11 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         case Kind::RemovePlaceholder:
         case Kind::ChangePlaceholder:
             editor_placeholder_request(request);
+            break;
+        case Kind::ShowKeys:
+            if (m_input) {
+                m_input->show_key_help();
+            }
             break;
         case Kind::ListIslandFiles:
             m_editor_files.clear();
@@ -1226,31 +1239,58 @@ void MapViewer::draw_editor_marks() {
         return std::pair<double, double>{sx, sy};
     };
     // A rectangle of the map as a dotted line: a dot of 3 x 3 pixels every 6.
+    // A dotted line between two points of the map (in tiles).
+    const auto segment = [&](double wx0, double wy0, double wx1, double wy1, std::int32_t ink) {
+        const auto [ax, ay] = screen(wx0, wy0);
+        const auto [bx, by] = screen(wx1, wy1);
+        const double length = std::hypot(bx - ax, by - ay);
+        const auto dots = static_cast<std::int32_t>(std::min(4000.0, length / 6.0));
+        for (std::int32_t d = 0; d <= dots; ++d) {
+            const double t = dots == 0 ? 0.0 : static_cast<double>(d) / dots;
+            const auto dx = static_cast<std::int32_t>(std::floor(ax + (bx - ax) * t)) - 1;
+            const auto dy = static_cast<std::int32_t>(std::floor(ay + (by - ay) * t)) - 1;
+            if (dx < v.x || dy < v.y || dx + 3 > v.x + v.w || dy + 3 > v.y + v.h) {
+                continue;
+            }
+            ui::DrawItem dot;
+            dot.kind = ui::DrawItem::Kind::Fill;
+            dot.x = dx;
+            dot.y = dy;
+            dot.w = 3;
+            dot.h = 3;
+            dot.colour = ink;
+            items.push_back(std::move(dot));
+        }
+    };
     const auto outline = [&](std::int64_t x0, std::int64_t y0, double w, double h, std::int32_t ink) {
         const auto x = static_cast<double>(x0);
         const auto y = static_cast<double>(y0);
-        const std::array<std::pair<double, double>, 4> corners = {screen(x, y), screen(x + w, y), screen(x + w, y + h),
-                                                                  screen(x, y + h)};
-        for (std::size_t i = 0; i < corners.size(); ++i) {
-            const auto [ax, ay] = corners[i];
-            const auto [bx, by] = corners[(i + 1) % corners.size()];
-            const double length = std::hypot(bx - ax, by - ay);
-            const auto dots = static_cast<std::int32_t>(std::min(4000.0, length / 6.0));
-            for (std::int32_t d = 0; d <= dots; ++d) {
-                const double t = dots == 0 ? 0.0 : static_cast<double>(d) / dots;
-                const auto dx = static_cast<std::int32_t>(std::floor(ax + (bx - ax) * t)) - 1;
-                const auto dy = static_cast<std::int32_t>(std::floor(ay + (by - ay) * t)) - 1;
-                if (dx < v.x || dy < v.y || dx + 3 > v.x + v.w || dy + 3 > v.y + v.h) {
-                    continue;
-                }
-                ui::DrawItem dot;
-                dot.kind = ui::DrawItem::Kind::Fill;
-                dot.x = dx;
-                dot.y = dy;
-                dot.w = 3;
-                dot.h = 3;
-                dot.colour = ink;
-                items.push_back(std::move(dot));
+        segment(x, y, x + w, y, ink);
+        segment(x + w, y, x + w, y + h, ink);
+        segment(x + w, y + h, x, y + h, ink);
+        segment(x, y + h, x, y, ink);
+    };
+    // The rim of a set of tiles: each side of a tile whose neighbour is not in the set.
+    const auto rim = [&](const std::vector<std::pair<std::uint32_t, std::uint32_t>>& tiles, std::int32_t ink) {
+        const auto in = [&](std::int64_t x, std::int64_t y) {
+            return x >= 0 && y >= 0 &&
+                   std::find(tiles.begin(), tiles.end(),
+                             std::pair{static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y)}) != tiles.end();
+        };
+        for (const auto& [tx, ty] : tiles) {
+            const auto x = static_cast<double>(tx);
+            const auto y = static_cast<double>(ty);
+            if (!in(std::int64_t{tx}, std::int64_t{ty} - 1)) {
+                segment(x, y, x + 1, y, ink);
+            }
+            if (!in(std::int64_t{tx} + 1, std::int64_t{ty})) {
+                segment(x + 1, y, x + 1, y + 1, ink);
+            }
+            if (!in(std::int64_t{tx}, std::int64_t{ty} + 1)) {
+                segment(x + 1, y + 1, x, y + 1, ink);
+            }
+            if (!in(std::int64_t{tx} - 1, std::int64_t{ty})) {
+                segment(x, y + 1, x, y, ink);
             }
         }
     };
@@ -1306,13 +1346,19 @@ void MapViewer::draw_editor_marks() {
             } else if (t.tool == Tool::Random || t.tool == Tool::Land || t.tool == Tool::Water ||
                        t.tool == Tool::Coast ||
                        (t.tool == Tool::Brush && b != nullptr && b->size_x == 1 && b->size_y == 1)) {
-                w = h = editor::kBrushSizes[t.brush % editor::kBrushSizes.size()];
+                // The brush in its shape; erasing (the right button) in red.
+                const std::uint32_t side = editor::kBrushSizes[t.brush % editor::kBrushSizes.size()];
+                const auto shape = static_cast<editor::BrushShape>(t.shape % editor::kBrushShapes);
+                const bool erasing = m_input->right_stroke();
+                rim(editor::brush_tiles(tile->x, tile->y, side, world.width(), world.height(), shape),
+                    ui::rgb_ink(erasing ? assets::Rgba{235, 120, 80, 255} : assets::Rgba{250, 250, 250, 255}));
+                w = 0;
             } else if (t.tool == Tool::Brush && b != nullptr) {
                 sim::rotated_size(*b, t.rotation, w, h);
             }
             const std::int64_t x0 = std::int64_t{tile->x} - (std::int64_t{w} - 1) / 2;
             const std::int64_t y0 = std::int64_t{tile->y} - (std::int64_t{h} - 1) / 2;
-            if (t.tool != Tool::Select) {
+            if (t.tool != Tool::Select && w > 0) {
                 // A copy that cannot go where the mouse is: its frame in red, the map unchanged.
                 const bool refused = t.tool == Tool::Paste && m_editor->paste_refused;
                 outline(x0, y0, w, h,
@@ -1483,6 +1529,40 @@ void MapViewer::apply_editor() {
         m_editor->placing.reset();
     }
     m_hud->set_editor_model(editor_model());
+    m_hud->set_editor_chrome(editor_chrome());
+}
+
+EditorChromeModel MapViewer::editor_chrome() const {
+    EditorChromeModel c;
+    if (m_input) {
+        const auto first = static_cast<int>(ui::KeyAction::EditorToolSelect);
+        for (std::size_t t = 0; t < kEditorTools; ++t) {
+            c.tool_keys[t] = m_input->editor_keys(static_cast<ui::KeyAction>(first + static_cast<int>(t)));
+        }
+        const auto key = [&](EditorCommand command, ui::KeyAction action) {
+            c.command_keys[static_cast<std::size_t>(command)] = m_input->editor_keys(action);
+        };
+        key(EditorCommand::New, ui::KeyAction::EditorNew);
+        key(EditorCommand::Open, ui::KeyAction::EditorOpen);
+        key(EditorCommand::Save, ui::KeyAction::EditorSave);
+        key(EditorCommand::SaveAs, ui::KeyAction::EditorSaveAs);
+        key(EditorCommand::Undo, ui::KeyAction::EditorUndo);
+        key(EditorCommand::Redo, ui::KeyAction::EditorRedo);
+        c.command_keys[static_cast<std::size_t>(EditorCommand::Keys)] = "F1";
+        // Where the mouse is: the world tile, and the island's number and its own tile there.
+        const auto mx = static_cast<std::int32_t>(m_input->mouse_x());
+        const auto my = static_cast<std::int32_t>(m_input->mouse_y());
+        const auto tile = m_hud && m_hud->covers(mx, my) ? std::nullopt : m_input->tile_at_mouse();
+        if (tile && tile->x < m_state->world.width() && tile->y < m_state->world.height()) {
+            const sim::World& world = m_state->world;
+            const sim::World::Cell& cell = world.cell(tile->x, tile->y);
+            c.place = cell.island == sim::World::kSea
+                          ? ui::tr("editor.status.sea", {std::to_string(tile->x), std::to_string(tile->y)})
+                          : ui::tr("editor.status.island",
+                                   {std::to_string(tile->x), std::to_string(tile->y), std::to_string(cell.island + 1)});
+        }
+    }
+    return c;
 }
 
 namespace {
@@ -1538,6 +1618,7 @@ void MapViewer::editor_terrain_request(const EditorRequest& request) {
     t.group = static_cast<std::uint8_t>(t.group % editor::kTerrainGroups);
     t.rotation &= 3U;
     t.brush = static_cast<std::uint8_t>(t.brush % editor::kBrushSizes.size());
+    t.shape = static_cast<std::uint8_t>(t.shape % editor::kBrushShapes);
     const auto pieces = editor::terrain_pieces(m_buildings, static_cast<editor::TerrainGroup>(t.group));
     t.piece = pieces.empty() ? 0 : std::min(t.piece, pieces.size() - 1);
     if (!pieces.empty() && pieces[t.piece]->rotate == 0) {
@@ -1566,13 +1647,18 @@ void MapViewer::editor_pipette(std::uint32_t x, std::uint32_t y) {
 }
 
 void MapViewer::editor_paint(editor::TerrainStroke& stroke, std::int64_t x, std::int64_t y, bool going_on) {
-    const EditorTerrain& t = m_editor->terrain;
+    EditorTerrain t = m_editor->terrain;
+    if (m_editor->stroke_erases && &stroke == m_editor->stroke.get()) {
+        // The right button: water where the tool lays land or pieces, land where it lays water.
+        t.tool = t.tool == EditorTerrain::Tool::Water ? EditorTerrain::Tool::Land : EditorTerrain::Tool::Water;
+    }
     const std::uint32_t side = editor::kBrushSizes[t.brush % editor::kBrushSizes.size()];
+    const auto shape = static_cast<editor::BrushShape>(t.shape % editor::kBrushShapes);
     const sim::World& world = m_state->world;
     if (t.tool == EditorTerrain::Tool::Coast) {
         // The coast under the brush laid anew, island by island.
         std::vector<std::pair<std::uint16_t, std::vector<std::pair<std::uint32_t, std::uint32_t>>>> by_island;
-        for (const auto& [tx, ty] : editor::brush_tiles(x, y, side, world.width(), world.height())) {
+        for (const auto& [tx, ty] : editor::brush_tiles(x, y, side, world.width(), world.height(), shape)) {
             const sim::World::Cell& c = world.cell(tx, ty);
             if (c.island == sim::World::kSea) {
                 continue;
@@ -1594,7 +1680,7 @@ void MapViewer::editor_paint(editor::TerrainStroke& stroke, std::int64_t x, std:
         return;
     }
     if (t.tool == EditorTerrain::Tool::Land || t.tool == EditorTerrain::Tool::Water) {
-        const auto brush = editor::brush_tiles(x, y, side, world.width(), world.height());
+        const auto brush = editor::brush_tiles(x, y, side, world.width(), world.height(), shape);
         if (brush.empty()) {
             return;
         }
@@ -1664,7 +1750,7 @@ void MapViewer::editor_paint(editor::TerrainStroke& stroke, std::int64_t x, std:
         return;
     }
     if (t.tool == EditorTerrain::Tool::Random) {
-        for (const auto& [tx, ty] : editor::brush_tiles(x, y, side, world.width(), world.height())) {
+        for (const auto& [tx, ty] : editor::brush_tiles(x, y, side, world.width(), world.height(), shape)) {
             const sim::World::Cell& c = world.cell(tx, ty);
             const std::uint8_t climate = c.island != sim::World::kSea ? world.islands()[c.island].header.climate : 0;
             const auto piece = editor::random_piece(m_buildings, static_cast<editor::TerrainGroup>(t.group), climate,
@@ -1680,7 +1766,7 @@ void MapViewer::editor_paint(editor::TerrainStroke& stroke, std::int64_t x, std:
         return;
     }
     if (b->size_x == 1 && b->size_y == 1) {
-        for (const auto& [tx, ty] : editor::brush_tiles(x, y, side, world.width(), world.height())) {
+        for (const auto& [tx, ty] : editor::brush_tiles(x, y, side, world.width(), world.height(), shape)) {
             (void)stroke.stamp_world(tx, ty, *b, t.rotation);
         }
         return;
@@ -1879,6 +1965,7 @@ void MapViewer::editor_end_stroke() {
     m_editor->stroke.reset();
     m_editor->stroke_at.reset();
     m_editor->stroke_large.reset();
+    m_editor->stroke_erases = false;
     if (!m_editor->stroke_steps.empty()) {
         if (op) {
             m_editor->stroke_steps.push_back(std::move(op));
@@ -1951,13 +2038,16 @@ void MapViewer::editor_paste(std::int64_t x, std::int64_t y) {
     }
 }
 
-bool MapViewer::editor_stroke(std::optional<render::TilePos> tile, Stroke phase) {
+bool MapViewer::editor_stroke(std::optional<render::TilePos> tile, Stroke phase, bool erase) {
     if (!m_editor || m_editor->preview_plan) {
         return false;
     }
     const EditorPanel* panel = m_hud ? m_hud->editor_panel() : nullptr;
     if (panel != nullptr && panel->page() == EditorPanel::Page::Objects && !m_editor->placing) {
         editor_end_stroke();
+        if (erase) {
+            return false;  // the right button drags the map, it never builds
+        }
         return editor_objects_stroke(tile, phase);
     }
     editor_end_objects();  // the page left while the button was held
@@ -1970,8 +2060,11 @@ bool MapViewer::editor_stroke(std::optional<render::TilePos> tile, Stroke phase)
     switch (phase) {
         case Stroke::Begin: {
             editor_end_stroke();
+            if (erase && tool != Tool::Land && tool != Tool::Water && tool != Tool::Brush && tool != Tool::Random) {
+                return false;  // the right button drags the map
+            }
             if (!tile) {
-                return true;
+                return !erase;
             }
             const auto x = static_cast<std::uint32_t>(tile->x);
             const auto y = static_cast<std::uint32_t>(tile->y);
@@ -2019,6 +2112,7 @@ bool MapViewer::editor_stroke(std::optional<render::TilePos> tile, Stroke phase)
                 return true;
             }
             ++m_editor->strokes;
+            m_editor->stroke_erases = erase;
             m_editor->stroke = std::make_unique<editor::TerrainStroke>(m_state->world, m_buildings);
             m_editor->stroke_at = {tile->x, tile->y};
             editor_paint(*m_editor->stroke, tile->x, tile->y, false);
@@ -2063,6 +2157,28 @@ bool MapViewer::editor_stroke(std::optional<render::TilePos> tile, Stroke phase)
     return false;
 }
 
+void MapViewer::editor_rotate_tool() {
+    const EditorPanel* panel = m_hud ? m_hud->editor_panel() : nullptr;
+    if (!m_editor || panel == nullptr) {
+        return;
+    }
+    if (panel->page() == EditorPanel::Page::Objects) {
+        EditorRequest r{EditorRequest::Kind::Objects};
+        r.objects = m_editor->objects;
+        r.objects.rotation = static_cast<std::uint8_t>((r.objects.rotation + 1U) & 3U);
+        editor_request(r);
+    } else if (panel->page() == EditorPanel::Page::Terrain) {
+        if (m_editor->terrain.tool == EditorTerrain::Tool::Paste) {
+            editor_request(EditorRequest{EditorRequest::Kind::TerrainTurn});
+            return;
+        }
+        EditorRequest r{EditorRequest::Kind::Terrain};
+        r.terrain = m_editor->terrain;
+        r.terrain.rotation = static_cast<std::uint8_t>((r.terrain.rotation + 1U) & 3U);
+        editor_request(r);
+    }
+}
+
 void MapViewer::editor_key(ui::KeyAction action) {
     switch (action) {
         case ui::KeyAction::EditorUndo:
@@ -2074,8 +2190,43 @@ void MapViewer::editor_key(ui::KeyAction action) {
         case ui::KeyAction::EditorSave:
             editor_request(EditorRequest{EditorRequest::Kind::Save});
             break;
-        default:
+        case ui::KeyAction::EditorNew:
+            if (m_hud) {
+                m_hud->editor_command(EditorCommand::New);
+            }
             break;
+        case ui::KeyAction::EditorOpen:
+            if (m_hud) {
+                m_hud->editor_command(EditorCommand::Open);
+            }
+            break;
+        case ui::KeyAction::EditorSaveAs:
+            if (m_hud) {
+                m_hud->editor_command(EditorCommand::SaveAs);
+            }
+            break;
+        case ui::KeyAction::EditorRotate:
+            editor_rotate_tool();
+            break;
+        case ui::KeyAction::EditorBrushBigger:
+        case ui::KeyAction::EditorBrushSmaller: {
+            EditorRequest r{EditorRequest::Kind::Terrain};
+            r.terrain = m_editor->terrain;
+            const bool bigger = action == ui::KeyAction::EditorBrushBigger;
+            const auto last = static_cast<std::uint8_t>(kTerrainBrushes.size() - 1);
+            r.terrain.brush = bigger ? std::min<std::uint8_t>(last, r.terrain.brush + 1)
+                                     : static_cast<std::uint8_t>(r.terrain.brush > 0 ? r.terrain.brush - 1 : 0);
+            editor_request(r);
+            break;
+        }
+        default: {
+            const auto first = static_cast<int>(ui::KeyAction::EditorToolSelect);
+            const auto a = static_cast<int>(action);
+            if (m_hud && a >= first && a < first + static_cast<int>(kEditorTools)) {
+                m_hud->editor_tool(static_cast<EditorTool>(a - first));
+            }
+            break;
+        }
     }
 }
 

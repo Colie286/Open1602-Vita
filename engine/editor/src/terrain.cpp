@@ -1246,14 +1246,32 @@ core::Result<std::unique_ptr<Operation>> replace_terrain(sim::World& world, cons
 }
 
 std::vector<std::pair<std::uint32_t, std::uint32_t>> brush_tiles(std::int64_t x, std::int64_t y, std::uint32_t size,
-                                                                 std::uint32_t width, std::uint32_t height) {
+                                                                 std::uint32_t width, std::uint32_t height,
+                                                                 BrushShape shape) {
     std::vector<std::pair<std::uint32_t, std::uint32_t>> out;
     size = std::max<std::uint32_t>(size, 1);
-    const std::int64_t left = x - (std::int64_t{size} - 1) / 2;
-    const std::int64_t top = y - (std::int64_t{size} - 1) / 2;
-    for (std::int64_t ty = top; ty < top + size; ++ty) {
-        for (std::int64_t tx = left; tx < left + size; ++tx) {
-            if (tx >= 0 && ty >= 0 && tx < width && ty < height) {
+    const std::int64_t n = size;
+    const std::int64_t left = x - (n - 1) / 2;
+    const std::int64_t top = y - (n - 1) / 2;
+    // In twice the tiles, from the brush's middle: the round takes the tiles whose middle lies within
+    // the circle through the square's sides (a little more, so that a side of 3 is a plus), the
+    // diamond those within the diamond through them.
+    const auto inside = [&](std::int64_t tx, std::int64_t ty) {
+        const std::int64_t dx = 2 * (tx - left) - (n - 1);
+        const std::int64_t dy = 2 * (ty - top) - (n - 1);
+        switch (shape) {
+            case BrushShape::Round:
+                return n <= 2 || dx * dx + dy * dy <= n * n + n;
+            case BrushShape::Diamond:
+                return n <= 2 || std::abs(dx) + std::abs(dy) <= n;
+            case BrushShape::Square:
+                break;
+        }
+        return true;
+    };
+    for (std::int64_t ty = top; ty < top + n; ++ty) {
+        for (std::int64_t tx = left; tx < left + n; ++tx) {
+            if (tx >= 0 && ty >= 0 && tx < width && ty < height && inside(tx, ty)) {
                 out.emplace_back(static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(ty));
             }
         }

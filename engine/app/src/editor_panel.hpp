@@ -55,7 +55,7 @@ struct EditorNewIsland {
 };
 
 /// The sides of the terrain brushes, in tiles (editor::kBrushSizes).
-inline constexpr std::array<std::uint8_t, 5> kTerrainBrushes = {1, 2, 3, 5, 9};
+inline constexpr std::array<std::uint8_t, 8> kTerrainBrushes = {1, 2, 3, 5, 7, 9, 13, 17};
 
 /// The settings of the terrain tools (the page "Terrain").
 struct EditorTerrain {
@@ -71,6 +71,7 @@ struct EditorTerrain {
     std::size_t piece = 0;      ///< index into the group's pieces
     std::uint8_t rotation = 0;  ///< 0..3, a quarter clockwise each
     std::uint8_t brush = 0;     ///< index into editor::kBrushSizes
+    std::uint8_t shape = 1;     ///< editor::BrushShape of the shaping tools (Land, Water, Coast, Random)
     friend bool operator==(const EditorTerrain&, const EditorTerrain&) = default;
 };
 
@@ -93,6 +94,51 @@ struct EditorObjects {
     std::uint8_t rotation = 0;  ///< 0..3, a quarter clockwise each; ships and units face 2 * rotation
     std::size_t owner = 0;      ///< index into the world's players
     friend bool operator==(const EditorObjects&, const EditorObjects&) = default;
+};
+
+/// The tools of the editor's tool bar (EditorChrome), each with a key of its own: what a click on
+/// the map does.
+enum class EditorTool : std::uint8_t {
+    Select,       ///< picks what is clicked (the page "Selection")
+    Island,       ///< a new island of a template or of its own shape (the page "Islands")
+    Placeholder,  ///< a new placeholder of the world plan (only a world that has a plan)
+    Land,
+    Water,
+    Coast,
+    Brush,
+    Random,
+    Fill,
+    Replace,
+    Pipette,
+    Area,  ///< EditorTerrain::Tool::Select: a rectangle of an island to copy
+    Paste,
+    Build,
+    Template,
+    Ship,
+    Unit,
+    Resource,
+    Remove,
+};
+inline constexpr std::size_t kEditorTools = 19;
+
+/// What the editor's menu bar asks for (EditorChrome), the same as the keys do.
+enum class EditorCommand : std::uint8_t {
+    New,
+    Open,
+    Save,
+    SaveAs,
+    Close,
+    Undo,
+    Redo,
+    View,
+    Islands,
+    WorldSize,
+    Random,
+    Preview,
+    Players,
+    Rules,
+    Check,
+    Keys,
 };
 
 /// What a click on the editor's map picked.
@@ -348,6 +394,7 @@ struct EditorRequest {
         /// another roll); nothing of it is kept.
         RandomRoll,
         RandomPreviewEnd,  ///< the plan back from the dice preview
+        ShowKeys,          ///< the overview of the keys (F1)
     };
     Kind kind = Kind::Close;
     std::size_t index = 0;
@@ -365,8 +412,8 @@ struct EditorRequest {
 
 class EditorPanel {
 public:
-    /// The panel's width in design units, as the side panel's.
-    static constexpr std::int32_t kWidth = 256;
+    /// The panel's width in design units: the editor's column right of the map (EditorChrome).
+    static constexpr std::int32_t kWidth = 280;
     /// Rows of the list of files on one page.
     static constexpr std::size_t kRows = 12;
     /// The longest name a scenario can be saved under.
@@ -440,6 +487,12 @@ public:
     std::optional<EditorRequest> key(int key);
     /// Escape outside a field: a page back to the document's; false if it showed already.
     bool back() noexcept;
+    /// What the menu bar or a key asked for, as the buttons of the pages do it.
+    std::optional<EditorRequest> command(EditorCommand command, const EditorModel& model);
+    /// The tool chosen in the tool bar or by its key: its page, and its settings for the viewer.
+    std::optional<EditorRequest> choose_tool(EditorTool tool, const EditorModel& model);
+    /// The tool the page and the model's settings stand for, if the page is a tool's.
+    [[nodiscard]] std::optional<EditorTool> active_tool(const EditorModel& model) const noexcept;
 
     /// The widgets as laid out last (tests).
     [[nodiscard]] const ui::Form& form() const noexcept { return m_form; }
@@ -480,6 +533,8 @@ private:
     /// The buttons of an island selected: move, turn, copy, take out; or a note while placing.
     void layout_island_actions(const EditorModel& model, std::int32_t& y);
     std::optional<EditorRequest> commit_name();
+    /// What the widget `id` does when clicked (`forward`: with the left button).
+    std::optional<EditorRequest> press(ui::Form::Id id, const EditorModel& model, bool forward);
 
     ui::Form m_form;
     Page m_page = Page::Document;

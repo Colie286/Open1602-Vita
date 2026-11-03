@@ -22,6 +22,7 @@
 #include "chat_window.hpp"
 #include "diplomacy_strip.hpp"
 #include "display_menu.hpp"
+#include "editor_chrome.hpp"
 #include "editor_panel.hpp"
 #include "end_screen.hpp"
 #include "goods_window.hpp"
@@ -258,6 +259,12 @@ public:
     [[nodiscard]] const EditorModel& editor_model() const noexcept { return m_editor_model; }
     /// What the editor's panel asked for since the last call.
     [[nodiscard]] std::vector<EditorRequest> take_editor_requests() { return std::exchange(m_editor_requests, {}); }
+    /// What the editor's frame shows besides the panel (keys, the status line); the viewer sets it
+    /// every frame.
+    void set_editor_chrome(EditorChromeModel model) { m_chrome_model = std::move(model); }
+    /// A tool of the editor's tool bar chosen by its key, or a command of its menus: as clicked.
+    void editor_tool(EditorTool tool);
+    void editor_command(EditorCommand command);
     /// The build menu shows a tool a key started (its title names it).
     void show_tool_in_build_menu(BuildPanel::Tool tool) {
         if (m_build) {
@@ -673,6 +680,12 @@ private:
     std::unique_ptr<TemplateWindow> m_templates;
     TemplatesModel m_templates_model;
     std::unique_ptr<EditorPanel> m_editor;
+    std::unique_ptr<EditorChrome> m_chrome;
+    EditorChromeModel m_chrome_model;
+    /// The window and the interface's scale as laid out last: the editor lays its frame out anew.
+    std::int32_t m_layout_w = 0;
+    std::int32_t m_layout_h = 0;
+    double m_layout_scale = 0.0;
     EditorModel m_editor_model;
     std::vector<EditorRequest> m_editor_requests;
     bool m_editing = false;

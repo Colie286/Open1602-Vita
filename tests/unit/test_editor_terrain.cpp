@@ -2,6 +2,7 @@
 // The editor's terrain (ADR 0013): the palette's groups, a stroke of the brush, filling and
 // replacing, each one step that undo takes back to the same bytes.
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -256,6 +257,17 @@ TEST_CASE("editor terrain: brushes, lines and random pieces") {
     const auto even = editor::brush_tiles(5, 5, 2, 100, 100);
     REQUIRE(even.size() == 4);
     CHECK((even.front() == std::pair<std::uint32_t, std::uint32_t>{5, 5}));
+    // The round brush leaves the square's corners out, the diamond all but a cross of rows.
+    using editor::BrushShape;
+    CHECK(editor::brush_tiles(5, 5, 2, 100, 100, BrushShape::Round).size() == 4);  // too small for a shape
+    CHECK(editor::brush_tiles(5, 5, 3, 100, 100, BrushShape::Round).size() == 9);
+    CHECK(editor::brush_tiles(5, 5, 5, 100, 100, BrushShape::Round).size() == 21);
+    CHECK(editor::brush_tiles(9, 9, 7, 100, 100, BrushShape::Round).size() == 45);
+    CHECK(editor::brush_tiles(5, 5, 3, 100, 100, BrushShape::Diamond).size() == 5);
+    CHECK(editor::brush_tiles(5, 5, 5, 100, 100, BrushShape::Diamond).size() == 13);
+    const auto round = editor::brush_tiles(5, 5, 5, 100, 100, BrushShape::Round);
+    CHECK(std::find(round.begin(), round.end(), std::pair<std::uint32_t, std::uint32_t>{3, 3}) == round.end());
+    CHECK(std::find(round.begin(), round.end(), std::pair<std::uint32_t, std::uint32_t>{5, 3}) != round.end());
 
     const auto line = editor::line_tiles(0, 0, 3, 2);
     CHECK(line.size() == 6);  // 3 + 2 steps, by sides

@@ -10,18 +10,36 @@ open1602 --editor my-map.o1602             an Open1602 scenario or savegame
 ```
 
 The editor shows the map as the game does: it scrolls, turns and zooms with the game's keys and
-mouse, and the minimap, compass, rotation and zoom buttons work as in the game. The world never runs
-while it is edited: no figure or ship moves, nothing is built, no time passes. Only the pictures go
-on as they do (water, flags). The game's mode buttons above the panel are greyed.
+mouse. The world never runs while it is edited: no figure or ship moves, nothing is built, no time
+passes. Only the pictures go on as they do (water, flags).
 
-## The side panel
+## The editor's screen
 
-Below the minimap the side panel shows the map the editor has open: its name (`*` after it while it
-has changes that are not saved), its size, its islands and its players. A scenario of the original
-that makes its islands when a game starts (the endless games) shows how many islands its plan
-makes; they are made when a game of it starts, as in the original.
+The editor has a frame of its own around the map instead of the game's panel:
 
-| Button | What it does |
+- **The menu bar** above the map: **File** (new map, open, save, save as, leave the editor), **Edit**
+  (undo, redo), **View** (the overlays), **Map** (islands, map size, random elements, dice preview),
+  **Players**, **Rules**, **Check** and **Help** (the keys). The menus name each command's key. At
+  its right end it shows the map's name, with `*` while it has changes that are not saved.
+- **The tool bar** down the map's left edge: a symbol for each tool, in groups: select; island and
+  placeholder; land, water and tidy coast; the terrain pieces' brush, random fill, fill, replace,
+  pipette, area and paste; buildings, building templates, ships, land units, resources and remove.
+  The mouse over a symbol shows the tool's name and key in the status line.
+- **The column** on the right: the minimap at its top, below it the page of the tool chosen or of
+  the command (its settings, or what is selected).
+- **The status line** below the map: what happened last (saved, or why something was refused), and
+  the tile under the mouse with its island.
+
+The window's title names the map instead of the game's time.
+
+## The pages
+
+Without a tool chosen, the column shows the map the editor has open: its name, its size, its
+islands and its players. A scenario of the original that makes its islands when a game starts (the
+endless games) shows how many islands its plan makes; they are made when a game of it starts, as in
+the original. The menu bar's commands and the tools:
+
+| Command or tool | What it does |
 |---|---|
 | New map | A map of one of the sizes offered (500 × 350 as the original, up to 4000 × 4000): only sea, or with islands, players and their ships as a new endless game makes them. Kind of islands chooses them as the endless game's setup does: the original's templates (with the packages' island templates), one of Open1602's kinds of islands of their own shape, or a package's (`landscapes.toml`); islands of their own shape may make the map larger where the largest would find no room. A world number gives the same world again. |
 | Open | The own scenarios, then the scenarios of the game. |
@@ -30,8 +48,8 @@ makes; they are made when a game of it starts, as in the original.
 | Undo, Redo | Takes the last change back, or does it again. |
 | Edit islands | New islands: one of the original's templates (or a package's, from `islands.toml`) or one of its own shape, north, south or of a package's climate (`climates.toml`; a placeholder only north or south), in the five sizes of the templates (30 × 30 up to 100 × 90); Another one picks the next template, the panel saying which (its number, or a package's island by name), or another shape. Place puts it in hand: its outline follows the mouse, green where it fits on open sea and red where not; a left click puts it down, a right click or Cancel puts it back. Load island lists the islands saved with Save (below) and the original's island files (`.scp`) put into the folder `islands` in Open1602's user data folder, and puts the one chosen in hand the same way; an `.scp` file, which does not tell its climate, gets the climate chosen on the page. |
 | Placeholders | A scenario of the original that makes its islands when a game starts has a world plan: each of its islands is a placeholder, drawn as a yellow outline of its size class with its name. The shape Placeholder on Edit islands sets a new one (north or south, a size class, its template drawn when the game starts); a click on a placeholder selects it (below). Islands cannot be put on a placeholder. When a game of the scenario starts, the world keeps what the editor left (its islands, cities, players and ships) and only the placeholders become islands; what is beyond the original's limits does not start with it. |
-| Edit terrain | The terrain tools (below). |
-| Place objects | The objects' tools (below). |
+| Terrain tools | Land, water, tidy coast and the pieces' tools (below). |
+| Object tools | Buildings, templates, ships, land units, resources, remove (below). |
 | Change map size | Makes the map larger or smaller in steps of 50 tiles, or fits it to its content with some sea around. It grows or is cut at the right and the bottom, so everything keeps its place, and it cannot be cut below the islands, ships, land units and markers. |
 | Overlays | What the map shows over the world: the players' land in their colours, the numbers of the islands, the coordinates of the tile under the mouse. |
 | Check | The check list: what keeps the scenario from being saved (the world must hold together, its description and markers be right), and what the original cannot have (its map size, more islands, cities, ships, land units, towers or players with a start than it holds, larger islands, more ore deposits, content of a package, a script). The second group is a fault only for a scenario that is to keep to the original's limits. |
@@ -66,11 +84,19 @@ takes back.
 
 ## Terrain
 
-**Edit terrain** paints the islands' terrain from a palette of the game's own: ground, forest, rock
-and ore mountains, slopes, rivers, beach, surf and sea. **Kind** picks a group of the palette,
-**Piece** goes through its pieces (a right click goes back), **Turn** turns a piece that can turn and
-**Size** sets the side of the square brush. A white dotted square on the map shows where the tool
-lays, and the brush shows its piece there before the click. The tools:
+The terrain tools of the tool bar paint the islands' terrain from a palette of the game's own: ground,
+forest, rock and ore mountains, slopes, rivers, beach, surf and sea. The column shows the tool's name
+and only the settings it uses. **Kind** picks a group of the palette, **Piece** goes through its pieces
+(a right click goes back) and **Turn** turns a piece that can turn. **Size** sets the brush's side,
+from 1 to 17 tiles: with the buttons - and +, the slider between them, the keys + and -, or Ctrl and
+the mouse wheel. **Shape** makes the brush round, square or a diamond (Land, Water, Tidy coast, Random
+fill and the brush of a one-tile piece). A white dotted outline on the map shows the tiles the tool
+lays, and the brush shows its piece there before the click.
+
+Land, Water, the brush and Random fill draw the other way with the right button held: water where
+they lay land or pieces, land where Water lays water, so that a mistake is painted over without
+changing the tool; the outline turns orange meanwhile. A right click without dragging still drags
+the map or puts back what is in hand. The tools:
 
 | Tool | What it does |
 |---|---|
@@ -208,10 +234,36 @@ saved and cannot be edited; undo, save and the other pages wait until the plan i
 
 | Key | What it does |
 |---|---|
+| Ctrl+N | New map |
+| Ctrl+O | Open |
+| Ctrl+S | Save |
+| Ctrl+Shift+S | Save as |
 | Ctrl+Z | Undo |
 | Ctrl+Y, Ctrl+Shift+Z | Redo |
-| Ctrl+S | Save |
-| Escape | Back from a page of the side panel |
+| V | Select |
+| I | Island |
+| H | Placeholder |
+| L | Draw land |
+| O | Draw water |
+| K | Tidy coast |
+| P | Brush for terrain pieces |
+| Z | Random fill |
+| F | Fill |
+| Shift+F | Replace |
+| C | Pipette |
+| B | Select an area to copy |
+| Ctrl+V | Paste |
+| G | Place buildings |
+| T | Place a building template |
+| Shift+S | Place ships |
+| U | Place land units |
+| Shift+R | Place resources |
+| X | Remove |
+| R | Turn the piece or object in hand |
+| + and -, Ctrl and the mouse wheel | Larger and smaller brush |
+| Right button dragged | Land, Water, the brush and Random fill draw the other way (water for land) |
+| F1 | The keys |
+| Escape | Closes a menu, or goes back from a page of the column |
 
 The view's keys are those of the game (WASD and the arrows, Q and E, Page Up and Page Down, F12 for a
 screenshot, F11 for the full screen). F1 shows the keys the editor knows. All of them can be changed

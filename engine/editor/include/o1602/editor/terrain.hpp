@@ -240,14 +240,19 @@ struct SeaTile {
 /// are left out (meadow where they were).
 [[nodiscard]] TerrainClip mirrored(const TerrainClip& clip, const assets::BuildingTable& buildings);
 
-/// The sides of the square brushes, in tiles.
-inline constexpr std::array<std::uint8_t, 5> kBrushSizes = {1, 2, 3, 5, 9};
+/// The sides of the brushes, in tiles.
+inline constexpr std::array<std::uint8_t, 8> kBrushSizes = {1, 2, 3, 5, 7, 9, 13, 17};
 
-/// The world tiles of a square brush of side `size` about (x, y) (the tile under the mouse is its
-/// middle, or the one right below it for an even side), within a map of `width` x `height`.
+/// The shapes of the brushes: the whole square, the round within it, the diamond within it.
+enum class BrushShape : std::uint8_t { Square, Round, Diamond };
+inline constexpr std::size_t kBrushShapes = 3;
+
+/// The world tiles of a brush of side `size` about (x, y) (the tile under the mouse is its middle,
+/// or the one right below it for an even side), within a map of `width` x `height`.
 [[nodiscard]] std::vector<std::pair<std::uint32_t, std::uint32_t>> brush_tiles(std::int64_t x, std::int64_t y,
                                                                                std::uint32_t size, std::uint32_t width,
-                                                                               std::uint32_t height);
+                                                                               std::uint32_t height,
+                                                                               BrushShape shape = BrushShape::Square);
 
 /// The tiles of a line from (x0, y0) to (x1, y1), both ends included, without gaps (a stroke drawn
 /// faster than the frames).

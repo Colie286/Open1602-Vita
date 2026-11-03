@@ -75,6 +75,31 @@ KeyHelpPlace key_help_place(KeyAction action) noexcept {
         case KeyAction::EditorUndo:
         case KeyAction::EditorRedo:
         case KeyAction::EditorSave:
+        case KeyAction::EditorNew:
+        case KeyAction::EditorOpen:
+        case KeyAction::EditorSaveAs:
+        case KeyAction::EditorRotate:
+        case KeyAction::EditorBrushBigger:
+        case KeyAction::EditorBrushSmaller:
+        case KeyAction::EditorToolSelect:
+        case KeyAction::EditorToolIsland:
+        case KeyAction::EditorToolPlaceholder:
+        case KeyAction::EditorToolLand:
+        case KeyAction::EditorToolWater:
+        case KeyAction::EditorToolCoast:
+        case KeyAction::EditorToolBrush:
+        case KeyAction::EditorToolRandom:
+        case KeyAction::EditorToolFill:
+        case KeyAction::EditorToolReplace:
+        case KeyAction::EditorToolPipette:
+        case KeyAction::EditorToolArea:
+        case KeyAction::EditorToolPaste:
+        case KeyAction::EditorToolBuild:
+        case KeyAction::EditorToolTemplate:
+        case KeyAction::EditorToolShip:
+        case KeyAction::EditorToolUnit:
+        case KeyAction::EditorToolResource:
+        case KeyAction::EditorToolRemove:
             return {0, 1};
         case KeyAction::ModeBuild:
         case KeyAction::ModeMilitary:

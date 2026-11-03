@@ -162,6 +162,31 @@ bool MapInput::editor_key(ui::KeyAction action) noexcept {
         case KeyAction::EditorUndo:
         case KeyAction::EditorRedo:
         case KeyAction::EditorSave:
+        case KeyAction::EditorNew:
+        case KeyAction::EditorOpen:
+        case KeyAction::EditorSaveAs:
+        case KeyAction::EditorRotate:
+        case KeyAction::EditorBrushBigger:
+        case KeyAction::EditorBrushSmaller:
+        case KeyAction::EditorToolSelect:
+        case KeyAction::EditorToolIsland:
+        case KeyAction::EditorToolPlaceholder:
+        case KeyAction::EditorToolLand:
+        case KeyAction::EditorToolWater:
+        case KeyAction::EditorToolCoast:
+        case KeyAction::EditorToolBrush:
+        case KeyAction::EditorToolRandom:
+        case KeyAction::EditorToolFill:
+        case KeyAction::EditorToolReplace:
+        case KeyAction::EditorToolPipette:
+        case KeyAction::EditorToolArea:
+        case KeyAction::EditorToolPaste:
+        case KeyAction::EditorToolBuild:
+        case KeyAction::EditorToolTemplate:
+        case KeyAction::EditorToolShip:
+        case KeyAction::EditorToolUnit:
+        case KeyAction::EditorToolResource:
+        case KeyAction::EditorToolRemove:
             return true;
         default:
             return false;
@@ -264,6 +289,35 @@ void MapInput::setup_keys() {
     editor(chord(SDLK_Y, true), KeyAction::EditorRedo);
     editor(chord(SDLK_Z, true, true), KeyAction::EditorRedo);
     editor(chord(SDLK_S, true), KeyAction::EditorSave);
+    editor(chord(SDLK_N, true), KeyAction::EditorNew);
+    editor(chord(SDLK_O, true), KeyAction::EditorOpen);
+    editor(chord(SDLK_S, true, true), KeyAction::EditorSaveAs);
+    editor(chord(SDLK_R), KeyAction::EditorRotate);
+    editor(chord(SDLK_PLUS), KeyAction::EditorBrushBigger);
+    editor(chord(SDLK_EQUALS), KeyAction::EditorBrushBigger);
+    editor(chord(SDLK_KP_PLUS), KeyAction::EditorBrushBigger);
+    editor(chord(SDLK_MINUS), KeyAction::EditorBrushSmaller);
+    editor(chord(SDLK_KP_MINUS), KeyAction::EditorBrushSmaller);
+    // The tools: keys that the view's (W A S D, Q, E by their place) leave free.
+    editor(chord(SDLK_V), KeyAction::EditorToolSelect);
+    editor(chord(SDLK_I), KeyAction::EditorToolIsland);
+    editor(chord(SDLK_H), KeyAction::EditorToolPlaceholder);
+    editor(chord(SDLK_L), KeyAction::EditorToolLand);
+    editor(chord(SDLK_O), KeyAction::EditorToolWater);
+    editor(chord(SDLK_K), KeyAction::EditorToolCoast);
+    editor(chord(SDLK_P), KeyAction::EditorToolBrush);
+    editor(chord(SDLK_Z), KeyAction::EditorToolRandom);
+    editor(chord(SDLK_F), KeyAction::EditorToolFill);
+    editor(chord(SDLK_F, false, true), KeyAction::EditorToolReplace);
+    editor(chord(SDLK_C), KeyAction::EditorToolPipette);
+    editor(chord(SDLK_B), KeyAction::EditorToolArea);
+    editor(chord(SDLK_V, true, false), KeyAction::EditorToolPaste);
+    editor(chord(SDLK_G), KeyAction::EditorToolBuild);
+    editor(chord(SDLK_T), KeyAction::EditorToolTemplate);
+    editor(chord(SDLK_S, false, true), KeyAction::EditorToolShip);
+    editor(chord(SDLK_U), KeyAction::EditorToolUnit);
+    editor(chord(SDLK_R, false, true), KeyAction::EditorToolResource);
+    editor(chord(SDLK_X), KeyAction::EditorToolRemove);
     // Building
     building(chord(SDLK_R), KeyAction::RotateBuilding);
     building(chord(SDLK_R, false, true), KeyAction::RotateBuildingBack);
@@ -341,6 +395,15 @@ void MapInput::show_key_help() {
     auto pages = key_help_pages(entries, [](KeyAction a) { return action_label(a); });
     add_click_lines(pages);
     m_hud->show_help(std::move(pages));
+}
+
+std::string MapInput::editor_keys(ui::KeyAction action) const {
+    for (const ui::KeyBinding& b : m_keys.all()) {
+        if (b.action == action && b.context == ui::KeyContext::Editor) {
+            return key_label(b.chord);
+        }
+    }
+    return {};
 }
 
 ui::KeyContext MapInput::key_context() const {
@@ -665,6 +728,31 @@ void MapInput::run_action(const ui::KeyBinding& b) {
         case KeyAction::EditorUndo:
         case KeyAction::EditorRedo:
         case KeyAction::EditorSave:
+        case KeyAction::EditorNew:
+        case KeyAction::EditorOpen:
+        case KeyAction::EditorSaveAs:
+        case KeyAction::EditorRotate:
+        case KeyAction::EditorBrushBigger:
+        case KeyAction::EditorBrushSmaller:
+        case KeyAction::EditorToolSelect:
+        case KeyAction::EditorToolIsland:
+        case KeyAction::EditorToolPlaceholder:
+        case KeyAction::EditorToolLand:
+        case KeyAction::EditorToolWater:
+        case KeyAction::EditorToolCoast:
+        case KeyAction::EditorToolBrush:
+        case KeyAction::EditorToolRandom:
+        case KeyAction::EditorToolFill:
+        case KeyAction::EditorToolReplace:
+        case KeyAction::EditorToolPipette:
+        case KeyAction::EditorToolArea:
+        case KeyAction::EditorToolPaste:
+        case KeyAction::EditorToolBuild:
+        case KeyAction::EditorToolTemplate:
+        case KeyAction::EditorToolShip:
+        case KeyAction::EditorToolUnit:
+        case KeyAction::EditorToolResource:
+        case KeyAction::EditorToolRemove:
             if (m_editor) {
                 m_host.editor_key(b.action);
             }
@@ -980,13 +1068,15 @@ void MapInput::handle_event(const SDL_Event& event) {
                     m_host.apply_hud(*a);
                 }
             }
-            if (m_left_down) {
-                m_press.move(static_cast<double>(event.motion.x), static_cast<double>(event.motion.y));
+            if (m_left_down || m_right_stroke) {
+                if (m_left_down) {
+                    m_press.move(static_cast<double>(event.motion.x), static_cast<double>(event.motion.y));
+                }
                 // A stroke of the editor's terrain tools goes on where the mouse is over the map.
                 if (m_editor && !(m_hud && m_hud->covers(static_cast<std::int32_t>(event.motion.x),
                                                          static_cast<std::int32_t>(event.motion.y)))) {
                     if (const auto tile = tile_at_mouse(); tile.has_value()) {
-                        (void)m_host.editor_stroke(tile, Host::Stroke::Continue);
+                        (void)m_host.editor_stroke(tile, Host::Stroke::Continue, m_right_stroke);
                     }
                 }
             }
@@ -1042,7 +1132,15 @@ void MapInput::handle_event(const SDL_Event& event) {
                 }
                 break;
             }
-            if (event.button.button == SDL_BUTTON_RIGHT || event.button.button == SDL_BUTTON_MIDDLE) {
+            if (event.button.button == SDL_BUTTON_RIGHT && m_editor && !m_left_down) {
+                // The editor's right button: the shaping tools draw the other way (land and water
+                // swapped); otherwise it drags the map, and a click puts back what is in hand.
+                const auto tile = tile_at_mouse();
+                m_right_stroke = tile && m_host.editor_stroke(tile, Host::Stroke::Begin, true);
+                if (!m_right_stroke) {
+                    m_drag.press();
+                }
+            } else if (event.button.button == SDL_BUTTON_RIGHT || event.button.button == SDL_BUTTON_MIDDLE) {
                 m_drag.press();
             } else if (m_editor) {
                 // The editor's map: no selection, tool or order of the game (ADR 0013); the left
@@ -1050,7 +1148,7 @@ void MapInput::handle_event(const SDL_Event& event) {
                 if (event.button.button == SDL_BUTTON_LEFT) {
                     const auto tile = tile_at_mouse();
                     if (!tile || !m_host.editor_place(*tile)) {
-                        if (!m_host.editor_stroke(tile, Host::Stroke::Begin)) {
+                        if (!m_host.editor_stroke(tile, Host::Stroke::Begin, false)) {
                             editor_pick_at_mouse();
                         }
                     }
@@ -1067,7 +1165,7 @@ void MapInput::handle_event(const SDL_Event& event) {
             if (event.button.button == SDL_BUTTON_LEFT) {
                 m_left_down = false;
                 if (m_editor) {
-                    (void)m_host.editor_stroke(std::nullopt, Host::Stroke::End);
+                    (void)m_host.editor_stroke(std::nullopt, Host::Stroke::End, false);
                 }
                 if (m_hud) {
                     if (const auto a = m_hud->mouse(static_cast<std::int32_t>(event.button.x),
@@ -1086,7 +1184,10 @@ void MapInput::handle_event(const SDL_Event& event) {
                 (void)m_hud->mouse(static_cast<std::int32_t>(event.button.x), static_cast<std::int32_t>(event.button.y),
                                    false, ui::MouseButton::Right);
             }
-            if (event.button.button == SDL_BUTTON_RIGHT || event.button.button == SDL_BUTTON_MIDDLE) {
+            if (event.button.button == SDL_BUTTON_RIGHT && m_right_stroke) {
+                m_right_stroke = false;
+                (void)m_host.editor_stroke(std::nullopt, Host::Stroke::End, true);
+            } else if (event.button.button == SDL_BUTTON_RIGHT || event.button.button == SDL_BUTTON_MIDDLE) {
                 // A right click (not a drag): an order (ADR 0010), or back with the original's mouse;
                 // in the editor it puts back what is being placed.
                 const bool click = m_drag.release() && event.button.button == SDL_BUTTON_RIGHT;
@@ -1162,6 +1263,19 @@ void MapInput::handle_event(const SDL_Event& event) {
                 const auto notches = static_cast<std::int32_t>(m_wheel_rest);
                 m_wheel_rest -= static_cast<float>(notches);
                 m_hud->goods_wheel(notches);
+                break;
+            }
+            if (m_editor && (SDL_GetModState() & SDL_KMOD_CTRL) != 0) {
+                // Ctrl and the wheel: the editor's brush bigger or smaller, a size a notch.
+                m_wheel_rest += y;
+                auto notches = static_cast<std::int32_t>(m_wheel_rest);
+                m_wheel_rest -= static_cast<float>(notches);
+                for (; notches > 0; --notches) {
+                    m_host.editor_key(ui::KeyAction::EditorBrushBigger);
+                }
+                for (; notches < 0; ++notches) {
+                    m_host.editor_key(ui::KeyAction::EditorBrushSmaller);
+                }
                 break;
             }
             if (m_hud && m_hud->covers(static_cast<std::int32_t>(event.wheel.mouse_x),

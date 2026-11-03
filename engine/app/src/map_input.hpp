@@ -92,9 +92,11 @@ public:
         virtual bool editor_cancel_place() = 0;
         /// The left button pressed on the editor's map at `tile`, the mouse moved there with it held,
         /// or the button let go (`tile` nothing if off the map): a stroke of a terrain tool. False
-        /// if no terrain tool is out (a press picks).
+        /// if no terrain tool is out (a press picks). `erase`: the right button began it, which
+        /// lays water for land and land for water (false if the tool has no such stroke: the
+        /// right button drags the map).
         enum class Stroke : std::uint8_t { Begin, Continue, End };
-        virtual bool editor_stroke(std::optional<render::TilePos> tile, Stroke phase) = 0;
+        virtual bool editor_stroke(std::optional<render::TilePos> tile, Stroke phase, bool erase) = 0;
         /// Where Home goes without a selection.
         [[nodiscard]] virtual render::TilePos home_tile() const = 0;
         /// The graphics of the zoom level shown; null while they are not there.
@@ -200,6 +202,8 @@ public:
     [[nodiscard]] std::optional<render::TilePos> tile_at(double sx, double sy) const;
     /// Map tile under the mouse; none while a window takes all of the mouse (a question).
     [[nodiscard]] std::optional<render::TilePos> tile_at_mouse() const;
+    /// The editor's right button draws a stroke (the brush shown in the colour of erasing).
+    [[nodiscard]] bool right_stroke() const noexcept { return m_right_stroke; }
     /// Island tile under the mouse, nullopt over the sea.
     [[nodiscard]] std::optional<BuildTool::Spot> spot_at_mouse() const;
     /// The ship or land unit under the mouse, as a click would pick it.
@@ -214,12 +218,15 @@ public:
     /// A pick the next click on the map answers: an attack (A) or a patrol (P).
     enum class Pick : std::uint8_t { None, Attack, Patrol };
     [[nodiscard]] Pick pick() const noexcept { return m_pick; }
+    /// F1: the keys as they are bound now, over the map.
+    void show_key_help();
+    /// The first key of `action` in the editor's context, as the overview names it ("Ctrl+S");
+    /// empty: none.
+    [[nodiscard]] std::string editor_keys(ui::KeyAction action) const;
 
 private:
     /// The keys of ADR 0010.
     void setup_keys();
-    /// F1: the keys as they are bound now, over the map.
-    void show_key_help();
     void handle_key(int key, int scancode, std::uint16_t mod);
     [[nodiscard]] ui::KeyContext key_context() const;
     void run_action(const ui::KeyBinding& binding);
@@ -315,10 +322,11 @@ private:
     mutable std::vector<render::TileHit> m_tile_hits;  ///< working memory of picks
     double m_mouse_x = 0.0;                            ///< in output pixels
     double m_mouse_y = 0.0;
-    bool m_left_down = false;   ///< the left mouse button, for the frame's buttons
-    bool m_editor = false;      ///< the editor runs (set_editor)
-    float m_wheel_rest = 0.0F;  ///< wheel notches begun (touchpads) the goods window did not scroll yet
-    bool m_text_input = false;  ///< the platform's text input is on (a name is typed)
+    bool m_left_down = false;     ///< the left mouse button, for the frame's buttons
+    bool m_right_stroke = false;  ///< the editor's right button draws a stroke (land and water swapped)
+    bool m_editor = false;        ///< the editor runs (set_editor)
+    float m_wheel_rest = 0.0F;    ///< wheel notches begun (touchpads) the goods window did not scroll yet
+    bool m_text_input = false;    ///< the platform's text input is on (a name is typed)
 };
 
 }  // namespace o1602::app

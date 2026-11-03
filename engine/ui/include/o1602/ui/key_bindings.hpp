@@ -96,6 +96,32 @@ enum class KeyAction : std::uint16_t {
     EditorUndo,
     EditorRedo,
     EditorSave,
+    EditorNew,
+    EditorOpen,
+    EditorSaveAs,
+    EditorRotate,        ///< the piece or object in hand a quarter on
+    EditorBrushBigger,   ///< the terrain brush one size larger
+    EditorBrushSmaller,  ///< and smaller
+    /// The tools of the tool bar, in its order (app::EditorTool): EditorToolSelect + the tool.
+    EditorToolSelect,
+    EditorToolIsland,
+    EditorToolPlaceholder,
+    EditorToolLand,
+    EditorToolWater,
+    EditorToolCoast,
+    EditorToolBrush,
+    EditorToolRandom,
+    EditorToolFill,
+    EditorToolReplace,
+    EditorToolPipette,
+    EditorToolArea,
+    EditorToolPaste,
+    EditorToolBuild,
+    EditorToolTemplate,
+    EditorToolShip,
+    EditorToolUnit,
+    EditorToolResource,
+    EditorToolRemove,
 };
 
 enum class KeyContext : std::uint8_t { General, Building, Units, Editor };
