@@ -281,6 +281,10 @@ public:
     bool step_back();
     /// Commands the windows gave since the last call.
     [[nodiscard]] std::vector<sim::Command> take_commands() { return std::exchange(m_commands, {}); }
+    /// A right click on the build menu: its category is deselected (pop-up and building in hand
+    /// go), the build menu stays (as in the original). False outside the build menu, with no
+    /// category selected, or while a ship founds a Kontor.
+    bool deselect_build_category();
     /// Switches the mode (also from the keys); returns what the tool should do.
     std::optional<Action> set_mode(std::int32_t mode);
 

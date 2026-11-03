@@ -177,6 +177,12 @@ public:
     [[nodiscard]] std::optional<std::int32_t> hovered() const;
     /// Gadget Id held down by the mouse now (a slider being dragged), nothing if none.
     [[nodiscard]] std::optional<std::int32_t> held() const;
+    /// Forgets a press without a click: another panel took over the button while it was held
+    /// (a pop-up opened by the press), so that the next press here counts as a new one.
+    void drop_press() noexcept {
+        m_down = false;
+        m_pressed.reset();
+    }
 
     /// Everything to draw, in paint order. `fonts` are the three font slots (for flowing text).
     [[nodiscard]] std::vector<DrawItem> draw(const std::array<const Font*, kFontSlots>& fonts) const;

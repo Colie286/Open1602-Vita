@@ -274,6 +274,88 @@ TEST_CASE("side panel build menu: another category puts its building in hand whe
     CHECK(a->kind == BuildPanel::Action::Kind::Off);
 }
 
+TEST_CASE("side panel build menu: with a pop-up open, one press opens another category") {
+    Build b;
+    // A press and release on the workshops' button, the mouse not moving in between: the pop-up
+    // takes the release, the button is let go of all the same.
+    const auto [wx, wy] = centre(b.panel.panel(), kWorkshops);
+    bool consumed = false;
+    (void)b.panel.mouse(wx, wy, true, b.available, consumed);
+    (void)b.panel.mouse(wx, wy, false, b.available, consumed);
+    REQUIRE(b.panel.popup_open());
+    REQUIRE(b.panel.popup_category() == kWorkshops);
+    // The next press on the roads (no move first, the pop-up had the mouse) opens them at once.
+    const auto [rx, ry] = centre(b.panel.panel(), kRoads);
+    const auto a = b.panel.mouse(rx, ry, true, b.available, consumed);
+    CHECK(consumed);
+    REQUIRE(a.has_value());
+    CHECK(a->kind == BuildPanel::Action::Kind::Pick);
+    CHECK(a->building == kDirtRoad);
+    CHECK(b.panel.popup_open());
+    CHECK(b.panel.popup_category() == kRoads);
+}
+
+TEST_CASE("side panel build menu: a pop-up stands above all category buttons") {
+    // Two rows of buttons as in the game: the roads below the workshops.
+    assets::GadgetLayout bau = bau_layout();
+    for (assets::Gadget& g : bau.gadgets) {
+        if (g.id == kRoads) {
+            g.pos[1] = 200;
+        } else if (g.id >= 31001 && g.id <= 31008) {
+            g.pos[1] = 130;
+        }
+    }
+    const assets::TextTable texts = assets::TextTable::parse("[WERK]\nBaecker\nSchmied\n");
+    const ui::BuildMenuDefinition definition = menu();
+    BuildPanel panel{bau, definition, &texts};
+    const BuildPanel::Available all = [](std::uint32_t) { return true; };
+    const auto [x, y] = centre(panel.panel(), kRoads);
+    bool consumed = false;
+    (void)panel.mouse(x, y, true, all, consumed);
+    REQUIRE(panel.popup() != nullptr);
+    // The pop-up of the lower row ends above the upper row's buttons, which stay free to click.
+    const std::vector<ui::DrawItem> drawn = panel.popup()->draw(kNoFonts);
+    for (const ui::DrawItem& d : drawn) {
+        if (d.kind == ui::DrawItem::Kind::Sprite) {
+            CHECK(d.y <= 135);  // the bottom strip and its shadow touch the buttons, as in the original
+        }
+    }
+    (void)panel.mouse(x, y, false, all, consumed);
+    const auto [wx, wy] = centre(panel.panel(), kWorkshops);
+    const auto a = panel.mouse(wx, wy, true, all, consumed);
+    REQUIRE(a.has_value());
+    CHECK(a->building == kBakery);
+    CHECK(panel.popup_category() == kWorkshops);
+}
+
+TEST_CASE("side panel build menu: a right click deselects the category, the menu picks it up again") {
+    Build b;
+    (void)b.press(kWorkshops);
+    REQUIRE(b.release_on(1).has_value());  // the smith in hand
+    (void)b.press(kWorkshops);
+    REQUIRE(b.panel.popup_open());
+    // Deselected: the pop-up closes, nothing is in hand, the panel shows no building.
+    CHECK(b.panel.deselect());
+    CHECK(b.panel.deselected());
+    CHECK(!b.panel.popup_open());
+    CHECK(!b.panel.panel().selected(kWorkshops));
+    CHECK(!b.panel.current(b.available).has_value());
+    CHECK(!b.panel.demolish());
+    b.refresh();
+    CHECK(!shows(b.panel.panel(), "Schmied"));
+    CHECK(!b.panel.deselect());  // nothing more to deselect: the next right click leaves the menu
+    // A category pressed now puts its building in hand.
+    auto a = b.press(kRoads);
+    REQUIRE(a.has_value());
+    CHECK(a->building == kDirtRoad);
+    CHECK(b.panel.deselect());
+    // The build menu opened again picks up the category deselected last, with its building.
+    b.panel.reselect();
+    CHECK(!b.panel.deselected());
+    CHECK(b.panel.panel().selected(kRoads));
+    CHECK(b.panel.current(b.available) == kDirtRoad);
+}
+
 TEST_CASE("side panel build menu: the blueprint switch goes back to the building in hand and names it") {
     Build b;
     (void)b.press(kWorkshops);

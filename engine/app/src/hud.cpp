@@ -770,6 +770,13 @@ void Hud::found_kontor(std::uint32_t ship, std::uint32_t kontor) {
     m_founding_ship = ship;
 }
 
+bool Hud::deselect_build_category() {
+    if (m_menu_active || m_mode != kModeBuild || !m_build || m_founding_ship) {
+        return false;
+    }
+    return m_build->deselect();
+}
+
 std::optional<Hud::Action> Hud::set_mode(std::int32_t mode) {
     if (mode < kModeBuild || mode > kModeOptions) {
         return std::nullopt;
@@ -783,6 +790,9 @@ std::optional<Hud::Action> Hud::set_mode(std::int32_t mode) {
     m_ctrl.set_selected(m_mode, true);
     if (m_build) {
         m_build->close_popup();
+        if (mode == kModeBuild) {
+            m_build->reselect();
+        }
     }
     // The build mode arms the remembered building again, the others put
     // the tool away.

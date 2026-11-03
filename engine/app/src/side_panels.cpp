@@ -173,6 +173,25 @@ BuildPanel::Action BuildPanel::shown_action(const Available& available) {
     return Action{Action::Kind::Off, 0, 0};
 }
 
+bool BuildPanel::deselect() {
+    if (m_category == 0) {
+        return false;
+    }
+    m_popup.reset();
+    m_bau.set_selected(m_category, false);
+    m_deselected = m_category;
+    m_category = 0;
+    return true;
+}
+
+void BuildPanel::reselect() {
+    if (m_category != 0 || m_menu->category(m_deselected) == nullptr) {
+        return;
+    }
+    m_category = m_deselected;
+    m_bau.set_selected(m_category, true);
+}
+
 bool BuildPanel::show(std::uint32_t id) {
     const ui::BuildCategory* c = m_menu->category_of(id);
     if (c == nullptr) {
@@ -198,12 +217,23 @@ void BuildPanel::open_popup(const ui::BuildCategory& category, const Available& 
     if (button == nullptr) {
         return;
     }
-    m_popup.emplace(ui::build_popup(category, ok, *button, m_gfx_bauhaus, m_menu->locked_icon_offset), m_bau.scale());
+    // Open1602: the pop-up stands above all category buttons, not just above the one pressed, so
+    // that it never covers another category (the original puts it right above its button, over
+    // the upper row).
+    assets::Gadget anchor = *button;
+    for (const ui::BuildCategory& c : m_menu->categories) {
+        if (const assets::Gadget* other = m_layout.find(c.button)) {
+            anchor.pos[1] = std::min(anchor.pos[1], other->pos[1]);
+        }
+    }
+    m_popup.emplace(ui::build_popup(category, ok, anchor, m_gfx_bauhaus, m_menu->locked_icon_offset), m_bau.scale());
     ui::show_popup_patches(*m_popup);
     m_popup_category = category.button;
     // The button is still held: the pop-up takes over this press, so that dragging onto an icon
-    // and letting go there picks it.
+    // and letting go there picks it. The panel underneath lets go of it: the release goes to the
+    // pop-up, and a press on another category while the pop-up is open must open that one at once.
     (void)m_popup->mouse(x, y, true);
+    m_bau.drop_press();
 }
 
 std::optional<BuildPanel::Action> BuildPanel::mouse(std::int32_t x, std::int32_t y, bool down,

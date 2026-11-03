@@ -52,6 +52,15 @@ public:
     /// The category whose pop-up is open (its button), 0 if none.
     [[nodiscard]] std::int32_t popup_category() const noexcept { return m_popup ? m_popup_category : 0; }
     void close_popup() noexcept { m_popup.reset(); }
+    /// A right click on the panel: the pop-up closes and no category is selected any more, the
+    /// build menu stays open with nothing in hand (as in the original). False if no category was
+    /// selected.
+    bool deselect();
+    /// Selects the category deselected last again (the build menu opened anew picks up the
+    /// remembered building, as in the original). Nothing if a category is selected.
+    void reselect();
+    /// No category is selected (deselect()).
+    [[nodiscard]] bool deselected() const noexcept { return m_category == 0; }
 
     /// The building of the open category (nothing: the tools, or nothing available there). Picks
     /// another available one if the remembered one is not (the original keeps it, S-014).
@@ -110,6 +119,7 @@ private:
     std::int32_t m_gfx_ware = 192;
     std::int32_t m_category = 0;
     std::int32_t m_building_category = 0;  ///< the last category of buildings shown
+    std::int32_t m_deselected = 0;         ///< the category deselect() took away
     bool m_blueprint = false;
     bool m_moving = true;
     std::map<std::int32_t, std::size_t> m_picked;  ///< remembered position per category

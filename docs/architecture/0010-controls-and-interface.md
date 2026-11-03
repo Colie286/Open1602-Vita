@@ -88,7 +88,11 @@ information fit in and the controls follow today's real-time strategy games (202
 | U | blueprint mode on or off (Open1602): what the build and copy tools place becomes the player's blueprints, built later |
 | Shift+U | build the player's blueprints of the city under the mouse |
 | Escape | put the tool away (the copy tool: first the piece in hand) |
-| Right-click | put the tool away and return to the player status (the copy and move tools: only what is in hand) |
+| Right-click | put the tool away and return to the player status (the copy and move tools: only what is in hand); on the build menu's panel it first only deselects the category, the build menu stays open (as in the original) |
+
+Every category's pop-up stands above both rows of category buttons (the original puts it right above
+the button pressed, so the lower row's pop-ups covered the upper row); a press on another category
+opens that one at once.
 
 The build menu's demolish button opens a pop-up with the tools, like the other categories: demolish
 and the copy tool (Open1602's icons). A copied piece is built as one order: roads and walls first,

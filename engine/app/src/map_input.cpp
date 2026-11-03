@@ -1022,10 +1022,13 @@ void MapInput::handle_event(const SDL_Event& event) {
                 } else if (event.button.button == SDL_BUTTON_RIGHT) {
                     // A right click on the minimap sends the selection there (ADR 0010), elsewhere on
                     // the panel it goes back to the player status; from a page that leads somewhere
-                    // (a ship's route editor) a page back.
+                    // (a ship's route editor) a page back. In the build menu it first only
+                    // deselects the category, the menu stays (as in the original).
                     if (const auto t = m_hud->minimap_tile(static_cast<std::int32_t>(event.button.x),
                                                            static_cast<std::int32_t>(event.button.y))) {
                         order_to_tile(t->first, t->second, (SDL_GetModState() & SDL_KMOD_SHIFT) != 0);
+                    } else if (m_hud->deselect_build_category()) {
+                        m_tool.set_mode(BuildTool::Mode::Off);
                     } else if (!m_hud->step_back()) {
                         (void)back_to_status();
                     }
