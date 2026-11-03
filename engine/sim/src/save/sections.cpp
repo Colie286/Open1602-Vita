@@ -170,6 +170,9 @@ constexpr std::uint32_t kComputerProducers = tag("AIPR");
 /// The slots of the computers' city records a package changed (Balance::computer_slots), only
 /// written when there are any. Required: the computers would build otherwise.
 constexpr std::uint32_t kComputerSlots = tag("SLOT");
+/// SLOT version 2: after the original's slots the public buildings of a kind of their own, each
+/// with its name, building and service after its fields; written only when there are any.
+constexpr std::uint16_t kSlotsWithPublic = 2;
 /// SCRP version 2: each script's table `campaign` after its table `state`.
 constexpr std::uint16_t kScriptsWithCampaign = 2;
 
@@ -308,6 +311,9 @@ constexpr std::uint16_t max_version(std::uint32_t id) noexcept {
     }
     if (id == kClimates) {
         return kClimatesWithShares;
+    }
+    if (id == kComputerSlots) {
+        return kSlotsWithPublic;
     }
     if (id == kBalance) {
         return kBalanceWithStages;
@@ -674,9 +680,21 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
         });
     }
     if (!world.balance().computer_slots.empty()) {
-        section(out, kComputerSlots, [&](Writer& o) {
-            o.list(world.balance().computer_slots, 28, [&](const ComputerSlot& k) { slot_fields(o, k); });
-        });
+        const auto& slots = world.balance().computer_slots;
+        const bool added = slots.size() > original_computer_slots().size();
+        section(
+            out, kComputerSlots,
+            [&](Writer& o) {
+                o.list(slots, 28, [&](const ComputerSlot& k) {
+                    slot_fields(o, k);
+                    if (computer_slot(original_computer_slots(), k.number) == nullptr) {
+                        o.string(k.name);
+                        o.u32(k.building);
+                        o.u16(k.service);
+                    }
+                });
+            },
+            Need::Required, added ? kSlotsWithPublic : std::uint16_t{1});
     }
     if (!world.balance().climates.empty()) {
         const auto& climates = world.balance().climates;
@@ -1271,12 +1289,24 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                 std::vector<ComputerSlot> slots;
                 in.list(slots, 28, [&](ComputerSlot& k) {
                     slot_fields(in, k);
+                    ComputerSlot own;
                     const ComputerSlot* o = computer_slot(original_computer_slots(), k.number);
+                    if (o == nullptr && version >= kSlotsWithPublic && k.number <= kOwnPublicSlot &&
+                        k.number > kOwnPublicSlot - kMaxOwnPublic) {
+                        std::string name;
+                        std::uint32_t building = 0;
+                        std::uint16_t service = 0;
+                        in.string(name);
+                        in.u32(building);
+                        in.u16(service);
+                        own = own_public_slot(kOwnPublicSlot - k.number, std::move(name), building, service);
+                        o = &own;
+                    }
                     if (o == nullptr) {
                         in.fail();  // a slot of a later version
                         return;
                     }
-                    // What slots.toml does not change is the original's.
+                    // What slots.toml does not change is the original's (or as it adds it).
                     ComputerSlot read = k;
                     k = *o;
                     if (read.removed) {

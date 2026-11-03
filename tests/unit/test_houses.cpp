@@ -10,6 +10,8 @@
 #include "../test_framework.hpp"
 
 #include "o1602/assets/cod_parser.hpp"
+#include "o1602/assets/own_buildings.hpp"
+#include "o1602/assets/resident_classes.hpp"
 #include "o1602/sim/consumption.hpp"
 #include "o1602/sim/houses.hpp"
 #include "o1602/sim/world.hpp"
@@ -395,4 +397,53 @@ TEST_CASE("game data: ware groups and unlock levels are tables (MD-3, MD-8)") {
     CHECK(!p.unlocked(sim::infra::kMaxLevel + 1));
     CHECK(sim::infra::ware_level(sim::ware::kJewellery) == sim::infra::kLevel4A);
     CHECK(sim::infra::ware_level(sim::ware::kCloth) == sim::infra::kNone);
+}
+
+TEST_CASE("houses: a public building of a kind of its own gives its service, which a class may need") {
+    Town town;
+    std::vector<std::string> warnings;
+    const std::string_view file =
+        "[court]\nlike = \"anno1602:20803\"\ngfx = 500\nservice = true\n"
+        "[shrine]\nlike = \"anno1602:20803\"\n";
+    std::vector<std::string> services;
+    assets::own_services(services, "rome", file, warnings);
+    REQUIRE(services == std::vector<std::string>{"rome:court"});
+    std::vector<assets::OwnBuilding> own;
+    assets::apply_own_buildings_file(town.buildings, own, "rome", file, warnings, {}, {}, {}, {}, nullptr, {}, {},
+                                     services);
+    REQUIRE(warnings.empty());
+    REQUIRE(own.size() == 2);
+    const assets::BuildingType& court = *town.buildings.by_id(own[0].number);
+    CHECK(court.own_service == assets::public_building::kOwn[0]);
+    CHECK(town.buildings.by_id(own[1].number)->own_service == 0);  // a chapel as the original's
+
+    // Settlers need a market and the court.
+    std::vector<assets::ResidentClass> classes = town.buildings.resident_classes();
+    REQUIRE(assets::apply_classes_file(classes, "rome", "[\"anno1602:settlers\"]\npublic = \"market, rome:court\"\n",
+                                       warnings, {}, services));
+    REQUIRE(warnings.empty());
+    const std::vector<std::uint16_t> needs = {assets::public_building::kMarket, assets::public_building::kOwn[0]};
+    CHECK(classes[1].public_needs == needs);
+    town.buildings.set_resident_classes(classes);
+
+    town.place(kMarket, 10, 11);
+    town.place(own[0].number, 20, 11);
+    town.place(kPioneerHouse, 14, 13);
+    town.place(kPioneerHouse, 30, 25);  // out of the court's reach
+    town.finish({{10, 11}, {20, 11}});
+    town.add_house(14, 13, 0, 64);
+    town.add_house(30, 25, 0, 64);
+    sim::update_services(town.world, town.buildings);
+    const sim::House& near = *town.world.house(0, 14, 13);
+    const sim::House& far = *town.world.house(0, 30, 25);
+    CHECK((near.services & assets::public_building::kOwn[0]) != 0);
+    CHECK((near.services & sim::house_service::kKapelle) == 0);  // its own kind, not the chapel's
+    CHECK(sim::has_services(near, town.buildings, 1));
+    CHECK(!sim::has_services(far, town.buildings, 1));
+
+    // A third building with a service of its own is more than a game may have.
+    std::vector<std::string> more = {"a:one", "b:two"};
+    assets::own_services(more, "rome", file, warnings);
+    CHECK(more.size() == 2);
+    CHECK(warnings.size() == 1);
 }

@@ -122,6 +122,9 @@ struct BuildingType {
     std::uint16_t workers = 0;
     /// Bausample (record +0x5E): WAV_* number of the sound when it is built, 0 = none.
     std::uint16_t build_sound = 0;
+    /// Open1602's own (own_buildings.toml `service`): the service of a public building of a kind of
+    /// its own that houses in its reach get (public_building::kOwn), 0 for that of its kind.
+    std::uint16_t own_service = 0;
     /// HAUS_BAUKOST: what building costs (goods in 1/32 t, record +0x4C..+0x54).
     struct BuildCost {
         std::uint32_t tools = 0;    ///< Werkzeug

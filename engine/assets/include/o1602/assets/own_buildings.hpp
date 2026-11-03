@@ -43,11 +43,19 @@ struct OwnBuilding {
 /// `levels`: what `level` may name (unlock_levels.hpp), by default the levels of `table`; `images`:
 /// what `gfx` may name besides the original's sprite numbers (package_graphics.hpp); `figures` and
 /// `own_figures`: what `figure` may name (own_figures.hpp), no figure at all without `figures`;
-/// `sounds`: what `build_sound` may name (package_sounds.hpp).
+/// `sounds`: what `build_sound` may name (package_sounds.hpp); `services`: the buildings with a
+/// service of their own (own_services), whose `service = true` gives them theirs.
 void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& own, std::string_view package,
                               std::string_view utf8, std::vector<std::string>& warnings, const Goods& goods = {},
                               std::span<const ResidentClass> classes = {}, std::span<const InfraLevel> levels = {},
                               std::span<const PackageImage> images = {}, const FigureTable* figures = nullptr,
-                              std::span<const OwnFigure> own_figures = {}, std::span<const PackageSound> sounds = {});
+                              std::span<const OwnFigure> own_figures = {}, std::span<const PackageSound> sounds = {},
+                              std::span<const std::string> services = {});
+
+/// Adds to `services` the buildings of `own_buildings.toml` of `package` with `service = true`: the
+/// public buildings of a kind of their own, at most kMaxOwnServices in a game (a warning for more).
+/// Read before the classes, which name them in `public` (public_needs_of), and the buildings.
+void own_services(std::vector<std::string>& services, std::string_view package, std::string_view utf8,
+                  std::vector<std::string>& warnings);
 
 }  // namespace o1602::assets

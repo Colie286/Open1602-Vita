@@ -259,7 +259,13 @@ stonemason's quarries (`process_*`) and the subsidy of raw materials (`subsidy_*
 rules, the sites of public buildings, removes producers and public buildings (their numbers stay,
 empty) and lets goods of packages count as food or alcohol (`counts`); a game keeps the table in
 section `SLOT`. The producers of packages' goods stay derived from the building table, after the
-original's slots. Next: public buildings of a package and the stages' thresholds as data.
+original's slots. Step 4, public buildings of a kind of their own: `service = true` in
+own_buildings.toml gives a building a service of its own (the free bits 13 and 14 of a house's
+services, so two in a game), classes need it by its id, and `kind = "public"` in slots.toml adds a
+slot the computers plan (slots 0xFE and 0xFD, tasks 0x3E and 0x3F, "covered" flags 0x2000 and
+0x4000; section `SLOT` version 2). More than two kinds would need a wider service field of houses
+and of the classes' needs (savegame sections of houses and `CPUB`). Next: the stages' thresholds as
+data.
 
 ### 6. Lua scripts (section 6)
 

@@ -18,8 +18,9 @@ namespace o1602::sim::ai {
 
 /// No slot: a raw material nobody builds for.
 inline constexpr std::uint8_t kNoSlot = 0xFF;
-/// At most so many producers of packages' goods: the slots from kSlots up to kNoSlot.
-inline constexpr std::size_t kMaxPackageNeeds = kNoSlot - kSlots;
+/// At most so many producers of packages' goods: the slots from kSlots up to those of the public
+/// buildings of a kind of their own below kNoSlot (computer_slots.hpp, kOwnPublicSlot).
+inline constexpr std::size_t kMaxPackageNeeds = kNoSlot - kSlots - 2;
 /// At most so many producers of one good in a city.
 inline constexpr std::uint32_t kMaxPackageProducers = 8;
 

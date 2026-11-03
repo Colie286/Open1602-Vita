@@ -23,6 +23,8 @@ struct OwnBuilding;
 
 namespace o1602::sim {
 
+struct ComputerSlot;
+
 /// One entry of an order.
 struct ComputerNeed {
     enum class Kind : std::uint8_t {
@@ -160,16 +162,20 @@ inline constexpr std::string_view kComputersFile = "computers.toml";
 /// is passed over with a warning that names the file and the line, the rest of the order is kept.
 /// `goods`: the goods a `<package>:<name>` entry may name. A table `[producer.<name>]` changes a
 /// producer into `producers` (none read without them); its buildings are the original's and those
-/// of `own`.
+/// of `own`. `slots`: the game's slots (Balance::computer_slots), whose public buildings of a kind
+/// of their own an entry may name besides the original's.
 void apply_computers_file(std::vector<ComputerOrder>& orders, std::string_view package, std::string_view utf8,
                           std::vector<std::string>& warnings, const assets::Goods& goods,
                           std::vector<ComputerProducer>* producers = nullptr,
-                          std::span<const assets::OwnBuilding> own = {});
+                          std::span<const assets::OwnBuilding> own = {},
+                          const std::vector<ComputerSlot>* slots = nullptr);
 
 /// A producer's changes as computers.toml writes them, for messages and tests.
 [[nodiscard]] std::string producer_text(const ComputerProducer& producer);
 
-/// An order as computers.toml writes it, for messages and tests; `goods` names the packages' goods.
-[[nodiscard]] std::string order_text(std::span<const ComputerNeed> needs, const assets::Goods& goods);
+/// An order as computers.toml writes it, for messages and tests; `goods` names the packages' goods,
+/// `slots` the public buildings of a kind of their own.
+[[nodiscard]] std::string order_text(std::span<const ComputerNeed> needs, const assets::Goods& goods,
+                                     const std::vector<ComputerSlot>* slots = nullptr);
 
 }  // namespace o1602::sim

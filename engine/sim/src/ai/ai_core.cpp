@@ -124,14 +124,15 @@ bool Engine::accepts(const State& state) const {
         }
         for (std::size_t i = 0; i < p.stack.size(); ++i) {
             const std::uint8_t task = p.stack[i];
-            if (task < kSettleArea || task > kClaimLand ||
+            if (task < kSettleArea || task > kOwnPublic2 ||
                 std::find(p.stack.begin(), p.stack.begin() + static_cast<std::ptrdiff_t>(i), task) !=
                     p.stack.begin() + static_cast<std::ptrdiff_t>(i)) {
                 return false;
             }
         }
         const Search& s = p.search;
-        if (s.segment < 0 || s.slot >= kSlots + m_package_needs.size() || s.remaining < -kMaxSpan ||
+        const bool own_public = s.slot > kOwnPublicSlot - kMaxOwnPublic && s.slot <= kOwnPublicSlot;
+        if (s.segment < 0 || (s.slot >= kSlots + m_package_needs.size() && !own_public) || s.remaining < -kMaxSpan ||
             s.remaining > kMaxSpan || s.extra < -kMaxSpan || s.extra > kMaxSpan || s.target_x < -1 ||
             s.target_x > kMaxSpan || s.target_y < -1 || s.target_y > kMaxSpan) {
             return false;
@@ -322,7 +323,7 @@ void Engine::run_task(AiPlayer& p) {
             }
             break;
         default:
-            if (id >= kWoodcutter && id <= kDenkmal) {
+            if ((id >= kWoodcutter && id <= kDenkmal) || id == kOwnPublic1 || id == kOwnPublic2) {
                 task_building(p, id);
             } else {
                 pop(p);  // unknown ids never stay on the stack

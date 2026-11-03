@@ -97,11 +97,12 @@ static_assert(assets::public_building::kChapel == hs::kKapelle && assets::public
                   assets::public_building::kTheatre == hs::kTheater &&
                   assets::public_building::kCollege == hs::kHochschule &&
                   assets::public_building::kDoctor == hs::kKlinik && assets::public_building::kKontor == hs::kKontor &&
-                  assets::public_building::kGallows == hs::kGalgen,
+                  assets::public_building::kGallows == hs::kGalgen &&
+                  (assets::public_building::kOwn[0] | assets::public_building::kOwn[1]) == hs::kOwnMask,
               "the public buildings of classes.toml are the bits of House::services");
-static_assert((kMarketNeed &
-               (hs::kDisasterMask | hs::kKapelle | hs::kKirche | hs::kWirtshaus | hs::kSchule | hs::kBadehaus |
-                hs::kTheater | hs::kHochschule | hs::kKlinik | hs::kKontor | hs::kGalgen | hs::kBrunnen)) == 0,
+static_assert((kMarketNeed & (hs::kDisasterMask | hs::kKapelle | hs::kKirche | hs::kWirtshaus | hs::kSchule |
+                              hs::kBadehaus | hs::kTheater | hs::kHochschule | hs::kKlinik | hs::kKontor | hs::kGalgen |
+                              hs::kBrunnen | hs::kOwnMask)) == 0,
               "kMarketNeed must not be a bit of House::services");
 
 /// Decline for plague and fire on the house (P7).
@@ -623,7 +624,8 @@ void services_on(World& world, const assets::BuildingTable& buildings, std::uint
         if (b == nullptr) {
             continue;
         }
-        const std::uint16_t bit = service_bit(b->prod_kind);
+        // A public building of a kind of its own gives its own service (own_buildings.toml).
+        const std::uint16_t bit = b->own_service != 0 ? b->own_service : service_bit(b->prod_kind);
         if (bit == 0 && b->prod_kind != prod::kMarket) {
             continue;
         }

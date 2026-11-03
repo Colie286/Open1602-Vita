@@ -488,6 +488,12 @@ void Engine::task_houses(AiPlayer& p) {
             if ((sv & hs::kKlinik) == 0) {
                 r->flags &= ~city_flag::kKlinik;
             }
+            for (const ComputerSlot& k : slots()) {
+                if (k.number > kOwnPublicSlot - kMaxOwnPublic && k.kind == ComputerSlot::Kind::Public &&
+                    (sv & k.service) == 0) {
+                    r->flags &= ~k.flag;
+                }
+            }
         }
         return;
     }
@@ -1107,6 +1113,14 @@ bool Engine::survey_tile(AiPlayer& p, const City& c, CityPlan& r, std::uint32_t 
     }
     const std::uint8_t w = t.ware;
     const std::uint8_t raw = t.raw;
+    // A public building of a kind of its own (slots.toml) before the kind of the building it copies.
+    for (const ComputerSlot& k : slots()) {
+        if (k.number > kOwnPublicSlot - kMaxOwnPublic && k.kind == ComputerSlot::Kind::Public &&
+            k.building == t.type->id) {
+            count(k.number);
+            return true;
+        }
+    }
     switch (t.prod) {
         case prod::kHouse:
             count(kSlotHouses);

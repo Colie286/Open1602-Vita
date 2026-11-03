@@ -35,6 +35,8 @@ inline constexpr std::uint16_t kKlinik = 1U << 9;
 inline constexpr std::uint16_t kKontor = 1U << 10;
 inline constexpr std::uint16_t kGalgen = 1U << 11;
 inline constexpr std::uint16_t kBrunnen = 1U << 12;
+/// Public buildings of a kind of their own (assets::public_building::kOwn, own_buildings.toml).
+inline constexpr std::uint16_t kOwnMask = (1U << 13) | (1U << 14);
 }  // namespace house_service
 
 /// Bits of the house panel's public buildings (the icons of

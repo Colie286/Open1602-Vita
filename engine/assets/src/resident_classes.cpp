@@ -149,7 +149,8 @@ std::optional<std::uint8_t> class_of(std::span<const ResidentClass> classes, std
     return static_cast<std::uint8_t>(it - classes.begin());
 }
 
-std::optional<std::vector<std::uint16_t>> public_needs_of(std::string_view text, std::string& error) {
+std::optional<std::vector<std::uint16_t>> public_needs_of(std::string_view text, std::string& error,
+                                                          std::span<const std::string> services) {
     std::vector<std::uint16_t> needs;
     if (trimmed(text).empty()) {
         return needs;
@@ -164,6 +165,14 @@ std::optional<std::vector<std::uint16_t>> public_needs_of(std::string_view text,
             const std::string_view name = trimmed(text.substr(from, bar - from));
             const auto it = std::find_if(kPublicNames.begin(), kPublicNames.end(),
                                          [&](const PublicName& p) { return p.name == name; });
+            const auto own = std::find(services.begin(), services.end(), name);
+            if (it == kPublicNames.end() && own != services.end() &&
+                own - services.begin() < static_cast<std::ptrdiff_t>(kMaxOwnServices)) {
+                any = static_cast<std::uint16_t>(
+                    any | public_building::kOwn[static_cast<std::size_t>(own - services.begin())]);
+                from = bar + 1;
+                continue;
+            }
             if (it == kPublicNames.end()) {
                 error =
                     name.empty() ? "has an empty choice" : "names no public building: \"" + std::string(name) + "\"";
@@ -187,7 +196,7 @@ std::string class_name(const ResidentClass& c, std::string_view language) {
 }
 
 bool apply_classes_file(std::vector<ResidentClass>& classes, std::string_view package, std::string_view utf8,
-                        std::vector<std::string>& warnings, const Goods& goods) {
+                        std::vector<std::string>& warnings, const Goods& goods, std::span<const std::string> services) {
     const std::string where = std::string(package) + "/" + std::string(kClassesFile);
     auto tables = core::parse_data_file(utf8);
     if (!tables) {
@@ -263,7 +272,7 @@ bool apply_classes_file(std::vector<ResidentClass>& classes, std::string_view pa
                 if (text == nullptr) {
                     warnings.push_back(field + "is a text, as \"market, chapel | church\"");
                     ok = false;
-                } else if (auto needs = public_needs_of(*text, error)) {
+                } else if (auto needs = public_needs_of(*text, error, services)) {
                     change.public_needs = std::move(needs);
                 } else {
                     warnings.push_back(field + error);

@@ -85,6 +85,9 @@ enum Task : std::uint8_t {
     kDenkmal = 0x3C,
     /// Open1602: a market that brings a deposit the city wants into its land (Engine::claim_land).
     kClaimLand = 0x3D,
+    /// Open1602: the public buildings of a kind of their own (slots.toml `kind = "public"`).
+    kOwnPublic1 = 0x3E,
+    kOwnPublic2 = 0x3F,
 };
 
 /// Building slots of a city record: what the city has of each kind of building.
@@ -164,6 +167,9 @@ inline constexpr std::uint32_t kHochschule = 0x0200;
 inline constexpr std::uint32_t kTheater = 0x0400;
 inline constexpr std::uint32_t kGalgen = 0x0800;
 inline constexpr std::uint32_t kBrunnen = 0x1000;
+/// Open1602: the public buildings of a kind of their own (slots.toml `kind = "public"`).
+inline constexpr std::uint32_t kOwnPublic1 = 0x2000;
+inline constexpr std::uint32_t kOwnPublic2 = 0x4000;
 }  // namespace city_flag
 
 /// Development stages of a city (switch of task 5).

@@ -2,6 +2,8 @@
 #include "o1602/sim/computer_slots.hpp"
 
 #include <algorithm>
+#include <array>
+#include <bit>
 #include <charconv>
 #include <optional>
 
@@ -263,7 +265,25 @@ const ComputerSlot* computer_slot(std::span<const ComputerSlot> slots, std::uint
     return it == slots.end() ? nullptr : &*it;
 }
 
+ComputerSlot own_public_slot(std::size_t index, std::string name, std::uint32_t building, std::uint16_t service) {
+    constexpr std::array<std::uint8_t, kMaxOwnPublic> kTasks = {ai::kOwnPublic1, ai::kOwnPublic2};
+    constexpr std::array<std::uint32_t, kMaxOwnPublic> kFlags = {ai::city_flag::kOwnPublic1,
+                                                                 ai::city_flag::kOwnPublic2};
+    const std::size_t i = std::min(index, kMaxOwnPublic - 1);
+    ComputerSlot s = public_building(static_cast<std::uint8_t>(kOwnPublicSlot - i), "", kTasks[i], building, kFlags[i],
+                                     service, 8, true);
+    s.name = std::move(name);
+    return s;
+}
+
 namespace {
+
+/// A name of a slot a package adds: lower case letters, digits and '_'.
+bool is_slot_name(std::string_view name) noexcept {
+    return !name.empty() && name.size() <= 64 && std::ranges::all_of(name, [](const char c) {
+        return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
+    });
+}
 
 /// Whether slot `n` of `slots` may be named by a rule of another: kNoProducer, or a producer or a
 /// tower that is not `self`.
@@ -303,12 +323,21 @@ bool valid(const std::vector<ComputerSlot>& slots) noexcept {
         return true;
     }
     const std::vector<ComputerSlot>& original = original_computer_slots();
-    if (slots.size() != original.size()) {
+    if (slots.size() < original.size() || slots.size() > original.size() + kMaxOwnPublic) {
         return false;
     }
     for (std::size_t i = 0; i < slots.size(); ++i) {
         const ComputerSlot& s = slots[i];
-        const ComputerSlot& o = original[i];
+        // A public building of a kind of its own: as slots.toml adds it, with its building, service,
+        // name and site; names differ from every other slot's.
+        const ComputerSlot o =
+            i < original.size() ? original[i] : own_public_slot(i - original.size(), s.name, s.building, s.service);
+        if (i >= original.size() &&
+            (!is_slot_name(s.name) || s.building == 0 || (s.service & ~house_service::kOwnMask) != 0 ||
+             std::popcount(s.service) != 1 ||
+             std::count_if(slots.begin(), slots.end(), [&](const ComputerSlot& k) { return k.name == s.name; }) != 1)) {
+            return false;
+        }
         if (s.number != o.number || s.name != o.name) {
             return false;
         }
@@ -390,7 +419,7 @@ void remove_slot(std::vector<ComputerSlot>& slots, std::size_t at) {
 
 /// Reads table `table` of slots.toml into slot `at` of `slots`.
 void read_slot(const core::DataTable& table, std::vector<ComputerSlot>& slots, std::size_t at, const std::string& where,
-               const assets::Goods& goods, std::vector<std::string>& warnings) {
+               const assets::Goods& goods, std::vector<std::string>& warnings, bool adding = false) {
     ComputerSlot s = slots[at];
     const auto producer = [&](const std::string* text) -> std::optional<std::uint8_t> {
         if (text == nullptr) {
@@ -432,6 +461,9 @@ void read_slot(const core::DataTable& table, std::vector<ComputerSlot>& slots, s
             }
         };
         const bool producer_rule = s.kind == Kind::Producer || s.kind == Kind::Tower;
+        if (adding && (e.key == "kind" || e.key == "building")) {
+            continue;  // add_public read them
+        }
         if (e.key == "remove") {
             if (flag == nullptr) {
                 warnings.push_back(field + "is true or false");
@@ -573,10 +605,58 @@ void read_slot(const core::DataTable& table, std::vector<ComputerSlot>& slots, s
     slots[at] = std::move(s);
 }
 
+/// Adds the public building of a kind of its own that table `table` of slots.toml declares
+/// (`kind = "public"`), or warns why it does not.
+void add_public(const core::DataTable& table, std::vector<ComputerSlot>& slots, const std::string& where,
+                const assets::Goods& goods, std::span<const assets::OwnBuilding> own,
+                const assets::BuildingTable* buildings, std::vector<std::string>& warnings) {
+    const std::string at = line_of(where, table.line) + "[" + table.name + "] ";
+    const auto entry = [&](std::string_view key) -> const std::string* {
+        const auto e = std::ranges::find(table.entries, key, &core::DataEntry::key);
+        return e == table.entries.end() ? nullptr : e->value.string();
+    };
+    const std::string* kind = entry("kind");
+    if (kind == nullptr || *kind != "public") {
+        warnings.push_back(at +
+                           "is no slot (the original's: woodcutter, chapel, food, ...); kind = \"public\" adds a "
+                           "public building");
+        return;
+    }
+    if (!is_slot_name(table.name)) {
+        warnings.push_back(at + "a slot's name holds only lower case letters, digits and '_'");
+        return;
+    }
+    const std::string* name = entry("building");
+    const assets::OwnBuilding* b = name != nullptr ? assets::find_own_building(own, *name) : nullptr;
+    const assets::BuildingType* type = b != nullptr && buildings != nullptr ? buildings->by_id(b->number) : nullptr;
+    if (type == nullptr || type->own_service == 0) {
+        warnings.push_back(at +
+                           "'building' names no building of a package with a service of its own "
+                           "(own_buildings.toml, service = true)");
+        return;
+    }
+    const std::size_t added = slots.empty() ? 0 : slots.size() - original_computer_slots().size();
+    if (added >= kMaxOwnPublic) {
+        warnings.push_back(at + "a game has at most " + std::to_string(kMaxOwnPublic) +
+                           " public buildings of a kind of their own; it is passed over");
+        return;
+    }
+    if (std::ranges::any_of(slots, [&](const ComputerSlot& k) { return k.service == type->own_service; })) {
+        warnings.push_back(at + "another slot builds the service of " + *name + "; it is passed over");
+        return;
+    }
+    if (slots.empty()) {
+        slots = original_computer_slots();
+    }
+    slots.push_back(own_public_slot(added, table.name, b->number, type->own_service));
+    read_slot(table, slots, slots.size() - 1, where, goods, warnings, true);
+}
+
 }  // namespace
 
 void apply_slots_file(std::vector<ComputerSlot>& slots, std::string_view package, std::string_view utf8,
-                      std::vector<std::string>& warnings, const assets::Goods& goods) {
+                      std::vector<std::string>& warnings, const assets::Goods& goods,
+                      std::span<const assets::OwnBuilding> own, const assets::BuildingTable* buildings) {
     const std::string where = std::string(package) + "/" + std::string(kSlotsFile);
     auto tables = core::parse_data_file(utf8);
     if (!tables) {
@@ -592,8 +672,7 @@ void apply_slots_file(std::vector<ComputerSlot>& slots, std::string_view package
         const std::vector<ComputerSlot>& now = computer_slots_of(slots);
         const auto it = std::ranges::find(now, std::string_view(table.name), &ComputerSlot::name);
         if (it == now.end()) {
-            warnings.push_back(line_of(where, table.line) + "there is no slot '" + table.name +
-                               "' (the original's: woodcutter, chapel, food, ...)");
+            add_public(table, slots, where, goods, own, buildings, warnings);
             continue;
         }
         if (it->removed) {

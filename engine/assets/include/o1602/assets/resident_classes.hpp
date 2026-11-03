@@ -7,6 +7,7 @@
 // (section CLAS of the savegame), so it plays with them whatever the packages installed later say.
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -40,9 +41,15 @@ inline constexpr std::uint16_t kDoctor = 1U << 9;
 inline constexpr std::uint16_t kKontor = 1U << 10;
 inline constexpr std::uint16_t kGallows = 1U << 11;
 inline constexpr std::uint16_t kMarket = 1U << 15;  ///< no bit of House::services: the market
-inline constexpr std::uint16_t kAll =
-    kChapel | kChurch | kTavern | kSchool | kBathhouse | kTheatre | kCollege | kDoctor | kKontor | kGallows | kMarket;
+/// The services of public buildings of a kind of their own (own_buildings.toml `service`), in the
+/// order the packages declare them (own_services).
+inline constexpr std::array<std::uint16_t, 2> kOwn = {1U << 13, 1U << 14};
+inline constexpr std::uint16_t kAll = kChapel | kChurch | kTavern | kSchool | kBathhouse | kTheatre | kCollege |
+                                      kDoctor | kKontor | kGallows | kMarket | kOwn[0] | kOwn[1];
 }  // namespace public_building
+
+/// Public buildings of a kind of their own a game may have.
+inline constexpr std::size_t kMaxOwnServices = public_building::kOwn.size();
 
 /// Choices of public buildings a class may need at most.
 inline constexpr std::size_t kMaxPublicNeeds = 8;
@@ -50,17 +57,20 @@ inline constexpr std::size_t kMaxPublicNeeds = 8;
 /// The public buildings `text` names (the field `public` of classes.toml): choices separated by
 /// commas, the buildings of a choice by '|', as "market, chapel | church, tavern"; "" needs none.
 /// Names: market, kontor, chapel, church, tavern, school, college, bathhouse, theatre, doctor,
-/// gallows. Nothing, and `error` says why, for an unknown name, an empty choice or more than
-/// kMaxPublicNeeds choices.
-[[nodiscard]] std::optional<std::vector<std::uint16_t>> public_needs_of(std::string_view text, std::string& error);
+/// gallows; and `<package>:<name>`, a building of `services` (own_services: its own kind). Nothing,
+/// and `error` says why, for an unknown name, an empty choice or more than kMaxPublicNeeds choices.
+[[nodiscard]] std::optional<std::vector<std::uint16_t>> public_needs_of(std::string_view text, std::string& error,
+                                                                        std::span<const std::string> services = {});
 
 /// Changes `classes` as `classes.toml` of `package` says, in the order of the file: a table
 /// ["anno1602:<name or number>"] or ["<package>:<name>"] changes a class there is, a table [<name>]
 /// adds the class `<package>:<name>` after the last. A table that cannot be read is passed over
 /// with a warning; a file that is no data file changes nothing. `goods`: what `need.<good>` may
-/// name besides the original's goods. Returns whether anything changed.
+/// name besides the original's goods; `services`: the buildings of a kind of their own `public` may
+/// name (own_services). Returns whether anything changed.
 bool apply_classes_file(std::vector<ResidentClass>& classes, std::string_view package, std::string_view utf8,
-                        std::vector<std::string>& warnings, const Goods& goods = {});
+                        std::vector<std::string>& warnings, const Goods& goods = {},
+                        std::span<const std::string> services = {});
 
 /// The number of the class a string id stands for: "anno1602:<name or number>" of the original's
 /// (original_names.hpp) or "<package>:<name>" of one a package added; nothing for any other.

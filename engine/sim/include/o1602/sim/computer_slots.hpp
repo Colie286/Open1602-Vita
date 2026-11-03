@@ -17,6 +17,7 @@
 #include <string_view>
 #include <vector>
 
+#include "o1602/assets/own_buildings.hpp"
 #include "o1602/sim/computer_orders.hpp"
 
 namespace o1602::sim {
@@ -104,6 +105,11 @@ struct ComputerSlot {
     friend bool operator==(const ComputerSlot&, const ComputerSlot&) = default;
 };
 
+/// The public buildings of a kind of their own a package adds (slots.toml `kind = "public"`): at
+/// most so many, the slot of the j-th kOwnPublicSlot - j, below the producers of packages' goods.
+inline constexpr std::size_t kMaxOwnPublic = 2;
+inline constexpr std::uint8_t kOwnPublicSlot = 0xFE;
+
 /// At most so many goods a counter counts besides the original's.
 inline constexpr std::size_t kMaxSlotGoods = 16;
 /// At most so many houses a public building's site must reach.
@@ -118,8 +124,9 @@ inline constexpr std::int32_t kMaxSlotHouses = 1000;
 }
 
 /// Whether `slots` can be run: empty, or the original's slots by number with their names and kinds
-/// (a removed one of Kind::None), slots named by a rule among them and values in their ranges (a
-/// savegame's are checked with it).
+/// (a removed one of Kind::None) and then at most kMaxOwnPublic public buildings of a kind of their
+/// own, slots named by a rule among them and values in their ranges (a savegame's are checked with
+/// it).
 [[nodiscard]] bool valid(const std::vector<ComputerSlot>& slots) noexcept;
 
 /// The file of a package that changes the slots.
@@ -127,10 +134,18 @@ inline constexpr std::string_view kSlotsFile = "slots.toml";
 
 /// Reads slots.toml of `package` into `slots` (empty: the original's, copied before the first
 /// change): a table names a slot (`[weaving_hut]`) and changes its rules, `remove = true` removes
-/// it. A field that cannot be read is passed over with a warning that names the file and the line.
+/// it; a table of a new name with `kind = "public"` adds a public building of a kind of its own, its
+/// `building` one of `own` with a service of its own in `table` (own_buildings.toml `service`). A
+/// field that cannot be read is passed over with a warning that names the file and the line.
 /// `goods`: the goods a field may name.
 void apply_slots_file(std::vector<ComputerSlot>& slots, std::string_view package, std::string_view utf8,
-                      std::vector<std::string>& warnings, const assets::Goods& goods);
+                      std::vector<std::string>& warnings, const assets::Goods& goods,
+                      std::span<const assets::OwnBuilding> own = {}, const assets::BuildingTable* table = nullptr);
+
+/// The slot of a public building of a kind of its own as slots.toml adds it: the `index`-th one
+/// (below kMaxOwnPublic), called `name`, of `building` with service `service`.
+[[nodiscard]] ComputerSlot own_public_slot(std::size_t index, std::string name, std::uint32_t building,
+                                           std::uint16_t service);
 
 /// The slot called `name` of `slots`, nullptr for none.
 [[nodiscard]] const ComputerSlot* find_computer_slot(std::span<const ComputerSlot> slots,

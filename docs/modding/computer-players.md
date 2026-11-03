@@ -235,6 +235,29 @@ the orders can still name it; a later table cannot change it.
 | `subsidy_ware`, `subsidy_tons`, `subsidy_above` | producers | a city of 50 citizens and above gets `subsidy_tons` of the good while it has less than 3 t and more than `subsidy_above` of these producers (the original: a ton of spices, tobacco, alcohol, sugar, wool and cocoa above 3 farms, 4 t of ore above none); `subsidy_ware = ""` none |
 | `subsidy_class`, `subsidy_people` | producers | the subsidy only with as many inhabitants of this class and above (`anno1602:pioneers` to `anno1602:aristocrats`; the original's cocoa: 100 merchants); 0 no test |
 
+### Public buildings of a kind of their own
+
+A table with a name of its own and `kind = "public"` adds a public building the computers plan: a
+building of a package with a service of its own (`service = true` in
+[own-buildings.md](own-buildings.md)), at most two in a game. The orders name it by the table's name
+(`court 1 covered`) once the slots are read; packages read their `slots.toml` before any
+`computers.toml`.
+
+```toml
+# mods/rome/slots.toml: the computers build courts where 8 houses lack one
+[court]
+kind = "public"
+building = "rome:court"
+min_houses = 8          # the default
+roads_on_fail = true    # the default
+
+# mods/rome/computers.toml
+[citizens]
+append = "court 1 covered"
+```
+
+A new house that lacks its service asks for it again, as for the chapel, school, tavern and doctor.
+
 What stays in the code: the mines look for their deposits, and the Kontor, market, houses, shipyard,
 towers and castle are counted by their kind of building. The producers of packages' goods
 ([goods.md](goods.md)) are derived from the building table and count in slots after the original's.

@@ -44,7 +44,8 @@ void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& ow
                               std::string_view utf8, std::vector<std::string>& warnings, const Goods& goods,
                               std::span<const ResidentClass> classes, std::span<const InfraLevel> levels,
                               std::span<const PackageImage> images, const FigureTable* figures,
-                              std::span<const OwnFigure> own_figures, std::span<const PackageSound> sounds) {
+                              std::span<const OwnFigure> own_figures, std::span<const PackageSound> sounds,
+                              std::span<const std::string> services) {
     const std::string where = std::string(package) + "/" + std::string(kOwnBuildingsFile);
     auto tables = core::parse_data_file(utf8);
     if (!tables) {
@@ -92,6 +93,7 @@ void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& ow
         std::optional<std::uint32_t> figure;
         const PackageSound* build_sound = nullptr;
         const PackageImage* image = nullptr;
+        bool service = false;
         bool ok = true;
         for (const core::DataEntry& e : t.entries) {
             const std::string field = line_of(where, e.value.line) + "'" + e.key + "' ";
@@ -177,6 +179,13 @@ void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& ow
                     warnings.push_back(field + "names no sound of a package (sounds.toml, <package>:<name>)");
                     ok = false;
                 }
+            } else if (e.key == "service") {
+                if (e.value.boolean() == nullptr) {
+                    warnings.push_back(field + "is true or false");
+                    ok = false;
+                } else {
+                    service = *e.value.boolean();
+                }
             } else {
                 warnings.push_back(field + "is no field of a building of a package and is passed over");
             }
@@ -227,6 +236,12 @@ void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& ow
         if (build_sound != nullptr) {
             b.build_sound = build_sound->number;
         }
+        // A service of its own: the place of its id among the services (own_services warned of more).
+        b.own_service = 0;
+        if (const auto it = std::find(services.begin(), services.end(), id);
+            service && it != services.end() && it - services.begin() < static_cast<std::ptrdiff_t>(kMaxOwnServices)) {
+            b.own_service = public_building::kOwn[static_cast<std::size_t>(it - services.begin())];
+        }
         // The image holds every sprite the building draws: its tiles, turned four ways, in every
         // frame of its animation (render::building_sprite).
         if (image != nullptr) {
@@ -251,6 +266,34 @@ void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& ow
         }
         own.push_back(OwnBuilding{id, *number});
         ++added;
+    }
+}
+
+void own_services(std::vector<std::string>& services, std::string_view package, std::string_view utf8,
+                  std::vector<std::string>& warnings) {
+    auto tables = core::parse_data_file(utf8);
+    if (!tables) {
+        return;  // apply_own_buildings_file reports it
+    }
+    const std::string where = std::string(package) + "/" + std::string(kOwnBuildingsFile);
+    for (const core::DataTable& t : *tables) {
+        const auto service = std::find_if(t.entries.begin(), t.entries.end(), [](const core::DataEntry& e) {
+            return e.key == "service" && e.value.boolean() != nullptr && *e.value.boolean();
+        });
+        if (service == t.entries.end() || t.name.empty()) {
+            continue;
+        }
+        const std::string id = t.name.find(':') != std::string::npos ? t.name : std::string(package) + ":" + t.name;
+        if (std::find(services.begin(), services.end(), id) != services.end()) {
+            continue;
+        }
+        if (services.size() >= kMaxOwnServices) {
+            warnings.push_back(line_of(where, service->value.line) + id + ": a game has at most " +
+                               std::to_string(kMaxOwnServices) +
+                               " public buildings of a kind of their own; it counts as the building it copies");
+            continue;
+        }
+        services.push_back(id);
     }
 }
 

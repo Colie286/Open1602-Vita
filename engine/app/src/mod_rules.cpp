@@ -49,13 +49,21 @@ ModRules load_mod_rules(std::span<const assets::ModPackage> packages, assets::Bu
             assets::apply_goods_file(rules.goods, package.id, text, problems, icons);
         }
     }
+    // The public buildings of a kind of their own, which the classes may need.
+    std::vector<std::string> services;
+    for (const assets::ModPackage& package : packages) {
+        if (const auto bytes = core::read_file(package.folder / assets::kOwnBuildingsFile)) {
+            const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
+            assets::own_services(services, package.id, text, problems);
+        }
+    }
     // Then the classes that need them, then the buildings, among them houses of those classes.
     std::vector<assets::ResidentClass> classes = buildings.resident_classes();
     bool classes_changed = false;
     for (const assets::ModPackage& package : packages) {
         if (const auto bytes = core::read_file(package.folder / assets::kClassesFile)) {
             const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
-            classes_changed |= assets::apply_classes_file(classes, package.id, text, problems, rules.goods);
+            classes_changed |= assets::apply_classes_file(classes, package.id, text, problems, rules.goods, services);
         }
     }
     if (classes_changed) {
@@ -116,7 +124,7 @@ ModRules load_mod_rules(std::span<const assets::ModPackage> packages, assets::Bu
         if (const auto bytes = core::read_file(package.folder / assets::kOwnBuildingsFile)) {
             const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
             assets::apply_own_buildings_file(buildings, rules.own, package.id, text, problems, rules.goods, classes,
-                                             levels, rules.images, &figures, rules.own_figures, rules.sounds);
+                                             levels, rules.images, &figures, rules.own_figures, rules.sounds, services);
         }
     }
     for (const assets::ModPackage& package : packages) {
@@ -136,14 +144,20 @@ ModRules load_mod_rules(std::span<const assets::ModPackage> packages, assets::Bu
             const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
             sim::apply_figures_file(rules.balance, package.id, text, problems, rules.own_figures);
         }
+    }
+    // The computers' slots before their orders, which may name the public buildings they add.
+    for (const assets::ModPackage& package : packages) {
+        if (const auto bytes = core::read_file(package.folder / sim::kSlotsFile)) {
+            const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
+            sim::apply_slots_file(rules.balance.computer_slots, package.id, text, problems, rules.goods, rules.own,
+                                  &buildings);
+        }
+    }
+    for (const assets::ModPackage& package : packages) {
         if (const auto bytes = core::read_file(package.folder / sim::kComputersFile)) {
             const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
             sim::apply_computers_file(rules.balance.computer_orders, package.id, text, problems, rules.goods,
-                                      &rules.balance.computer_producers, rules.own);
-        }
-        if (const auto bytes = core::read_file(package.folder / sim::kSlotsFile)) {
-            const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
-            sim::apply_slots_file(rules.balance.computer_slots, package.id, text, problems, rules.goods);
+                                      &rules.balance.computer_producers, rules.own, &rules.balance.computer_slots);
         }
     }
     // Climates after the buildings, whose trees their forest may name.

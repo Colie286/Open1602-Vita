@@ -19,6 +19,8 @@
 #include "o1602/assets/figure_table.hpp"
 #include "o1602/assets/game_data.hpp"
 #include "o1602/assets/goods.hpp"
+#include "o1602/assets/own_buildings.hpp"
+#include "o1602/assets/resident_classes.hpp"
 #include "o1602/core/byte_reader.hpp"
 #include "o1602/core/byte_writer.hpp"
 #include "o1602/sim/ai.hpp"
@@ -1817,6 +1819,42 @@ TEST_CASE("ai: a package's slots count its good as food and remove a producer (s
     CHECK(food.workshops == 1);
     CHECK(food.food == 1);
     CHECK(built("[bakery]\nremove = true\n").workshops == 0);
+}
+
+TEST_CASE("ai: a package's public building of a kind of its own is planned by the computers (slots.toml)") {
+    // A court of its own kind: the founded city's order asks for one. The test world has no houses
+    // for it to serve, so the computer plans it (its "covered" flag) and finds no site.
+    const auto flags = [](bool with_slot) {
+        Game g;
+        static constexpr std::uint32_t kCourt = 20992;
+        g.buildings = make_buildings(
+            "  @Nummer: 13\n  Id: 20992\n  Kind: 14\n  Gfx: 100\n  Size: 2, 1\n"
+            "  Objekt: HAUS_PRODTYP\n    Kind: 18\n    Radius: 12\n  EndObj\n"
+            "  Objekt: HAUS_BAUKOST\n    Money: 50\n  EndObj\n");
+        g.buildings.by_id(kKontor)->ware = sim::ware::kAll;
+        g.buildings.by_id(kCourt)->own_service = assets::public_building::kOwn[0];
+        const std::vector<assets::OwnBuilding> own = {{"rome:court", kCourt}};
+        sim::Balance balance;
+        std::vector<std::string> warnings;
+        if (with_slot) {
+            sim::apply_slots_file(balance.computer_slots, "rome",
+                                  "[court]\nkind = \"public\"\nbuilding = \"rome:court\"\n", warnings, {}, own,
+                                  &g.buildings);
+        }
+        sim::apply_computers_file(balance.computer_orders, "rome", "[founded]\norder = \"market 1, court 1\"\n",
+                                  warnings, {}, nullptr, own, &balance.computer_slots);
+        REQUIRE(warnings.size() == (with_slot ? 0U : 1U));
+        REQUIRE(sim::valid(balance));
+        g.world.set_balance(balance);
+        sim::Simulation s(g.world, g.buildings, g.figures);
+        found_city(g, s, 60'000);
+        const auto view = s.computers().view();
+        REQUIRE(!view.empty());
+        REQUIRE(!view[0].plans.empty());
+        return view[0].plans[0].flags;
+    };
+    CHECK((flags(false) & sim::ai::city_flag::kOwnPublic1) == 0);
+    CHECK((flags(true) & sim::ai::city_flag::kOwnPublic1) != 0);
 }
 
 TEST_CASE("ai: when a city moves on to the next stage comes from the game's balance ([computer_stages])") {

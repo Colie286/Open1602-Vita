@@ -9,7 +9,10 @@
 #include "../test_framework.hpp"
 
 #include "o1602/assets/building_table.hpp"
+#include "o1602/assets/cod_parser.hpp"
 #include "o1602/assets/goods.hpp"
+#include "o1602/assets/own_buildings.hpp"
+#include "o1602/assets/resident_classes.hpp"
 #include "o1602/sim/balance.hpp"
 #include "o1602/sim/computer_orders.hpp"
 #include "o1602/sim/computer_slots.hpp"
@@ -467,4 +470,69 @@ TEST_CASE("computer slots: a game keeps its slots in the savegame (SLOT), a wron
     auto damaged = sim::write_game(world, buildings);
     REQUIRE(damaged.ok());
     CHECK(!sim::read_game(*damaged, buildings).ok());
+}
+
+TEST_CASE("computer slots: a package adds a public building of a kind of its own, the orders name it") {
+    const assets::CodPredefinedSymbol types[] = {{"HAUS", 1}};
+    auto table = assets::BuildingTable::from_cod(assets::cod::parse(
+        "Objekt: HAUS\n  @Nummer: 0\n  Id: 20803\n  Kind: 14\n  Gfx: 40\n  Size: 2, 1\nEndObj\n", types));
+    REQUIRE(table.ok());
+    assets::BuildingTable buildings = std::move(table).value();
+    assets::BuildingType court = *buildings.by_id(20803);
+    court.own_service = assets::public_building::kOwn[1];
+    const auto number = buildings.add(court);
+    REQUIRE(number.ok());
+    const std::vector<assets::OwnBuilding> own = {{"rome:court", *number}};
+    std::vector<std::string> warnings;
+    sim::Balance balance;
+    sim::apply_slots_file(balance.computer_slots, "rome",
+                          "[court]\nkind = \"public\"\nbuilding = \"rome:court\"\nmin_houses = 12\n"
+                          "[forum]\nkind = \"public\"\nbuilding = \"rome:court\"\n"  // the same service again
+                          "[baths]\nkind = \"public\"\nbuilding = \"rome:nothing\"\n"
+                          "[Bad]\nkind = \"public\"\n"
+                          "[well]\nmin_houses = 3\n",  // no slot and no kind
+                          warnings, {}, own, &buildings);
+    CHECK(warnings.size() == 4);
+    REQUIRE(sim::valid(balance));
+    const sim::ComputerSlot* k = sim::find_computer_slot(balance.computer_slots, "court");
+    REQUIRE(k != nullptr);
+    CHECK(k->number == sim::kOwnPublicSlot);
+    CHECK(k->kind == sim::ComputerSlot::Kind::Public);
+    CHECK(k->task == sim::ai::kOwnPublic1);
+    CHECK(k->flag == sim::ai::city_flag::kOwnPublic1);
+    CHECK(k->service == assets::public_building::kOwn[1]);
+    CHECK(k->building == *number);
+    CHECK(k->min_houses == 12);
+    CHECK(k->roads_on_fail);
+
+    // The orders name it once the slots are read.
+    warnings.clear();
+    sim::apply_computers_file(balance.computer_orders, "rome", "[settlers]\nappend = \"court 1 covered\"\n", warnings,
+                              {}, nullptr, own, &balance.computer_slots);
+    REQUIRE(warnings.empty());
+    REQUIRE(sim::valid(balance));
+    const auto order = sim::order_of(balance.computer_orders, sim::ComputerList::Settlers);
+    CHECK(order.back().kind == Kind::Public);
+    CHECK(order.back().slot == sim::kOwnPublicSlot);
+    CHECK(sim::order_text(order.last(1), {}, &balance.computer_slots) == "court 1 covered");
+    std::vector<sim::ComputerOrder> without;
+    sim::apply_computers_file(without, "rome", "[settlers]\nappend = \"court 1\"\n", warnings, {});
+    CHECK(warnings.size() == 1);
+
+    // The game keeps it (SLOT version 2).
+    sim::World world(60, 40);
+    world.set_balance(balance);
+    auto bytes = sim::write_game(world, buildings);
+    REQUIRE(bytes.ok());
+    auto loaded = sim::read_game(*bytes, buildings);
+    REQUIRE(loaded.ok());
+    CHECK(loaded->balance() == balance);
+
+    // Not valid: another service, a name twice.
+    std::vector<sim::ComputerSlot> wrong = balance.computer_slots;
+    wrong.back().service = 3;
+    CHECK(!sim::valid(wrong));
+    wrong = balance.computer_slots;
+    wrong.back().name = "chapel";
+    CHECK(!sim::valid(wrong));
 }

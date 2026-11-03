@@ -126,14 +126,28 @@ std::string_view name_of(std::span<const SlotName> names, std::uint8_t slot) {
 constexpr ComputerSlot::Kind kProducers = ComputerSlot::Kind::Producer;
 constexpr ComputerSlot::Kind kPublic = ComputerSlot::Kind::Public;
 
-std::optional<std::uint8_t> slot_of(ComputerSlot::Kind kind, std::string_view name) {
+/// The slot of `kind` called `name`: of the original's, or a public building of a kind of its own
+/// of `slots` (a game's, computer_slots.hpp).
+std::optional<std::uint8_t> slot_of(ComputerSlot::Kind kind, std::string_view name,
+                                    std::span<const ComputerSlot> slots = {}) {
     const ComputerSlot* s = find_computer_slot(original_computer_slots(), name);
+    if (s == nullptr && kind == ComputerSlot::Kind::Public) {
+        s = find_computer_slot(slots, name);
+    }
     return s != nullptr && s->kind == kind ? std::optional<std::uint8_t>(s->number) : std::nullopt;
 }
 
-std::string_view name_of(ComputerSlot::Kind kind, std::uint8_t slot) {
+std::string_view name_of(ComputerSlot::Kind kind, std::uint8_t slot, std::span<const ComputerSlot> slots = {}) {
     const ComputerSlot* s = computer_slot(original_computer_slots(), slot);
+    if (s == nullptr && kind == ComputerSlot::Kind::Public) {
+        s = computer_slot(slots, slot);
+    }
     return s != nullptr && s->kind == kind ? std::string_view(s->name) : std::string_view{};
+}
+
+/// Whether `slot` is the slot of a public building of a kind of its own.
+constexpr bool own_public(std::uint8_t slot) noexcept {
+    return slot > kOwnPublicSlot - kMaxOwnPublic && slot <= kOwnPublicSlot;
 }
 
 /// The word of a flag or a condition `w` after `prefix`; empty for When::Never.
@@ -515,7 +529,8 @@ std::optional<std::uint32_t> number(std::string_view w) {
 }
 
 /// One entry of an order ("cattle 4 gold_4000"); a message on what is wrong otherwise.
-std::optional<ComputerNeed> read_need(std::string_view text, const assets::Goods& goods, std::string& problem) {
+std::optional<ComputerNeed> read_need(std::string_view text, const assets::Goods& goods, std::string& problem,
+                                      std::span<const ComputerSlot> slots) {
     const std::vector<std::string_view> w = words(text);
     if (w.empty()) {
         problem = "an empty entry";
@@ -525,7 +540,7 @@ std::optional<ComputerNeed> read_need(std::string_view text, const assets::Goods
     if (const auto slot = slot_of(kProducers, w[0])) {
         need.kind = Kind::Building;
         need.slot = *slot;
-    } else if (const auto pub = slot_of(kPublic, w[0])) {
+    } else if (const auto pub = slot_of(kPublic, w[0], slots)) {
         need.kind = Kind::Public;
         need.slot = *pub;
     } else if (const auto crop_ware = slot_of(kCropNames, w[0])) {
@@ -723,7 +738,7 @@ bool valid(const ComputerNeed& need) noexcept {
         case Kind::Building:
             return !name_of(kProducers, need.slot).empty();
         case Kind::Public:
-            return !name_of(kPublic, need.slot).empty();
+            return !name_of(kPublic, need.slot).empty() || own_public(need.slot);
         case Kind::Package:
             return need.slot >= assets::ware::kFirstOwn;
         case Kind::Crop:
@@ -747,7 +762,10 @@ bool valid(const std::vector<ComputerOrder>& orders) noexcept {
 
 void apply_computers_file(std::vector<ComputerOrder>& orders, std::string_view package, std::string_view utf8,
                           std::vector<std::string>& warnings, const assets::Goods& goods,
-                          std::vector<ComputerProducer>* producers, std::span<const assets::OwnBuilding> own) {
+                          std::vector<ComputerProducer>* producers, std::span<const assets::OwnBuilding> own,
+                          const std::vector<ComputerSlot>* game_slots) {
+    const std::span<const ComputerSlot> slots =
+        game_slots != nullptr ? std::span<const ComputerSlot>(*game_slots) : std::span<const ComputerSlot>{};
     const std::string where = std::string(package) + "/" + std::string(kComputersFile);
     auto tables = core::parse_data_file(utf8);
     if (!tables) {
@@ -794,7 +812,7 @@ void apply_computers_file(std::vector<ComputerOrder>& orders, std::string_view p
             const std::string in = at + "[" + table.name + "]: ";
             for (const std::string_view entry : split(*text, ',')) {
                 std::string problem;
-                const std::optional<ComputerNeed> need = read_need(entry, goods, problem);
+                const std::optional<ComputerNeed> need = read_need(entry, goods, problem, slots);
                 if (!need) {
                     problem += ", the entry is passed over";
                     warnings.push_back(in + problem);
@@ -823,7 +841,10 @@ void apply_computers_file(std::vector<ComputerOrder>& orders, std::string_view p
     }
 }
 
-std::string order_text(std::span<const ComputerNeed> needs, const assets::Goods& goods) {
+std::string order_text(std::span<const ComputerNeed> needs, const assets::Goods& goods,
+                       const std::vector<ComputerSlot>* game_slots) {
+    const std::span<const ComputerSlot> slots =
+        game_slots != nullptr ? std::span<const ComputerSlot>(*game_slots) : std::span<const ComputerSlot>{};
     std::string out;
     for (const ComputerNeed& n : needs) {
         if (!out.empty()) {
@@ -834,7 +855,7 @@ std::string order_text(std::span<const ComputerNeed> needs, const assets::Goods&
                 out += name_of(kProducers, n.slot);
                 break;
             case Kind::Public:
-                out += name_of(kPublic, n.slot);
+                out += name_of(kPublic, n.slot, slots);
                 break;
             case Kind::Crop:
                 out += name_of(kCropNames, n.slot);
