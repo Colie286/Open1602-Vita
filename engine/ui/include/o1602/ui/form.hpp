@@ -87,8 +87,9 @@ public:
     void entry(Rect r, std::string label, std::string value, Tone label_tone = Tone::Normal,
                Tone value_tone = Tone::Normal);
     /// Text wrapped into the lines of the box (`line` design units apart); what does not fit is
-    /// left out.
-    void paragraph(Rect r, std::string text, Tone tone = Tone::Normal, std::int32_t line = 22);
+    /// left out. With a `fallback`, that is shown instead where `text` does not fit whole.
+    void paragraph(Rect r, std::string text, Tone tone = Tone::Normal, std::int32_t line = 22,
+                   std::string fallback = {});
     void button(Id id, Rect r, std::string text, bool enabled = true, bool selected = false);
     /// A button that goes through values: the left button chooses the next, the right one the
     /// previous (clicked_with() tells which). Other widgets answer the left button only.
@@ -163,7 +164,7 @@ public:
         Id id = 0;
         Rect rect;
         std::string text;
-        std::string value;  ///< entry: the text on the right; speech: what follows the name
+        std::string value;  ///< entry: the text on the right; speech: what follows the name; paragraph: the fallback
         Align align = Align::Left;
         Tone tone = Tone::Normal;
         Tone value_tone = Tone::Normal;  ///< entry

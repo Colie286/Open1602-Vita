@@ -431,6 +431,7 @@ EditorModel MapViewer::editor_model() const {
     }
     editor_object_model(m);
     editor_city_model(m);
+    editor_players_model(m);
     m.terrain_selected = m_editor->selection.has_value();
     m.clip_width = m_editor->clip.width;
     m.clip_height = m_editor->clip.height;
@@ -556,6 +557,12 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         case Kind::CityGoods:
         case Kind::CityOwner:
             editor_city_request(request);
+            break;
+        case Kind::SetPlayer:
+        case Kind::AddPlayer:
+        case Kind::RemovePlayer:
+        case Kind::SetRelations:
+            editor_players_request(request);
             break;
         case Kind::TerrainCopy: {
             const auto& sel = m_editor->selection;

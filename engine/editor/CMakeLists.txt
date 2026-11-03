@@ -10,6 +10,7 @@ add_library(o1602_editor
     src/objects.cpp
     src/operations.cpp
     src/original_check.cpp
+    src/players.cpp
     src/resources.cpp
     src/terrain.cpp
     src/units.cpp

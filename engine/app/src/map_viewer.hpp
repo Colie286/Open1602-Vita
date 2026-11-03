@@ -356,6 +356,10 @@ private:
     void editor_city_model(EditorModel& m) const;
     /// A city renamed, its stock or owner changed (EditorRequest RenameCity, CityGoods, CityOwner).
     void editor_city_request(const EditorRequest& request);
+    /// The humans' and computers' slots on the page "Players".
+    void editor_players_model(EditorModel& m) const;
+    /// A slot changed, added or taken away (EditorRequest SetPlayer, AddPlayer, RemovePlayer).
+    void editor_players_request(const EditorRequest& request);
     /// The buildings' tools' settings from the panel.
     void editor_objects_request(const EditorRequest& request);
     /// The order that places the chosen building about the world tile (x, y) for the chosen owner,

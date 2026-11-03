@@ -182,8 +182,9 @@ void Form::entry(Rect r, std::string label, std::string value, Tone label_tone, 
     m_widgets.push_back(std::move(w));
 }
 
-void Form::paragraph(Rect r, std::string text, Tone tone, std::int32_t line) {
+void Form::paragraph(Rect r, std::string text, Tone tone, std::int32_t line, std::string fallback) {
     Widget w = make(Widget::Kind::Paragraph, -1, r, std::move(text));
+    w.value = std::move(fallback);
     w.tone = tone;
     w.line = std::max(line, 1);
     m_widgets.push_back(std::move(w));
@@ -422,6 +423,10 @@ std::vector<DrawItem> Form::draw(const std::array<const Font*, kFontSlots>& font
                 if (font != nullptr) {
                     const double room = std::max(0.0, (w.rect.w - 2.0 * kPadding) * font->design_scale());
                     lines = wrap_text(*font, w.text, static_cast<std::uint32_t>(room));
+                    const auto fit = static_cast<std::size_t>(std::max(w.rect.h / w.line, 0));
+                    if (lines.size() > fit && !w.value.empty()) {
+                        lines = wrap_text(*font, w.value, static_cast<std::uint32_t>(room));
+                    }
                 } else {
                     lines = {w.text};
                 }

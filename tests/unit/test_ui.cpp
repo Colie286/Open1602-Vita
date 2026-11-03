@@ -789,3 +789,28 @@ TEST_CASE("ui: key bindings: a key by its place works on every layout, by meanin
     CHECK(keys.find_pressed(ui::KeyContext::Units, ui::KeyPress{'w', kScanW})->action == ui::KeyAction::WhiteFlag);
     CHECK(keys.find_pressed(ui::KeyContext::Units, ui::KeyPress{'z', kScanW})->action == ui::KeyAction::ScrollUp);
 }
+
+TEST_CASE("ui: a paragraph that does not fit whole shows its fallback instead") {
+    const ui::Font font = test_font();
+    const std::array<const ui::Font*, ui::kFontSlots> fonts = {&font, &font, &font};
+    const auto texts = [&](const ui::Form& form) {
+        std::vector<std::string> out;
+        for (const ui::DrawItem& d : form.draw(fonts)) {
+            if (d.kind == ui::DrawItem::Kind::Text) {
+                out.push_back(d.text);
+            }
+        }
+        return out;
+    };
+    ui::Form tall;
+    tall.paragraph(ui::Rect{0, 0, 80, 200}, "one two three four five six seven eight", ui::Form::Tone::Normal, 20,
+                   "short");
+    auto lines = texts(tall);
+    REQUIRE(!lines.empty());
+    CHECK(lines.front().rfind("one", 0) == 0);
+    ui::Form low;
+    low.paragraph(ui::Rect{0, 0, 80, 20}, "one two three four five six seven eight", ui::Form::Tone::Normal, 20,
+                  "short");
+    lines = texts(low);
+    CHECK((lines == std::vector<std::string>{"short"}));
+}
