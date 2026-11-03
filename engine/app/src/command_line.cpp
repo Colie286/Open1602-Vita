@@ -495,8 +495,8 @@ core::Result<CommandLine> parse_command_line(int argc, const char* const* argv) 
             custom_world = true;
         } else if (arg == "--island-preset" && has_value) {
             const std::string_view name = argv[++i];
-            const auto preset = std::ranges::find(sim::kLandscapePresets, name, &sim::LandscapePreset::name);
-            if (preset == sim::kLandscapePresets.end()) {
+            const auto preset = std::ranges::find(sim::landscape_presets(), name, &sim::LandscapePreset::name);
+            if (preset == sim::landscape_presets().end()) {
                 return bad(i);
             }
             custom.shapes = sim::WorldSettings::Shapes::Own;

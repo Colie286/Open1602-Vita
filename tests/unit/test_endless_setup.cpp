@@ -1009,7 +1009,8 @@ TEST_CASE("endless setup: the islands' presets and settings, and their lines in 
         CHECK(!app::setup_item_used(s, SetupItem::IslandSizes));
     }
     app::choose(s, SetupItem::IslandPreset, 1);
-    CHECK(s.world.landscape == Landscape{});
+    CHECK(sim::same_islands(s.world.landscape, Landscape{}));
+    CHECK(s.world.landscape.name == "varied");
     CHECK(app::islands_summary(s) == ui::tr("setup.island_preset.varied"));
     app::choose(s, SetupItem::IslandPreset, 0);
     CHECK(s.world.shapes == sim::WorldSettings::Shapes::Templates);
@@ -1048,12 +1049,26 @@ TEST_CASE("endless setup: the islands' presets and settings, and their lines in 
     CHECK(text.find("endless.island_land = 45\n") != std::string::npos);
     CHECK(text.find("endless.island_spread = giants\n") != std::string::npos);
     CHECK(text.find("endless.island_outline = long\n") != std::string::npos);
+    // A changed preset keeps its name, the kind of island world (a climate's share there).
+    CHECK(text.find("endless.island_preset = continents\n") != std::string::npos);
     CHECK(text.find("seed") == std::string::npos);
     EndlessSetup back;
     app::read_setup(back, text);
     CHECK(back == s);
     CHECK(back.world_seed == 0);
     CHECK(back.world.landscape == s.world.landscape);
+    CHECK(back.world.landscape.name == "continents");
+    // A setup of before the names: the settings of a preset are that preset.
+    EndlessSetup old;
+    old.own_world = true;
+    app::choose(old, SetupItem::IslandPreset, 2);  // archipelago
+    std::string unnamed = app::write_setup(old);
+    unnamed.erase(unnamed.find("endless.island_preset = archipelago\n"), 36);
+    EndlessSetup old_back;
+    app::read_setup(old_back, unnamed);
+    CHECK(old_back.world.landscape.name.empty());
+    CHECK(app::setup_choice(old_back, SetupItem::IslandPreset) == 2);
+    CHECK(sim::landscape_name(old_back.world.landscape) == "archipelago");
     // Values beyond the generator's are left out; any side within it is taken.
     CHECK(app::read_setup_line(back, "island_land", "90"));
     CHECK(back.world.landscape.land == 45);
@@ -1222,8 +1237,8 @@ TEST_CASE("endless setup: kinds of island world of a package (landscapes.toml) c
     CHECK(atolls.title("fr") == "Atolls");
     CHECK(atolls.landscape.land == 10);
     CHECK(atolls.landscape.max_side == 40);
-    CHECK(atolls.landscape.min_side == sim::kLandscapePresets[1].landscape.min_side);  // as the archipelago
-    CHECK(atolls.landscape.gap == sim::kLandscapePresets[1].landscape.gap);
+    CHECK(atolls.landscape.min_side == sim::landscape_presets()[1].landscape.min_side);  // as the archipelago
+    CHECK(atolls.landscape.gap == sim::landscape_presets()[1].landscape.gap);
     const sim::PackageLandscape& pangaea = presets[1];
     CHECK(pangaea.landscape.land == 45);
     CHECK(pangaea.landscape.min_side == 400);
@@ -1231,7 +1246,9 @@ TEST_CASE("endless setup: kinds of island world of a package (landscapes.toml) c
     CHECK(pangaea.landscape.coast == atolls.landscape.coast);
     CHECK(pangaea.title("en") == "seas:pangaea");  // without a title: its id
     CHECK(sim::find_package_landscape(presets, "seas:bad") == &presets[2]);
-    CHECK(presets[2].landscape == sim::WorldSettings::Landscape{});
+    CHECK(sim::same_islands(presets[2].landscape, sim::WorldSettings::Landscape{}));
+    CHECK(atolls.landscape.name == "seas:atolls");  // its own name, not the one of `like`
+    CHECK(presets[2].landscape.name == "seas:bad");
 
     // In the start dialog after Open1602's presets, with their titles.
     const std::size_t before = app::setup_choices(SetupItem::IslandPreset);

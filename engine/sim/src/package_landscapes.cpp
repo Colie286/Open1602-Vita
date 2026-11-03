@@ -25,8 +25,8 @@ bool is_name(std::string_view name) noexcept {
 
 /// The landscape `like` names: one of Open1602's presets or an earlier package's.
 std::optional<WorldSettings::Landscape> landscape_of(std::span<const PackageLandscape> presets, std::string_view like) {
-    if (const auto it = std::ranges::find(kLandscapePresets, like, &LandscapePreset::name);
-        it != kLandscapePresets.end()) {
+    if (const auto it = std::ranges::find(landscape_presets(), like, &LandscapePreset::name);
+        it != landscape_presets().end()) {
         return it->landscape;
     }
     if (const PackageLandscape* p = find_package_landscape(presets, like)) {
@@ -116,6 +116,7 @@ void apply_landscapes_file(std::vector<PackageLandscape>& presets, std::string_v
                 warnings.push_back(field + "has a value out of its range or no name of its choices");
             }
         }
+        preset.landscape.name = preset.id;  // not the name of `like`
         presets.push_back(std::move(preset));
         ++added;
     }

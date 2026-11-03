@@ -54,6 +54,11 @@ file and the line; a package names at most 32 presets.
 A preset only fills the settings of a new world: the world comes from them and its number, and a
 game needs no package for it. A preset that equals one of Open1602's shows as that one.
 
+The settings keep the kind of island world they come from (`<package>:<name>`, also when a setting
+of it is changed afterwards; the settings file's line `island_preset`). A climate of a package may
+take another share of the islands in a kind of island world (`share.<kind>`,
+[climates.md](climates.md)).
+
 ## In the code
 
 `engine/sim/include/o1602/sim/package_landscapes.hpp`: `apply_landscapes_file`,

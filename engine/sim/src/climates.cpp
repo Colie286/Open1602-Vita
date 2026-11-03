@@ -10,6 +10,7 @@
 #include "o1602/core/data_file.hpp"
 #include "o1602/core/text.hpp"
 #include "o1602/sim/game_data.hpp"
+#include "o1602/sim/world_plan.hpp"
 
 namespace o1602::sim {
 
@@ -92,6 +93,11 @@ std::string Climate::name(std::string_view language) const {
         }
     }
     return names.empty() ? id : names.begin()->second;
+}
+
+std::uint8_t Climate::share_in(std::string_view landscape) const {
+    const auto it = landscape_shares.find(landscape);
+    return it != landscape_shares.end() ? it->second : share;
 }
 
 std::uint32_t original_climate_crops(std::uint8_t like) noexcept {
@@ -207,12 +213,22 @@ void apply_climates_file(std::vector<Climate>& climates, std::string_view packag
                     }
                 }
                 (forest ? c.forest : c.ground) = std::move(tiles);
-            } else if (e.key == "share") {
+            } else if (e.key == "share" || e.key.starts_with("share.")) {
                 const std::int64_t* n = e.value.integer();
+                const std::string landscape = e.key == "share" ? std::string() : e.key.substr(6);
                 if (n == nullptr || *n < 0 || *n > 100) {
                     warnings.push_back(field + "is a percent from 0 to 100");
-                } else {
+                } else if (e.key == "share") {
                     c.share = static_cast<std::uint8_t>(*n);
+                } else if (!is_landscape_name(landscape)) {
+                    warnings.push_back(field +
+                                       "names no kind of island world (share.archipelago or "
+                                       "share.\"<package>:<name>\")");
+                } else if (c.landscape_shares.size() >= kMaxLandscapeShares) {
+                    warnings.push_back(field + "is one share more than " + std::to_string(kMaxLandscapeShares) +
+                                       "; it is passed over");
+                } else {
+                    c.landscape_shares.insert_or_assign(landscape, static_cast<std::uint8_t>(*n));
                 }
             } else {
                 warnings.push_back(field + "is no field of a climate and is passed over");
@@ -229,8 +245,14 @@ bool valid(std::span<const Climate> climates) noexcept {
     for (std::size_t i = 0; i < climates.size(); ++i) {
         const Climate& c = climates[i];
         if (c.id.empty() || c.like >= climate::kCount || (c.crops & ~kAllCrops) != 0 || c.share > 100 ||
-            c.forest.size() > kMaxForestTrees || c.ground.size() > kMaxGroundTiles) {
+            c.forest.size() > kMaxForestTrees || c.ground.size() > kMaxGroundTiles ||
+            c.landscape_shares.size() > kMaxLandscapeShares) {
             return false;
+        }
+        for (const auto& [landscape, share] : c.landscape_shares) {
+            if (!is_landscape_name(landscape) || share > 100) {
+                return false;
+            }
         }
         for (std::size_t j = 0; j < i; ++j) {
             if (climates[j].id == c.id) {

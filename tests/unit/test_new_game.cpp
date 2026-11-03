@@ -777,6 +777,46 @@ TEST_CASE("new game: an own world gives a package's climate its share of the isl
     CHECK(same_world(*world, *again));
 }
 
+TEST_CASE("new game: a package's climate takes its share of the kind of island world, else its own") {
+    const auto& fake = installation();
+    sim::NewGameOptions o = options(5);
+    sim::WorldSettings settings;
+    settings.players = 4;
+    settings.shapes = sim::WorldSettings::Shapes::Own;
+    settings.landscape = sim::landscape_presets()[1].landscape;  // archipelago
+    o.custom = settings;
+    sim::Climate tundra;
+    tundra.id = "mod:tundra";
+    tundra.like = sim::climate::kNorth;
+    tundra.crops = sim::original_climate_crops(sim::climate::kNorth);
+    tundra.landscape_shares = {{"giants", 100}};
+    o.world.climates = {tundra};
+    const auto taken = [](const sim::World& w) {
+        return std::count_if(w.islands().begin(), w.islands().end(),
+                             [](const sim::WorldIsland& i) { return i.climate != 0; });
+    };
+    // No share in an archipelago: no island of the climate.
+    auto none = sim::start_new_game(fake.game, buildings(), texts(), o);
+    REQUIRE(none.ok());
+    CHECK(taken(*none) == 0);
+    // Its share there.
+    tundra.landscape_shares.emplace("archipelago", 100);
+    o.world.climates = {tundra};
+    auto some = sim::start_new_game(fake.game, buildings(), texts(), o);
+    REQUIRE(some.ok());
+    CHECK(taken(*some) > 0);
+    // Without the name, the settings of Open1602's preset name it.
+    o.custom->landscape.name.clear();
+    auto unnamed = sim::start_new_game(fake.game, buildings(), texts(), o);
+    REQUIRE(unnamed.ok());
+    CHECK(taken(*unnamed) == taken(*some));
+    // The original's islands (templates) take `share` only.
+    o.custom->shapes = sim::WorldSettings::Shapes::Templates;
+    auto templates = sim::start_new_game(fake.game, buildings(), texts(), o);
+    REQUIRE(templates.ok());
+    CHECK(taken(*templates) == 0);
+}
+
 TEST_CASE("new game: a colour the level's file does not have is swapped with the player who had it") {
     sim::World world;
     std::vector<sim::Player> players(4);

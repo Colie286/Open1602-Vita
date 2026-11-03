@@ -73,6 +73,10 @@ struct WorldSettings {
         Outline outline = Outline::Round;
         shapes::Share forest = shapes::Share::Normal;
         shapes::Share mountains = shapes::Share::Normal;  ///< ore mountains for the size of an island
+        /// The kind of island world it is: the name of the preset it comes from ("archipelago" or
+        /// "<package>:<name>"), "" for none. A changed preset keeps its name; the packages'
+        /// climates may take another share of its islands (climates.toml `share.<name>`).
+        std::string name;
 
         friend bool operator==(const Landscape&, const Landscape&) = default;
 
@@ -124,33 +128,19 @@ struct LandscapePreset {
     std::string_view name;
     WorldSettings::Landscape landscape;
 };
-[[nodiscard]] constexpr WorldSettings::Landscape make_landscape(
-    std::uint8_t land, std::uint16_t min_side, std::uint16_t max_side, WorldSettings::Landscape::Spread spread,
-    WorldSettings::Landscape::Gap gap, shapes::Roughness coast, WorldSettings::Landscape::Outline outline) {
-    WorldSettings::Landscape l;
-    l.land = land;
-    l.min_side = min_side;
-    l.max_side = max_side;
-    l.spread = spread;
-    l.gap = gap;
-    l.coast = coast;
-    l.outline = outline;
-    return l;
-}
-namespace detail {
-using L = WorldSettings::Landscape;
-}  // namespace detail
-inline constexpr std::array<LandscapePreset, 5> kLandscapePresets = {{
-    {"varied", detail::L{}},
-    {"archipelago", make_landscape(20, 16, 60, detail::L::Spread::Even, detail::L::Gap::Narrow,
-                                   shapes::Roughness::Rugged, detail::L::Outline::Round)},
-    {"continents", make_landscape(35, 150, 400, detail::L::Spread::Even, detail::L::Gap::Normal,
-                                  shapes::Roughness::Natural, detail::L::Outline::Round)},
-    {"giants", make_landscape(30, 25, 500, detail::L::Spread::FewGiants, detail::L::Gap::Wide,
-                              shapes::Roughness::Natural, detail::L::Outline::Round)},
-    {"even", make_landscape(20, 50, 60, detail::L::Spread::Even, detail::L::Gap::Normal, shapes::Roughness::Smooth,
-                            detail::L::Outline::Round)},
-}};
+/// Open1602's presets: varied (the Landscape's defaults), archipelago, continents, giants, even.
+[[nodiscard]] const std::array<LandscapePreset, 5>& landscape_presets();
+
+/// Whether `name` can name a kind of island world (Landscape::name): Open1602's preset's name or
+/// "<package>:<name>", 1 to 192 bytes without control characters.
+[[nodiscard]] bool is_landscape_name(std::string_view name) noexcept;
+
+/// Whether `a` and `b` make the same islands: all their settings but the name are the same.
+[[nodiscard]] bool same_islands(const WorldSettings::Landscape& a, const WorldSettings::Landscape& b);
+
+/// The kind of island world `landscape` is: its name, else the name of Open1602's preset with the
+/// same settings (a setup of before the names, the command line's settings), else "".
+[[nodiscard]] std::string_view landscape_name(const WorldSettings::Landscape& landscape);
 
 /// Sets one setting of `landscape` from text: `key` one of landscape_names::kKeys, `value` a
 /// number (land: percent, min and max: tiles) or a name of landscape_names. When the smallest

@@ -49,6 +49,8 @@ TEST_CASE("climates: a package names climates like the north or the south, with 
         "forest = \"anno1602:mixed_forest, anno1602:21306\"\n"
         "ground = \"anno1602:22722, anno1602:22724\"\n"
         "share = 30\n"
+        "share.archipelago = 60\n"
+        "share.\"other:atolls\" = 0\n"
         "[jungle]\n"
         "like = \"south\"\n",
         warnings);
@@ -61,6 +63,12 @@ TEST_CASE("climates: a package names climates like the north or the south, with 
     CHECK((tundra.forest == std::vector<std::uint32_t>{21304, 21306}));
     CHECK((tundra.ground == std::vector<std::uint32_t>{22722, 22724}));
     CHECK(tundra.share == 30);
+    // Its share by kind of island world, else `share`.
+    CHECK(tundra.landscape_shares.size() == 2);
+    CHECK(tundra.share_in("archipelago") == 60);
+    CHECK(tundra.share_in("other:atolls") == 0);
+    CHECK(tundra.share_in("giants") == 30);
+    CHECK(tundra.share_in("") == 30);
     CHECK(tundra.name("de") == "Tundra (de)");
     CHECK(tundra.name("fr") == "Tundra");
     // Without its own fields: the like's crops, no forest of its own, no share, the id as its name.
@@ -92,10 +100,11 @@ TEST_CASE("climates: what cannot be read is passed over with the file and the li
         "[dry]\nlike = \"south\"\n"
         "crops = \"cocoa, rice\"\n"        // rice is no crop
         "share = 150\n"                    // more than 100
+        "share.giants = 101\n"             // more than 100
         "forest = \"anno1602:nothing\"\n"  // no building
         "colour = 3\n",                    // no field
         warnings);
-    CHECK(warnings.size() == 7);
+    CHECK(warnings.size() == 8);
     for (const std::string& w : warnings) {
         CHECK(w.starts_with("mod/climates.toml line "));
     }
@@ -103,6 +112,7 @@ TEST_CASE("climates: what cannot be read is passed over with the file and the li
     CHECK(climates[0].id == "mod:dry");
     CHECK(climates[0].crops == bit(sim::ware::kCocoaField));
     CHECK(climates[0].share == 0);
+    CHECK(climates[0].landscape_shares.empty());
     CHECK(climates[0].forest.empty());
     // At most kMaxClimates in all.
     std::string many;
@@ -149,7 +159,8 @@ TEST_CASE("climates: a game keeps its climates and its islands' in the savegame 
     balance.climates = read(
         "[tundra]\nlike = \"north\"\nname.de = \"Tundra\"\ncrops = \"wine\"\nforest = \"anno1602:21304\"\nshare = 40\n",
         warnings);
-    // Without ground CLIM stays version 1; the second save below has ground (version 2).
+    // Without ground CLIM stays version 1; the second save below has ground (version 2), the third
+    // shares by kind of island world (version 3).
     world.set_balance(balance);
     world.island(1).climate = 1;
     auto bytes = sim::write_game(world, buildings);
@@ -167,6 +178,14 @@ TEST_CASE("climates: a game keeps its climates and its islands' in the savegame 
     auto loaded_ground = sim::read_game(*with_ground, buildings);
     REQUIRE(loaded_ground.ok());
     CHECK(loaded_ground->balance() == balance);
+    // Shares by kind of island world: version 3.
+    balance.climates[0].landscape_shares = {{"archipelago", 70}, {"mod:atolls", 0}};
+    world.set_balance(balance);
+    auto with_shares = sim::write_game(world, buildings);
+    REQUIRE(with_shares.ok());
+    auto loaded_shares = sim::read_game(*with_shares, buildings);
+    REQUIRE(loaded_shares.ok());
+    CHECK(loaded_shares->balance() == balance);
 
     // An island of a climate the game does not have is a damaged file.
     world.island(0).climate = 2;

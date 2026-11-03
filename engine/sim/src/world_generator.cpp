@@ -278,7 +278,7 @@ public:
           m_shape_seed(shape_seed),
           m_shape_random(shape_seed, kShapeStream),
           m_own_islands(std::move(own_islands)),
-          m_landscape(landscape),
+          m_landscape(std::move(landscape)),
           m_climate_random(shape_seed, kClimateStream) {}
 
     core::Result<GeneratedWorld> run(const assets::ChunkFile& scenario, bool guarantee);
@@ -555,8 +555,11 @@ bool Generator::load_package_island(Slot& slot, const PackageIsland& island) {
 
 std::uint8_t Generator::own_climate(const ScenarioPlan::Island& e) {
     // Of the islands of a climate of the original, not the homes, each climate of a package that
-    // is like it takes its share: one draw per island of a climate that has any.
-    const auto like = [&](const Climate& c) { return c.like == e.climate && c.share != 0; };
+    // is like it takes its share, the one for the kind of island world if it names one: one draw
+    // per island of a climate that has any.
+    const std::string_view landscape =
+        m_shapes == WorldSettings::Shapes::Templates ? std::string_view{} : landscape_name(m_landscape);
+    const auto like = [&](const Climate& c) { return c.like == e.climate && c.share_in(landscape) != 0; };
     if ((e.flags & kPlanNoVillage) != 0 || std::none_of(m_climates.begin(), m_climates.end(), like)) {
         return 0;
     }
@@ -565,10 +568,11 @@ std::uint8_t Generator::own_climate(const ScenarioPlan::Island& e) {
         if (!like(m_climates[i])) {
             continue;
         }
-        if (roll < m_climates[i].share) {
+        const std::uint8_t share = m_climates[i].share_in(landscape);
+        if (roll < share) {
             return static_cast<std::uint8_t>(i + 1);
         }
-        roll -= m_climates[i].share;
+        roll -= share;
     }
     return 0;
 }

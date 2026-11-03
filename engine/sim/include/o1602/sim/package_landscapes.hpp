@@ -2,7 +2,7 @@
 //
 // Kinds of island world of a content package's own: `landscapes.toml` names presets of the
 // landscape of islands of their own shape (WorldSettings::Landscape, world generator stage 2),
-// which the start dialog offers after Open1602's own (kLandscapePresets;
+// which the start dialog offers after Open1602's own (landscape_presets();
 // docs/modding/landscapes.md). A preset only fills the settings of a new world: the world itself
 // comes from them and its number, so a game needs no package for it.
 #pragma once
@@ -36,7 +36,7 @@ struct PackageLandscape {
 };
 
 /// Reads `landscapes.toml` of `package` (UTF-8) and adds its presets to `presets`. A table starts
-/// from the landscape `like` names (a name of kLandscapePresets or an earlier package's preset,
+/// from the landscape `like` names (a name of landscape_presets() or an earlier package's preset,
 /// the defaults without it) and changes the fields set_landscape() knows (landscape_names::kKeys);
 /// `title` and `title.<language>` name it. A field that is wrong is passed over with a warning that
 /// names the line; a file that is no data file adds nothing.

@@ -5,9 +5,9 @@ north or south and differs in its name, the crops its islands grow, the trees of
 how many islands of a new own world take it (item 9 of [open-work.md](open-work.md)).
 
 **Status:** Done are the file `climates.toml`, its crops, forest and ground, its share of the
-islands of new own worlds, island templates of its own (`islands.toml`), its name and crops in the
-status line over grass and trees, and the island editor's choice of it for new islands. Still open:
-its share set per kind of island world (`landscapes.toml`).
+islands of new own worlds, also per kind of island world, island templates of its own
+(`islands.toml`), its name and crops in the status line over grass and trees, and the island
+editor's choice of it for new islands.
 
 ## The file
 
@@ -28,6 +28,8 @@ crops = "tobacco, wine"
 forest = "anno1602:mixed_forest"
 ground = "anno1602:22722, anno1602:22724"
 share = 25
+share.archipelago = 60
+share."seas:atolls" = 0
 ```
 
 | Field | Value | Meaning |
@@ -38,6 +40,7 @@ share = 25
 | `forest` | a list of up to 16 trees, `anno1602:<name or number>` ([names](values.md#names)) or `<package>:<name>` ([own-buildings.md](own-buildings.md)) | the trees of the forest of its islands of their own shape; without it the like's |
 | `ground` | a list of up to 16 kinds of ground, named as the trees | the ground of its islands of their own shape, each kind as often; without it the original's mix |
 | `share` | 0 to 100 | percent of the islands of `like` that take this climate in a new own world, not the players' home islands; 0 without it |
+| `share.<kind>` | 0 to 100 | the percent in a world of islands of their own shape of one kind of island world instead of `share`: Open1602's `varied`, `archipelago`, `continents`, `giants`, `even`, or a package's preset as `share."<package>:<name>"` ([landscapes.md](landscapes.md)); up to 32 |
 
 A climate's crop grows half on each of its islands and fully on those the world gives it to, as
 the original's three crops of a climate do; the other crops do not grow there. Grain grows
@@ -56,7 +59,11 @@ A new own world (the start dialog's "Own world", `o1602-tool new-world --mods`) 
 island of the north or the south, other than a home island, whether a climate of a package that is
 like it takes it, by the climates' shares in their load order; the shares of the climates like one
 climate together take at most all of its islands. These draws have a random stream of their own, so
-a world without such climates is the same as before. The world gives an island of such a climate
+a world without such climates is the same as before. A world of islands of their own shape
+(island shapes "Own" or "Mixed") takes a climate's `share.<kind>` for the kind of island world its
+start dialog chose; a preset changed there keeps its kind, and settings without a kind (the command
+line's, a settings file of before) are the kind of Open1602's preset with the same settings. A
+world of the original's islands takes `share`. The world gives an island of such a climate
 only its crops (sugar cane and wine still never on one island), and every start still gets each
 crop within reach where an island can grow it. An island of its own shape (island shapes "Own" or
 "Mixed") grows the climate's forest on the climate's ground; an island drawn from a template keeps

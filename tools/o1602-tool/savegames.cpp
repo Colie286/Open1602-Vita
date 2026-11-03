@@ -407,8 +407,8 @@ int cmd_new_world(const Args& args) {
                                            : sim::WorldSettings::Shapes::Templates;
     }
     if (const auto it = args.options.find("--island-preset"); it != args.options.end()) {
-        const auto preset = std::ranges::find(sim::kLandscapePresets, it->second, &sim::LandscapePreset::name);
-        if (preset == sim::kLandscapePresets.end()) {
+        const auto preset = std::ranges::find(sim::landscape_presets(), it->second, &sim::LandscapePreset::name);
+        if (preset == sim::landscape_presets().end()) {
             std::fprintf(stderr, "--island-preset: no preset %s\n", std::string(it->second).c_str());
             return usage();
         }

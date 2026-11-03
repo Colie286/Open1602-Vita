@@ -34,6 +34,8 @@ inline constexpr std::size_t kMaxClimates = 32;
 inline constexpr std::size_t kMaxForestTrees = 16;
 /// Kinds of ground one climate may name.
 inline constexpr std::size_t kMaxGroundTiles = 16;
+/// Kinds of island world one climate may give a share of their own.
+inline constexpr std::size_t kMaxLandscapeShares = 32;
 
 struct Climate {
     std::string id;         ///< "<package>:<name>"
@@ -50,7 +52,13 @@ struct Climate {
     std::vector<std::uint32_t> ground;
     /// Percent of the islands of `like` in a new own world that take this climate (not the homes).
     std::uint8_t share = 0;
+    /// The percent in a world of a kind of island world (WorldSettings::Landscape::name, such as
+    /// "archipelago" or "<package>:<name>") instead of `share`, by its name.
+    std::map<std::string, std::uint8_t, std::less<>> landscape_shares;
 
+    /// The percent of the islands of `like` it takes in a world of the kind `landscape`
+    /// (landscape_name(); "" for the original's islands): its share there, else `share`.
+    [[nodiscard]] std::uint8_t share_in(std::string_view landscape) const;
     /// The name in `language`, else the one for every language, else English, else the id.
     [[nodiscard]] std::string name(std::string_view language) const;
     friend bool operator==(const Climate&, const Climate&) = default;
@@ -74,8 +82,8 @@ void apply_climates_file(std::vector<Climate>& climates, std::string_view packag
                          std::span<const assets::OwnBuilding> own = {});
 
 /// Whether `climates` can be played: at most kMaxClimates, ids once each, `like` north or south,
-/// crops of the six only, shares up to 100, at most kMaxForestTrees trees and kMaxGroundTiles
-/// kinds of ground.
+/// crops of the six only, shares up to 100, at most kMaxForestTrees trees, kMaxGroundTiles
+/// kinds of ground and kMaxLandscapeShares shares of kinds of island world.
 [[nodiscard]] bool valid(std::span<const Climate> climates) noexcept;
 
 }  // namespace o1602::sim

@@ -549,8 +549,8 @@ TEST_CASE("world plan: the landscape's settings by name, as setup files and the 
     CHECK(!sim::set_landscape(l, "mountains", "many"));
     CHECK(!sim::set_landscape(l, "rivers", "many"));
     // Every preset has a name of its own and is a landscape the settings can give.
-    for (const sim::LandscapePreset& p : sim::kLandscapePresets) {
-        CHECK(std::ranges::count(sim::kLandscapePresets, p.name, &sim::LandscapePreset::name) == 1);
+    for (const sim::LandscapePreset& p : sim::landscape_presets()) {
+        CHECK(std::ranges::count(sim::landscape_presets(), p.name, &sim::LandscapePreset::name) == 1);
         CHECK(p.landscape.min_side <= p.landscape.max_side);
         CHECK(p.landscape.land >= L::kMinLand);
         CHECK(p.landscape.land <= L::kMaxLand);

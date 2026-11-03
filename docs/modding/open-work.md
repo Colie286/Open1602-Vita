@@ -21,7 +21,7 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 | 6. Lua scripts | a sandboxed Lua 5.4 script per package that hears what happens and reads and changes the game (money, goods, missions, buildings, ships, land units, diplomacy, who wins) |
 | 7. Scenarios and campaigns | scenarios with maps, briefings, goals and scripts; campaigns of up to five parts that carry money and a script table on |
 | 8. Factions | factions of a package's own that take the base game's slots, and settlers or pirates left wholly to a script |
-| 9. Island generator | islands of their own shape and size with slopes, rivers with bends, volcanoes and native villages; kinds of island world as data (`landscapes.toml`); island templates of a package's own, which new own worlds draw with the original's (`islands.toml`, [islands.md](islands.md)); climates of a package's own with their crops, forest and share of the islands (`climates.toml`, [climates.md](climates.md)) |
+| 9. Island generator | islands of their own shape and size with slopes, rivers with bends, volcanoes and native villages; kinds of island world as data (`landscapes.toml`); island templates of a package's own, which new own worlds draw with the original's (`islands.toml`, [islands.md](islands.md)); climates of a package's own with their crops, forest, ground and share of the islands, also per kind of island world (`climates.toml`, [climates.md](climates.md)) |
 
 ### Still open
 
@@ -29,7 +29,6 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 |---|---|---|
 | 4 | videos in a modern format (today only Smacker and Bink 2) | medium: a decoder in `third_party` (e.g. a royalty-free format such as AV1 or VP9 in WebM) |
 | 5 | the 55 fixed slots of a city record as data (owner's wish of 2026-11-03, after item 9): total conversions that carry none of the original's slots, public buildings of a package's own kind that the computers plan, goods that count as food or alcohol for the stages, and the rules tied to single slots (weaving, quarries per stonemason, smelters, market, Kontor, towers) | large: slots named, numbered per game, the mapping kept in the savegame |
-| 9 | a climate's share per kind of island world | small: landscapes.toml and the generator's draw |
 
 ### Smaller adjustments
 
@@ -49,8 +48,7 @@ the **first page for modders**, [README.md](README.md); and the **package check*
 `o1602-tool check-mod <mods folder>`, which reads the packages as the game does and lists every
 problem without starting the game.
 
-- Next item to work on: the rest of the island generator (item 9): a climate's share per kind of
-  island world.
+- Next item to work on: the 55 fixed slots of a city record as data (item 5, the owner's wish).
 
 ## What a mod can do today
 
@@ -359,7 +357,7 @@ Part 3 done on 2026-10-31: the landscape on the command line of the game and of 
 new-world`, with the same names as the setup files (`--island-preset varied|archipelago|continents|
 giants|even`, `--island-land`, `--island-min`, `--island-max`, `--island-spread`, `--island-gap`,
 `--island-coast`, `--island-outline`, `--island-forest`, `--island-mountains`; `sim::set_landscape`,
-`sim::kLandscapePresets`).
+`sim::landscape_presets()`).
 
 Part 4 done on 2026-11-01, from
 `o1602-tool template-stats` over all 662 templates: the ore mountains of islands of their own shape
@@ -427,8 +425,9 @@ of their own). An island of such a climate grows its crops half and fully where 
 them, keeps the original's climate in its header and its own in the savegame (section `CLIM`); the
 status line names it with its crops. Done on 2026-11-03: the island editor offers the packages'
 climates for new islands (#434), a climate's own ground (`ground`, savegame `CLIM` version 2) and
-island templates of such a climate (`islands.toml`'s `climate = "<package>:<name>"`). Still open:
-its share per kind of island world.
+island templates of such a climate (`islands.toml`'s `climate = "<package>:<name>"`) and its
+share per kind of island world (`share.<kind>`, savegame `CLIM` version 3; a world's settings name
+their kind, `WorldSettings::Landscape::name`).
 
 ## Order of work
 

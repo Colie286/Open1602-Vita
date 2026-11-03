@@ -161,6 +161,9 @@ constexpr std::uint32_t kPlannedIslands = tag("PLAN");
 constexpr std::uint32_t kClimates = tag("CLIM");
 /// CLIM version 2: each climate's ground after its share, written only when a climate has ground.
 constexpr std::uint16_t kClimatesWithGround = 2;
+/// CLIM version 3: each climate's shares by kind of island world after its ground, written only
+/// when a climate has any.
+constexpr std::uint16_t kClimatesWithShares = 3;
 /// The computers' producers a package changed (Balance::computer_producers), only written when
 /// there are any. Required: the computers would build otherwise.
 constexpr std::uint32_t kComputerProducers = tag("AIPR");
@@ -222,7 +225,7 @@ constexpr std::uint16_t max_version(std::uint32_t id) noexcept {
         return kScriptsWithCampaign;
     }
     if (id == kClimates) {
-        return kClimatesWithGround;
+        return kClimatesWithShares;
     }
     if (id == kBalance) {
         return kBalanceWithStages;
@@ -590,10 +593,11 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
     }
     if (!world.balance().climates.empty()) {
         const auto& climates = world.balance().climates;
-        const std::uint16_t version =
-            std::any_of(climates.begin(), climates.end(), [](const Climate& c) { return !c.ground.empty(); })
-                ? kClimatesWithGround
-                : std::uint16_t{1};
+        const auto any = [&](auto has) { return std::any_of(climates.begin(), climates.end(), has); };
+        const std::uint16_t version = any([](const Climate& c) { return !c.landscape_shares.empty(); })
+                                          ? kClimatesWithShares
+                                      : any([](const Climate& c) { return !c.ground.empty(); }) ? kClimatesWithGround
+                                                                                                : std::uint16_t{1};
         section(
             out, kClimates,
             [&](Writer& o) {
@@ -609,6 +613,12 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
                     o.u8(c.share);
                     if (version >= kClimatesWithGround) {
                         o.u32s(c.ground);
+                    }
+                    if (version >= kClimatesWithShares) {
+                        o.list(c.landscape_shares, 5, [&](const auto& share) {
+                            o.string(share.first);
+                            o.u8(share.second);
+                        });
                     }
                 });
                 std::vector<std::pair<std::uint16_t, std::uint8_t>> islands;
@@ -1186,6 +1196,14 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                     in.u8(c.share);
                     if (version >= kClimatesWithGround) {
                         in.u32s(c.ground);
+                    }
+                    if (version >= kClimatesWithShares) {
+                        std::vector<std::pair<std::string, std::uint8_t>> shares;
+                        in.list(shares, 5, [&](std::pair<std::string, std::uint8_t>& share) {
+                            in.string(share.first);
+                            in.u8(share.second);
+                        });
+                        c.landscape_shares.insert(shares.begin(), shares.end());
                     }
                 });
                 in.list(part.islands, 3, [&](std::pair<std::uint16_t, std::uint8_t>& island) {

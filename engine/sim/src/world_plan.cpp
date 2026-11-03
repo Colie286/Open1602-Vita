@@ -1111,8 +1111,65 @@ std::uint16_t WorldSettings::Landscape::fill() const {
     return static_cast<std::uint16_t>(outline == Outline::Branched ? compact - 120 : compact);
 }
 
+namespace {
+
+using L = WorldSettings::Landscape;
+
+L make_landscape(std::string_view name, std::uint8_t land, std::uint16_t min_side, std::uint16_t max_side,
+                 L::Spread spread, L::Gap gap, shapes::Roughness coast, L::Outline outline) {
+    L l;
+    l.name = name;
+    l.land = land;
+    l.min_side = min_side;
+    l.max_side = max_side;
+    l.spread = spread;
+    l.gap = gap;
+    l.coast = coast;
+    l.outline = outline;
+    return l;
+}
+
+}  // namespace
+
+const std::array<LandscapePreset, 5>& landscape_presets() {
+    static const std::array<LandscapePreset, 5> presets = {{
+        {"varied",
+         make_landscape("varied", L{}.land, L{}.min_side, L{}.max_side, L{}.spread, L{}.gap, L{}.coast, L{}.outline)},
+        {"archipelago", make_landscape("archipelago", 20, 16, 60, L::Spread::Even, L::Gap::Narrow,
+                                       shapes::Roughness::Rugged, L::Outline::Round)},
+        {"continents", make_landscape("continents", 35, 150, 400, L::Spread::Even, L::Gap::Normal,
+                                      shapes::Roughness::Natural, L::Outline::Round)},
+        {"giants", make_landscape("giants", 30, 25, 500, L::Spread::FewGiants, L::Gap::Wide, shapes::Roughness::Natural,
+                                  L::Outline::Round)},
+        {"even", make_landscape("even", 20, 50, 60, L::Spread::Even, L::Gap::Normal, shapes::Roughness::Smooth,
+                                L::Outline::Round)},
+    }};
+    return presets;
+}
+
+bool is_landscape_name(std::string_view name) noexcept {
+    return !name.empty() && name.size() <= 192 && std::ranges::none_of(name, [](const char c) {
+        const auto u = static_cast<unsigned char>(c);
+        return u < 0x20 || u == 0x7F;
+    });
+}
+
+bool same_islands(const WorldSettings::Landscape& a, const WorldSettings::Landscape& b) {
+    WorldSettings::Landscape named = b;
+    named.name = a.name;
+    return a == named;
+}
+
+std::string_view landscape_name(const WorldSettings::Landscape& landscape) {
+    if (!landscape.name.empty()) {
+        return landscape.name;
+    }
+    const auto it = std::ranges::find_if(
+        landscape_presets(), [&](const LandscapePreset& p) { return same_islands(p.landscape, landscape); });
+    return it != landscape_presets().end() ? it->name : std::string_view{};
+}
+
 bool set_landscape(WorldSettings::Landscape& landscape, std::string_view key, std::string_view value) {
-    using L = WorldSettings::Landscape;
     namespace names = landscape_names;
     const auto choice = [value](const std::array<std::string_view, 3>& list) -> std::optional<std::uint8_t> {
         for (std::size_t i = 0; i < list.size(); ++i) {

@@ -176,7 +176,9 @@ static_assert(kSmallest.front() >= sim::shapes::kMinSide && kLargest.back() <= s
 
 /// The kinds of world of the page's first item, after the original's islands: Open1602's
 /// (setup.island_preset.<name>), then the packages' (landscapes.toml).
-constexpr const auto& kIslandPresets = sim::kLandscapePresets;
+const auto& island_presets() {
+    return sim::landscape_presets();
+}
 
 std::vector<sim::PackageLandscape>& package_presets() {
     static std::vector<sim::PackageLandscape> presets;
@@ -185,13 +187,13 @@ std::vector<sim::PackageLandscape>& package_presets() {
 
 /// The presets of the first item after the original's islands.
 std::size_t island_preset_count() {
-    return kIslandPresets.size() + package_presets().size();
+    return island_presets().size() + package_presets().size();
 }
 
 /// The landscape of preset `i` (0: Open1602's first).
 const sim::WorldSettings::Landscape& island_preset_landscape(std::size_t i) {
-    return i < kIslandPresets.size() ? kIslandPresets[i].landscape
-                                     : package_presets()[i - kIslandPresets.size()].landscape;
+    return i < island_presets().size() ? island_presets()[i].landscape
+                                       : package_presets()[i - island_presets().size()].landscape;
 }
 
 /// The preset choice the setup is (0 the original's islands), or nothing.
@@ -203,7 +205,9 @@ std::optional<std::size_t> island_preset(const sim::WorldSettings& w) {
         return std::nullopt;
     }
     for (std::size_t i = 0; i < island_preset_count(); ++i) {
-        if (island_preset_landscape(i) == w.landscape) {
+        // The same settings; a name, if the setup has one, the preset's (two may have the same).
+        const sim::WorldSettings::Landscape& l = island_preset_landscape(i);
+        if (sim::same_islands(l, w.landscape) && (w.landscape.name.empty() || w.landscape.name == l.name)) {
             return i + 1;
         }
     }
@@ -1343,11 +1347,11 @@ std::string setup_value(SetupItem item, std::size_t choice) {
             return ui::tr(kKeys[std::min<std::size_t>(choice, kKeys.size() - 1)]);
         }
         case SetupItem::IslandPreset:
-            if (choice > kIslandPresets.size() && choice <= island_preset_count()) {
-                return package_presets()[choice - 1 - kIslandPresets.size()].title(ui::current_language());
+            if (choice > island_presets().size() && choice <= island_preset_count()) {
+                return package_presets()[choice - 1 - island_presets().size()].title(ui::current_language());
             }
             return ui::tr(choice == 0 ? std::string("setup.island_preset.original")
-                                      : "setup.island_preset." + std::string(kIslandPresets[choice - 1].name));
+                                      : "setup.island_preset." + std::string(island_presets()[choice - 1].name));
         case SetupItem::LandShare:
             return ui::tr("setup.win.percent", {std::to_string(kLandShares[choice])});
         case SetupItem::SmallestIsland:
@@ -1730,6 +1734,10 @@ bool read_setup_line(EndlessSetup& setup, std::string_view key, std::string_view
         if (const auto i = name_index(kShapeNames, value)) {
             w.shapes = static_cast<Shapes>(*i);
         }
+    } else if (key == "island_preset") {
+        if (sim::is_landscape_name(value)) {
+            w.landscape.name = value;
+        }
     } else if (key.starts_with("island_") &&
                std::ranges::find(sim::landscape_names::kKeys, key.substr(7)) != sim::landscape_names::kKeys.end()) {
         (void)sim::set_landscape(w.landscape, key.substr(7), value);
@@ -1791,6 +1799,9 @@ std::string write_setup(const EndlessSetup& setup, std::string_view prefix) {
     line("island_sizes", kSizeNames[std::min<std::size_t>(static_cast<std::size_t>(w.sizes), 2)]);
     line("island_shapes", kShapeNames[enum_choice(w.shapes, kShapeNames.size())]);
     const Landscape& l = w.landscape;
+    if (!l.name.empty()) {
+        line("island_preset", l.name);
+    }
     line("island_land", std::to_string(l.land));
     line("island_min", std::to_string(l.min_side));
     line("island_max", std::to_string(l.max_side));
@@ -1856,11 +1867,11 @@ std::size_t landscape_choices() {
 
 std::string landscape_choice_name(std::size_t choice) {
     choice = std::min(choice, island_preset_count());
-    if (choice > kIslandPresets.size()) {
-        return package_presets()[choice - 1 - kIslandPresets.size()].title(ui::current_language());
+    if (choice > island_presets().size()) {
+        return package_presets()[choice - 1 - island_presets().size()].title(ui::current_language());
     }
     return ui::tr(choice == 0 ? std::string("setup.island_preset.original")
-                              : "setup.island_preset." + std::string(kIslandPresets[choice - 1].name));
+                              : "setup.island_preset." + std::string(island_presets()[choice - 1].name));
 }
 
 void apply_landscape_choice(sim::WorldSettings& w, std::size_t choice) {
