@@ -1784,9 +1784,36 @@ void MapViewer::render() {
                 sim::fit_connection(m_state->world, m_buildings, island, t.x, t.y);
             }
         }
+        // The editor's brush: the piece it would lay under the mouse, drawn for this frame only as
+        // the build tool's; the guard takes it back even if drawing throws.
+        std::optional<editor::TerrainStroke> terrain_preview;
+        struct TerrainPreviewGuard {
+            std::optional<editor::TerrainStroke>& stroke;
+            explicit TerrainPreviewGuard(std::optional<editor::TerrainStroke>& s) : stroke(s) {}
+            TerrainPreviewGuard(const TerrainPreviewGuard&) = delete;
+            TerrainPreviewGuard& operator=(const TerrainPreviewGuard&) = delete;
+            ~TerrainPreviewGuard() {
+                if (stroke) {
+                    stroke->cancel();
+                }
+            }
+        } terrain_guard{terrain_preview};
+        if (m_editor && !m_editor->stroke && !m_editor->placing &&
+            m_editor->terrain.tool == EditorTerrain::Tool::Brush && m_hud != nullptr &&
+            m_hud->editor_panel() != nullptr && m_hud->editor_panel()->page() == EditorPanel::Page::Terrain &&
+            !m_hud->covers(static_cast<std::int32_t>(m_input->mouse_x()),
+                           static_cast<std::int32_t>(m_input->mouse_y()))) {
+            if (const auto tile = m_input->tile_at_mouse()) {
+                terrain_preview.emplace(m_state->world, m_buildings);
+                editor_paint(*terrain_preview, tile->x, tile->y, false);
+            }
+        }
         std::sort(m_sprite_tints.tiles.begin(), m_sprite_tints.tiles.end());
         render::build_world_draw_list(m_state->world, m_buildings, m_clock, m_camera.view(), m_camera.viewport(),
                                       layers, m_commands, m_draw_scratch);
+        if (terrain_preview) {
+            terrain_preview->cancel();
+        }
         preview.restore();
         draw_map(*graphics);
         draw_unit_arms();

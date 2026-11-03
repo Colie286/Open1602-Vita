@@ -49,6 +49,25 @@ struct EditorNewIsland {
     friend bool operator==(const EditorNewIsland&, const EditorNewIsland&) = default;
 };
 
+/// The sides of the terrain brushes, in tiles (editor::kBrushSizes).
+inline constexpr std::array<std::uint8_t, 5> kTerrainBrushes = {1, 2, 3, 5, 9};
+
+/// The settings of the terrain tools (the page "Terrain").
+struct EditorTerrain {
+    /// Brush: the piece where the mouse goes; Land, Water: land or sea with the coast laid
+    /// about it; Random: pieces of the group drawn tile by tile; Fill: the tiles joined to the one
+    /// clicked that show the same; Replace: every tile of the island that shows the same; Pipette:
+    /// takes the piece of the tile clicked.
+    enum class Tool : std::uint8_t { Brush, Land, Water, Random, Fill, Replace, Pipette };
+    static constexpr std::size_t kTools = 7;
+    Tool tool = Tool::Brush;
+    std::uint8_t group = 0;     ///< editor::TerrainGroup
+    std::size_t piece = 0;      ///< index into the group's pieces
+    std::uint8_t rotation = 0;  ///< 0..3, a quarter clockwise each
+    std::uint8_t brush = 0;     ///< index into editor::kBrushSizes
+    friend bool operator==(const EditorTerrain&, const EditorTerrain&) = default;
+};
+
 /// What a click on the editor's map picked.
 struct EditorPick {
     enum class Kind : std::uint8_t { None, Sea, Island, Building, Ship, Soldier, Placeholder };
@@ -139,6 +158,14 @@ struct EditorModel {
     std::uint8_t placeholder_size = 0;
     std::uint32_t used_width = 1;
     std::uint32_t used_height = 1;
+    /// The terrain tools' settings, the pieces of the group, and the piece chosen: its id, its
+    /// size in tiles and whether it turns.
+    EditorTerrain terrain;
+    std::size_t terrain_pieces = 0;
+    std::uint32_t terrain_id = 0;
+    std::uint32_t terrain_width = 1;
+    std::uint32_t terrain_height = 1;
+    bool terrain_turns = false;
 };
 
 /// What a click or a key asked for.
@@ -170,6 +197,7 @@ struct EditorRequest {
         MovePlaceholder,    ///< the placeholder `index` to place anew
         RemovePlaceholder,  ///< the placeholder `index` taken out
         ChangePlaceholder,  ///< the placeholder `index` of climate `island.climate`, size `island.size`
+        Terrain,            ///< the terrain tools set to `terrain`
     };
     Kind kind = Kind::Close;
     std::size_t index = 0;
@@ -179,6 +207,7 @@ struct EditorRequest {
     std::uint32_t width = 0;      ///< ResizeWorld
     std::uint32_t height = 0;     ///< ResizeWorld
     std::uint32_t fertility = 0;  ///< SetFertility
+    EditorTerrain terrain{};      ///< Terrain
 };
 
 class EditorPanel {
@@ -201,7 +230,8 @@ public:
         Islands,
         WorldSize,
         Fertility,
-        IslandFiles
+        IslandFiles,
+        Terrain
     };
 
     explicit EditorPanel(ui::FormStyle style = {}) : m_form(style) {}
@@ -267,6 +297,7 @@ private:
     void layout_islands(const EditorModel& model);
     void layout_world_size(const EditorModel& model);
     void layout_fertility(const EditorModel& model);
+    void layout_terrain(const EditorModel& model);
     void layout_placeholder_actions(const EditorModel& model, std::int32_t& y);
     /// The buttons of an island selected: move, turn, copy, take out; or a note while placing.
     void layout_island_actions(const EditorModel& model, std::int32_t& y);

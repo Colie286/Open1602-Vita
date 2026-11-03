@@ -982,6 +982,13 @@ void MapInput::handle_event(const SDL_Event& event) {
             }
             if (m_left_down) {
                 m_press.move(static_cast<double>(event.motion.x), static_cast<double>(event.motion.y));
+                // A stroke of the editor's terrain tools goes on where the mouse is over the map.
+                if (m_editor && !(m_hud && m_hud->covers(static_cast<std::int32_t>(event.motion.x),
+                                                         static_cast<std::int32_t>(event.motion.y)))) {
+                    if (const auto tile = tile_at_mouse(); tile.has_value()) {
+                        (void)m_host.editor_stroke(tile, Host::Stroke::Continue);
+                    }
+                }
             }
             if (m_drag.move(static_cast<double>(event.motion.xrel), static_cast<double>(event.motion.yrel))) {
                 m_camera.scroll(-static_cast<double>(event.motion.xrel), -static_cast<double>(event.motion.yrel));
@@ -1040,7 +1047,9 @@ void MapInput::handle_event(const SDL_Event& event) {
                 if (event.button.button == SDL_BUTTON_LEFT) {
                     const auto tile = tile_at_mouse();
                     if (!tile || !m_host.editor_place(*tile)) {
-                        editor_pick_at_mouse();
+                        if (!m_host.editor_stroke(tile, Host::Stroke::Begin)) {
+                            editor_pick_at_mouse();
+                        }
                     }
                 }
             } else if (event.button.button == SDL_BUTTON_LEFT && m_tool.active()) {
@@ -1054,6 +1063,9 @@ void MapInput::handle_event(const SDL_Event& event) {
         case SDL_EVENT_MOUSE_BUTTON_UP:
             if (event.button.button == SDL_BUTTON_LEFT) {
                 m_left_down = false;
+                if (m_editor) {
+                    (void)m_host.editor_stroke(std::nullopt, Host::Stroke::End);
+                }
                 if (m_hud) {
                     if (const auto a = m_hud->mouse(static_cast<std::int32_t>(event.button.x),
                                                     static_cast<std::int32_t>(event.button.y), false)) {

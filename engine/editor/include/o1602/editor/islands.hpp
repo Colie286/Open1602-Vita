@@ -154,6 +154,18 @@ struct NewIsland {
 [[nodiscard]] core::Result<std::unique_ptr<Operation>> add_island(const sim::World& world, sim::WorldIsland island,
                                                                   std::uint32_t x, std::uint32_t y,
                                                                   const assets::BuildingTable& buildings);
+/// The island `index` grown by tiles of open sea on each side, every tile keeping its place on the
+/// map (sim::World::grow_island): where land painted at its edge goes on.
+[[nodiscard]] core::Result<std::unique_ptr<Operation>> grow_island(const sim::World& world, std::size_t index,
+                                                                   std::uint32_t left, std::uint32_t top,
+                                                                   std::uint32_t right, std::uint32_t bottom,
+                                                                   const assets::BuildingTable& buildings);
+/// A new island of only open sea, `width` x `height` tiles at (x, y), of `climate` (0 north, 1
+/// south): where land painted on the open sea goes.
+[[nodiscard]] core::Result<std::unique_ptr<Operation>> add_sea_island(const sim::World& world, std::uint32_t x,
+                                                                      std::uint32_t y, std::uint32_t width,
+                                                                      std::uint32_t height, std::uint8_t climate,
+                                                                      const assets::BuildingTable& buildings);
 [[nodiscard]] core::Result<std::unique_ptr<Operation>> move_island(const sim::World& world, std::size_t index,
                                                                    std::uint32_t x, std::uint32_t y,
                                                                    const assets::BuildingTable& buildings);

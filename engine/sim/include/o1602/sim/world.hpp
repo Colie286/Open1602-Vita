@@ -516,6 +516,14 @@ public:
     /// Takes island `index` out with its animals and growing tiles; the islands after it move
     /// one place forward, and everything that names them follows. Only an island without use.
     core::Status remove_island(std::size_t index, const assets::BuildingTable* buildings = nullptr);
+    /// Island `index` grown by `left`, `top`, `right` and `bottom` tiles of open sea (`sea`, in the
+    /// phase of the world's open sea at its place), keeping every tile where it is on the map: its
+    /// deposits, craters, deer, animals and growing tiles move with its tiles. Fails if it would
+    /// leave the map or reach over another island's land, or grow beyond kMaxIslandSide. Only an
+    /// island without use (island_use()).
+    core::Status grow_island(std::size_t index, std::uint32_t left, std::uint32_t top, std::uint32_t right,
+                             std::uint32_t bottom, const assets::BuildingType& sea,
+                             const assets::BuildingTable* buildings = nullptr);
     /// The smallest island number no island has, nothing if all are taken.
     [[nodiscard]] std::optional<std::uint16_t> free_island_number() const;
     /// The map made `width` x `height` tiles large (at least 1, at most kMaxSide), growing or cut

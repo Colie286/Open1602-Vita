@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -113,6 +114,22 @@ public:
 private:
     std::string m_before;
     std::string m_after;
+};
+
+/// Several operations as one step: done in their order, taken back in the reverse one (a stroke
+/// of the land brush that first made room for its land).
+class Steps final : public Operation {
+public:
+    Steps(std::vector<std::unique_ptr<Operation>> steps, std::string_view kind)
+        : m_steps(std::move(steps)), m_kind(kind) {}
+    void apply(sim::World& world) override;
+    void revert(sim::World& world) override;
+    [[nodiscard]] std::size_t memory() const noexcept override;
+    [[nodiscard]] std::string_view kind() const noexcept override { return m_kind; }
+
+private:
+    std::vector<std::unique_ptr<Operation>> m_steps;
+    std::string m_kind;
 };
 
 }  // namespace o1602::editor

@@ -125,4 +125,24 @@ std::size_t MarkersEdit::memory() const noexcept {
     return sizeof(*this) + markers_memory(m_before) + markers_memory(m_after);
 }
 
+void Steps::apply(sim::World& world) {
+    for (const std::unique_ptr<Operation>& op : m_steps) {
+        op->apply(world);
+    }
+}
+
+void Steps::revert(sim::World& world) {
+    for (auto it = m_steps.rbegin(); it != m_steps.rend(); ++it) {
+        (*it)->revert(world);
+    }
+}
+
+std::size_t Steps::memory() const noexcept {
+    std::size_t total = sizeof(*this) + m_kind.size();
+    for (const std::unique_ptr<Operation>& op : m_steps) {
+        total += op->memory();
+    }
+    return total;
+}
+
 }  // namespace o1602::editor

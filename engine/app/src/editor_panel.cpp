@@ -63,7 +63,13 @@ constexpr Id kSaveIsland = 54;
 constexpr Id kLoadIsland = 55;
 constexpr Id kPlaceholderClimate = 56;
 constexpr Id kPlaceholderSize = 57;
-constexpr Id kFirstCrop = 60;     ///< + the index into kCropWares
+constexpr Id kTerrainPage = 58;
+constexpr Id kFirstCrop = 60;  ///< + the index into kCropWares
+constexpr Id kTerrainTool = 70;
+constexpr Id kTerrainGroup = 71;
+constexpr Id kTerrainPiece = 72;
+constexpr Id kTerrainRotation = 73;
+constexpr Id kTerrainBrush = 74;
 constexpr Id kFirstOverlay = 30;  ///< + EditorOverlay
 constexpr Id kFirstRow = 100;     ///< + the row on the page
 
@@ -106,6 +112,22 @@ std::uint64_t next_seed(std::uint64_t seed) {
 }
 
 /// The steps of the page "Map size", and the sea it leaves around what the map holds when fitted.
+constexpr std::array<const char*, EditorTerrain::kTools> kTerrainToolTexts = {
+    "editor.terrain.tool.brush",  "editor.terrain.tool.land", "editor.terrain.tool.water",
+    "editor.terrain.tool.random", "editor.terrain.tool.fill", "editor.terrain.tool.replace",
+    "editor.terrain.tool.pipette"};
+constexpr std::array<const char*, EditorTerrain::kTools> kTerrainToolNotes = {
+    "editor.terrain.note.brush",  "editor.terrain.note.land", "editor.terrain.note.water",
+    "editor.terrain.note.random", "editor.terrain.note.fill", "editor.terrain.note.replace",
+    "editor.terrain.note.pipette"};
+/// By editor::TerrainGroup.
+constexpr std::array<const char*, 8> kTerrainGroupTexts = {"editor.terrain.group.ground", "editor.terrain.group.forest",
+                                                           "editor.terrain.group.rock",   "editor.terrain.group.slope",
+                                                           "editor.terrain.group.river",  "editor.terrain.group.beach",
+                                                           "editor.terrain.group.coast",  "editor.terrain.group.sea"};
+constexpr std::array<const char*, 4> kTerrainRotationTexts = {"editor.terrain.rotation.0", "editor.terrain.rotation.1",
+                                                              "editor.terrain.rotation.2", "editor.terrain.rotation.3"};
+
 constexpr std::uint32_t kSizeStep = 50;
 constexpr std::uint32_t kFitMargin = 8;
 
@@ -236,6 +258,9 @@ void EditorPanel::layout(const EditorModel& model) {
         case Page::Fertility:
             layout_fertility(model);
             break;
+        case Page::Terrain:
+            layout_terrain(model);
+            break;
         case Page::IslandFiles:
             layout_open(model);
             break;
@@ -267,7 +292,7 @@ void EditorPanel::layout_document(const EditorModel& model) {
     y += kLine + 4;
     // The buttons share what is left above two lines of the notice: as high as the game's in a
     // large window, lower in a small one, so that the last stays in the panel.
-    constexpr std::int32_t kButtons = 11;
+    constexpr std::int32_t kButtons = 12;
     constexpr std::int32_t kNoticeRoom = 2 * 20 + 6 + kButtons;  // and what rounding the pitch down loses
     const std::int32_t bottom = m_top + m_height - 4;
     const std::int32_t pitch = std::clamp((bottom - kNoticeRoom - y) / kButtons, 22, kButtonH + kGap);
@@ -283,6 +308,7 @@ void EditorPanel::layout_document(const EditorModel& model) {
     full(kUndo, "editor.undo", model.can_undo);
     full(kRedo, "editor.redo", model.can_redo);
     full(kIslandPage, "editor.islands.edit");
+    full(kTerrainPage, "editor.terrain.edit");
     full(kWorldSizePage, "editor.world_size.edit");
     full(kView, "editor.view");
     full(kCheck, "editor.check");
@@ -481,6 +507,53 @@ void EditorPanel::layout_fertility(const EditorModel& model) {
     f.paragraph(Rect{kX, y, kW, kFertilityNote}, ui::tr("editor.fertility.note"), Tone::Dim, 20);
     y += kFertilityNote + 4;
     f.button(kSelectionPage, Rect{kX, y, kW, kButtonH}, ui::tr("editor.fertility.back"));
+}
+
+void EditorPanel::layout_terrain(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.terrain.title"), Align::Left, Tone::Heading);
+    y += 28;
+    const EditorTerrain& t = model.terrain;
+    using Tool = EditorTerrain::Tool;
+    // Each setting's name above its value, which takes the panel's width.
+    const auto value = [&](Id id, const char* label, std::string text, bool enabled) {
+        f.label(Rect{kX, y, kW, 18}, ui::tr(label), Align::Left, enabled ? Tone::Normal : Tone::Dim);
+        y += 18;
+        f.cycle_button(id, Rect{kX, y, kW, kButtonH}, std::move(text), enabled);
+        y += kButtonH + 2;
+    };
+    value(kTerrainTool, "editor.terrain.tool", ui::tr(kTerrainToolTexts[static_cast<std::size_t>(t.tool)]), true);
+    const bool shaping = t.tool == Tool::Land || t.tool == Tool::Water;
+    value(kTerrainGroup, "editor.terrain.group", ui::tr(kTerrainGroupTexts[t.group % kTerrainGroupTexts.size()]),
+          t.tool != Tool::Pipette && !shaping);
+    std::string piece = ui::tr("editor.terrain.no_piece");
+    if (model.terrain_pieces > 0) {
+        piece = ui::tr("editor.terrain.piece_value",
+                       {count(model.terrain_id), count(t.piece + 1), count(model.terrain_pieces)});
+    }
+    const bool pieces = model.terrain_pieces > 0 && t.tool != Tool::Random && t.tool != Tool::Pipette && !shaping;
+    value(kTerrainPiece, "editor.terrain.piece", std::move(piece), pieces);
+    value(kTerrainRotation, "editor.terrain.rotation", ui::tr(kTerrainRotationTexts[t.rotation & 3U]),
+          pieces && model.terrain_turns);
+    const std::uint32_t side = kTerrainBrushes[t.brush % kTerrainBrushes.size()];
+    const bool single = model.terrain_width == 1 && model.terrain_height == 1;
+    value(kTerrainBrush, "editor.terrain.brush", ui::tr("editor.size", {count(side), count(side)}),
+          t.tool == Tool::Random || shaping || (t.tool == Tool::Brush && single));
+    std::string note = ui::tr(kTerrainToolNotes[static_cast<std::size_t>(t.tool)]);
+    if (pieces && !single) {
+        note = ui::tr("editor.terrain.note.large", {count(model.terrain_width), count(model.terrain_height)});
+    }
+    // The tool's note, or in its place the notice of the last stroke (as tall as the panel is at
+    // 1024 x 768: the back button stays below it).
+    constexpr std::int32_t kTerrainNote = 4 * 20;
+    if (!model.notice.empty()) {
+        f.paragraph(Rect{kX, y, kW, kTerrainNote}, model.notice, model.notice_is_error ? Tone::Warning : Tone::Dim, 20);
+    } else {
+        f.paragraph(Rect{kX, y, kW, kTerrainNote}, note, Tone::Dim, 20);
+    }
+    y += kTerrainNote + 4;
+    f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
 }
 
 void EditorPanel::layout_islands(const EditorModel& model) {
@@ -766,6 +839,34 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
         case kSelectionPage:
             m_page = Page::Selection;
             return std::nullopt;
+        case kTerrainPage:
+            m_page = Page::Terrain;
+            return std::nullopt;
+        case kTerrainTool:
+        case kTerrainGroup:
+        case kTerrainPiece:
+        case kTerrainRotation:
+        case kTerrainBrush: {
+            EditorRequest r{EditorRequest::Kind::Terrain};
+            EditorTerrain& t = r.terrain;
+            t = model.terrain;
+            if (*id == kTerrainTool) {
+                t.tool = static_cast<EditorTerrain::Tool>(
+                    step(static_cast<std::size_t>(t.tool), EditorTerrain::kTools, forward));
+            } else if (*id == kTerrainGroup) {
+                t.group = static_cast<std::uint8_t>(step(t.group, kTerrainGroupTexts.size(), forward));
+                t.piece = 0;
+                t.rotation = 0;
+            } else if (*id == kTerrainPiece) {
+                t.piece = model.terrain_pieces > 0 ? step(t.piece, model.terrain_pieces, forward) : 0;
+                t.rotation = 0;
+            } else if (*id == kTerrainRotation) {
+                t.rotation = static_cast<std::uint8_t>(step(t.rotation, 4, forward));
+            } else {
+                t.brush = static_cast<std::uint8_t>(step(t.brush, kTerrainBrushes.size(), forward));
+            }
+            return r;
+        }
         case kWorldSizePage:
             m_page = Page::WorldSize;
             m_size_width = model.width;

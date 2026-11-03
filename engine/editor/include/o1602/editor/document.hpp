@@ -53,6 +53,8 @@ public:
 
     /// Does `op` and keeps it for undo.
     void perform(std::unique_ptr<Operation> op) { m_history.perform(*m_world, std::move(op)); }
+    /// Keeps `op`, done to the world already, for undo.
+    void record(std::unique_ptr<Operation> op) { m_history.record(std::move(op)); }
     bool undo() { return m_history.undo(*m_world); }
     bool redo() { return m_history.redo(*m_world); }
     [[nodiscard]] const History& history() const noexcept { return m_history; }
