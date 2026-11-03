@@ -12,6 +12,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 #include "ai_engine.hpp"
 
@@ -86,6 +87,8 @@ struct NeedDef {
     std::uint8_t attempts;  ///< tried while attempts < this
     std::uint8_t fertile;   ///< the island must grow this crop (0 = no test)
     bool from_start;        ///< mines: the search starts at the first point of segment 0
+    /// The producer of its raw material the city must have first, kNoProducer for none.
+    std::uint8_t after = kNoProducer;
 };
 
 inline constexpr std::array<NeedDef, 32> kNeeds{{
@@ -94,34 +97,35 @@ inline constexpr std::array<NeedDef, 32> kNeeds{{
     {kSlotGrain, kGrainFarm, ware::kGrain, ware::kCornField, 0, ware::kCornField, NeedType::B, 2, ware::kCornField,
      false},
     {kSlotMill, kMill, ware::kFlour, ware::kGrain, 0, 0, NeedType::B, 2, ware::kCornField, false},
-    {kSlotBakery, kBakery, ware::kFood, ware::kFlour, 0, 0, NeedType::B, 2, 0, false},
+    {kSlotBakery, kBakery, ware::kFood, ware::kFlour, 0, 0, NeedType::B, 2, 0, false, kSlotMill},
     {kSlotQuarry, kQuarry, ware::kStone, 0, 0, 0, NeedType::A, 1, 0, true},
     {kSlotStonemason, kStonemason, ware::kBricks, ware::kStone, 0, 0, NeedType::B, 1, 0, false},
     {kSlotFisher, kFisher, ware::kFood, ware::kFish, 0, 0, NeedType::B, 2, 0, false},
     {kSlotCotton, kCotton, ware::kWool, ware::kCottonField, 0, ware::kCottonField, NeedType::B, 2, ware::kCottonField,
      false},
-    {kSlotWebstube, kWeaving, 0, 0, id::kWebstube, 0, NeedType::B, 2, 0, false},
-    {kSlotWeberei, kWeaving, 0, 0, id::kWeberei, 0, NeedType::B, 2, 0, false},
+    {kSlotWebstube, kWeaving, 0, 0, id::kWebstube, 0, NeedType::B, 2, 0, false, kSlotSheep},
+    {kSlotWeberei, kWeaving, 0, 0, id::kWeberei, 0, NeedType::B, 2, 0, false, kSlotCotton},
     {kSlotTailor, kTailor, ware::kClothes, ware::kCloth, 0, 0, NeedType::B, 2, 0, false},
     {kSlotCattle, kCattle, ware::kMeat, ware::kGrass, 0, ware::kGrass, NeedType::B, 2, 0, false},
-    {kSlotButcher, kButcher, ware::kFood, ware::kMeat, 0, 0, NeedType::B, 2, 0, false},
+    {kSlotButcher, kButcher, ware::kFood, ware::kMeat, 0, 0, NeedType::B, 2, 0, false, kSlotCattle},
     {kSlotTobacco, kTobacco, ware::kTobacco, ware::kTobaccoField, 0, ware::kTobaccoField, NeedType::B, 2,
      ware::kTobaccoField, false},
-    {kSlotTobaccoGoods, kTobaccoGoods, ware::kTobaccoGoods, ware::kTobacco, 0, 0, NeedType::B, 2, 0, false},
+    {kSlotTobaccoGoods, kTobaccoGoods, ware::kTobaccoGoods, ware::kTobacco, 0, 0, NeedType::B, 2, 0, false,
+     kSlotTobacco},
     {kSlotSpices, kSpices, ware::kSpices, ware::kSpiceField, 0, ware::kSpiceField, NeedType::B, 2, ware::kSpiceField,
      false},
     {kSlotWine, kWine, ware::kAlcohol, ware::kWineField, 0, ware::kWineField, NeedType::B, 2, ware::kWineField, false},
     {kSlotSugar, kSugar, ware::kSugar, ware::kSugarField, 0, ware::kSugarField, NeedType::B, 2, ware::kSugarField,
      false},
-    {kSlotRum, kRum, ware::kAlcohol, ware::kSugar, 0, 0, NeedType::B, 2, 0, false},
+    {kSlotRum, kRum, ware::kAlcohol, ware::kSugar, 0, 0, NeedType::B, 2, 0, false, kSlotSugar},
     {kSlotCocoa, kCocoa, ware::kCocoa, ware::kCocoaField, 0, ware::kCocoaField, NeedType::B, 2, ware::kCocoaField,
      false},
     {kSlotSheep, kSheep, ware::kWool, ware::kGrass, 0, ware::kGrass, NeedType::B, 2, 0, false},
     {kSlotSmelter, kSmelter, ware::kIron, ware::kOre, 0, 0, NeedType::A, 2, 0, false},
-    {kSlotToolsmith, kToolsmith, ware::kTools, ware::kIron, 0, 0, NeedType::A, 2, 0, false},
-    {kSlotSwords, kSwords, ware::kSwords, ware::kIron, 0, 0, NeedType::A, 2, 0, false},
-    {kSlotMuskets, kMuskets, ware::kMuskets, ware::kIron, 0, 0, NeedType::A, 2, 0, false},
-    {kSlotCannons, kCannonFoundry, ware::kCannons, ware::kIron, 0, 0, NeedType::D, 2, 0, false},
+    {kSlotToolsmith, kToolsmith, ware::kTools, ware::kIron, 0, 0, NeedType::A, 2, 0, false, kSlotSmelter},
+    {kSlotSwords, kSwords, ware::kSwords, ware::kIron, 0, 0, NeedType::A, 2, 0, false, kSlotSmelter},
+    {kSlotMuskets, kMuskets, ware::kMuskets, ware::kIron, 0, 0, NeedType::A, 2, 0, false, kSlotSmelter},
+    {kSlotCannons, kCannonFoundry, ware::kCannons, ware::kIron, 0, 0, NeedType::D, 2, 0, false, kSlotSmelter},
     {kSlotGoldsmith, kGoldsmith, ware::kJewellery, ware::kGold, 0, 0, NeedType::A, 2, 0, false},
     {kSlotIronMine, kIronMine, 0, 0, id::kOreMine, 0, NeedType::A, 2, 0, true},
     {kSlotGoldMine, kGoldMine, 0, 0, id::kGoldMine, 0, NeedType::A, 1, 0, true},
@@ -136,6 +140,43 @@ inline const NeedDef* need_def(std::uint8_t slot) {
         }
     }
     return nullptr;
+}
+
+static_assert(static_cast<std::uint8_t>(NeedType::D) == static_cast<std::uint8_t>(ProducerWait::Placed) &&
+              static_cast<std::uint8_t>(NeedType::C) == static_cast<std::uint8_t>(ProducerWait::Unlock) &&
+              static_cast<std::uint8_t>(NeedType::B) == static_cast<std::uint8_t>(ProducerWait::Money));
+
+/// The Need of `slot` with the changes of the packages (Balance::computer_producers): their
+/// building, attempts, crop, producer first and wait over the original's. Nothing for no Need.
+inline std::optional<NeedDef> need_def(std::uint8_t slot, const std::vector<ComputerProducer>& changes) {
+    const NeedDef* d = need_def(slot);
+    if (d == nullptr) {
+        return std::nullopt;
+    }
+    NeedDef out = *d;
+    if (const ComputerProducer* c = producer_change(changes, slot)) {
+        if (c->building) {
+            out.fixed = *c->building;
+        }
+        out.attempts = c->attempts.value_or(out.attempts);
+        out.fertile = c->fertile.value_or(out.fertile);
+        out.after = c->after.value_or(out.after);
+        if (c->wait) {
+            out.type = static_cast<NeedType>(*c->wait);  // A to D in the same order
+        }
+    }
+    return out;
+}
+
+/// The slot the packages count building `id` for: a producer's changed building or one it counts
+/// besides its own (ComputerProducer::counts).
+inline std::optional<std::uint8_t> counted_slot(std::uint32_t id, const std::vector<ComputerProducer>& changes) {
+    for (const ComputerProducer& c : changes) {
+        if (c.building == id || std::find(c.counts.begin(), c.counts.end(), id) != c.counts.end()) {
+            return c.slot;
+        }
+    }
+    return std::nullopt;
 }
 
 /// A public building task: its building, slot, flag, the service its houses lack and how many

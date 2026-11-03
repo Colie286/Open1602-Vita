@@ -121,6 +121,8 @@ struct Decoded {
     std::optional<std::vector<FigureValue>> figure_values;
     /// The computers' build orders a package changed (AIOR).
     std::optional<std::vector<ComputerOrder>> computer_orders;
+    /// The computers' producers a package changed (AIPR).
+    std::optional<std::vector<ComputerProducer>> computer_producers;
     /// The packages' climates and the islands that have one (CLIM).
     struct ClimatePart {
         std::vector<Climate> climates;

@@ -10,8 +10,9 @@ of a city builds is a package's `computers.toml`; what they get from nowhere is 
 **Status:** Part 1 done on 2026-10-31: the producers of a package's goods that a class needs, down
 to their farms and to the original's raw materials. Part 2 done on 2026-10-31: what they get from
 nowhere, as values of `balance.toml`. Part 3 done on 2026-10-31: the stage orders, with the public
-buildings, as data (`computers.toml`). Still open: the original's own Needs and how a stage moves
-on to the next (they stay as the original has them).
+buildings, as data (`computers.toml`). Part 6 done on 2026-11-03: the original's producers
+(`[producer.<name>]`): which building each builds, how often it tries, the crop and the producer it
+needs first, how a stage goes on without it and which buildings count as it.
 
 ## What the computers build
 
@@ -155,6 +156,42 @@ workshops to feed them. On the original's large islands a city at the aristocrat
 earns at least 50 gold a minute more than it pays grows the same way from 1000 tiles of free land,
 once there is no next stage its growing could hold up. The original's computer players (`Rules::bugs.classic_ai`, `--ai classic`) keep the plain numbers.
 
+## The producers
+
+Each producer an order names (`woodcutter` to `goldsmith`) is one of the original's Needs: a
+building, how often a stage tries to place it, the crop its island must grow, the producer of its
+raw material the city must have first and how the stage goes on when it is not built. A table
+`[producer.<name>]` of `computers.toml` changes these; a field it leaves out stays the original's,
+and a later package changes the fields an earlier one gave:
+
+```toml
+# mods/bread/computers.toml: the computers bake in a package's bakery, three tries a stage, and
+# count the original's bakery as theirs too
+[producer.bakery]
+building = "bread:stone_oven"
+attempts = 3
+after = "mill"
+counts = "anno1602:bakery"
+```
+
+| Field | Value | Meaning |
+|---|---|---|
+| `building` | `anno1602:<name or number>` or `<package>:<name>` ([own-buildings.md](own-buildings.md)) | the building it builds, placed as the producer's own is (a fisher's at the coast, a mine's on its deposit); without it the original's (for most producers the first building that makes its good from its raw material) |
+| `attempts` | 1 to 255 | how often a stage tries to place it before it goes on (the original: 2, quarry, stonemason and gold mine 1) |
+| `fertile` | `grain`, `tobacco`, `spices`, `sugar`, `cotton`, `wine`, `cocoa` or `""` | the crop the city's island must grow; `""` none |
+| `after` | another producer, or `""` | the producer the city must have first: the original's workshops wait for their farms (`weaving_hut` for `sheep`, `butcher` for `cattle`, `bakery` for `mill`, the iron workshops for `smelter`, ...); `""` none |
+| `wait` | `none`, `money`, `unlock` or `placed` | how the stage goes on without it: `none` goes on to the next entry when the producer is locked or too dear; `money` waits while the money lacks; `unlock` also while it is locked; `placed` also goes on when it found no place (the original's types A to D) |
+| `counts` | a list of up to 16 buildings | buildings the city counts as this producer besides its own, such as a package's second bakery |
+
+The survey counts a production building as the producer whose `building` or `counts` names it,
+before it looks at its good and raw material. A field that cannot be read or an unknown producer is
+passed over with a warning that names the file and the line.
+
+What stays in the code: a weaving hut becomes a weaving mill and sheep cotton where cotton grows
+fully; a stonemason waits for two quarries, a goldsmith for gold in stock, a second smelter for ore
+and three iron workshops; the mines look for their deposits. A game keeps the changed producers
+(section `AIPR` of the savegame).
+
 ## What they get from nowhere
 
 The original gives its computer players money and goods on every difficulty: steady money while
@@ -184,7 +221,9 @@ A game keeps them with its other balance values (section `BALA` version 2 of the
 
 `engine/sim/include/o1602/sim/computer_orders.hpp`: the orders (`ComputerNeed`, `ComputerList`,
 `default_order`, `apply_computers_file`), kept in `Balance::computer_orders`; `Engine::run_stage`
-and `Engine::first_need` in `ai_planner.cpp` go through them.
+and `Engine::first_need` in `ai_planner.cpp` go through them. The producers' changes
+(`ComputerProducer`) are kept in `Balance::computer_producers`; `need_def` and `counted_slot`
+(`ai_tables.hpp`) lay them over the original's Needs (`kNeeds`) and survey (`kProducerCounts`).
 
 `engine/sim/src/ai/ai_chains.hpp`: `package_needs` (the producers from the building table),
 `package_wanted` (how many a city wants); `Engine::package_chains` in `ai_planner.cpp` plans them,

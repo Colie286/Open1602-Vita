@@ -1192,7 +1192,11 @@ bool Engine::survey_tile(AiPlayer& p, const City& c, CityPlan& r, std::uint32_t 
     if (w == ware::kAlcohol) {
         count(kSlotAlcohol);
     }
-    std::optional<std::uint8_t> slot = producer_slot(w, raw, t.type->id);
+    // A package's producer first: its building and those it counts (ComputerProducer).
+    std::optional<std::uint8_t> slot = counted_slot(t.type->id, m_world.balance().computer_producers);
+    if (!slot) {
+        slot = producer_slot(w, raw, t.type->id);
+    }
     if (!slot) {
         slot = package_slot(w);
     }

@@ -9,12 +9,17 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "o1602/assets/goods.hpp"
+
+namespace o1602::assets {
+struct OwnBuilding;
+}  // namespace o1602::assets
 
 namespace o1602::sim {
 
@@ -113,15 +118,56 @@ inline constexpr std::uint32_t kMaxOrderCount = 1000;
 /// list first_crops of `orders`; 0 (any island) without one.
 [[nodiscard]] std::uint8_t first_crop(const std::vector<ComputerOrder>& orders, std::uint32_t player);
 
+/// How a stage goes on when a producer is not built (the original's types of Need A to D).
+enum class ProducerWait : std::uint8_t {
+    None,    ///< A: the stage goes on to its next entry only when the producer is locked or too dear
+    Money,   ///< B: it also waits while the city lacks the money
+    Unlock,  ///< C: it also waits while the producer is locked
+    Placed,  ///< D: it goes on also when the producer found no place
+};
+inline constexpr std::uint8_t kProducerWaits = 4;
+
+/// No producer (ComputerProducer::after).
+inline constexpr std::uint8_t kNoProducer = 0xFF;
+
+/// A producer of the original's Needs as a package changed it ([producer.<name>] of computers.toml);
+/// a field without a value is the original's (ai_tables.hpp, kNeeds).
+struct ComputerProducer {
+    std::uint8_t slot = 0;                  ///< its slot of the city record (a producer of an order's names)
+    std::optional<std::uint32_t> building;  ///< the building it builds (haeuser.cod Id)
+    std::optional<std::uint8_t> attempts;   ///< tries per stage, 1 to 255
+    std::optional<std::uint8_t> fertile;    ///< the crop (field ware) the island must grow, 0: none
+    std::optional<std::uint8_t> after;      ///< the producer the city must have first, kNoProducer: none
+    std::optional<ProducerWait> wait;       ///< how the stage goes on without it
+    std::vector<std::uint32_t> counts;      ///< buildings that count as this producer besides its own
+    friend bool operator==(const ComputerProducer&, const ComputerProducer&) = default;
+};
+/// At most so many buildings a producer counts besides its own.
+inline constexpr std::size_t kMaxProducerCounts = 16;
+
+/// The changes of `slot` in `producers`, nullptr if there are none.
+[[nodiscard]] const ComputerProducer* producer_change(const std::vector<ComputerProducer>& producers,
+                                                      std::uint8_t slot) noexcept;
+/// Whether `producers` can be run: sorted by slot, each once, a producer of an order's names, values
+/// in their ranges (a savegame's are checked with it).
+[[nodiscard]] bool valid(const std::vector<ComputerProducer>& producers) noexcept;
+
 /// The file of a package with its orders.
 inline constexpr std::string_view kComputersFile = "computers.toml";
 
 /// Reads computers.toml of `package` into `orders`: a table names a stage's order (`[settlers]`);
 /// `order = "..."` replaces it, `append = "..."` adds entries after it. An entry that cannot be read
 /// is passed over with a warning that names the file and the line, the rest of the order is kept.
-/// `goods`: the goods a `<package>:<name>` entry may name.
+/// `goods`: the goods a `<package>:<name>` entry may name. A table `[producer.<name>]` changes a
+/// producer into `producers` (none read without them); its buildings are the original's and those
+/// of `own`.
 void apply_computers_file(std::vector<ComputerOrder>& orders, std::string_view package, std::string_view utf8,
-                          std::vector<std::string>& warnings, const assets::Goods& goods);
+                          std::vector<std::string>& warnings, const assets::Goods& goods,
+                          std::vector<ComputerProducer>* producers = nullptr,
+                          std::span<const assets::OwnBuilding> own = {});
+
+/// A producer's changes as computers.toml writes them, for messages and tests.
+[[nodiscard]] std::string producer_text(const ComputerProducer& producer);
 
 /// An order as computers.toml writes it, for messages and tests; `goods` names the packages' goods.
 [[nodiscard]] std::string order_text(std::span<const ComputerNeed> needs, const assets::Goods& goods);

@@ -17,7 +17,7 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 | 2. Content | change 16 values of the original's buildings and 10 of its figures; add buildings and figures of its own, each copying one of the original, and replace another package's building; soldiers that castles train and ships that shipyards build, which computers train and build too |
 | 3. Goods, classes, levels | add trade goods, change the original's classes and add up to eight in all with their needs and public buildings, change and add unlock levels with messages of their own |
 | 4. Graphics and sound | PNG images for buildings, figures, ships and icons; music and sounds as WAV, Ogg Vorbis or FLAC for messages, buildings and figures; Smacker and Bink 2 videos for messages |
-| 5. Computer players | they build the chains of a package's goods; they train soldiers and build ships of packages; their stage orders, public buildings, cheat amounts, when a city moves on and the crop of their first colony are data |
+| 5. Computer players | they build the chains of a package's goods; they train soldiers and build ships of packages; their stage orders, public buildings, producers (building, tries, crop, what they wait for, what counts), cheat amounts, when a city moves on and the crop of their first colony are data |
 | 6. Lua scripts | a sandboxed Lua 5.4 script per package that hears what happens and reads and changes the game (money, goods, missions, buildings, ships, land units, diplomacy, who wins) |
 | 7. Scenarios and campaigns | scenarios with maps, briefings, goals and scripts; campaigns of up to five parts that carry money and a script table on |
 | 8. Factions | factions of a package's own that take the base game's slots, and settlers or pirates left wholly to a script |
@@ -28,7 +28,7 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 | Item | What is missing | Size |
 |---|---|---|
 | 4 | videos in a modern format (today only Smacker and Bink 2) | medium: a decoder in `third_party` (e.g. a royalty-free format such as AV1 or VP9 in WebM) |
-| 5 | the original's 32 rows of needs (`kNeeds`), its 55 fixed building slots of a city and which building of the original produces what (`producer_slot`), all still compiled in | large: the AI's core tables |
+| 5 | the 55 fixed slots of a city record as data (owner's wish of 2026-11-03, after item 9): total conversions that carry none of the original's slots, public buildings of a package's own kind that the computers plan, goods that count as food or alcohol for the stages, and the rules tied to single slots (weaving, quarries per stonemason, smelters, market, Kontor, towers) | large: slots named, numbered per game, the mapping kept in the savegame |
 | 9 | a climate's own ground, its share per kind of island world, island templates and the editor's choice of it | medium: the island shapes, landscapes.toml, islands.toml and the editor |
 
 ### Smaller adjustments
@@ -49,8 +49,8 @@ the **first page for modders**, [README.md](README.md); and the **package check*
 `o1602-tool check-mod <mods folder>`, which reads the packages as the game does and lists every
 problem without starting the game.
 
-- Next item to work on: the computers' core tables (item 5), so that computers play a package's
-  content as well as the original's.
+- Next item to work on: the rest of the island generator (item 9): a climate's own ground, its
+  share per kind of island world, its island templates and the editor's choice of it.
 
 ## What a mod can do today
 
@@ -238,8 +238,15 @@ version 3).
 
 Part 5 done on 2026-11-02: computers train soldiers and build ships of a package of the family
 or type they want ([own-figures.md](own-figures.md)), and the crop of their first colony is the list
-`first_crops` of `computers.toml` ([computer-players.md](computer-players.md#in-which-order)). Still
-open: the original's Needs (`kNeeds`), the 55 slots and `producer_slot` as data.
+`first_crops` of `computers.toml` ([computer-players.md](computer-players.md#in-which-order)).
+
+Part 6 done on 2026-11-03 ([computer-players.md](computer-players.md#the-producers)): the
+original's Needs and the survey's producers are data, `[producer.<name>]` of `computers.toml`
+(savegame `AIPR`): building, attempts, crop, the producer first, how a stage goes on, and which
+buildings count. The 55 slots of a city record stay as they are, since the savegame and the orders
+name them; a package's goods count in slots after them. What stays in the code: the weaving and
+cotton swaps, the stonemason's quarries, the goldsmith's gold, the smelter's cap and the mines'
+deposits.
 
 ### 6. Lua scripts (section 6)
 

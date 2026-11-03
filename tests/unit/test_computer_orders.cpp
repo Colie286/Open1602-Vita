@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "../../engine/sim/src/ai/ai_state.hpp"
 #include "../test_framework.hpp"
 
 #include "o1602/assets/building_table.hpp"
@@ -232,6 +233,123 @@ TEST_CASE("computer orders: a game keeps its orders in the savegame (AIOR), a wr
     CHECK(loaded->balance() == balance);
 
     balance.computer_orders[0].needs[1].n = sim::kMaxOrderCount + 1;
+    world.set_balance(balance);
+    auto damaged = sim::write_game(world, buildings);
+    REQUIRE(damaged.ok());
+    CHECK(!sim::read_game(*damaged, buildings).ok());
+}
+
+TEST_CASE("computer producers: a package changes the original's producers ([producer.<name>])") {
+    std::vector<std::string> warnings;
+    std::vector<sim::ComputerOrder> orders;
+    std::vector<sim::ComputerProducer> producers;
+    sim::apply_computers_file(orders, "mod",
+                              "[producer.weaving_mill]\nattempts = 4\nafter = \"\"\n"
+                              "[producer.bakery]\n"
+                              "building = \"anno1602:20802\"\n"
+                              "fertile = \"grain\"\n"
+                              "after = \"grain_farm\"\n"
+                              "wait = \"placed\"\n"
+                              "counts = \"anno1602:20803, anno1602:20804, anno1602:20803\"\n",
+                              warnings, {}, &producers);
+    CHECK(warnings.empty());
+    CHECK(orders.empty());
+    REQUIRE(producers.size() == 2);
+    // Sorted by slot, whatever the file's order.
+    CHECK(producers[0].slot < producers[1].slot);
+    const sim::ComputerProducer* bakery = sim::producer_change(producers, sim::ai::kSlotBakery);
+    REQUIRE(bakery != nullptr);
+    CHECK(bakery->building == 20802U);
+    CHECK(!bakery->attempts.has_value());
+    CHECK(bakery->fertile == assets::ware::kCornField);
+    CHECK(bakery->after == sim::ai::kSlotGrain);
+    CHECK(bakery->wait == sim::ProducerWait::Placed);
+    CHECK((bakery->counts == std::vector<std::uint32_t>{20803, 20804}));
+    CHECK(sim::producer_text(*bakery) ==
+          "[producer.bakery] building = anno1602:20802 fertile = \"grain\" after = \"grain_farm\" wait = placed "
+          "counts = anno1602:20803 anno1602:20804");
+    const sim::ComputerProducer& mill = *sim::producer_change(producers, sim::ai::kSlotWeberei);
+    CHECK(mill.attempts == 4);
+    CHECK(mill.after == sim::kNoProducer);
+    CHECK(sim::valid(producers));
+
+    // A later package changes its own fields over the earlier one's.
+    sim::apply_computers_file(orders, "late", "[producer.bakery]\nattempts = 9\nwait = \"none\"\n", warnings, {},
+                              &producers);
+    CHECK(warnings.empty());
+    bakery = sim::producer_change(producers, sim::ai::kSlotBakery);
+    REQUIRE(bakery != nullptr);
+    CHECK(bakery->attempts == 9);
+    CHECK(bakery->wait == sim::ProducerWait::None);
+    CHECK(bakery->building == 20802U);
+
+    // Without a list of producers, the tables are passed over without a word.
+    sim::apply_computers_file(orders, "mod", "[producer.bakery]\nattempts = 3\n", warnings, {});
+    CHECK(warnings.empty());
+}
+
+TEST_CASE("computer producers: what cannot be read is passed over with the file and the line") {
+    std::vector<std::string> warnings;
+    std::vector<sim::ComputerOrder> orders;
+    std::vector<sim::ComputerProducer> producers;
+    sim::apply_computers_file(orders, "mod",
+                              "[producer.chapel]\nattempts = 1\n"  // no producer
+                              "[producer.mill]\n"
+                              "building = \"anno1602:nothing\"\n"
+                              "attempts = 0\n"
+                              "fertile = \"rice\"\n"
+                              "after = \"mill\"\n"  // itself
+                              "wait = \"later\"\n"
+                              "counts = \"anno1602:20803, mod:none\"\n"
+                              "colour = 3\n",
+                              warnings, {}, &producers);
+    CHECK(warnings.size() == 8);
+    for (const std::string& w : warnings) {
+        CHECK(w.starts_with("mod/computers.toml line "));
+    }
+    REQUIRE(producers.size() == 1);
+    CHECK(!producers[0].building.has_value());
+    CHECK(!producers[0].attempts.has_value());
+    CHECK((producers[0].counts == std::vector<std::uint32_t>{20803}));
+    CHECK(sim::valid(producers));
+
+    // Only what the computers can run is valid.
+    std::vector<sim::ComputerProducer> wrong = producers;
+    wrong[0].attempts = 0;
+    CHECK(!sim::valid(wrong));
+    wrong = producers;
+    wrong.push_back(producers[0]);  // twice
+    CHECK(!sim::valid(wrong));
+    wrong = producers;
+    wrong[0].after = wrong[0].slot;
+    CHECK(!sim::valid(wrong));
+    wrong = producers;
+    wrong[0].slot = 200;
+    CHECK(!sim::valid(wrong));
+}
+
+TEST_CASE("computer producers: a game keeps them in the savegame (AIPR), a wrong one loads nothing") {
+    const assets::BuildingTable buildings;
+    sim::World world(60, 40);
+    std::vector<std::string> warnings;
+    std::vector<sim::ComputerOrder> orders;
+    sim::Balance balance;
+    sim::apply_computers_file(orders, "mod",
+                              "[producer.bakery]\nbuilding = \"anno1602:20802\"\nafter = \"\"\n"
+                              "[producer.gold_mine]\nattempts = 3\nwait = \"money\"\nfertile = \"\"\n"
+                              "counts = \"anno1602:20803\"\n",
+                              warnings, {}, &balance.computer_producers);
+    REQUIRE(warnings.empty());
+    REQUIRE(balance.computer_producers.size() == 2);
+    REQUIRE(sim::valid(balance));
+    world.set_balance(balance);
+    auto bytes = sim::write_game(world, buildings);
+    REQUIRE(bytes.ok());
+    auto loaded = sim::read_game(*bytes, buildings);
+    REQUIRE(loaded.ok());
+    CHECK(loaded->balance() == balance);
+
+    balance.computer_producers[1].attempts = 0;
     world.set_balance(balance);
     auto damaged = sim::write_game(world, buildings);
     REQUIRE(damaged.ok());

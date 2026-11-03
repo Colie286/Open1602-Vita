@@ -132,6 +132,8 @@ TEST_CASE("data: the example package loads without a warning") {
     CHECK(rules.own.size() == 2);
     CHECK(rules.goods.own_goods().size() == 1);
     CHECK(rules.balance.climates.size() == 1);  // its forest of the original's trees
+    REQUIRE(rules.balance.computer_producers.size() == 1);
+    CHECK(rules.balance.computer_producers[0].attempts == 3);
     (void)ui::load_build_menu_mods(ui::original_build_menu(), packages, *buildings, problems, rules.own);
     require_none(problems);
 }

@@ -159,6 +159,9 @@ constexpr std::uint32_t kPlannedIslands = tag("PLAN");
 /// The packages' climates (Balance::climates) and the islands that have one (WorldIsland::climate),
 /// only written when there are any. Required: crops would grow otherwise.
 constexpr std::uint32_t kClimates = tag("CLIM");
+/// The computers' producers a package changed (Balance::computer_producers), only written when
+/// there are any. Required: the computers would build otherwise.
+constexpr std::uint32_t kComputerProducers = tag("AIPR");
 /// SCRP version 2: each script's table `campaign` after its table `state`.
 constexpr std::uint16_t kScriptsWithCampaign = 2;
 
@@ -167,17 +170,17 @@ constexpr std::size_t kMaxScenarioIdLength = 2 * assets::kMaxPackageIdLength + 1
 
 /// Every section this version reads; others are of a later version.
 constexpr std::array kKnownSections = {
-    kRules,          kWorld,          kIslands,         kTiles,      kPlayers,        kCities,
-    kProductions,    kHouses,         kGrowth,          kCosts,      kShips,          kSoldiers,
-    kAnimals,        kDisasters,      kVolcanoes,       kSimulation, kFleet,          kEpochs,
-    kArmy,           kDiplomacy,      kExplored,        kMap,        kWorld2,         kMeta,
-    kMissions,       kPlayerState,    kCityState,       kOrigin,     kQueues,         kStances,
-    kScores,         kMaterialClocks, kPopulationMarks, kTutorial,   kGiveUps,        kFactions,
-    kLedgers,        kBalance,        kBuildingValues,  kPackages,   kFigureValues,   kOwnBuildings,
-    kGoods,          kClasses,        kLevels,          kUnlocked,   kGoodPictures,   kScripts,
-    kClassPublic,    kUnitGroups,     kScenario,        kCampaign,   kComputerOrders, kOwnFigures,
-    kLevelMessages,  kBlueprints,     kScenarioInfo,    kMarkers,    kScenarioScript, kEditorState,
-    kPlannedIslands, kClimates};
+    kRules,          kWorld,          kIslands,          kTiles,      kPlayers,        kCities,
+    kProductions,    kHouses,         kGrowth,           kCosts,      kShips,          kSoldiers,
+    kAnimals,        kDisasters,      kVolcanoes,        kSimulation, kFleet,          kEpochs,
+    kArmy,           kDiplomacy,      kExplored,         kMap,        kWorld2,         kMeta,
+    kMissions,       kPlayerState,    kCityState,        kOrigin,     kQueues,         kStances,
+    kScores,         kMaterialClocks, kPopulationMarks,  kTutorial,   kGiveUps,        kFactions,
+    kLedgers,        kBalance,        kBuildingValues,   kPackages,   kFigureValues,   kOwnBuildings,
+    kGoods,          kClasses,        kLevels,           kUnlocked,   kGoodPictures,   kScripts,
+    kClassPublic,    kUnitGroups,     kScenario,         kCampaign,   kComputerOrders, kOwnFigures,
+    kLevelMessages,  kBlueprints,     kScenarioInfo,     kMarkers,    kScenarioScript, kEditorState,
+    kPlannedIslands, kClimates,       kComputerProducers};
 
 /// Section flag (the u16 after the version): the section holds state the game cannot do without, so
 /// a reader that cannot read it (unknown identifier or later version) must not load the file. Other
@@ -561,6 +564,22 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
                     o.u8(static_cast<std::uint8_t>(n.flag));
                     o.u8(static_cast<std::uint8_t>(n.when));
                 });
+            });
+        });
+    }
+    if (!world.balance().computer_producers.empty()) {
+        section(out, kComputerProducers, [&](Writer& o) {
+            o.list(world.balance().computer_producers, 15, [&](const ComputerProducer& p) {
+                o.u8(p.slot);
+                // Which fields the package changed, bit by bit in the order that follows.
+                o.u8(static_cast<std::uint8_t>((p.building ? 1U : 0U) | (p.attempts ? 2U : 0U) | (p.fertile ? 4U : 0U) |
+                                               (p.after ? 8U : 0U) | (p.wait ? 16U : 0U)));
+                o.u32(p.building.value_or(0));
+                o.u8(p.attempts.value_or(0));
+                o.u8(p.fertile.value_or(0));
+                o.u8(p.after.value_or(0));
+                o.u8(static_cast<std::uint8_t>(p.wait.value_or(ProducerWait::None)));
+                o.u32s(p.counts);
             });
         });
     }
@@ -1090,6 +1109,49 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                     in.fail();  // a list, an entry or a condition of a later version
                 }
                 d.computer_orders = std::move(orders);
+                break;
+            }
+            case kComputerProducers: {
+                std::vector<ComputerProducer> producers;
+                in.list(producers, 15, [&](ComputerProducer& p) {
+                    std::uint8_t fields = 0;
+                    std::uint32_t building = 0;
+                    std::uint8_t attempts = 0;
+                    std::uint8_t fertile = 0;
+                    std::uint8_t after = 0;
+                    std::uint8_t wait = 0;
+                    in.u8(p.slot);
+                    in.u8(fields);
+                    in.u32(building);
+                    in.u8(attempts);
+                    in.u8(fertile);
+                    in.u8(after);
+                    in.u8(wait);
+                    in.u32s(p.counts);
+                    if ((fields & ~31U) != 0 || wait >= kProducerWaits) {
+                        in.fail();  // a field of a later version
+                        return;
+                    }
+                    if ((fields & 1U) != 0) {
+                        p.building = building;
+                    }
+                    if ((fields & 2U) != 0) {
+                        p.attempts = attempts;
+                    }
+                    if ((fields & 4U) != 0) {
+                        p.fertile = fertile;
+                    }
+                    if ((fields & 8U) != 0) {
+                        p.after = after;
+                    }
+                    if ((fields & 16U) != 0) {
+                        p.wait = static_cast<ProducerWait>(wait);
+                    }
+                });
+                if (!valid(producers)) {
+                    in.fail();
+                }
+                d.computer_producers = std::move(producers);
                 break;
             }
             case kClimates: {

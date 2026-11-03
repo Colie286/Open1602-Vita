@@ -1035,7 +1035,8 @@ bool Engine::need(AiPlayer& p, std::uint8_t which, std::uint32_t n, bool cov) {
     }
     // Some Needs choose another building first.
     const bool cotton_island = fertility(c->island, ware::kCottonField) == 128;
-    const assets::BuildingType* weberei = by_id(id::kWeberei);
+    const std::vector<ComputerProducer>& changes = m_world.balance().computer_producers;
+    const assets::BuildingType* weberei = by_id(need_def(kSlotWeberei, changes).value().fixed);
     const bool weberei_ok = weberei != nullptr && unlocked(p, *weberei);
     if (which == kSlotSheep && cotton_island && weberei_ok) {
         which = kSlotCotton;  // wool from cotton where it grows fully
@@ -1049,8 +1050,8 @@ bool Engine::need(AiPlayer& p, std::uint8_t which, std::uint32_t n, bool cov) {
     if (which == kSlotGoldMine) {
         return need_gold_mine(p);
     }
-    const NeedDef* d = need_def(which);
-    if (d == nullptr) {
+    const auto d = need_def(which, changes);
+    if (!d) {
         return false;
     }
     SlotState& s = r->slots[which];
@@ -1068,61 +1069,20 @@ bool Engine::need(AiPlayer& p, std::uint8_t which, std::uint32_t n, bool cov) {
     if (s.count >= wanted || s.attempts >= d->attempts) {
         return false;
     }
-    // Conditions besides the count.
-    switch (which) {
-        case kSlotStonemason:
-            if (n > 2U * r->slots[kSlotQuarry].count) {
-                return false;
-            }
-            break;
-        // Processors only where their raw material is produced. The original bounds the raw
-        // producers from above instead (ceil(raw / 2) <= n), so more farms stop the workshop (S-098).
-        case kSlotWebstube:
-            if (r->slots[kSlotSheep].count == 0) {
-                return false;
-            }
-            break;
-        case kSlotWeberei:
-            if (r->slots[kSlotCotton].count == 0) {
-                return false;
-            }
-            break;
-        case kSlotButcher:
-            if (r->slots[kSlotCattle].count == 0) {
-                return false;
-            }
-            break;
-        case kSlotTobaccoGoods:
-            if (r->slots[kSlotTobacco].count == 0) {
-                return false;
-            }
-            break;
-        case kSlotRum:
-            if (r->slots[kSlotSugar].count == 0) {
-                return false;
-            }
-            break;
-        case kSlotBakery:
-            // The original asks for bakeries and mills even where nothing feeds them (S-098).
-            if (r->slots[kSlotMill].count == 0 && !classic()) {
-                return false;
-            }
-            break;
-        case kSlotToolsmith:
-        case kSlotSwords:
-        case kSlotMuskets:
-        case kSlotCannons:
-            if (r->slots[kSlotSmelter].count == 0) {
-                return false;
-            }
-            break;
-        case kSlotGoldsmith:
-            if (c->stock(ware::kGold) <= kTon) {
-                return false;
-            }
-            break;
-        default:
-            break;
+    // Processors only where their raw material is produced (NeedDef::after, a package may change
+    // it). The original bounds the raw producers from above instead (ceil(raw / 2) <= n), so more
+    // farms stop the workshop, and asks for bakeries even where no mill feeds them (S-098).
+    const ComputerProducer* change = producer_change(changes, which);
+    const bool original_bakery = which == kSlotBakery && classic() && (change == nullptr || !change->after);
+    if (d->after != kNoProducer && r->slots[d->after].count == 0 && !original_bakery) {
+        return false;
+    }
+    // Conditions besides the count that stay the original's.
+    if (which == kSlotStonemason && n > 2U * r->slots[kSlotQuarry].count) {
+        return false;
+    }
+    if (which == kSlotGoldsmith && c->stock(ware::kGold) <= kTon) {
+        return false;
     }
     if (d->fertile != 0 && fertility(c->island, d->fertile) == 0) {
         return false;
@@ -1233,13 +1193,15 @@ bool Engine::need_iron_mine(AiPlayer& p, std::uint32_t n) {
     if (c == nullptr || r == nullptr) {
         return false;
     }
+    const NeedDef def = need_def(kSlotIronMine, m_world.balance().computer_producers).value();
     SlotState& s = r->slots[kSlotIronMine];
     const std::uint32_t wanted = civ_level(p) >= 2 ? n : 1;
-    if (s.count >= wanted || s.attempts >= 2) {
+    const std::uint8_t blocked = std::max<std::uint8_t>(2, def.attempts);
+    if (s.count >= wanted || s.attempts >= def.attempts) {
         return false;
     }
     if (c->stock(ware::kOre) >= 8 * kTon) {
-        s.attempts = 2;  // enough ore: blocked
+        s.attempts = blocked;  // enough ore
         return false;
     }
     bool usable = false;
@@ -1252,10 +1214,10 @@ bool Engine::need_iron_mine(AiPlayer& p, std::uint32_t n) {
         }
     }
     if (!usable && free_x < 0) {
-        s.attempts = 2;
+        s.attempts = blocked;
         return false;
     }
-    const assets::BuildingType* b = by_id(id::kOreMine);
+    const assets::BuildingType* b = by_id(def.fixed);
     if (b == nullptr || !unlocked(p, *b)) {
         return false;
     }
@@ -1277,8 +1239,9 @@ bool Engine::need_gold_mine(AiPlayer& p) {
     if (c == nullptr || r == nullptr) {
         return false;
     }
+    const NeedDef def = need_def(kSlotGoldMine, m_world.balance().computer_producers).value();
     SlotState& s = r->slots[kSlotGoldMine];
-    if (s.count != 0 || s.attempts >= 1) {
+    if (s.count != 0 || s.attempts >= def.attempts) {
         return false;
     }
     bool usable = false;
@@ -1290,10 +1253,10 @@ bool Engine::need_gold_mine(AiPlayer& p) {
         }
     }
     if (!usable && free_x < 0) {
-        s.attempts = 2;
+        s.attempts = std::max<std::uint8_t>(2, def.attempts);
         return false;
     }
-    const assets::BuildingType* b = by_id(id::kGoldMine);
+    const assets::BuildingType* b = by_id(def.fixed);
     if (b == nullptr || !unlocked(p, *b)) {
         return false;
     }
@@ -1733,7 +1696,8 @@ bool Engine::luxury(AiPlayer& p, std::uint32_t n, bool exclusive) {
     }
     // 2. Gold
     if (p.score >= 4 && fertility(c->island, ware::kGold) >= 64) {
-        const assets::BuildingType* mine = by_id(id::kGoldMine);
+        const assets::BuildingType* mine =
+            by_id(need_def(kSlotGoldMine, m_world.balance().computer_producers).value().fixed);
         if (mine != nullptr && mine->running_cost < budget && need_gold_mine(p)) {
             return true;
         }

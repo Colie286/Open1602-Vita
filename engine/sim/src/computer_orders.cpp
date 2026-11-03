@@ -7,6 +7,8 @@
 
 #include "ai/ai_state.hpp"
 
+#include "o1602/assets/original_names.hpp"
+#include "o1602/assets/own_buildings.hpp"
 #include "o1602/core/data_file.hpp"
 
 namespace o1602::sim {
@@ -126,6 +128,20 @@ constexpr std::array<SlotName, 7> kCropNames = {{
     {"crop_wine", assets::ware::kWineField},
     {"crop_cocoa", assets::ware::kCocoaField},
 }};
+
+/// The crops a producer's `fertile` names: the field the island must grow.
+constexpr std::array<SlotName, 7> kFertileNames = {{
+    {"grain", assets::ware::kCornField},
+    {"tobacco", assets::ware::kTobaccoField},
+    {"spices", assets::ware::kSpiceField},
+    {"sugar", assets::ware::kSugarField},
+    {"cotton", assets::ware::kCottonField},
+    {"wine", assets::ware::kWineField},
+    {"cocoa", assets::ware::kCocoaField},
+}};
+
+/// The words of `wait`, by ProducerWait.
+constexpr std::array<std::string_view, kProducerWaits> kWaitNames = {"none", "money", "unlock", "placed"};
 
 const KindInfo& info(Kind k) {
     return kKindInfo[static_cast<std::size_t>(k)];
@@ -596,6 +612,106 @@ std::optional<ComputerNeed> read_need(std::string_view text, const assets::Goods
     return need;
 }
 
+/// A building a producer names: "anno1602:<name or number>" or a package's own.
+std::optional<std::uint32_t> building_of(std::string_view id, std::span<const assets::OwnBuilding> own) {
+    if (const auto original = assets::original_building_id(id)) {
+        return original;
+    }
+    if (const assets::OwnBuilding* b = assets::find_own_building(own, id)) {
+        return b->number;
+    }
+    return std::nullopt;
+}
+
+/// Reads [producer.<name>] into `producers`, the fields over those an earlier package gave.
+void read_producer(const core::DataTable& table, std::string_view name, const std::string& where,
+                   std::vector<ComputerProducer>& producers, std::span<const assets::OwnBuilding> own,
+                   std::vector<std::string>& warnings) {
+    const auto slot = slot_of(kBuildingNames, name);
+    if (!slot) {
+        warnings.push_back(line_of(where, table.line) + "there is no producer '" + std::string(name) +
+                           "' (the producers of an order: woodcutter, bakery, ...)");
+        return;
+    }
+    ComputerProducer p;
+    p.slot = *slot;
+    if (const ComputerProducer* before = producer_change(producers, *slot)) {
+        p = *before;
+    }
+    for (const core::DataEntry& e : table.entries) {
+        const std::string field = line_of(where, e.value.line) + "[" + table.name + "] '" + e.key + "' ";
+        const std::string* text = e.value.string();
+        const std::int64_t* n = e.value.integer();
+        if (e.key == "building") {
+            const auto id = text != nullptr ? building_of(*text, own) : std::nullopt;
+            if (id) {
+                p.building = id;
+            } else {
+                warnings.push_back(field + "names no building (anno1602:<name> or <package>:<name>)");
+            }
+        } else if (e.key == "attempts") {
+            if (n != nullptr && *n >= 1 && *n <= 255) {
+                p.attempts = static_cast<std::uint8_t>(*n);
+            } else {
+                warnings.push_back(field + "is a number from 1 to 255");
+            }
+        } else if (e.key == "fertile") {
+            if (text != nullptr && text->empty()) {
+                p.fertile = std::uint8_t{0};
+            } else if (const auto crop = text != nullptr ? slot_of(kFertileNames, *text) : std::nullopt) {
+                p.fertile = crop;
+            } else {
+                warnings.push_back(field + "is a crop (grain, tobacco, spices, sugar, cotton, wine, cocoa) or \"\"");
+            }
+        } else if (e.key == "after") {
+            if (text != nullptr && text->empty()) {
+                p.after = kNoProducer;
+            } else if (const auto first = text != nullptr ? slot_of(kBuildingNames, *text) : std::nullopt;
+                       first && *first != *slot) {
+                p.after = first;
+            } else {
+                warnings.push_back(field + "is another producer of an order or \"\"");
+            }
+        } else if (e.key == "wait") {
+            const auto it = text != nullptr ? std::find(kWaitNames.begin(), kWaitNames.end(), *text) : kWaitNames.end();
+            if (it != kWaitNames.end()) {
+                p.wait = static_cast<ProducerWait>(it - kWaitNames.begin());
+            } else {
+                warnings.push_back(field + "is none, money, unlock or placed");
+            }
+        } else if (e.key == "counts") {
+            if (text == nullptr) {
+                warnings.push_back(field + "is a list of buildings");
+                continue;
+            }
+            std::vector<std::uint32_t> counts;
+            for (const std::string_view entry : split(*text, ',')) {
+                const std::string_view id = trim(entry);
+                if (id.empty()) {
+                    continue;
+                }
+                const auto b = building_of(id, own);
+                if (!b) {
+                    warnings.push_back(field + "'" + std::string(id) + "' is no building; it is passed over");
+                } else if (counts.size() >= kMaxProducerCounts) {
+                    warnings.push_back(field + "names more than " + std::to_string(kMaxProducerCounts) +
+                                       " buildings; the rest are passed over");
+                    break;
+                } else if (std::find(counts.begin(), counts.end(), *b) == counts.end()) {
+                    counts.push_back(*b);
+                }
+            }
+            p.counts = std::move(counts);
+        } else {
+            warnings.push_back(field + "is no field of a producer and is passed over");
+        }
+    }
+    std::erase_if(producers, [&](const ComputerProducer& c) { return c.slot == p.slot; });
+    const auto place =
+        std::find_if(producers.begin(), producers.end(), [&](const ComputerProducer& c) { return c.slot > p.slot; });
+    producers.insert(place, std::move(p));
+}
+
 }  // namespace
 
 std::span<const ComputerNeed> default_order(ComputerList list) {
@@ -662,7 +778,8 @@ bool valid(const std::vector<ComputerOrder>& orders) noexcept {
 }
 
 void apply_computers_file(std::vector<ComputerOrder>& orders, std::string_view package, std::string_view utf8,
-                          std::vector<std::string>& warnings, const assets::Goods& goods) {
+                          std::vector<std::string>& warnings, const assets::Goods& goods,
+                          std::vector<ComputerProducer>* producers, std::span<const assets::OwnBuilding> own) {
     const std::string where = std::string(package) + "/" + std::string(kComputersFile);
     auto tables = core::parse_data_file(utf8);
     if (!tables) {
@@ -673,6 +790,12 @@ void apply_computers_file(std::vector<ComputerOrder>& orders, std::string_view p
         if (table.name.empty()) {
             warnings.push_back(line_of(where, table.entries.front().value.line) +
                                "fields before the first [table] belong to none and are passed over");
+            continue;
+        }
+        if (table.name.starts_with("producer.")) {
+            if (producers != nullptr) {
+                read_producer(table, std::string_view(table.name).substr(9), where, *producers, own, warnings);
+            }
             continue;
         }
         const auto name = std::find(kComputerListNames.begin(), kComputerListNames.end(), table.name);
@@ -769,6 +892,54 @@ std::string order_text(std::span<const ComputerNeed> needs, const assets::Goods&
             out += " never";
         } else if (n.when != When::Always) {
             out += " " + when_word("gold", n.when);
+        }
+    }
+    return out;
+}
+
+const ComputerProducer* producer_change(const std::vector<ComputerProducer>& producers, std::uint8_t slot) noexcept {
+    const auto it =
+        std::find_if(producers.begin(), producers.end(), [&](const ComputerProducer& p) { return p.slot == slot; });
+    return it == producers.end() ? nullptr : &*it;
+}
+
+bool valid(const std::vector<ComputerProducer>& producers) noexcept {
+    for (std::size_t i = 0; i < producers.size(); ++i) {
+        const ComputerProducer& p = producers[i];
+        const bool known = !name_of(kBuildingNames, p.slot).empty();
+        const bool fertile = !p.fertile || *p.fertile == 0 || !name_of(kFertileNames, *p.fertile).empty();
+        const bool after =
+            !p.after || *p.after == kNoProducer || (*p.after != p.slot && !name_of(kBuildingNames, *p.after).empty());
+        if (!known || (i > 0 && producers[i - 1].slot >= p.slot) || (p.attempts && *p.attempts == 0) || !fertile ||
+            !after || (p.wait && static_cast<std::uint8_t>(*p.wait) >= kProducerWaits) ||
+            p.counts.size() > kMaxProducerCounts || (p.building && *p.building == 0)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string producer_text(const ComputerProducer& p) {
+    std::string out = "[producer." + std::string(name_of(kBuildingNames, p.slot)) + "]";
+    if (p.building) {
+        out += " building = anno1602:" + std::to_string(*p.building);
+    }
+    if (p.attempts) {
+        out += " attempts = " + std::to_string(*p.attempts);
+    }
+    if (p.fertile) {
+        out += " fertile = \"" + std::string(name_of(kFertileNames, *p.fertile)) + "\"";
+    }
+    if (p.after) {
+        out += " after = \"" + std::string(name_of(kBuildingNames, *p.after)) + "\"";
+    }
+    if (p.wait) {
+        out += " wait = " + std::string(kWaitNames[static_cast<std::size_t>(*p.wait)]);
+    }
+    if (!p.counts.empty()) {
+        out += " counts =";
+        for (const std::uint32_t c : p.counts) {
+            out += " anno1602:" + std::to_string(c);
         }
     }
     return out;

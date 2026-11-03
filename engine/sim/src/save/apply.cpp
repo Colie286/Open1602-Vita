@@ -232,6 +232,7 @@ core::Status apply_decoded(World& world, Decoded& d) {
     balance.buildings = d.building_values.value_or(std::vector<BuildingValue>{});
     balance.figures = d.figure_values.value_or(std::vector<FigureValue>{});
     balance.computer_orders = d.computer_orders.value_or(std::vector<ComputerOrder>{});
+    balance.computer_producers = d.computer_producers.value_or(std::vector<ComputerProducer>{});
     if (d.climates) {
         balance.climates = std::move(d.climates->climates);
         for (const auto& [island, climate] : d.climates->islands) {

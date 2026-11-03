@@ -1690,6 +1690,62 @@ TEST_CASE("ai: a stage's build order from the game's balance (computers.toml) is
     CHECK(mills_built(true) == 2);
 }
 
+TEST_CASE("ai: a package's building replaces a producer of the original's ([producer.<name>], MD-4)") {
+    // The founded city's order of a package asks for a bakery; a package names its own workshop as
+    // the bakery, without the mill first. Without the change the game has no bakery to build.
+    const auto workshops_built = [](bool with_change) {
+        Game g;
+        static constexpr std::uint32_t kSmokehouse = 20992;
+        g.buildings = make_buildings(
+            "  @Nummer: 13\n  Id: 20992\n  Kind: 14\n  Gfx: 100\n  Size: 2, 2\n"
+            "  Objekt: HAUS_PRODTYP\n    Kind: 1\n    Maxlager: 4\n    Ware: 59\n"
+            "    Prodmenge: 1\n    Interval: 20\n  EndObj\n"
+            "  Objekt: HAUS_BAUKOST\n    Money: 50\n  EndObj\n");
+        g.buildings.by_id(kKontor)->ware = sim::ware::kAll;
+        sim::Balance balance;
+        balance.computer_orders.push_back(
+            {sim::ComputerList::Founded,
+             {sim::ComputerNeed{sim::ComputerNeed::Kind::Market, 0, 1},
+              sim::ComputerNeed{sim::ComputerNeed::Kind::Building, sim::ai::kSlotBakery, 1},
+              sim::ComputerNeed{sim::ComputerNeed::Kind::Houses, 0, 8}}});
+        if (with_change) {
+            sim::ComputerProducer bakery;
+            bakery.slot = sim::ai::kSlotBakery;
+            bakery.building = kSmokehouse;
+            bakery.after = sim::kNoProducer;
+            balance.computer_producers.push_back(bakery);
+        }
+        REQUIRE(sim::valid(balance));
+        g.world.set_balance(balance);
+        sim::Simulation s(g.world, g.buildings, g.figures);
+        found_city(g, s, 120'000);
+        std::size_t n = 0;
+        for (const sim::City& c : g.world.cities()) {
+            if (c.owner != kComputer) {
+                continue;
+            }
+            const sim::IslandMap& map = g.world.island(c.island).map;
+            for (std::uint32_t y = 0; y < map.height(); ++y) {
+                for (std::uint32_t x = 0; x < map.width(); ++x) {
+                    const sim::MapCell& cell = map.top(x, y);
+                    const assets::BuildingType* b = g.buildings.by_sprite(cell.sprite);
+                    n += b != nullptr && b->id == kSmokehouse && cell.owner == kComputer ? 1U : 0U;
+                }
+            }
+        }
+        if (with_change) {
+            // The survey counts it as the city's bakery, so the order's one is enough.
+            const auto view = s.computers().view();
+            REQUIRE(!view.empty());
+            REQUIRE(!view[0].plans.empty());
+            CHECK(view[0].plans[0].slots[sim::ai::kSlotBakery][0] == n / 4);
+        }
+        return n / 4;  // four tiles each
+    };
+    CHECK(workshops_built(false) == 0);
+    CHECK(workshops_built(true) == 1);
+}
+
 TEST_CASE("ai: when a city moves on to the next stage comes from the game's balance ([computer_stages])") {
     // A city founded moves on to the pioneers with two inhabitants, by default; a package may ask
     // for more.

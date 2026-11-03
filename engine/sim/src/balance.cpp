@@ -171,7 +171,8 @@ bool valid(const Balance& balance) noexcept {
                                                     [](const FigureValue& a, const FigureValue& b) {
                                                         return !before_figure(a, b);
                                                     }) == balance.figures.end();
-    return numbers && buildings && ordered && figures && figures_ordered && valid(balance.computer_orders);
+    return numbers && buildings && ordered && figures && figures_ordered && valid(balance.computer_orders) &&
+           valid(balance.computer_producers);
 }
 
 std::uint16_t balance_version(const Balance& balance) noexcept {

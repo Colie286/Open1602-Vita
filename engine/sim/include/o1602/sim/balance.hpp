@@ -145,6 +145,9 @@ struct Balance {
     std::vector<FigureValue> figures;
     /// The computers' build orders a package changed (computers.toml), sorted by list, each once.
     std::vector<ComputerOrder> computer_orders;
+    /// The computers' producers a package changed ([producer.<name>] of computers.toml), sorted by
+    /// slot, each once.
+    std::vector<ComputerProducer> computer_producers;
     /// The packages' climates (climates.toml), in load order; WorldIsland::climate numbers them from 1.
     std::vector<Climate> climates;
 

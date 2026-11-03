@@ -1,3 +1,7 @@
 # Build orders of the computer players (computer-players.md): the aristocrats also build a theatre.
 [aristocrats]
 append = "theatre 1"
+
+# The computers try three times a stage to place a bakery (computer-players.md, "The producers").
+[producer.bakery]
+attempts = 3
