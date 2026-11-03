@@ -32,6 +32,8 @@ inline constexpr std::string_view kClimatesFile = "climates.toml";
 inline constexpr std::size_t kMaxClimates = 32;
 /// Trees one climate's forest may name.
 inline constexpr std::size_t kMaxForestTrees = 16;
+/// Kinds of ground one climate may name.
+inline constexpr std::size_t kMaxGroundTiles = 16;
 
 struct Climate {
     std::string id;         ///< "<package>:<name>"
@@ -43,6 +45,9 @@ struct Climate {
     std::uint32_t crops = 0;
     /// The trees of the forest of its islands of their own shape (building Ids); none: the like's.
     std::vector<std::uint32_t> forest;
+    /// The ground of its islands of their own shape (building Ids, kind::kGround), each as often;
+    /// none: the original's mix (ids::kGroundMix).
+    std::vector<std::uint32_t> ground;
     /// Percent of the islands of `like` in a new own world that take this climate (not the homes).
     std::uint8_t share = 0;
 
@@ -61,14 +66,16 @@ struct Climate {
 
 /// Reads `climates.toml` of `package` (UTF-8) and adds its climates to `climates`, at most
 /// kMaxClimates in all. A field that is wrong is passed over with a warning that names the line;
-/// a table without `like` is passed over. `forest` names the original's buildings and those of
-/// `own`; with `buildings`, only those that are forest (kind::kForest).
+/// a table without `like` is passed over. `forest` and `ground` name the original's buildings and
+/// those of `own`; with `buildings`, only those that are forest (kind::kForest) or ground
+/// (kind::kGround).
 void apply_climates_file(std::vector<Climate>& climates, std::string_view package, std::string_view utf8,
                          std::vector<std::string>& warnings, const assets::BuildingTable* buildings = nullptr,
                          std::span<const assets::OwnBuilding> own = {});
 
 /// Whether `climates` can be played: at most kMaxClimates, ids once each, `like` north or south,
-/// crops of the six only, shares up to 100, at most kMaxForestTrees trees.
+/// crops of the six only, shares up to 100, at most kMaxForestTrees trees and kMaxGroundTiles
+/// kinds of ground.
 [[nodiscard]] bool valid(std::span<const Climate> climates) noexcept;
 
 }  // namespace o1602::sim

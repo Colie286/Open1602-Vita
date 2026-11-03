@@ -1009,6 +1009,9 @@ assets::Island make_island(const ShapeRequest& request) {
     const std::uint32_t ground_total = std::accumulate(ids::kGroundMix.begin(), ids::kGroundMix.end(), std::uint32_t{0},
                                                        [](std::uint32_t sum, const auto& g) { return sum + g.weight; });
     const auto ground = [&]() {
+        if (!request.ground.empty()) {
+            return request.ground[random.below(static_cast<std::uint32_t>(request.ground.size()))];
+        }
         std::uint32_t roll = random.below(ground_total);
         for (const auto& g : ids::kGroundMix) {
             if (roll < g.weight) {

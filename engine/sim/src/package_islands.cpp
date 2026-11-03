@@ -90,8 +90,11 @@ void apply_islands_file(std::vector<PackageIsland>& islands, const assets::ModPa
                     climate = climate::kNorth;
                 } else if (text != nullptr && *text == "south") {
                     climate = climate::kSouth;
+                } else if (const std::size_t colon = text != nullptr ? text->find(':') : std::string::npos;
+                           colon != std::string::npos && colon > 0 && colon + 1 < text->size()) {
+                    island.own_climate = *text;  // a package's climate (climates.toml)
                 } else {
-                    refuse(e, "is \"north\" or \"south\"");
+                    refuse(e, "is \"north\", \"south\" or a package's climate \"<package>:<name>\"");
                 }
             } else if (const std::string_view language = assets::name_key_language(e.key); !language.empty()) {
                 if (text != nullptr) {

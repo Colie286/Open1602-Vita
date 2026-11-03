@@ -30,8 +30,11 @@ struct PackageIsland {
     std::string package;  ///< the package's id
     std::filesystem::path file;
     std::uint8_t climate = 0;  ///< 0 north, 1 south
-    std::uint8_t size = 0;     ///< size class 0 lit .. 4 lar, the smallest the island fits
-    std::uint16_t width = 0;   ///< in tiles
+    /// A package's climate the island takes when a world draws it ("<package>:<name>",
+    /// climates.toml), empty for none; it is drawn among the templates of `climate`.
+    std::string own_climate;
+    std::uint8_t size = 0;    ///< size class 0 lit .. 4 lar, the smallest the island fits
+    std::uint16_t width = 0;  ///< in tiles
     std::uint16_t height = 0;
     assets::LocalizedNames names;  ///< Windows-1252
 
@@ -41,9 +44,10 @@ struct PackageIsland {
 
 /// Reads `islands.toml` of `package` (UTF-8) and adds its islands to `islands`. A table names one
 /// island: `file`, an island file of the original's format in the package (required), `climate`
-/// ("north" or "south"; the file's if not given) and `name.<language>`. The island must fit a size
-/// class of the original's templates (templates::kClassWidth, kClassHeight). A table that is wrong
-/// or whose file cannot be read is passed over with a warning that names the line.
+/// ("north", "south" or a package's climate "<package>:<name>"; the file's if not given; a
+/// package's climate leaves the island among the templates of the file's) and `name.<language>`. The island must fit a
+/// size class of the original's templates (templates::kClassWidth, kClassHeight). A table that is wrong or whose file
+/// cannot be read is passed over with a warning that names the line.
 void apply_islands_file(std::vector<PackageIsland>& islands, const assets::ModPackage& package, std::string_view utf8,
                         std::vector<std::string>& warnings);
 

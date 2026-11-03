@@ -29,7 +29,7 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 |---|---|---|
 | 4 | videos in a modern format (today only Smacker and Bink 2) | medium: a decoder in `third_party` (e.g. a royalty-free format such as AV1 or VP9 in WebM) |
 | 5 | the 55 fixed slots of a city record as data (owner's wish of 2026-11-03, after item 9): total conversions that carry none of the original's slots, public buildings of a package's own kind that the computers plan, goods that count as food or alcohol for the stages, and the rules tied to single slots (weaving, quarries per stonemason, smelters, market, Kontor, towers) | large: slots named, numbered per game, the mapping kept in the savegame |
-| 9 | a climate's own ground, its share per kind of island world, island templates and the editor's choice of it | medium: the island shapes, landscapes.toml, islands.toml and the editor |
+| 9 | a climate's share per kind of island world | small: landscapes.toml and the generator's draw |
 
 ### Smaller adjustments
 
@@ -49,8 +49,8 @@ the **first page for modders**, [README.md](README.md); and the **package check*
 `o1602-tool check-mod <mods folder>`, which reads the packages as the game does and lists every
 problem without starting the game.
 
-- Next item to work on: the rest of the island generator (item 9): a climate's own ground, its
-  share per kind of island world, its island templates and the editor's choice of it.
+- Next item to work on: the rest of the island generator (item 9): a climate's share per kind of
+  island world.
 
 ## What a mod can do today
 
@@ -425,8 +425,10 @@ Part 11 done on 2026-11-03 ([climates.md](climates.md)): climates of a package's
 forest and its share of the islands of its like in new own worlds (not the homes, a random stream
 of their own). An island of such a climate grows its crops half and fully where the world gives
 them, keeps the original's climate in its header and its own in the savegame (section `CLIM`); the
-status line names it with its crops. Still open: a climate's own ground, its share per kind of
-island world, island templates of such a climate and the editor's choice of it.
+status line names it with its crops. Done on 2026-11-03: the island editor offers the packages'
+climates for new islands (#434), a climate's own ground (`ground`, savegame `CLIM` version 2) and
+island templates of such a climate (`islands.toml`'s `climate = "<package>:<name>"`). Still open:
+its share per kind of island world.
 
 ## Order of work
 

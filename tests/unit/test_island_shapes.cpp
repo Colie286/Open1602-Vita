@@ -506,6 +506,31 @@ TEST_CASE("island shapes: the forest of the climate, or of the trees a climate o
     CHECK(count(own, [&](std::uint32_t id) { return id == r.trees[0] || id == r.trees[1]; }) == trees);
 }
 
+TEST_CASE("island shapes: the ground a climate of a package names, in the same places") {
+    sim::shapes::ShapeRequest r;
+    r.width = 60;
+    r.height = 50;
+    r.size = 3;
+    r.seed = 7;
+    const auto mixed = [](std::uint32_t id) {
+        return std::any_of(ids::kGroundMix.begin(), ids::kGroundMix.end(), [&](const auto& g) { return g.id == id; });
+    };
+    const auto count = [](const assets::Island& island, auto&& is) {
+        std::size_t n = 0;
+        for (const assets::IslandTile& t : island.layers[0]) {
+            n += is(t.cod_id()) ? 1U : 0U;
+        }
+        return n;
+    };
+    const assets::Island plain = sim::shapes::make_island(r);
+    const std::size_t ground = count(plain, mixed);
+    CHECK(ground > 0);
+    r.ground = {22722, 22724};
+    const assets::Island own = sim::shapes::make_island(r);
+    CHECK(count(own, [&](std::uint32_t id) { return id == 22722 || id == 22724; }) == ground);
+    CHECK(count(own, [&](std::uint32_t id) { return mixed(id) && id != 22722 && id != 22724; }) == 0);
+}
+
 TEST_CASE("island shapes: a volcano only where one is asked for, in its ring of slopes") {
     for (std::uint64_t seed = 0; seed < 10; ++seed) {
         sim::shapes::ShapeRequest r;

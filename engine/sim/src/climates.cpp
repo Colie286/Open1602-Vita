@@ -72,7 +72,7 @@ std::vector<std::string_view> entries(std::string_view text) {
     return out;
 }
 
-/// The building a forest entry names: "anno1602:<name or number>" or a package's own building.
+/// The building a forest or ground entry names: "anno1602:<name or number>" or a package's own building.
 std::optional<std::uint32_t> tree_of(std::string_view id, std::span<const assets::OwnBuilding> own) {
     if (const auto original = assets::original_building_id(id)) {
         return original;
@@ -176,26 +176,37 @@ void apply_climates_file(std::vector<Climate>& climates, std::string_view packag
                     }
                 }
                 c.crops = crops;
-            } else if (e.key == "forest") {
+            } else if (e.key == "forest" || e.key == "ground") {
+                const bool forest = e.key == "forest";
+                const std::int32_t wanted = forest ? kind::kForest : kind::kGround;
+                const std::size_t most = forest ? kMaxForestTrees : kMaxGroundTiles;
+                const std::string what = forest ? "tree" : "ground";
                 if (s == nullptr) {
-                    warnings.push_back(field + "is a list of trees, such as \"anno1602:mixed_forest\"");
+                    warnings.push_back(field + (forest ? "is a list of trees, such as \"anno1602:mixed_forest\""
+                                                       : "is a list of kinds of ground (anno1602:<number>)"));
                     continue;
                 }
-                std::vector<std::uint32_t> trees;
-                for (const std::string_view tree : entries(*s)) {
-                    const auto id = tree_of(tree, own);
+                std::vector<std::uint32_t> tiles;
+                for (const std::string_view tile : entries(*s)) {
+                    const auto id = tree_of(tile, own);
                     const assets::BuildingType* b = id && buildings != nullptr ? buildings->by_id(*id) : nullptr;
-                    if (!id || (buildings != nullptr && (b == nullptr || b->kind != kind::kForest))) {
-                        warnings.push_back(field + "'" + std::string(tree) + "' is no tree; it is passed over");
-                    } else if (trees.size() >= kMaxForestTrees) {
-                        warnings.push_back(field + "names more than " + std::to_string(kMaxForestTrees) +
-                                           " trees; the rest are passed over");
+                    if (!id || (buildings != nullptr && (b == nullptr || b->kind != wanted))) {
+                        std::string text = field;
+                        text += "'";
+                        text += tile;
+                        text += "' is no ";
+                        text += what;
+                        text += "; it is passed over";
+                        warnings.push_back(std::move(text));
+                    } else if (tiles.size() >= most) {
+                        warnings.push_back(field + "names more than " + std::to_string(most) + " " +
+                                           (forest ? "trees" : "kinds of ground") + "; the rest are passed over");
                         break;
-                    } else if (std::ranges::find(trees, *id) == trees.end()) {
-                        trees.push_back(*id);
+                    } else if (std::ranges::find(tiles, *id) == tiles.end()) {
+                        tiles.push_back(*id);
                     }
                 }
-                c.forest = std::move(trees);
+                (forest ? c.forest : c.ground) = std::move(tiles);
             } else if (e.key == "share") {
                 const std::int64_t* n = e.value.integer();
                 if (n == nullptr || *n < 0 || *n > 100) {
@@ -218,7 +229,7 @@ bool valid(std::span<const Climate> climates) noexcept {
     for (std::size_t i = 0; i < climates.size(); ++i) {
         const Climate& c = climates[i];
         if (c.id.empty() || c.like >= climate::kCount || (c.crops & ~kAllCrops) != 0 || c.share > 100 ||
-            c.forest.size() > kMaxForestTrees) {
+            c.forest.size() > kMaxForestTrees || c.ground.size() > kMaxGroundTiles) {
             return false;
         }
         for (std::size_t j = 0; j < i; ++j) {

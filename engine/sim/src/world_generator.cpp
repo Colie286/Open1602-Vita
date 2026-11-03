@@ -528,6 +528,15 @@ bool Generator::load_package_island(Slot& slot, const PackageIsland& island) {
     slot.base = std::move(islands->front());
     slot.base.layers.resize(1);  // the ground; what lies on it in other layers stays out
     slot.package = true;
+    // A template of a package's climate gives its island that climate, the homes excepted (their
+    // crops stay those of the original's climate, as own_climate leaves them).
+    if (!island.own_climate.empty() && (slot.plan.flags & kPlanNoVillage) == 0 && !slot.own_shape) {
+        const auto c = std::find_if(m_climates.begin(), m_climates.end(),
+                                    [&](const Climate& k) { return k.id == island.own_climate; });
+        if (c != m_climates.end() && c->like == slot.plan.climate) {
+            slot.climate = static_cast<std::uint8_t>(c - m_climates.begin() + 1);
+        }
+    }
     slot.plan.flags = static_cast<std::uint8_t>(
         slot.plan.flags & ~1U);  // no native village: a package has no native version of its island
     slot.map = IslandMap::from_island(slot.base, m_buildings, m_warnings, nullptr);
@@ -597,8 +606,9 @@ void Generator::count_mountains(Slot& slot) const {
 void Generator::give_own_shape(Slot& slot) {
     shapes::ShapeRequest r;
     r.climate = slot.plan.climate;
-    if (slot.climate != 0 && !m_climates[slot.climate - 1U].forest.empty()) {
-        r.trees = m_climates[slot.climate - 1U].forest;
+    if (slot.climate != 0) {
+        r.trees = m_climates[slot.climate - 1U].forest;  // none: the climate's
+        r.ground = m_climates[slot.climate - 1U].ground;
     }
     r.size = slot.plan.size;
     r.number = slot.plan.number;

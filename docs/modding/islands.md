@@ -26,7 +26,7 @@ Each table names one island. Together with the package's id, the table's name is
 # mods/atoll/islands.toml
 [lagoon]
 file = "islands/lagoon.scp"   # an island file of the package (required)
-climate = "south"             # "north" or "south"; the file's own if not given
+climate = "south"             # "north", "south" or a package's climate; the file's own if not given
 name.en = "Lagoon"
 name.de = "Lagune"
 ```
@@ -34,7 +34,7 @@ name.de = "Lagune"
 | Field | Limits | Meaning |
 |---|---|---|
 | `file` | a path in the package, folders split by `/` | the island: a file of the original's island format (chunks `INSEL5` and `INSELHAUS`) with all its tiles (required) |
-| `climate` | `"north"` or `"south"` | the climate whose islands it stands among; the file's (`INSEL5` +0x64) if not given |
+| `climate` | `"north"`, `"south"` or a package's climate `"<package>:<name>"` ([climates.md](climates.md#how-a-world-uses-them)) | the climate whose islands it stands among; the file's (`INSEL5` +0x64) if not given, and for a package's climate, whose islands drawn from it take that climate |
 | `name.<language>` | a text | its name, for lists such as the editor's; the id if there is none |
 
 The file's name may end in anything; the game reads its chunks. The example package names its

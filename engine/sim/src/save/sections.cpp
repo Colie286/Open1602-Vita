@@ -159,6 +159,8 @@ constexpr std::uint32_t kPlannedIslands = tag("PLAN");
 /// The packages' climates (Balance::climates) and the islands that have one (WorldIsland::climate),
 /// only written when there are any. Required: crops would grow otherwise.
 constexpr std::uint32_t kClimates = tag("CLIM");
+/// CLIM version 2: each climate's ground after its share, written only when a climate has ground.
+constexpr std::uint16_t kClimatesWithGround = 2;
 /// The computers' producers a package changed (Balance::computer_producers), only written when
 /// there are any. Required: the computers would build otherwise.
 constexpr std::uint32_t kComputerProducers = tag("AIPR");
@@ -218,6 +220,9 @@ constexpr std::uint16_t max_version(std::uint32_t id) noexcept {
     }
     if (id == kScripts) {
         return kScriptsWithCampaign;
+    }
+    if (id == kClimates) {
+        return kClimatesWithGround;
     }
     if (id == kBalance) {
         return kBalanceWithStages;
@@ -584,29 +589,40 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
         });
     }
     if (!world.balance().climates.empty()) {
-        section(out, kClimates, [&](Writer& o) {
-            o.list(world.balance().climates, 16, [&](const Climate& c) {
-                o.string(c.id);
-                o.u8(c.like);
-                o.list(c.names, 8, [&](const auto& name) {
-                    o.string(name.first);
-                    o.string(name.second);
+        const auto& climates = world.balance().climates;
+        const std::uint16_t version =
+            std::any_of(climates.begin(), climates.end(), [](const Climate& c) { return !c.ground.empty(); })
+                ? kClimatesWithGround
+                : std::uint16_t{1};
+        section(
+            out, kClimates,
+            [&](Writer& o) {
+                o.list(world.balance().climates, 16, [&](const Climate& c) {
+                    o.string(c.id);
+                    o.u8(c.like);
+                    o.list(c.names, 8, [&](const auto& name) {
+                        o.string(name.first);
+                        o.string(name.second);
+                    });
+                    o.u32(c.crops);
+                    o.u32s(c.forest);
+                    o.u8(c.share);
+                    if (version >= kClimatesWithGround) {
+                        o.u32s(c.ground);
+                    }
                 });
-                o.u32(c.crops);
-                o.u32s(c.forest);
-                o.u8(c.share);
-            });
-            std::vector<std::pair<std::uint16_t, std::uint8_t>> islands;
-            for (std::size_t i = 0; i < world.islands().size(); ++i) {
-                if (world.islands()[i].climate != 0) {
-                    islands.emplace_back(static_cast<std::uint16_t>(i), world.islands()[i].climate);
+                std::vector<std::pair<std::uint16_t, std::uint8_t>> islands;
+                for (std::size_t i = 0; i < world.islands().size(); ++i) {
+                    if (world.islands()[i].climate != 0) {
+                        islands.emplace_back(static_cast<std::uint16_t>(i), world.islands()[i].climate);
+                    }
                 }
-            }
-            o.list(islands, 3, [&](const auto& island) {
-                o.u16(island.first);
-                o.u8(island.second);
-            });
-        });
+                o.list(islands, 3, [&](const auto& island) {
+                    o.u16(island.first);
+                    o.u8(island.second);
+                });
+            },
+            Need::Required, version);
     }
     if (!world.goods().own_goods().empty()) {
         section(out, kGoods, [&](Writer& o) {
@@ -1168,6 +1184,9 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                     in.u32(c.crops);
                     in.u32s(c.forest);
                     in.u8(c.share);
+                    if (version >= kClimatesWithGround) {
+                        in.u32s(c.ground);
+                    }
                 });
                 in.list(part.islands, 3, [&](std::pair<std::uint16_t, std::uint8_t>& island) {
                     in.u16(island.first);

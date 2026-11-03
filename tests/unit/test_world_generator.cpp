@@ -1617,9 +1617,15 @@ TEST_CASE("package islands: islands.toml names island files, with their climate,
                             "[huge]\nfile = \"islands/huge.scp\"\n"
                             "[missing]\nfile = \"islands/none.scp\"\n"
                             "[outside]\nfile = \"../reef.scp\"\n"
-                            "[wrong]\nfile = \"islands/reef.scp\"\nclimate = \"east\"\n",
+                            "[wrong]\nfile = \"islands/reef.scp\"\nclimate = \"east\"\n"
+                            "[frost_reef]\nfile = \"islands/reef.scp\"\nclimate = \"atoll:frost\"\n",
                             warnings);
-    REQUIRE(islands.size() == 2);
+    REQUIRE(islands.size() == 3);
+    // A package's climate: the island stays among the templates of the file's climate.
+    CHECK(islands[2].own_climate == "atoll:frost");
+    CHECK(islands[2].climate == 1);
+    CHECK(islands[0].own_climate.empty());
+    islands.pop_back();
     CHECK(islands[0].id == "atoll:reef");
     CHECK(islands[0].climate == 1);  // the file's
     CHECK(islands[0].size == 0);     // lit: 30 x 30 at most
@@ -1639,6 +1645,53 @@ TEST_CASE("package islands: islands.toml names island files, with their climate,
     CHECK(sim::package_template(islands, 0, 0, kTemplateCount[0][0]) == &islands[1]);
     CHECK(sim::package_template(islands, 0, 0, 0) == nullptr);
     std::filesystem::remove_all(root);
+}
+
+TEST_CASE("package islands: a template of a package's climate gives the islands drawn from it that climate") {
+    const auto& fake = full_game();
+    fake.write("pkg_frost.scp", package_island_file(0, 20, 20));
+    sim::PackageIsland frost;
+    frost.id = "atoll:frost_reef";
+    frost.package = "atoll";
+    frost.file = fake.root / "pkg_frost.scp";
+    frost.climate = 0;
+    frost.size = 0;
+    frost.width = 20;
+    frost.height = 20;
+    frost.own_climate = "atoll:frost";
+    const std::vector<sim::PackageIsland> package_islands{frost};
+    sim::Climate climate;
+    climate.id = "atoll:frost";
+    climate.like = sim::climate::kNorth;
+    climate.crops = sim::original_climate_crops(sim::climate::kNorth);
+    const std::vector<sim::Climate> climates{climate};  // no share: only the template gives it
+    const auto templates = sim::island_templates(fake.game, buildings(), package_islands);
+    std::size_t drawn = 0;
+    for (std::uint64_t seed = 1; seed <= 12 && drawn == 0; ++seed) {
+        sim::WorldSettings settings;
+        settings.seed = seed;
+        settings.sizes = sim::WorldSettings::Sizes::Small;
+        settings.islands = sim::WorldSettings::Amount::Many;
+        std::vector<std::string> warnings;
+        auto plan = sim::plan_world(settings, templates, &warnings);
+        REQUIRE(plan.ok());
+        sim::WorldStart start;
+        start.seed = seed;
+        start.package_islands = package_islands;
+        start.climates = climates;
+        auto own = sim::own_world_scenario(scenario(standard_plan()), *plan, settings.players);
+        REQUIRE(own.ok());
+        auto w = sim::generate_islands(*own, *plan, fake.game, buildings(), start, &warnings);
+        REQUIRE(w.ok());
+        for (const sim::GeneratedIsland& g : w->islands) {
+            if (g.width == 20 && g.height == 20 && g.own_climate == 1) {
+                ++drawn;
+            } else {
+                CHECK(g.own_climate == 0);  // the other islands keep the original's
+            }
+        }
+    }
+    CHECK(drawn > 0);
 }
 
 TEST_CASE("package islands: an own world draws them with the templates and keeps their tiles") {

@@ -47,6 +47,7 @@ TEST_CASE("climates: a package names climates like the north or the south, with 
         "name.de = \"Tundra (de)\"\n"
         "crops = \"tobacco, cocoa\"\n"
         "forest = \"anno1602:mixed_forest, anno1602:21306\"\n"
+        "ground = \"anno1602:22722, anno1602:22724\"\n"
         "share = 30\n"
         "[jungle]\n"
         "like = \"south\"\n",
@@ -58,6 +59,7 @@ TEST_CASE("climates: a package names climates like the north or the south, with 
     CHECK(tundra.like == sim::climate::kNorth);
     CHECK(tundra.crops == (bit(sim::ware::kTobaccoField) | bit(sim::ware::kCocoaField)));
     CHECK((tundra.forest == std::vector<std::uint32_t>{21304, 21306}));
+    CHECK((tundra.ground == std::vector<std::uint32_t>{22722, 22724}));
     CHECK(tundra.share == 30);
     CHECK(tundra.name("de") == "Tundra (de)");
     CHECK(tundra.name("fr") == "Tundra");
@@ -65,6 +67,7 @@ TEST_CASE("climates: a package names climates like the north or the south, with 
     const sim::Climate& jungle = climates[1];
     CHECK(jungle.crops == sim::original_climate_crops(sim::climate::kSouth));
     CHECK(jungle.forest.empty());
+    CHECK(jungle.ground.empty());
     CHECK(jungle.share == 0);
     CHECK(jungle.name("en") == "mod:jungle");
     CHECK(sim::valid(climates));
@@ -146,6 +149,7 @@ TEST_CASE("climates: a game keeps its climates and its islands' in the savegame 
     balance.climates = read(
         "[tundra]\nlike = \"north\"\nname.de = \"Tundra\"\ncrops = \"wine\"\nforest = \"anno1602:21304\"\nshare = 40\n",
         warnings);
+    // Without ground CLIM stays version 1; the second save below has ground (version 2).
     world.set_balance(balance);
     world.island(1).climate = 1;
     auto bytes = sim::write_game(world, buildings);
@@ -156,6 +160,13 @@ TEST_CASE("climates: a game keeps its climates and its islands' in the savegame 
     CHECK(loaded->islands()[0].climate == 0);
     CHECK(loaded->islands()[1].climate == 1);
     CHECK(sim::island_fertility(*loaded, loaded->islands()[1], sim::ware::kWineField) == 64);
+    balance.climates[0].ground = {22722};
+    world.set_balance(balance);
+    auto with_ground = sim::write_game(world, buildings);
+    REQUIRE(with_ground.ok());
+    auto loaded_ground = sim::read_game(*with_ground, buildings);
+    REQUIRE(loaded_ground.ok());
+    CHECK(loaded_ground->balance() == balance);
 
     // An island of a climate the game does not have is a damaged file.
     world.island(0).climate = 2;
