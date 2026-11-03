@@ -149,6 +149,46 @@ TEST_CASE("ai tables: Needs and public tasks name each slot once") {
     CHECK(!public_task(kGalgen)->roads_on_fail);
 }
 
+TEST_CASE("ai tables: the rules of the original's slots are fields of the slots") {
+    using o1602::sim::ComputerSlot;
+    const auto& slots = o1602::sim::original_computer_slots();
+    const auto at = [&](std::uint8_t n) -> const ComputerSlot& { return *o1602::sim::computer_slot(slots, n); };
+    // Wool and cloth from cotton where it grows fully, once the weaving mill is unlocked.
+    CHECK(at(kSlotSheep).instead == kSlotCotton);
+    CHECK(at(kSlotWebstube).instead == kSlotWeberei);
+    CHECK(at(kSlotWebstube).instead_unlocked == kSlotWeberei);
+    CHECK(at(kSlotWebstube).instead_crop == o1602::sim::ware::kCottonField);
+    // One smelter unless 30 t of ore and three iron workshops.
+    CHECK(at(kSlotSmelter).single_below_stock == 30);
+    CHECK(at(kSlotSmelter).single_below_users == 3);
+    std::size_t users = 0;
+    for (const ComputerSlot& c : slots) {
+        users += c.after == kSlotSmelter ? 1U : 0U;
+    }
+    CHECK(users == 4);
+    // The mines, the goldsmith's gold, two stonemasons a quarry.
+    CHECK(at(kSlotIronMine).deposit == o1602::sim::ware::kOre);
+    CHECK(at(kSlotGoldMine).deposit == o1602::sim::ware::kGold);
+    CHECK(at(kSlotGoldsmith).raw_stock == 1);
+    CHECK(at(kSlotStonemason).process_max == 2);
+    // The processing order: eight workshops, each rank once.
+    std::set<std::uint8_t> ranks;
+    for (const ComputerSlot& c : slots) {
+        if (c.process_rank != 0) {
+            REQUIRE(ranks.insert(c.process_rank).second);
+            CHECK(c.process_from != o1602::sim::kNoProducer);
+        }
+    }
+    CHECK(ranks.size() == 8);
+    CHECK(at(kSlotMill).process_rank == 1);
+    CHECK(!at(kSlotMill).process_round_up);
+    CHECK(at(kSlotBakery).process_round_up);
+    // The subsidy: four tons of ore for a mine, cocoa from 100 merchants.
+    CHECK(at(kSlotIronMine).subsidy_tons == 4);
+    CHECK(at(kSlotCocoa).subsidy_people == 100);
+    CHECK(at(kSlotCotton).subsidy_ware == o1602::sim::ware::kWool);
+}
+
 TEST_CASE("ai tables: a city on a large island grows its orders with its free land") {
     CHECK(grown_count(500, 44) == 44);  // the original's islands: the original's orders
     CHECK(grown_count(kGrowFrom, 44) == 44);

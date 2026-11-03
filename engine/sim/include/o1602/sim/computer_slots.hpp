@@ -46,6 +46,40 @@ struct ComputerSlot {
     bool from_start = false;           ///< mines: the search starts at the first point of segment 0
     std::uint8_t after = kNoProducer;  ///< the producer the city must have first
 
+    // The rules of a producer (Producer).
+    /// Built instead where crop `instead_crop` grows fully and the building of `instead_unlocked`
+    /// is unlocked (the original: cotton for sheep, the weaving mill for the weaving hut);
+    /// kNoProducer for none.
+    std::uint8_t instead = kNoProducer;
+    std::uint8_t instead_crop = 0;
+    std::uint8_t instead_unlocked = kNoProducer;
+    /// At most one unless the city has `single_below_stock` tons of its raw material and
+    /// `single_below_users` producers that need it first (`after`) (the original's smelters); 0 for
+    /// no such limit.
+    std::uint8_t single_below_stock = 0;
+    std::uint8_t single_below_users = 0;
+    /// A mine: the deposit it is built on (ore or gold), 0 for none.
+    std::uint8_t deposit = 0;
+    /// Built only while the city has more than this many tons of its raw material, 0 for no test
+    /// (the original's goldsmith).
+    std::uint8_t raw_stock = 0;
+    /// The order `processing`: one for every `process_per` producers of slot `process_from`,
+    /// rounded up or down, in the order of `process_rank` (1 first; 0: not in the order); at most
+    /// `process_max` for each of them (0: no limit).
+    std::uint8_t process_from = kNoProducer;
+    std::uint8_t process_per = 0;
+    bool process_round_up = false;
+    std::uint8_t process_rank = 0;
+    std::uint8_t process_max = 0;
+    /// The subsidy of a city of 50 inhabitants of the second class: `subsidy_tons` of
+    /// `subsidy_ware` while it has less than 3 t and more than `subsidy_above` such producers, and
+    /// `subsidy_people` inhabitants of class `subsidy_class` (0: no further test); 0 tons for none.
+    std::uint8_t subsidy_ware = 0;
+    std::uint8_t subsidy_tons = 0;
+    std::uint8_t subsidy_above = 0;
+    std::uint8_t subsidy_class = 0;
+    std::uint16_t subsidy_people = 0;
+
     // How the survey counts a building for it: its ware (0: not counted), raw material (0: any)
     // and building (0: any). A slot with a raw material or a building counts before one without.
     std::uint8_t count_ware = 0;

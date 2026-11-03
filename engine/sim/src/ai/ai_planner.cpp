@@ -20,10 +20,6 @@ constexpr std::uint64_t kRefreshMs = 5100;  // a refresh every 5.1 s
 constexpr std::uint64_t kStage0AbandonMs = 480'000;
 constexpr std::uint64_t kStage14AbandonMs = 1'200'000;
 
-std::uint32_t ceil_half(std::uint32_t n) {
-    return (n + 1) / 2;
-}
-
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------
@@ -131,16 +127,12 @@ void Engine::subsidy(AiPlayer& p, std::int32_t m) {
     }
     // The bricks of the original need a score of 20, which never comes.
     if (population(*c, 2) >= 50) {
-        for (const SubsidyRaw& raw : kSubsidyRaws) {
-            if (r->slots[raw.slot].count > 3 && c->stock(raw.ware) < 3 * kTon) {
-                add_goods(*c, raw.ware, kTon * u);
+        for (const ComputerSlot& k : original_computer_slots()) {
+            if (k.subsidy_tons != 0 && r->slots[k.number].count > k.subsidy_above &&
+                c->stock(k.subsidy_ware) < 3 * kTon &&
+                (k.subsidy_people == 0 || population(*c, k.subsidy_class) >= k.subsidy_people)) {
+                add_goods(*c, k.subsidy_ware, k.subsidy_tons * kTon * u);
             }
-        }
-        if (r->slots[kSlotIronMine].count > 0 && c->stock(ware::kOre) < 3 * kTon) {
-            add_goods(*c, ware::kOre, 4 * kTon * u);
-        }
-        if (population(*c, 3) >= 100 && r->slots[kSlotCocoa].count > 3 && c->stock(ware::kCocoa) < 3 * kTon) {
-            add_goods(*c, ware::kCocoa, kTon * u);
         }
     }
 }
@@ -1033,36 +1025,38 @@ bool Engine::need(AiPlayer& p, std::uint8_t which, std::uint32_t n, bool cov) {
     if (c == nullptr || r == nullptr) {
         return false;
     }
-    // Some Needs choose another building first.
-    const bool cotton_island = fertility(c->island, ware::kCottonField) == 128;
+    // Some Needs choose another building first (ComputerSlot::instead): wool and cloth from cotton
+    // where it grows fully.
     const std::vector<ComputerProducer>& changes = m_world.balance().computer_producers;
-    const assets::BuildingType* weberei = by_id(need_def(kSlotWeberei, changes).value().fixed);
-    const bool weberei_ok = weberei != nullptr && unlocked(p, *weberei);
-    if (which == kSlotSheep && cotton_island && weberei_ok) {
-        which = kSlotCotton;  // wool from cotton where it grows fully
+    if (const ComputerSlot* k = slot_info(which);
+        k != nullptr && k->instead != kNoProducer && fertility(c->island, k->instead_crop) == 128) {
+        const auto first = need_def(k->instead_unlocked, changes);
+        const assets::BuildingType* b = first ? by_id(first->fixed) : nullptr;
+        if (b != nullptr && unlocked(p, *b)) {
+            which = k->instead;
+        }
     }
-    if (which == kSlotWebstube && cotton_island && weberei_ok) {
-        which = kSlotWeberei;
-    }
-    if (which == kSlotIronMine) {
+    const ComputerSlot* slot = slot_info(which);
+    if (slot != nullptr && slot->deposit == ware::kOre) {
         return need_iron_mine(p, n);
     }
-    if (which == kSlotGoldMine) {
+    if (slot != nullptr && slot->deposit == ware::kGold) {
         return need_gold_mine(p);
     }
     const auto d = need_def(which, changes);
-    if (!d) {
+    if (!d || slot == nullptr) {
         return false;
     }
     SlotState& s = r->slots[which];
     std::uint32_t wanted = n;
-    if (which == kSlotSmelter) {
-        // More than one smelter only with ore in stock and three iron workshops.
+    if (slot->single_below_stock != 0) {
+        // More than one only with the raw material in stock and as many producers that need it.
         std::uint32_t users = 0;
-        for (const std::uint8_t k : {kSlotToolsmith, kSlotSwords, kSlotMuskets, kSlotCannons}) {
-            users += r->slots[k].count != 0 ? 1U : 0U;
+        for (const ComputerSlot& k : original_computer_slots()) {
+            users += k.after == which && r->slots[k.number].count != 0 ? 1U : 0U;
         }
-        if (!(c->stock(ware::kOre) >= 30 * kTon && users >= 3)) {
+        if (!(c->stock(slot->raw) >= slot->single_below_stock * kStockUnitsPerTon &&
+              users >= slot->single_below_users)) {
             wanted = std::min<std::uint32_t>(wanted, 1);
         }
     }
@@ -1078,10 +1072,11 @@ bool Engine::need(AiPlayer& p, std::uint8_t which, std::uint32_t n, bool cov) {
         return false;
     }
     // Conditions besides the count that stay the original's.
-    if (which == kSlotStonemason && n > 2U * r->slots[kSlotQuarry].count) {
+    if (slot->process_max != 0 && slot->process_from != kNoProducer &&
+        n > std::uint32_t{slot->process_max} * r->slots[slot->process_from].count) {
         return false;
     }
-    if (which == kSlotGoldsmith && c->stock(ware::kGold) <= kTon) {
+    if (slot->raw_stock != 0 && c->stock(slot->raw) <= slot->raw_stock * kStockUnitsPerTon) {
         return false;
     }
     if (d->fertile != 0 && fertility(c->island, d->fertile) == 0) {
@@ -1618,30 +1613,23 @@ bool Engine::processing(AiPlayer& p) {
     if (r == nullptr) {
         return false;
     }
-    const auto count = [&](std::uint8_t k) -> std::uint32_t { return r->slots[k].count; };
-    if (count(kSlotMill) < count(kSlotGrain) / 2) {
-        return need(p, kSlotMill, count(kSlotGrain) / 2);
+    // In the order of their ranks: one for every so many producers of their raw material.
+    std::array<const ComputerSlot*, 256> by_rank{};
+    for (const ComputerSlot& k : original_computer_slots()) {
+        if (k.process_rank != 0 && k.process_from != kNoProducer && k.process_per != 0) {
+            by_rank[k.process_rank] = &k;
+        }
     }
-    if (count(kSlotBakery) < ceil_half(count(kSlotMill))) {
-        return need(p, kSlotBakery, ceil_half(count(kSlotMill)));
-    }
-    if (count(kSlotWebstube) < count(kSlotSheep) / 2) {
-        return need(p, kSlotWebstube, count(kSlotSheep) / 2);
-    }
-    if (count(kSlotWeberei) < ceil_half(count(kSlotCotton))) {
-        return need(p, kSlotWeberei, ceil_half(count(kSlotCotton)));
-    }
-    if (count(kSlotButcher) < ceil_half(count(kSlotCattle))) {
-        return need(p, kSlotButcher, ceil_half(count(kSlotCattle)));
-    }
-    if (count(kSlotTobaccoGoods) < ceil_half(count(kSlotTobacco))) {
-        return need(p, kSlotTobaccoGoods, ceil_half(count(kSlotTobacco)));
-    }
-    if (count(kSlotRum) < ceil_half(count(kSlotSugar))) {
-        return need(p, kSlotRum, ceil_half(count(kSlotSugar)));
-    }
-    if (count(kSlotStonemason) < count(kSlotQuarry)) {
-        return need(p, kSlotStonemason, count(kSlotQuarry));
+    for (const ComputerSlot* k : by_rank) {
+        if (k == nullptr) {
+            continue;
+        }
+        const std::uint32_t from = r->slots[k->process_from].count;
+        const std::uint32_t want =
+            k->process_round_up ? (from + k->process_per - 1) / k->process_per : from / k->process_per;
+        if (r->slots[k->number].count < want) {
+            return need(p, k->number, want);
+        }
     }
     return false;
 }

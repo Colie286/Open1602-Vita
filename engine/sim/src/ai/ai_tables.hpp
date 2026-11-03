@@ -199,16 +199,9 @@ inline Cheats cheats_of(const Balance& b) {
     return c;
 }
 
-/// Raw materials the subsidy tops up (one ton per step below three) in cities of 50 settlers
-/// with more than three of their producers.
-struct SubsidyRaw {
-    std::uint8_t slot;
-    std::uint8_t ware;
-};
-inline constexpr std::array<SubsidyRaw, 5> kSubsidyRaws{{{kSlotSpices, ware::kSpices},
-                                                         {kSlotTobacco, ware::kTobacco},
-                                                         {kSlotWine, ware::kAlcohol},
-                                                         {kSlotSugar, ware::kSugar},
-                                                         {kSlotCotton, ware::kWool}}};
+/// The original's slot of number `slot` (computer_slots.hpp), nullptr for none.
+inline const ComputerSlot* slot_info(std::uint8_t slot) {
+    return computer_slot(original_computer_slots(), slot);
+}
 
 }  // namespace o1602::sim::ai

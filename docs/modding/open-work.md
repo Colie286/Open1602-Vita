@@ -251,8 +251,12 @@ the table of the slots (`engine/sim/include/o1602/sim/computer_slots.hpp`): each
 slots by number with its name (as `computers.toml` names it), its Need, how the survey counts it and
 the public building it stands for, in place of the tables `kNeeds`, `kProducerCounts` and
 `kPublicTasks`. The slots keep their numbers; the rules that name a slot of the original name it by
-its number. Next: those rules as fields of a slot, `slots.toml` for packages (with section `SLOT`),
-public buildings of a package and the stages' thresholds as data.
+its number. Step 2, the rules of single slots as fields of a slot: cotton and the weaving mill
+instead of sheep and the weaving hut (`instead`), the smelter's cap (`single_below_*`), the mines'
+deposits (`deposit`), the goldsmith's gold (`raw_stock`), the order `processing` with the
+stonemason's quarries (`process_*`) and the subsidy of raw materials (`subsidy_*`). Next:
+`slots.toml` for packages (with section `SLOT`), public buildings of a package and the stages'
+thresholds as data.
 
 ### 6. Lua scripts (section 6)
 

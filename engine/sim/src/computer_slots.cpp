@@ -194,6 +194,51 @@ std::vector<ComputerSlot> make_original_slots() {
     s.push_back(
         public_building(kSlotBrunnen, "fire_brigade", kBrunnen, id::kBrunnen, cf::kBrunnen, hs::kBrunnen, 6, false));
     s.push_back(counter(kSlotDenkmal, "monument"));
+    // The rules that name these slots.
+    const auto at = [&](std::uint8_t number) -> ComputerSlot& {
+        return *std::ranges::find(s, number, &ComputerSlot::number);
+    };
+    const auto swap = [&](std::uint8_t slot, std::uint8_t instead) {
+        at(slot).instead = instead;
+        at(slot).instead_crop = ware::kCottonField;  // wool and cloth from cotton where it grows fully
+        at(slot).instead_unlocked = kSlotWeberei;
+    };
+    swap(kSlotSheep, kSlotCotton);
+    swap(kSlotWebstube, kSlotWeberei);
+    at(kSlotSmelter).single_below_stock = 30;  // more than one with ore in stock and three iron workshops
+    at(kSlotSmelter).single_below_users = 3;
+    at(kSlotIronMine).deposit = ware::kOre;
+    at(kSlotGoldMine).deposit = ware::kGold;
+    at(kSlotGoldsmith).raw_stock = 1;
+    const auto process = [&](std::uint8_t slot, std::uint8_t from, std::uint8_t per, bool up, std::uint8_t rank) {
+        at(slot).process_from = from;
+        at(slot).process_per = per;
+        at(slot).process_round_up = up;
+        at(slot).process_rank = rank;
+    };
+    process(kSlotMill, kSlotGrain, 2, false, 1);
+    process(kSlotBakery, kSlotMill, 2, true, 2);
+    process(kSlotWebstube, kSlotSheep, 2, false, 3);
+    process(kSlotWeberei, kSlotCotton, 2, true, 4);
+    process(kSlotButcher, kSlotCattle, 2, true, 5);
+    process(kSlotTobaccoGoods, kSlotTobacco, 2, true, 6);
+    process(kSlotRum, kSlotSugar, 2, true, 7);
+    process(kSlotStonemason, kSlotQuarry, 1, false, 8);
+    at(kSlotStonemason).process_max = 2;  // two stonemasons at most for each quarry
+    const auto subsidy = [&](std::uint8_t slot, std::uint8_t w, std::uint8_t tons, std::uint8_t above) {
+        at(slot).subsidy_ware = w;
+        at(slot).subsidy_tons = tons;
+        at(slot).subsidy_above = above;
+    };
+    subsidy(kSlotSpices, ware::kSpices, 1, 3);
+    subsidy(kSlotTobacco, ware::kTobacco, 1, 3);
+    subsidy(kSlotWine, ware::kAlcohol, 1, 3);
+    subsidy(kSlotSugar, ware::kSugar, 1, 3);
+    subsidy(kSlotCotton, ware::kWool, 1, 3);
+    subsidy(kSlotIronMine, ware::kOre, 4, 0);
+    subsidy(kSlotCocoa, ware::kCocoa, 1, 3);
+    at(kSlotCocoa).subsidy_class = 3;
+    at(kSlotCocoa).subsidy_people = 100;
     return s;
 }
 
