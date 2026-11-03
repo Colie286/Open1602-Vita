@@ -224,11 +224,18 @@ void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& ow
         if (ware) {
             b.ware = *ware;
         }
+        // A good it uses no more ("") takes no amount either: it makes its good from nothing.
         if (raw) {
             b.raw_ware = *raw;
+            if (*raw == 0) {
+                b.raw_amount = 0;
+            }
         }
         if (raw2) {
             b.raw2_ware = *raw2;
+            if (*raw2 == 0) {
+                b.raw2_amount = 0;
+            }
         }
         if (figure) {
             b.worker_figure = static_cast<std::uint16_t>(*figure);

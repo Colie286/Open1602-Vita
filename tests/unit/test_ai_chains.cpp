@@ -46,6 +46,21 @@ assets::BuildingTable table(const std::string& records, const std::vector<std::u
 
 }  // namespace
 
+TEST_CASE("ai chains: a farm of a package that makes its good from nothing is placed as a workshop") {
+    // Pepper (59) from a farm that uses nothing (own_buildings.toml raw = ""): no fields to plant.
+    const auto buildings = table(
+        "  @Nummer: 0\n  Id: 21000\n  Kind: 14\n  Gfx: 0\n  Size: 2, 2\n  Objekt: HAUS_PRODTYP\n    Kind: 2\n"
+        "    Ware: 59\n    Prodmenge: 1\n    Interval: 20\n  EndObj\n",
+        {59});
+    const std::vector<PackageNeed> needs = package_needs(buildings);
+    REQUIRE(needs.size() == 1);
+    CHECK(needs[0].building == 21000);
+    CHECK(needs[0].task == kWeaving);
+    CHECK(needs[0].field == 0);
+    CHECK(needs[0].fertile == 0);
+    CHECK(needs[0].input == 0);
+}
+
 TEST_CASE("ai chains: a needed good of a package gets its producer, its raw material the producer's") {
     // Pepper sauce (60) from pepper (59) from pepper fields (tobacco fields, 46); cloth of a
     // package (61) from the original's tools (22).

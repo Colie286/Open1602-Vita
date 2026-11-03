@@ -1623,6 +1623,47 @@ TEST_CASE("ai: a computer builds the producer of a package's good its inhabitant
     CHECK(mills() >= 1);
 }
 
+TEST_CASE("ai: a computer builds a package's farm that makes its good from nothing (raw = \"\")") {
+    // A plantation of a package (2 x 2) without fields makes ware 59; the city's class needs it.
+    Game g;
+    constexpr std::uint32_t kPepperFarm = 20992;
+    g.buildings = make_buildings(
+        "  @Nummer: 13\n  Id: 20992\n  Kind: 14\n  Gfx: 100\n  Size: 2, 2\n"
+        "  Objekt: HAUS_PRODTYP\n    Kind: 2\n    Maxlager: 4\n    Ware: 59\n"
+        "    Prodmenge: 1\n    Interval: 20\n  EndObj\n"
+        "  Objekt: HAUS_BAUKOST\n    Money: 50\n  EndObj\n");
+    assets::ResidentClass settlers;
+    settlers.max_per_house = 10;
+    settlers.needs.push_back({59, 100});
+    g.buildings.set_resident_classes({settlers});
+    g.buildings.by_id(kKontor)->ware = sim::ware::kAll;
+    sim::Simulation s(g.world, g.buildings, g.figures);
+    found_city(g, s, 60'000);
+    sim::City* city = nullptr;
+    for (const sim::City& c : g.world.cities()) {
+        if (c.owner == kComputer) {
+            city = g.world.city(c.island, c.index);
+        }
+    }
+    REQUIRE(city != nullptr);
+    const sim::IslandMap& map = g.world.island(city->island).map;
+    const auto farms = [&] {
+        std::size_t n = 0;
+        for (std::uint32_t y = 0; y < map.height(); ++y) {
+            for (std::uint32_t x = 0; x < map.width(); ++x) {
+                const sim::MapCell& cell = map.top(x, y);
+                const assets::BuildingType* b = g.buildings.by_sprite(cell.sprite);
+                n += b != nullptr && b->id == kPepperFarm && cell.owner == kComputer ? 1U : 0U;
+            }
+        }
+        return n / 4;
+    };
+    CHECK(run_until(s, 600'000, [&] {
+        city->inhabitants.assign(1, 100);
+        return farms() != 0;
+    }));
+}
+
 TEST_CASE("ai: the computers' cheats come from the game's balance (balance.toml [computers])") {
     // A poor computer gets money for its founding: the original's 799, or what the balance gives.
     const auto money_after_founding = [](std::uint32_t founding_money) {

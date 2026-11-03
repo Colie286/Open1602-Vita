@@ -22,6 +22,7 @@
 #include "o1602/assets/game_directory.hpp"
 #include "o1602/assets/text_table.hpp"
 #include "o1602/core/file.hpp"
+#include "o1602/sim/balance.hpp"
 #include "o1602/sim/new_game.hpp"
 #include "o1602/sim/save_game.hpp"
 #include "o1602/sim/simulation.hpp"
@@ -173,6 +174,9 @@ int cmd_bench(const Args& args) {
         std::printf("%zu packages from %s, %zu problems\n", packages.size(), std::string(it->second).c_str(),
                     problems.size());
     }
+    // The tables with the packages' buildings and figures, before a game's values change them.
+    const assets::BuildingTable original_buildings = *buildings;
+    const assets::FigureTable original_figures = *figures;
     std::vector<std::string> warnings;
     const auto use_rules = [&](core::Result<sim::World> world) {
         if (world && rules) {
@@ -259,6 +263,11 @@ int cmd_bench(const Args& args) {
             }
             world = std::move(again);
         }
+        // The game's values, classes and levels in the tables, as the game sets them when it starts.
+        sim::apply_building_values(*buildings, original_buildings, world->balance());
+        sim::apply_resident_classes(*buildings, original_buildings, world->resident_classes());
+        sim::apply_infra_levels(*buildings, original_buildings, world->infra_levels());
+        sim::apply_figure_values(*figures, original_figures, world->balance());
         simulation.emplace(*world, *buildings, *figures);
         std::size_t handed_over = 0;
         for (sim::PlayerId p = sim::first_human_player(*world); p != sim::kNoPlayer;

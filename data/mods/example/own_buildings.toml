@@ -1,8 +1,11 @@
 # Buildings of this package (own-buildings.md).
 
-# A pepper farm: the tobacco plantation's values, making pepper, worked by the pepper pickers.
+# A pepper farm: the tobacco plantation's values, making pepper from nothing (no fields), worked by
+# the pepper pickers. A picture of its own: with the plantation's sprites the map would show, and the
+# game read, a tobacco plantation.
 [pepper_farm]
 like = "anno1602:tobacco_plantation"
+gfx = "example:pepper_farm"
 ware = "example:pepper"
 raw = ""
 figure = "example:pepper_picker"

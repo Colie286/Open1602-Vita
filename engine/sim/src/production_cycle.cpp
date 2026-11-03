@@ -58,7 +58,9 @@ bool asks_for_main_raw(const assets::BuildingType& b, const Production& p) noexc
 }  // namespace
 
 std::uint32_t cycle_rate(const Production& p, const assets::BuildingType& b) noexcept {
-    if (p.raw == 0 || (p.flags & kSpecialFlag) != 0 || b.ware == 0) {
+    // A building of a package that uses nothing (own_buildings.toml `raw = ""`) needs no raw material.
+    const bool from_nothing = b.raw_ware == 0 && b.raw_amount == 0 && b.raw2_amount == 0;
+    if ((p.raw == 0 && !from_nothing) || (p.flags & kSpecialFlag) != 0 || b.ware == 0) {
         return 0;
     }
     std::uint32_t rate = b.raw_amount == 0 ? Production::kFullRate

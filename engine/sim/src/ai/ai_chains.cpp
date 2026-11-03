@@ -26,6 +26,13 @@ std::uint32_t per_minute(std::uint32_t amount, std::uint32_t interval) {
 /// How the computers place `b`, as `need`; false if no task of theirs can.
 bool placement(const assets::BuildingType& b, PackageNeed& need) {
     const bool two_by_two = b.size_x == 2 && b.size_y == 2;
+    if (b.raw_ware == 0 && b.raw_amount == 0 && b.raw2_amount == 0 &&
+        (b.prod_kind == prod::kFarm || b.prod_kind == prod::kPasture)) {
+        // A farm of a package that makes its good from nothing (raw = ""): no fields, placed as a
+        // workshop is.
+        need.task = kWeaving;
+        return true;
+    }
     switch (b.prod_kind) {
         case prod::kWorkshop:
             if (b.raw_ware != 0 && !is_trade_ware(b.raw_ware) && !package_ware(b.raw_ware)) {

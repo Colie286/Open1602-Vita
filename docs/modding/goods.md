@@ -55,9 +55,18 @@ string id:
 # mods/spice/own_buildings.toml
 [pepper_farm]
 like = "anno1602:tobacco_plantation"
+gfx = "spice:pepper_farm"     # a picture of its own (graphics.md)
 ware = "spice:pepper"         # what it makes
 raw = ""                      # what it uses: "" for nothing
 ```
+
+A building that uses nothing (`raw = ""`, and no `raw2`) makes its good from nothing, at the pace
+of its `interval`: a farm of that kind needs no fields, and the computers place it as they place a
+workshop ([computer-players.md](computer-players.md)). Give a building that makes another good than
+the one it copies a `gfx` of its own: the map tells buildings apart by their sprites, so with the
+copied building's sprites it shows, and the game reads, the copied building (a pepper farm with the
+plantation's sprites would be a tobacco plantation without fields to the computers, which tear it
+down).
 
 A good is declared before the buildings that name it: the engine reads every package's
 `goods.toml` first, then the buildings.

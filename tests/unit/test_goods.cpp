@@ -136,6 +136,7 @@ TEST_CASE("goods: a building of a package makes and uses goods by their ids") {
     CHECK(mill->ware == assets::ware::kFirstOwn);
     CHECK(mill->raw_ware == assets::ware::kGrain);
     CHECK(mill->raw2_ware == 0);
+    CHECK(mill->raw2_amount == 0);  // "": it uses no second good, and none of it
     REQUIRE(warnings.size() == 1);
     CHECK(warnings[0] ==
           "spice/own_buildings.toml line 8: 'ware' names no good (anno1602:<name or number> or <package>:<name>, \"\" "

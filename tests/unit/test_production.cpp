@@ -367,6 +367,25 @@ TEST_CASE("production cycle: raw material in, goods out") {
     CHECK(p.produced == (100 + 32) / 2);
 }
 
+TEST_CASE("production cycle: a building of a package that uses nothing makes its good from nothing") {
+    assets::BuildingType b = workshop();
+    b.raw_ware = 0;  // own_buildings.toml raw = ""
+    b.raw_amount = 0;
+    sim::Production p;
+    std::vector<sim::ProductionEvent> events;
+    sim::finish_cycle(p, b, 3, &events);
+    CHECK(p.rate == 128);
+    sim::finish_cycle(p, b, 3, &events);
+    CHECK(p.stock == 32);
+    CHECK(count(events, sim::ProductionEvent::Kind::NeedsRawGoods) == 0);  // nobody fetches anything
+
+    // A building that names no raw material but uses some (the original's records) does not.
+    b.raw_amount = 32;
+    sim::Production q;
+    sim::finish_cycle(q, b, 3, &events);
+    CHECK(q.rate == 0);
+}
+
 TEST_CASE("simulation: fixed ticks, production once per game second, speed and pause") {
     const auto buildings = make_buildings();
     sim::World world;

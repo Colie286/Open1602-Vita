@@ -8,7 +8,7 @@ the guide of each file. What a package can do and what is still to come is in
 ## The example package
 
 The repository has a package that uses every file once: [`data/mods/example`](../../data/mods/example).
-It adds pepper, a farm that grows it, a lighthouse drawn with images of its own, a court the
+It adds pepper, a farm that grows it and a lighthouse, both drawn with images of their own, a court the
 merchants need and the computers build (a public building of a kind of its own), sounds and
 music, a script, a scenario with a campaign, a kind of island world and an island template, and changes a few values
 of the original. Copy it, rename the folder and change it, or read it next to the guides below.

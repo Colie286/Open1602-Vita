@@ -34,12 +34,12 @@ size_y = 2
 | Field | Limits | Meaning |
 |---|---|---|
 | `like` | a building of the original, `anno1602:<name or number>` ([names](values.md#names)) | every value of that building, as the copy's starting point |
-| `gfx` | 0 to 65534, or an image of a package, `<package>:<name>` ([graphics.md](graphics.md)) | the first sprite; the building uses `size_x * size_y` sprites from it, per direction and frame |
+| `gfx` | 0 to 65534, or an image of a package, `<package>:<name>` ([graphics.md](graphics.md)) | the first sprite; the building uses `size_x * size_y` sprites from it, per direction and frame. The map tells buildings apart by their sprites: a building that keeps those of the building it copies is that building on the map, so one that makes, uses or serves something else needs a `gfx` of its own |
 | `size_x`, `size_y` | 1 to 255 | the footprint in tiles |
 | `level` | an unlock level, `anno1602:<name or number>` or `<package>:<name>` ([levels.md](levels.md)), `""` for always | what the player must have reached to build it |
 | `class` | a class of inhabitants, `anno1602:<name or number>` or `<package>:<name>` ([classes.md](classes.md)), for a house only | whose house it is |
 | `figure` | one figure: `anno1602:<name or number>` ([names](values.md#names)) or `<package>:<name>` ([own-figures.md](own-figures.md)) | its carriers or workers (`Figurnr`) |
-| `ware`, `raw`, `raw2` | a good by string id: `anno1602:<name or number>` or `<package>:<name>` ([goods.md](goods.md)), `""` for none | what it makes, and the first and second good it uses |
+| `ware`, `raw`, `raw2` | a good by string id: `anno1602:<name or number>` or `<package>:<name>` ([goods.md](goods.md)), `""` for none | what it makes, and the first and second good it uses; `""` uses none of it, and a building that uses nothing makes its good from nothing |
 | `build_sound` | a sound of a package, `<package>:<name>` ([sounds.md](sounds.md#sounds-of-buildings-and-figures)) | the sound when it is built |
 | `service` | `true` or `false` | a public building of a kind of its own: the houses in its reach get its own service instead of that of the building it copies, which classes may need (`public` in [classes.md](classes.md#public-buildings)) and the computers may build ([computer-players.md](computer-players.md#the-slots)); at most 50 in a game, in the order of the packages, a 51st stays of the kind it copies. It needs a `gfx` of its own: the game tells buildings apart by their sprites |
 
