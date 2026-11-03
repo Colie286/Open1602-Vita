@@ -68,6 +68,53 @@ private:
 [[nodiscard]] core::Result<std::unique_ptr<Operation>> set_fertility(const sim::World& world, std::size_t index,
                                                                      std::uint32_t fertility);
 
+// Placeholders: the islands of a world plan (sim::PlannedIslands), made when a game of the world
+// starts. Only a world that has a plan has them (a scenario of the original that makes its islands).
+
+/// The world plan changed: keeps it before and after.
+class PlanEdit final : public Operation {
+public:
+    /// `kind` names the change (operation.hpp).
+    PlanEdit(std::optional<sim::PlannedIslands> before, std::optional<sim::PlannedIslands> after, std::string_view kind)
+        : m_before(std::move(before)), m_after(std::move(after)), m_kind(kind) {}
+    void apply(sim::World& world) override { world.set_planned_islands(m_after); }
+    void revert(sim::World& world) override { world.set_planned_islands(m_before); }
+    [[nodiscard]] std::size_t memory() const noexcept override;
+    [[nodiscard]] std::string_view kind() const noexcept override { return m_kind; }
+
+private:
+    std::optional<sim::PlannedIslands> m_before;
+    std::optional<sim::PlannedIslands> m_after;
+    std::string m_kind;
+};
+
+/// Whether the placeholder `index` of the plan is still made when a game starts: no island of the
+/// world has its number (a stored island is not made again).
+[[nodiscard]] bool placeholder_open(const sim::World& world, std::size_t index) noexcept;
+
+/// The rectangle a placeholder takes: its size class's, as large as the templates of the class.
+[[nodiscard]] std::pair<std::uint32_t, std::uint32_t> placeholder_size(
+    const assets::ScenarioPlan::Island& island) noexcept;
+
+/// The placeholder whose rectangle holds the world tile (x, y), if any (the open ones only).
+[[nodiscard]] std::optional<std::size_t> placeholder_at(const sim::World& world, std::uint32_t x,
+                                                        std::uint32_t y) noexcept;
+
+/// Whether a rectangle of `w` x `h` tiles at (x, y) lies in the map, on open sea and outside every
+/// open placeholder other than `except`.
+[[nodiscard]] bool free_for_placeholder(const sim::World& world, std::int64_t x, std::int64_t y, std::uint32_t w,
+                                        std::uint32_t h, std::optional<std::size_t> except = std::nullopt);
+
+/// A new placeholder of `climate` (0 north, 1 south, 2 by its place) and size class `size` at
+/// (x, y), with a free island number and a template drawn when the game starts.
+[[nodiscard]] core::Result<std::unique_ptr<Operation>> add_placeholder(const sim::World& world, std::uint8_t climate,
+                                                                       std::uint8_t size, std::uint32_t x,
+                                                                       std::uint32_t y);
+/// The placeholder `index` as `changed` (its place, climate or size).
+[[nodiscard]] core::Result<std::unique_ptr<Operation>> change_placeholder(const sim::World& world, std::size_t index,
+                                                                          const assets::ScenarioPlan::Island& changed);
+[[nodiscard]] core::Result<std::unique_ptr<Operation>> remove_placeholder(const sim::World& world, std::size_t index);
+
 /// About how much memory a world holds: the map's cells and the islands' tiles.
 [[nodiscard]] std::size_t world_memory(const sim::World& world) noexcept;
 

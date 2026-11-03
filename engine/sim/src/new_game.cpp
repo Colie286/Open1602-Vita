@@ -15,6 +15,7 @@
 #include "o1602/core/text.hpp"
 #include "o1602/sim/game_data.hpp"
 #include "o1602/sim/savegame_extension.hpp"
+#include "o1602/sim/savegame_writer.hpp"
 
 namespace o1602::sim {
 
@@ -502,8 +503,11 @@ core::Result<World> roll_planned_islands(const World& world, const assets::GameD
     if (const auto problems = check_planned_islands(*planned, world.width(), world.height()); !problems.empty()) {
         return core::make_error(core::ErrorCode::InvalidFormat, "world plan: " + problems.front());
     }
-    // The scenario of the original with the plan as it is now: the generator and the loader then
-    // make the world as for the original's file.
+    // The world as the editor left it, in the original's chunks (its islands, cities, players and
+    // ships), with the plan as it is now: the generator then makes only the islands no island of the
+    // world has the number of, and the loader the world around them. A world the original's
+    // chunks cannot hold starts from the scenario of the original it came from instead, with the
+    // plan as it is now.
     std::vector<std::uint8_t> table;
     if (planned->table) {
         for (const std::uint16_t v : *planned->table) {
@@ -512,21 +516,49 @@ core::Result<World> roll_planned_islands(const World& world, const assets::GameD
         }
     }
     const assets::ChunkFile& source = *world.source();
-    assets::ChunkWriter out;
-    bool has_plan = false;
+    std::span<const std::uint8_t> szene;
     for (const assets::Chunk& c : source.chunks()) {
         if (c.name == "SZENE") {
-            out.add(c.name, assets::write_scenario_plan(source.payload(c), planned->plan));
-            has_plan = true;
-        } else if (c.name != "RANDTAB") {
-            out.add(c.name, source.payload(c));
+            szene = source.payload(c);
         }
     }
-    if (!has_plan) {
-        out.add("SZENE", assets::write_scenario_plan({}, planned->plan));
+    assets::ChunkWriter out;
+    bool planned_added = false;
+    const auto add_plan = [&] {
+        out.add("SZENE", assets::write_scenario_plan(szene, planned->plan));
+        if (!table.empty()) {
+            out.add("RANDTAB", table);
+        }
+        planned_added = true;
+    };
+    auto saved = write_savegame(world, buildings);
+    auto saved_file = saved ? assets::ChunkFile::from_bytes(std::move(saved).value())
+                            : core::Result<assets::ChunkFile>(saved.error());
+    if (saved_file) {
+        // The plan before WIFF, where the original's chunks end; Open1602's own after it. Its chunk
+        // of what the original cannot hold names the chunks before as they were, which the islands
+        // made change: it stays out (what is beyond the original's limits does not start).
+        for (const assets::Chunk& c : saved_file->chunks()) {
+            if (c.name == "SZENE" || c.name == "RANDTAB" || c.name == kExtensionChunk) {
+                continue;
+            }
+            if (c.name == "WIFF" && !planned_added) {
+                add_plan();
+            }
+            out.add(c.name, saved_file->payload(c));
+        }
+    } else {
+        if (warnings != nullptr) {
+            warnings->push_back("the world starts from the original's scenario: " + saved_file.error().message);
+        }
+        for (const assets::Chunk& c : source.chunks()) {
+            if (c.name != "SZENE" && c.name != "RANDTAB") {
+                out.add(c.name, source.payload(c));
+            }
+        }
     }
-    if (!table.empty()) {
-        out.add("RANDTAB", table);
+    if (!planned_added) {
+        add_plan();
     }
     auto file = assets::ChunkFile::from_bytes(out.take());
     if (!file) {

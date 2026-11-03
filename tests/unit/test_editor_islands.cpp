@@ -418,3 +418,59 @@ TEST_CASE("editor islands: an island saved alone comes back with its tiles, with
     world.set_simulation_state({1});
     CHECK(!editor::save_island(world, 1, buildings).ok());
 }
+
+TEST_CASE("editor islands: placeholders of the world plan are set, changed and taken out, each one step") {
+    const auto buildings = make_buildings();
+    sim::World world = make_world(buildings);
+    CHECK(!editor::add_placeholder(world, 0, 2, 200, 100).ok());  // no plan
+    sim::PlannedIslands plan;
+    assets::ScenarioPlan::Island stored;  // island 1 is in the world: not made again, no placeholder
+    stored.number = 1;
+    stored.x = 100;
+    stored.y = 60;
+    plan.plan.islands.push_back(stored);
+    world.set_planned_islands(plan);
+    CHECK(!editor::placeholder_open(world, 0));
+    CHECK(!editor::placeholder_at(world, 101, 61).has_value());
+
+    editor::Document document(std::move(world));
+    auto op = editor::add_placeholder(document.world(), 1, 2, 200, 100);
+    REQUIRE(op.ok());
+    document.perform(std::move(op).value());
+    const auto& islands = document.world().planned_islands()->plan.islands;
+    REQUIRE(islands.size() == 2);
+    CHECK(islands[1].number == 2);  // 0 and 1 are taken
+    CHECK(islands[1].climate == 1);
+    CHECK(islands[1].template_number == assets::ScenarioPlan::kRandomTemplate);
+    CHECK(document.history().next_undo() == "placeholder_new");
+    CHECK(editor::placeholder_at(document.world(), 249, 151) == std::optional<std::size_t>{1});  // 50 x 52
+    CHECK(!editor::placeholder_at(document.world(), 250, 100).has_value());
+    CHECK(!editor::free_place(document.world(), 210, 110, 10, 8));  // no island on a placeholder
+    CHECK((editor::used_size(document.world()) == std::pair<std::uint32_t, std::uint32_t>{250, 152}));
+
+    // Not on an island, not on another placeholder, not off the map.
+    CHECK(!editor::add_placeholder(document.world(), 0, 0, 95, 55).ok());
+    CHECK(!editor::add_placeholder(document.world(), 0, 0, 230, 120).ok());
+    CHECK(!editor::add_placeholder(document.world(), 0, 4, 450, 300).ok());
+
+    assets::ScenarioPlan::Island changed = islands[1];
+    changed.size = 4;
+    changed.climate = 2;
+    changed.x = 300;
+    auto change = editor::change_placeholder(document.world(), 1, changed);
+    REQUIRE(change.ok());
+    document.perform(std::move(change).value());
+    CHECK(document.world().planned_islands()->plan.islands[1].size == 4);
+    CHECK(document.world().planned_islands()->plan.islands[1].x == 300);
+    CHECK(!editor::change_placeholder(document.world(), 0, stored).ok());  // a stored island
+
+    auto remove = editor::remove_placeholder(document.world(), 1);
+    REQUIRE(remove.ok());
+    document.perform(std::move(remove).value());
+    CHECK(document.world().planned_islands()->plan.islands.size() == 1);
+    CHECK(document.undo());
+    CHECK(document.undo());
+    CHECK(document.world().planned_islands()->plan.islands[1].x == 200);
+    CHECK(document.undo());
+    CHECK(document.world().planned_islands()->plan.islands.size() == 1);
+}

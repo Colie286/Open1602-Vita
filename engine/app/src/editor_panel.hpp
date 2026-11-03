@@ -39,7 +39,10 @@ struct EditorNewMap {
 
 /// The settings of a new island (the page "Islands").
 struct EditorNewIsland {
-    bool own_shape = false;    ///< of its own shape, else one of the original's templates
+    bool own_shape = false;  ///< of its own shape, else one of the original's templates
+    /// A placeholder of the world plan instead (only a world that has a plan): the island is made
+    /// when a game starts.
+    bool placeholder = false;
     std::uint8_t climate = 0;  ///< 0 north, 1 south
     std::uint8_t size = 2;     ///< size class 0 .. 4
     std::uint64_t seed = 0;    ///< which template, or the shape
@@ -48,9 +51,10 @@ struct EditorNewIsland {
 
 /// What a click on the editor's map picked.
 struct EditorPick {
-    enum class Kind : std::uint8_t { None, Sea, Island, Building, Ship, Soldier };
+    enum class Kind : std::uint8_t { None, Sea, Island, Building, Ship, Soldier, Placeholder };
     Kind kind = Kind::None;
-    std::uint16_t island = 0;  ///< Island, Building: index into World::islands()
+    /// Island, Building: index into World::islands(); Placeholder: into the world plan's islands.
+    std::uint16_t island = 0;
     /// Sea, Island: the world tile clicked; Building: its origin on the island.
     std::uint32_t x = 0;
     std::uint32_t y = 0;
@@ -126,6 +130,13 @@ struct EditorModel {
     bool placing = false;
     /// The smallest map that holds the islands, ships, land units and markers (the page "Map
     /// size"): the map cannot be cut below.
+    /// The world has a plan of islands made when a game starts: placeholders can be set.
+    bool has_plan = false;
+    /// The placeholder selected on the map (index into the plan's islands), its climate (0 north,
+    /// 1 south, 2 by its place) and size class.
+    std::optional<std::size_t> placeholder;
+    std::uint8_t placeholder_climate = 0;
+    std::uint8_t placeholder_size = 0;
     std::uint32_t used_width = 1;
     std::uint32_t used_height = 1;
 };
@@ -155,7 +166,10 @@ struct EditorRequest {
         SaveIsland,    ///< the island `index` saved alone, in the folder of own islands
         /// The page "Load island" opens: the model's list of files is due, the island files.
         ListIslandFiles,
-        LoadIsland,  ///< the island of file `index` of the model's list to place
+        LoadIsland,         ///< the island of file `index` of the model's list to place
+        MovePlaceholder,    ///< the placeholder `index` to place anew
+        RemovePlaceholder,  ///< the placeholder `index` taken out
+        ChangePlaceholder,  ///< the placeholder `index` of climate `island.climate`, size `island.size`
     };
     Kind kind = Kind::Close;
     std::size_t index = 0;
@@ -253,6 +267,7 @@ private:
     void layout_islands(const EditorModel& model);
     void layout_world_size(const EditorModel& model);
     void layout_fertility(const EditorModel& model);
+    void layout_placeholder_actions(const EditorModel& model, std::int32_t& y);
     /// The buttons of an island selected: move, turn, copy, take out; or a note while placing.
     void layout_island_actions(const EditorModel& model, std::int32_t& y);
     std::optional<EditorRequest> commit_name();

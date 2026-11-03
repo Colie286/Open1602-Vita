@@ -25,6 +25,7 @@
 #include "o1602/sim/new_game.hpp"
 #include "o1602/sim/package_islands.hpp"
 #include "o1602/sim/save_game.hpp"
+#include "o1602/sim/savegame_writer.hpp"
 #include "o1602/sim/validate.hpp"
 #include "o1602/sim/world.hpp"
 #include "o1602/sim/world_generator.hpp"
@@ -1063,6 +1064,75 @@ TEST_CASE("world generator: a plan kept for the editor is saved and its islands 
     moved.plan.islands[0].x = 500;
     loaded->set_planned_islands(moved);
     CHECK(!sim::roll_planned_islands(*loaded, fake.game, buildings(), start).ok());
+}
+
+TEST_CASE("world generator: a world started from the editor keeps its islands and cities, the plan makes the rest") {
+    const auto& fake = full_game();
+    const auto file = scenario(standard_plan());
+    sim::WorldStart start;
+    start.seed = 77;
+    auto full = sim::load_world(file, buildings(), fake.game, nullptr, start);
+    REQUIRE(full.ok());
+
+    // The editor's world: these islands, a player and a city stored, one placeholder more on open sea.
+    sim::World edited = *full;
+    sim::Player player;
+    player.role = sim::PlayerRole::Human;
+    player.name = "Merchant";
+    edited.set_players({player});
+    REQUIRE(!edited.islands().empty());
+    sim::City city;
+    city.island = 0;
+    city.index = 0;
+    city.owner = 0;
+    city.name = "Seaport";
+    city.warehouse_x = 5;  // the original keeps only cities with a Kontor
+    city.warehouse_y = 5;
+    edited.add_city(city);
+    sim::PlannedIslands planned;
+    planned.plan = standard_plan();
+    std::optional<std::pair<std::uint32_t, std::uint32_t>> free;
+    for (std::uint32_t y = 0; y + 30 <= edited.height() && !free; y += 5) {
+        for (std::uint32_t x = 0; x + 30 <= edited.width() && !free; x += 5) {
+            bool sea = true;
+            for (std::uint32_t dy = 0; dy < 30 && sea; ++dy) {
+                for (std::uint32_t dx = 0; dx < 30 && sea; ++dx) {
+                    sea = edited.cell(x + dx, y + dy).island == sim::World::kSea;
+                }
+            }
+            if (sea) {
+                free.emplace(x, y);
+            }
+        }
+    }
+    REQUIRE(free.has_value());
+    planned.plan.islands.push_back(island(40, 0, 0, free->first, free->second));
+    edited.set_planned_islands(planned);
+
+    std::vector<std::string> warnings;
+    auto rolled = sim::roll_planned_islands(edited, fake.game, buildings(), start, &warnings);
+    REQUIRE(rolled.ok());
+    CHECK(warnings.empty());
+    REQUIRE(rolled->islands().size() == full->islands().size() + 1);
+    for (const sim::WorldIsland& before : full->islands()) {
+        const auto at =
+            std::find_if(rolled->islands().begin(), rolled->islands().end(),
+                         [&](const sim::WorldIsland& w) { return w.header.number == before.header.number; });
+        REQUIRE(at != rolled->islands().end());
+        CHECK(at->x == before.x);
+        CHECK(at->y == before.y);
+        CHECK(at->map.width() == before.map.width());
+    }
+    const auto made = std::find_if(rolled->islands().begin(), rolled->islands().end(),
+                                   [](const sim::WorldIsland& w) { return w.header.number == 40; });
+    REQUIRE(made != rolled->islands().end());
+    CHECK(made->x == free->first);
+    CHECK(rolled->cities().size() == edited.cities().size());
+    CHECK(std::any_of(rolled->cities().begin(), rolled->cities().end(),
+                      [](const sim::City& c) { return c.name == "Seaport"; }));
+    REQUIRE(!rolled->players().empty());
+    CHECK(rolled->players().front().name == "Merchant");
+    CHECK(sim::validate(*rolled).ok());
 }
 
 TEST_CASE("world generator: a world plan names what is wrong with it") {

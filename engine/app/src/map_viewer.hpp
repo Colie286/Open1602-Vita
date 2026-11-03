@@ -321,6 +321,7 @@ private:
     /// The requests of the editor's islands: a new one, moved, turned, copied, taken out.
     void editor_island_request(const EditorRequest& request);
     void editor_save_island(std::size_t index);
+    void editor_placeholder_request(const EditorRequest& request);
     void editor_load_island(const std::filesystem::path& file, std::uint8_t climate);
     [[nodiscard]] static std::filesystem::path own_island_folder();
     /// `op` done as a step of the document; false (and a note why) if it could not be made.
@@ -661,10 +662,11 @@ private:
         std::vector<EditorCheckLine> check{};  ///< the check list, made when its page opened
         /// An island being placed: the map's next click puts it down.
         struct Placing {
-            enum class Kind : std::uint8_t { New, Move, Copy };
+            enum class Kind : std::uint8_t { New, Move, Copy, NewPlaceholder, MovePlaceholder };
             Kind kind = Kind::New;
-            std::size_t index = 0;                   ///< Move, Copy: the island
-            std::optional<sim::WorldIsland> island;  ///< New: the island made
+            std::size_t index = 0;                       ///< Move, Copy: the island; MovePlaceholder: the placeholder
+            assets::ScenarioPlan::Island placeholder{};  ///< NewPlaceholder, MovePlaceholder
+            std::optional<sim::WorldIsland> island;      ///< New: the island made
             std::uint32_t width = 0;
             std::uint32_t height = 0;
             EditorPanel::Page page = EditorPanel::Page::Islands;  ///< leaving it puts the island back

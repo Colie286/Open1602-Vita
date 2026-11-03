@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <memory>
 #include <random>
+#include <tuple>
 
 #include "map_viewer.hpp"
 #include "names.hpp"
@@ -366,6 +367,14 @@ EditorModel MapViewer::editor_model() const {
         m.island_climate = world.islands()[m_editor->pick.island].header.climate;
     }
     m.placing = m_editor->placing.has_value();
+    m.has_plan = world.planned_islands().has_value();
+    if (m_editor->pick.kind == EditorPick::Kind::Placeholder &&
+        editor::placeholder_open(world, m_editor->pick.island)) {
+        const assets::ScenarioPlan::Island& e = world.planned_islands()->plan.islands[m_editor->pick.island];
+        m.placeholder = m_editor->pick.island;
+        m.placeholder_climate = e.climate;
+        m.placeholder_size = e.size;
+    }
     if (m_hud && m_hud->editor_panel() && m_hud->editor_panel()->page() == EditorPanel::Page::WorldSize) {
         const auto [w, h] = editor::used_size(world);
         m.used_width = w;
@@ -475,6 +484,11 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         case Kind::SaveIsland:
             editor_save_island(request.index);
             break;
+        case Kind::MovePlaceholder:
+        case Kind::RemovePlaceholder:
+        case Kind::ChangePlaceholder:
+            editor_placeholder_request(request);
+            break;
         case Kind::ListIslandFiles:
             m_editor_files.clear();
             m_editor_file_rows.clear();
@@ -550,6 +564,17 @@ void MapViewer::editor_island_request(const EditorRequest& request) {
         (void)editor_cancel_place();
         return;
     }
+    if (request.kind == Kind::PlaceIsland && request.island.placeholder) {
+        Placing p;
+        p.kind = Placing::Kind::NewPlaceholder;
+        p.placeholder.climate = request.island.climate;
+        p.placeholder.size = request.island.size;
+        std::tie(p.width, p.height) = editor::placeholder_size(p.placeholder);
+        p.page = EditorPanel::Page::Islands;
+        m_editor->placing = std::move(p);
+        editor_notice(ui::tr("editor.placeholder.placing"), false, "placing a placeholder");
+        return;
+    }
     if (request.kind == Kind::PlaceIsland) {
         const auto number = world.free_island_number();
         editor::NewIsland wanted;
@@ -618,6 +643,61 @@ void MapViewer::editor_island_request(const EditorRequest& request) {
                 editor_notice(ui::tr("editor.islands.removed", {name}), false, "island deleted");
             }
             return;
+        default:
+            return;
+    }
+}
+
+void MapViewer::editor_placeholder_request(const EditorRequest& request) {
+    using Kind = EditorRequest::Kind;
+    const sim::World& world = m_editor->document.world();
+    if (!editor::placeholder_open(world, request.index)) {
+        return;
+    }
+    const assets::ScenarioPlan::Island& now = world.planned_islands()->plan.islands[request.index];
+    const std::string name = number(request.index + 1);
+    switch (request.kind) {
+        case Kind::MovePlaceholder: {
+            EditorSession::Placing p;
+            p.kind = EditorSession::Placing::Kind::MovePlaceholder;
+            p.index = request.index;
+            p.placeholder = now;
+            std::tie(p.width, p.height) = editor::placeholder_size(now);
+            p.page = EditorPanel::Page::Selection;
+            m_editor->placing = std::move(p);
+            editor_notice(ui::tr("editor.placeholder.placing"), false, "placing a placeholder");
+            return;
+        }
+        case Kind::RemovePlaceholder:
+            if (editor_perform(editor::remove_placeholder(world, request.index))) {
+                m_editor->pick = EditorPick{};
+                if (m_hud && m_hud->editor_panel() != nullptr) {
+                    m_hud->editor_panel()->show_document();
+                }
+                editor_notice(ui::tr("editor.placeholder.removed", {name}), false, "placeholder deleted");
+            }
+            return;
+        case Kind::ChangePlaceholder: {
+            assets::ScenarioPlan::Island changed = now;
+            changed.climate = request.island.climate;
+            changed.size = request.island.size;
+            auto op = editor::change_placeholder(world, request.index, changed);
+            // A size class without room is passed over, in the direction the button went.
+            const bool forward = (request.island.size + 5 - now.size) % 5 == 1;
+            for (int tries = 0; !op && request.island.size != now.size && tries < 3; ++tries) {
+                changed.size = static_cast<std::uint8_t>((changed.size + (forward ? 1 : 4)) % 5);
+                if (changed.size == now.size) {
+                    break;
+                }
+                op = editor::change_placeholder(world, request.index, changed);
+            }
+            if (!op) {
+                editor_notice(ui::tr("editor.placeholder.no_room"), true, op.error().message);
+                return;
+            }
+            m_editor->document.perform(std::move(op).value());
+            return;
+        }
         default:
             return;
     }
@@ -711,6 +791,9 @@ void MapViewer::editor_islands_changed() {
     if ((pick.kind == EditorPick::Kind::Island || pick.kind == EditorPick::Kind::Building) && pick.island >= islands) {
         pick = EditorPick{};
     }
+    if (pick.kind == EditorPick::Kind::Placeholder && !editor::placeholder_open(m_state->world, pick.island)) {
+        pick = EditorPick{};
+    }
     if (m_editor->placing && m_editor->placing->kind != EditorSession::Placing::Kind::New &&
         m_editor->placing->index >= islands) {
         m_editor->placing.reset();
@@ -730,6 +813,37 @@ bool MapViewer::editor_place(const render::TilePos& tile) {
     const EditorSession::Placing& p = *m_editor->placing;
     const sim::World& world = m_editor->document.world();
     const auto [x, y] = editor_place_origin(tile);
+    if (p.kind == Kind::NewPlaceholder || p.kind == Kind::MovePlaceholder) {
+        const bool moving = p.kind == Kind::MovePlaceholder;
+        const std::optional<std::size_t> own = moving ? std::optional<std::size_t>(p.index) : std::nullopt;
+        if (!editor::free_for_placeholder(world, x, y, p.width, p.height, own)) {
+            editor_notice(ui::tr("editor.placeholder.no_room"), true, "no room for the placeholder");
+            return true;
+        }
+        const auto ux = static_cast<std::uint32_t>(x);
+        const auto uy = static_cast<std::uint32_t>(y);
+        const std::size_t index = moving ? p.index : world.planned_islands()->plan.islands.size();
+        assets::ScenarioPlan::Island moved = p.placeholder;
+        moved.x = ux;
+        moved.y = uy;
+        if (!editor_perform(moving
+                                ? editor::change_placeholder(world, p.index, moved)
+                                : editor::add_placeholder(world, p.placeholder.climate, p.placeholder.size, ux, uy))) {
+            return true;
+        }
+        m_editor->placing.reset();
+        EditorPick pick;
+        pick.kind = EditorPick::Kind::Placeholder;
+        pick.island = static_cast<std::uint16_t>(index);
+        pick.x = tile.x;
+        pick.y = tile.y;
+        if (m_hud && m_hud->editor_panel() != nullptr && m_hud->editor_panel()->show_selection()) {
+            m_editor->pick = pick;
+        }
+        editor_notice(ui::tr(moving ? "editor.placeholder.moved" : "editor.placeholder.placed", {number(index + 1)}),
+                      false, moving ? "placeholder moved" : "placeholder placed");
+        return true;
+    }
     const std::optional<std::size_t> except = p.kind == Kind::Move ? std::optional<std::size_t>(p.index) : std::nullopt;
     if (!editor::free_place(world, x, y, p.width, p.height, except)) {
         editor_notice(ui::tr("editor.islands.no_room"), true, "no room for the island");
@@ -754,6 +868,9 @@ bool MapViewer::editor_place(const render::TilePos& tile) {
         case Kind::Copy:
             done = editor_perform(editor::copy_island(world, p.index, ux, uy, m_buildings));
             break;
+        case Kind::NewPlaceholder:
+        case Kind::MovePlaceholder:
+            break;  // above
     }
     if (!done) {
         return true;  // still in hand: another place may do
@@ -788,6 +905,13 @@ void MapViewer::editor_pick(const EditorPick& pick) {
     }
     if (m_hud->editor_panel()->show_selection()) {
         m_editor->pick = pick;
+        // Open sea in a placeholder's rectangle: the placeholder.
+        if (pick.kind == EditorPick::Kind::Sea) {
+            if (const auto placeholder = editor::placeholder_at(m_editor->document.world(), pick.x, pick.y)) {
+                m_editor->pick.kind = EditorPick::Kind::Placeholder;
+                m_editor->pick.island = static_cast<std::uint16_t>(*placeholder);
+            }
+        }
     }
 }
 
@@ -801,6 +925,23 @@ void MapViewer::editor_properties(EditorModel& m) const {
     switch (pick.kind) {
         case Kind::None:
             return;
+        case Kind::Placeholder: {
+            if (!editor::placeholder_open(world, pick.island)) {
+                return;
+            }
+            const assets::ScenarioPlan::Island& e = world.planned_islands()->plan.islands[pick.island];
+            const auto [w, h] = editor::placeholder_size(e);
+            m.selection = ui::tr("editor.placeholder.name", {number(pick.island + 1U)});
+            add("editor.prop.position", tiles(e.x, e.y));
+            add("editor.prop.size", ui::tr("editor.size", {number(w), number(h)}));
+            add("editor.prop.climate", ui::tr(e.climate == 0   ? "editor.prop.north"
+                                              : e.climate == 1 ? "editor.prop.south"
+                                                               : "editor.placeholder.by_place"));
+            add("editor.placeholder.template", e.template_number == assets::ScenarioPlan::kRandomTemplate
+                                                   ? ui::tr("editor.placeholder.random")
+                                                   : number(e.template_number));
+            return;
+        }
         case Kind::Sea:
             if (pick.x >= world.width() || pick.y >= world.height()) {
                 return;
@@ -947,54 +1088,76 @@ void MapViewer::draw_editor_marks() {
                     ui::tr("editor.prop.island", {number(i + 1)}));
         }
     }
+    const auto screen = [&](double x, double y) {
+        const auto [px, py] = render::text_figure_point(view, x, y, 0.0);
+        double sx = 0.0;
+        double sy = 0.0;
+        m_camera.world_to_screen(px, py, sx, sy);
+        return std::pair<double, double>{sx, sy};
+    };
+    // A rectangle of the map as a dotted line: a dot of 3 x 3 pixels every 6.
+    const auto outline = [&](std::int64_t x0, std::int64_t y0, double w, double h, std::int32_t ink) {
+        const auto x = static_cast<double>(x0);
+        const auto y = static_cast<double>(y0);
+        const std::array<std::pair<double, double>, 4> corners = {screen(x, y), screen(x + w, y), screen(x + w, y + h),
+                                                                  screen(x, y + h)};
+        for (std::size_t i = 0; i < corners.size(); ++i) {
+            const auto [ax, ay] = corners[i];
+            const auto [bx, by] = corners[(i + 1) % corners.size()];
+            const double length = std::hypot(bx - ax, by - ay);
+            const auto dots = static_cast<std::int32_t>(std::min(4000.0, length / 6.0));
+            for (std::int32_t d = 0; d <= dots; ++d) {
+                const double t = dots == 0 ? 0.0 : static_cast<double>(d) / dots;
+                const auto dx = static_cast<std::int32_t>(std::floor(ax + (bx - ax) * t)) - 1;
+                const auto dy = static_cast<std::int32_t>(std::floor(ay + (by - ay) * t)) - 1;
+                if (dx < v.x || dy < v.y || dx + 3 > v.x + v.w || dy + 3 > v.y + v.h) {
+                    continue;
+                }
+                ui::DrawItem dot;
+                dot.kind = ui::DrawItem::Kind::Fill;
+                dot.x = dx;
+                dot.y = dy;
+                dot.w = 3;
+                dot.h = 3;
+                dot.colour = ink;
+                items.push_back(std::move(dot));
+            }
+        }
+    };
+    // The placeholders of the world plan: islands made when a game starts, in yellow.
+    using PlacingKind = EditorSession::Placing::Kind;
+    if (const auto& planned = world.planned_islands()) {
+        const std::int32_t ink = ui::rgb_ink(assets::Rgba{240, 210, 70, 255});
+        for (std::size_t i = 0; i < planned->plan.islands.size(); ++i) {
+            const bool in_hand = m_editor->placing && m_editor->placing->kind == PlacingKind::MovePlaceholder &&
+                                 m_editor->placing->index == i;
+            if (in_hand || !editor::placeholder_open(world, i)) {
+                continue;
+            }
+            const assets::ScenarioPlan::Island& e = planned->plan.islands[i];
+            const auto [w, h] = editor::placeholder_size(e);
+            outline(e.x, e.y, w, h, ink);
+            text_at(e.x + w / 2.0, e.y + h / 2.0, ui::tr("editor.placeholder.name", {number(i + 1)}));
+        }
+    }
     // The island being placed: its outline under the mouse, green where it fits, red where not.
     if (m_editor->placing) {
         if (const auto tile = m_input->tile_at_mouse()) {
             const EditorSession::Placing& p = *m_editor->placing;
             const auto [x0, y0] = editor_place_origin(*tile);
-            const std::optional<std::size_t> except =
-                p.kind == EditorSession::Placing::Kind::Move ? std::optional<std::size_t>(p.index) : std::nullopt;
-            const bool fits = editor::free_place(world, x0, y0, p.width, p.height, except) &&
-                              !editor::ship_in_way(world, x0, y0, p.width, p.height, except);
-            const std::int32_t ink =
-                ui::rgb_ink(fits ? assets::Rgba{90, 230, 90, 255} : assets::Rgba{235, 70, 60, 255});
-            const auto screen = [&](double x, double y) {
-                const auto [px, py] = render::text_figure_point(view, x, y, 0.0);
-                double sx = 0.0;
-                double sy = 0.0;
-                m_camera.world_to_screen(px, py, sx, sy);
-                return std::pair<double, double>{sx, sy};
-            };
-            const double w = p.width;
-            const double h = p.height;
-            const std::array<std::pair<double, double>, 4> corners = {
-                screen(static_cast<double>(x0), static_cast<double>(y0)),
-                screen(static_cast<double>(x0) + w, static_cast<double>(y0)),
-                screen(static_cast<double>(x0) + w, static_cast<double>(y0) + h),
-                screen(static_cast<double>(x0), static_cast<double>(y0) + h)};
-            // Each side as a dotted line: a dot of 3 x 3 pixels every 6.
-            for (std::size_t i = 0; i < corners.size(); ++i) {
-                const auto [ax, ay] = corners[i];
-                const auto [bx, by] = corners[(i + 1) % corners.size()];
-                const double length = std::hypot(bx - ax, by - ay);
-                const auto dots = static_cast<std::int32_t>(std::min(4000.0, length / 6.0));
-                for (std::int32_t d = 0; d <= dots; ++d) {
-                    const double t = dots == 0 ? 0.0 : static_cast<double>(d) / dots;
-                    const auto dx = static_cast<std::int32_t>(std::floor(ax + (bx - ax) * t)) - 1;
-                    const auto dy = static_cast<std::int32_t>(std::floor(ay + (by - ay) * t)) - 1;
-                    if (dx < v.x || dy < v.y || dx + 3 > v.x + v.w || dy + 3 > v.y + v.h) {
-                        continue;
-                    }
-                    ui::DrawItem dot;
-                    dot.kind = ui::DrawItem::Kind::Fill;
-                    dot.x = dx;
-                    dot.y = dy;
-                    dot.w = 3;
-                    dot.h = 3;
-                    dot.colour = ink;
-                    items.push_back(std::move(dot));
-                }
+            bool fits = false;
+            if (p.kind == PlacingKind::NewPlaceholder || p.kind == PlacingKind::MovePlaceholder) {
+                const std::optional<std::size_t> own =
+                    p.kind == PlacingKind::MovePlaceholder ? std::optional<std::size_t>(p.index) : std::nullopt;
+                fits = editor::free_for_placeholder(world, x0, y0, p.width, p.height, own);
+            } else {
+                const std::optional<std::size_t> except =
+                    p.kind == PlacingKind::Move ? std::optional<std::size_t>(p.index) : std::nullopt;
+                fits = editor::free_place(world, x0, y0, p.width, p.height, except) &&
+                       !editor::ship_in_way(world, x0, y0, p.width, p.height, except);
             }
+            outline(x0, y0, p.width, p.height,
+                    ui::rgb_ink(fits ? assets::Rgba{90, 230, 90, 255} : assets::Rgba{235, 70, 60, 255}));
         }
     }
     // The mark of what the panel shows: a cross on the tile, or over the ship, unit or building.
@@ -1008,6 +1171,7 @@ void MapViewer::draw_editor_marks() {
                 break;
             case Kind::Sea:
             case Kind::Island:
+            case Kind::Placeholder:
                 text_at(pick.x + 0.5, pick.y + 0.5, mark);
                 break;
             case Kind::Building:
