@@ -64,6 +64,7 @@ Each file does one thing; a package has only the files it needs.
 | what the computer players build | `computers.toml` | [computer-players.md](computer-players.md) |
 | the neutral factions: pirates, trader, natives | `factions.toml` | [factions.md](factions.md) |
 | kinds of island world for new games | `landscapes.toml` | [landscapes.md](landscapes.md) |
+| climates: their crops, forest and share of the islands | `climates.toml` | [climates.md](climates.md) |
 | island templates of the package's own | `islands.toml` | [islands.md](islands.md) |
 | a script that hears and changes the game | `script.lua` | [scripts.md](scripts.md) |
 | scenarios and campaigns | `scenarios.toml`, `campaigns.toml` | [scenarios.md](scenarios.md) |

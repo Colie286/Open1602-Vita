@@ -5,6 +5,7 @@
 
 #include "o1602/assets/unlock_levels.hpp"
 #include "o1602/core/file.hpp"
+#include "o1602/sim/climates.hpp"
 #include "o1602/sim/computer_orders.hpp"
 #include "o1602/ui/package_icons.hpp"
 
@@ -138,6 +139,13 @@ ModRules load_mod_rules(std::span<const assets::ModPackage> packages, assets::Bu
         if (const auto bytes = core::read_file(package.folder / sim::kComputersFile)) {
             const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
             sim::apply_computers_file(rules.balance.computer_orders, package.id, text, problems, rules.goods);
+        }
+    }
+    // Climates after the buildings, whose trees their forest may name.
+    for (const assets::ModPackage& package : packages) {
+        if (const auto bytes = core::read_file(package.folder / sim::kClimatesFile)) {
+            const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
+            sim::apply_climates_file(rules.balance.climates, package.id, text, problems, &buildings, rules.own);
         }
     }
     sim::drop_unknown_buildings(rules.balance, buildings, problems);

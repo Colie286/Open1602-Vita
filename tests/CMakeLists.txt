@@ -20,6 +20,7 @@ add_executable(o1602_tests
     unit/test_editor_islands.cpp
     unit/test_editor_terrain.cpp
     unit/test_computer_orders.cpp
+    unit/test_climates.cpp
     unit/test_factions.cpp
     unit/test_diplomacy_strip.cpp
     unit/test_military.cpp

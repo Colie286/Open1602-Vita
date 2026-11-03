@@ -12,6 +12,7 @@
 #include <deque>
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <variant>
@@ -61,10 +62,12 @@ using Notice = std::variant<Announcement, DirectVideo, ScoreUpdate>;
 
 /// The help bar of the original over grass and trees of an explored island: the
 /// three crops of the climate (north sugar cane, grapes, tobacco; south spices, cotton, cocoa)
-/// with their fertility in percent.
-[[nodiscard]] std::array<std::pair<std::uint8_t, std::uint32_t>, 3> island_crops(const sim::WorldIsland& island);
+/// with their fertility in percent; for a climate of a package (`climates`, Balance::climates)
+/// the crops it grows.
+[[nodiscard]] std::vector<std::pair<std::uint8_t, std::uint32_t>> island_crops(
+    const sim::WorldIsland& island, std::span<const sim::Climate> climates = {});
 /// The same for the log and the window title.
-[[nodiscard]] std::string crops_text(const sim::WorldIsland& island);
+[[nodiscard]] std::string crops_text(const sim::WorldIsland& island, std::span<const sim::Climate> climates = {});
 
 /// A line in the multiplayer chat (Windows-1252, as drawn); the chat keeps the last kChatKept
 /// lines. `chat` may be null (no panel). A player's line goes to the log, unless `echo` is off, as

@@ -705,7 +705,17 @@ const char* refusal_name(BuildRefusal r) noexcept {
     return "?";
 }
 
-std::uint32_t island_fertility(const WorldIsland& island, std::uint8_t ware) noexcept {
+const Climate* island_climate(std::span<const Climate> climates, const WorldIsland& island) noexcept {
+    return island.climate != 0 && island.climate <= climates.size() ? &climates[island.climate - 1U] : nullptr;
+}
+
+std::uint32_t climate_crops(std::span<const Climate> climates, const WorldIsland& island) noexcept {
+    const Climate* own = island_climate(climates, island);
+    return own != nullptr ? own->crops : original_climate_crops(island.header.climate);
+}
+
+std::uint32_t island_fertility(std::span<const Climate> climates, const WorldIsland& island,
+                               std::uint8_t ware) noexcept {
     constexpr std::uint8_t kFirst = sim::ware::kCornField;
     constexpr std::uint8_t kLast = sim::ware::kTreasure;
     if (ware < kFirst || ware > kLast) {
@@ -725,16 +735,8 @@ std::uint32_t island_fertility(const WorldIsland& island, std::uint8_t ware) noe
         return 128;
     }
     // Without the bit, the crops of the climate still grow half: tobacco, sugar cane and wine in
-    // the north, spices, cotton and cocoa in the south.
-    const bool north = island.header.climate == climate::kNorth;
-    const bool south = island.header.climate == climate::kSouth;
-    if ((north &&
-         (ware == sim::ware::kTobaccoField || ware == sim::ware::kSugarField || ware == sim::ware::kWineField)) ||
-        (south &&
-         (ware == sim::ware::kSpiceField || ware == sim::ware::kCottonField || ware == sim::ware::kCocoaField))) {
-        return 64;
-    }
-    return 0;
+    // the north, spices, cotton and cocoa in the south, or a package climate's own.
+    return (climate_crops(climates, island) >> (ware - kFirst) & 1U) != 0 ? 64 : 0;
 }
 
 bool tile_fertile(const World& world, const assets::BuildingTable& buildings, std::uint16_t island_index,
@@ -768,7 +770,7 @@ bool tile_fertile_at(const World& world, const assets::BuildingTable& buildings,
     // Rules::fertile_fields: poor ground takes nothing from a crop, it grows as the island has it.
     const bool even = world.fertile_fields() && ware >= ware::kCornField && ware <= ware::kCocoaField;
     const std::uint32_t edge = g != nullptr && !even ? g->edge_growth : 128;
-    std::uint32_t f = std::min<std::uint32_t>(island_fertility(island, ware) * edge >> 7, 128);
+    std::uint32_t f = std::min<std::uint32_t>(island_fertility(world, island, ware) * edge >> 7, 128);
     // A drought takes its share, except from grass, trees and fish.
     if (drought != 0 && ware != ware::kGrass && ware != ware::kTree && ware != ware::kFish) {
         f -= drought * f / 128;

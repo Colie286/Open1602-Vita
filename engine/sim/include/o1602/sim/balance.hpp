@@ -17,6 +17,7 @@
 #include <string_view>
 #include <vector>
 
+#include "o1602/sim/climates.hpp"
 #include "o1602/sim/computer_orders.hpp"
 
 namespace o1602::assets {
@@ -144,6 +145,8 @@ struct Balance {
     std::vector<FigureValue> figures;
     /// The computers' build orders a package changed (computers.toml), sorted by list, each once.
     std::vector<ComputerOrder> computer_orders;
+    /// The packages' climates (climates.toml), in load order; WorldIsland::climate numbers them from 1.
+    std::vector<Climate> climates;
 
     friend bool operator==(const Balance&, const Balance&) = default;
 };

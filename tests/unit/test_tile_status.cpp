@@ -113,6 +113,25 @@ TEST_CASE("tile status: the crops of grass and trees only once the island is exp
     CHECK(i.at(3) == "Geeignet für: Tabak: 50% - Weintrauben: 50% - Zuckerrohr: 100%");
 }
 
+TEST_CASE("tile status: an island of a package's climate names it and the crops it grows") {
+    Island i;
+    i.island.explore(kMe);
+    sim::Climate tundra;
+    tundra.id = "mod:tundra";
+    tundra.names[""] = "Tundra";
+    tundra.crops = (1U << (46 - 45)) | (1U << (48 - 45)) | (1U << (51 - 45));  // tobacco, sugar cane, cocoa
+    const std::vector<sim::Climate> climates = {tundra};
+    i.island.climate = 1;
+    CHECK(app::tile_status(i.island, 3, 0, kMe, i.buildings, i.texts, climates) ==
+          "Tundra - Geeignet für: Tabak: 50% - Zuckerrohr: 100% - Kakao: 50%");
+    // A climate of one crop.
+    std::vector<sim::Climate> one = climates;
+    one[0].crops = 1U << (47 - 45);  // spices
+    CHECK(app::tile_status(i.island, 3, 0, kMe, i.buildings, i.texts, one) == "Tundra - Geeignet für: Gewürze: 50%");
+    // Without the climates the island shows the original's of its header.
+    CHECK(i.at(3) == "Geeignet für: Tabak: 50% - Weintrauben: 50% - Zuckerrohr: 100%");
+}
+
 TEST_CASE("tile status: an undiscovered island shows its terrain, not its buildings") {
     Island i;
     REQUIRE(i.island.map.place(*i.buildings.by_id(20501), 0, 0, 0, 0, 0, 0).ok());  // over the ground

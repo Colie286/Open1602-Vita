@@ -26,6 +26,7 @@
 #include "o1602/assets/island.hpp"
 #include "o1602/assets/scenario.hpp"
 #include "o1602/core/result.hpp"
+#include "o1602/sim/climates.hpp"
 #include "o1602/sim/package_islands.hpp"
 #include "o1602/sim/random.hpp"
 #include "o1602/sim/world_plan.hpp"
@@ -43,6 +44,9 @@ struct WorldStart {
     /// Island templates of the game's packages (package_islands.hpp). An own world draws them
     /// with the original's (island_templates), and the generator keeps their tiles in the world.
     std::vector<PackageIsland> package_islands;
+    /// The packages' climates (Balance::climates): an own world gives each its share of the islands
+    /// of its `like` (not the homes), with its crops and, on islands of their own shape, its forest.
+    std::vector<Climate> climates;
     /// Rules::guarantee_resources (S-019): after the original's passes, every crop of a climate,
     /// iron and gold that the plan asks for but did not get is placed on an island that can
     /// take it. Off: the world as the original makes it.
@@ -101,6 +105,7 @@ private:
 struct GeneratedIsland {
     std::uint8_t number = 0;
     std::uint8_t climate = 0;
+    std::uint8_t own_climate = 0;  ///< a climate of WorldStart::climates (WorldIsland::climate), 0: none
     std::uint8_t size = 0;
     std::uint16_t template_number = 0;  ///< assets::IslandHeader::kNoTemplate: a shape of its own
     std::uint16_t width = 0;            ///< in tiles
