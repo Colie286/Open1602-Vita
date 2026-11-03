@@ -78,14 +78,16 @@ struct EditorTerrain {
 struct EditorObjects {
     /// Build: the building where clicked, for the owner, without costs (dragged, again where it no
     /// longer covers the last); Ship, Unit: a ship on the water, a land unit on an island, for the
-    /// owner; Remove: takes the building, ship or unit clicked away.
-    enum class Tool : std::uint8_t { Build, Ship, Unit, Remove };
-    static constexpr std::size_t kTools = 4;
+    /// owner; Resource: an ore or gold vein in a mountain, a treasure, deer in a forest; Remove:
+    /// takes the ship, unit, resource or building clicked away.
+    enum class Tool : std::uint8_t { Build, Ship, Unit, Resource, Remove };
+    static constexpr std::size_t kTools = 5;
     Tool tool = Tool::Build;
     std::size_t group = 0;      ///< index into the build menu's categories that list buildings
     std::size_t piece = 0;      ///< index into the group's buildings
     std::size_t ship = 0;       ///< index into the ships (EditorModel::object_pieces while Ship)
     std::size_t unit = 0;       ///< index into the land units (EditorModel::object_pieces while Unit)
+    std::size_t resource = 0;   ///< editor::Resource: veins, treasure, deer
     std::uint8_t rotation = 0;  ///< 0..3, a quarter clockwise each; ships and units face 2 * rotation
     std::size_t owner = 0;      ///< index into the world's players
     friend bool operator==(const EditorObjects&, const EditorObjects&) = default;

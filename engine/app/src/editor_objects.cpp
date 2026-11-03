@@ -19,6 +19,7 @@
 #include "o1602/editor/cities.hpp"
 #include "o1602/editor/objects.hpp"
 #include "o1602/editor/operations.hpp"
+#include "o1602/editor/resources.hpp"
 #include "o1602/editor/terrain.hpp"
 #include "o1602/editor/units.hpp"
 #include "o1602/sim/construction.hpp"
@@ -121,6 +122,12 @@ void MapViewer::editor_object_model(EditorModel& m) const {
     }
     using Tool = EditorObjects::Tool;
     const Tool tool = m_editor->objects.tool;
+    if (tool == Tool::Resource) {
+        m.object_pieces = editor::kResources;
+        m.object_turns = false;
+        m.object_name =
+            ui::tr("editor.objects.resource." + std::to_string(std::min(m.objects.resource, editor::kResources - 1)));
+    }
     if (tool == Tool::Ship || tool == Tool::Unit) {
         const std::vector<std::uint16_t> figures = editor_figures(tool);
         m.object_pieces = figures.size();
@@ -339,6 +346,10 @@ bool MapViewer::editor_objects_stroke(std::optional<render::TilePos> tile, Strok
                 editor_remove_object(*tile);
                 return true;
             }
+            if (m_editor->objects.tool == EditorObjects::Tool::Resource) {
+                editor_place_resource(*tile);
+                return true;
+            }
             if (m_editor->objects.tool != EditorObjects::Tool::Build) {
                 editor_place_figure(tile->x, tile->y);  // one at a click, not dragged
                 return true;
@@ -447,6 +458,27 @@ void MapViewer::editor_place_figure(std::int64_t x, std::int64_t y) {
     m_editor->notice.clear();
 }
 
+void MapViewer::editor_place_resource(render::TilePos tile) {
+    const sim::World& world = m_editor->document.world();
+    const sim::World::Cell& c = world.cell(static_cast<std::uint32_t>(tile.x), static_cast<std::uint32_t>(tile.y));
+    const auto resource = static_cast<editor::Resource>(std::min(m_editor->objects.resource, editor::kResources - 1));
+    const sim::TilePos local{static_cast<std::int32_t>(c.local_x), static_cast<std::int32_t>(c.local_y)};
+    if (c.island == sim::World::kSea) {
+        editor_notice(ui::tr("editor.objects.refused.resource.0"), true, "resource not on an island");
+        return;
+    }
+    auto op = editor::place_resource(world, m_buildings, c.island, local, resource);
+    if (!op) {
+        const editor::ResourceRefusal refused = editor::resource_fits(world, m_buildings, c.island, local, resource);
+        editor_notice(ui::tr("editor.objects.refused.resource." + std::to_string(static_cast<int>(refused) - 1)), true,
+                      op.error().message);
+        return;
+    }
+    m_editor->document.perform(std::move(op).value());
+    editor_islands_changed();
+    m_editor->notice.clear();
+}
+
 void MapViewer::editor_remove_object(render::TilePos tile) {
     const sim::World& world = m_editor->document.world();
     if (const auto unit = m_input->unit_at_mouse()) {
@@ -462,6 +494,14 @@ void MapViewer::editor_remove_object(render::TilePos tile) {
     const sim::World::Cell& c = world.cell(static_cast<std::uint32_t>(tile.x), static_cast<std::uint32_t>(tile.y));
     if (c.island == sim::World::kSea) {
         editor_notice(ui::tr("editor.objects.refused.nothing"), true, "nothing to take away");
+        return;
+    }
+    const sim::TilePos local{static_cast<std::int32_t>(c.local_x), static_cast<std::int32_t>(c.local_y)};
+    // A treasure, deer or vein there before the building over it.
+    if (auto riches = editor::remove_resource(world, m_buildings, c.island, local)) {
+        m_editor->document.perform(std::move(riches).value());
+        editor_islands_changed();
+        m_editor->notice.clear();
         return;
     }
     auto op = editor::remove_building(

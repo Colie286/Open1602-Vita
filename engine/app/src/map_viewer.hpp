@@ -377,7 +377,10 @@ private:
     [[nodiscard]] sim::PlayerId editor_object_owner() const;
     /// A click of the tools Ship and Unit at the world tile (x, y): one step of undo, or a note why not.
     void editor_place_figure(std::int64_t x, std::int64_t y);
-    /// A click of the tool Remove: the ship or unit under the mouse, else the building on `tile`.
+    /// A click of the tool Resource at the world tile `tile`: one step of undo, or a note why not.
+    void editor_place_resource(render::TilePos tile);
+    /// A click of the tool Remove: the ship or unit under the mouse, else the treasure, deer or vein
+    /// on `tile`, else the building there.
     void editor_remove_object(render::TilePos tile);
     /// The pipette at the world tile (x, y).
     void editor_pipette(std::uint32_t x, std::uint32_t y);

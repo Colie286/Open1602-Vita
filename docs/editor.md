@@ -105,9 +105,9 @@ player, without costs, and takes them away again. Each click, or each drag, is o
 
 | Setting | What it does |
 |---|---|
-| Tool | **Build**: a left click puts the building down about the mouse, for the owner; dragged, the next one goes where it no longer covers the last, so roads, walls and fields are dragged out. **Ship**: a left click puts a new, empty ship on the water. **Unit**: a left click puts a land unit on an island. **Remove**: a left click takes the ship or unit under the mouse away, else the building there, as its owner demolishes it. |
+| Tool | **Build**: a left click puts the building down about the mouse, for the owner; dragged, the next one goes where it no longer covers the last, so roads, walls and fields are dragged out. **Ship**: a left click puts a new, empty ship on the water. **Unit**: a left click puts a land unit on an island. **Resource**: a left click puts a vein into an ore mountain, a treasure under open ground or deer into a forest. **Remove**: a left click takes the ship or unit under the mouse away, else the treasure, deer or vein there, else the building, as its owner demolishes it. |
 | Group | The groups of the build menu (with the buildings packages add to it); not for ships and units. |
-| Building, Ship, Unit | The group's buildings by name; the four ships of the shipyards and the four land units of the castle, each followed by those packages add. |
+| Building, Ship, Unit, Resource | The group's buildings by name; the four ships of the shipyards and the four land units of the castle, each followed by those packages add; a big or small iron vein, gold, a treasure or deer. |
 | Rotation | A quarter clockwise, for a building that turns; the way a ship or unit faces. |
 | Owner | The player the building, ship or unit is for: one of the map's humans and computers. |
 
@@ -124,6 +124,19 @@ shipyard launches it, at full strength with empty holds, and gets its name when 
 starts. A land unit goes on ground soldiers walk on (open ground, roads, squares, ruins), one to a
 tile, at full health. Orders of other ships and units that name a ship or unit taken away are
 forgotten with it.
+
+Resources lie where a new game puts them, and nobody knows them at first:
+
+| Resource | Where it goes |
+|---|---|
+| Iron ore, big vein | 240 t in a big ore mountain, which the deep mine digs. |
+| Iron ore, small vein | 80 t in any ore mountain. |
+| Gold | 50 t in any ore mountain. |
+| Treasure | 1000 gold under a tile of open ground; whoever builds on it finds it. |
+| Deer | A spot in a forest where deer live, at most 8 on an island. |
+
+A mountain holds one vein; a click anywhere on it puts the vein where the mines look for it. While the
+page is open the map names the veins, treasures and deer of every island.
 
 ## Cities
 

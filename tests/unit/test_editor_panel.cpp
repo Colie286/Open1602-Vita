@@ -732,6 +732,25 @@ TEST_CASE("editor panel: the tools Ship and Unit choose their type, the way they
     REQUIRE(r.has_value());
     CHECK(r->objects.unit == 3);
     CHECK(r->objects.ship == 1);
+
+    // Resources: no owner, no turn.
+    m.objects.tool = app::EditorObjects::Tool::Resource;
+    m.objects.resource = 3;
+    m.object_pieces = 5;
+    m.object_name = "Treasure";
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Resource (4/5)"));
+    CHECK(says(panel, "a treasure under open ground"));
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        if (w.text == "Merchant" || w.text == "0\xB0") {
+            CHECK(!w.enabled);
+        }
+        CHECK(w.rect.y + w.rect.h <= 760);
+    }
+    r = click(panel, m, "Treasure");
+    REQUIRE(r.has_value());
+    CHECK(r->objects.resource == 4);
+    CHECK(r->objects.unit == 0);
 }
 
 TEST_CASE("editor panel: the kind of islands of a new map and the packages' climates") {

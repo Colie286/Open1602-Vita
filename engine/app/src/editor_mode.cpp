@@ -21,6 +21,7 @@
 #include "o1602/core/text.hpp"
 #include "o1602/editor/islands.hpp"
 #include "o1602/editor/original_check.hpp"
+#include "o1602/editor/resources.hpp"
 #include "o1602/editor/units.hpp"
 #include "o1602/render/world_renderer.hpp"
 #include "o1602/sim/construction.hpp"
@@ -1303,6 +1304,22 @@ void MapViewer::draw_editor_marks() {
                          : editor::unit_fits(world, m_buildings, tile->x, tile->y)) == editor::UnitRefusal::None;
                 outline(tile->x, tile->y, 1, 1,
                         ui::rgb_ink(fits ? assets::Rgba{90, 230, 90, 255} : assets::Rgba{230, 60, 60, 255}));
+            } else if (tool == EditorObjects::Tool::Resource) {
+                // A vein, treasure or deer: its tile, green where it can go.
+                bool fits = false;
+                if (world.contains(static_cast<std::uint32_t>(tile->x), static_cast<std::uint32_t>(tile->y))) {
+                    const sim::World::Cell& c =
+                        world.cell(static_cast<std::uint32_t>(tile->x), static_cast<std::uint32_t>(tile->y));
+                    fits =
+                        c.island != sim::World::kSea &&
+                        editor::resource_fits(
+                            world, m_buildings, c.island,
+                            {static_cast<std::int32_t>(c.local_x), static_cast<std::int32_t>(c.local_y)},
+                            static_cast<editor::Resource>(std::min(
+                                m_editor->objects.resource, editor::kResources - 1))) == editor::ResourceRefusal::None;
+                }
+                outline(tile->x, tile->y, 1, 1,
+                        ui::rgb_ink(fits ? assets::Rgba{90, 230, 90, 255} : assets::Rgba{230, 60, 60, 255}));
             } else if (tool == EditorObjects::Tool::Remove || b == nullptr) {
                 outline(tile->x, tile->y, 1, 1, ui::rgb_ink(assets::Rgba{250, 250, 250, 255}));
             } else {
@@ -1336,6 +1353,25 @@ void MapViewer::draw_editor_marks() {
         const sim::WorldIsland& isl = world.islands()[sel.island];
         outline(std::int64_t{isl.x} + sel.x0, std::int64_t{isl.y} + sel.y0, sel.x1 - sel.x0 + 1.0,
                 sel.y1 - sel.y0 + 1.0, ui::rgb_ink(assets::Rgba{120, 200, 255, 255}));
+    }
+    // The riches of the islands on the page "Objects": veins, treasures and deer by name, which the
+    // map shows nowhere else.
+    if (panel != nullptr && panel->page() == EditorPanel::Page::Objects) {
+        for (const sim::WorldIsland& island : world.islands()) {
+            for (const assets::IslandHeader::Deposit& d : island.header.deposits) {
+                const char* key = d.ware == assets::ware::kGold       ? "editor.objects.mark.gold"
+                                  : d.ware == assets::ware::kTreasure ? "editor.objects.mark.treasure"
+                                                                      : "editor.objects.mark.ore";
+                // A vein lies at its mountain's origin: the mark goes a tile into the mountain.
+                const double inside = d.ware == assets::ware::kTreasure ? 0.5 : 1.5;
+                text_at(island.x + d.x + inside, island.y + d.y + inside, ui::tr(key));
+            }
+            for (const sim::DeerSpot& spot : island.deer_spots) {
+                if (spot.used) {
+                    text_at(island.x + spot.x + 0.5, island.y + spot.y + 0.5, ui::tr("editor.objects.mark.deer"));
+                }
+            }
+        }
     }
     // The mark of what the panel shows: a cross on the tile, or over the ship, unit or building.
     const EditorPick& pick = m_editor->pick;
