@@ -251,6 +251,7 @@ core::Status apply_decoded(World& world, Decoded& d) {
         world.set_package_scenario(std::move(*d.package_scenario));
     }
     if (d.scenario_info) {
+        d.scenario_info->rules = d.scenario_rules;
         world.set_scenario_info(std::move(d.scenario_info));
     }
     if (d.markers) {

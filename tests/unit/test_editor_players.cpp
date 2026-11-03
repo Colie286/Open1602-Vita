@@ -4,6 +4,7 @@
 #include "../test_framework.hpp"
 
 #include "o1602/editor/players.hpp"
+#include "o1602/editor/scenario_rules.hpp"
 #include "o1602/sim/world.hpp"
 
 using namespace o1602;
@@ -146,4 +147,17 @@ TEST_CASE("editor players: relations at the start are set on both sides and kept
     (*gone)->apply(world);
     CHECK((editor::relations(world, 0, 1) == editor::Relations{false, false}));
     CHECK((editor::relations(world, 2, 3) == editor::Relations{true, true}));
+}
+
+TEST_CASE("editor: a scenario's own settings are a step of undo") {
+    sim::World world(40, 40);
+    CHECK(!editor::scenario_rules(world).has_value());
+    auto op = editor::set_scenario_rules(world, sim::Rules::original());
+    REQUIRE(op != nullptr);
+    op->apply(world);
+    REQUIRE(editor::scenario_rules(world).has_value());
+    CHECK(*editor::scenario_rules(world) == sim::Rules::original());
+    CHECK(editor::set_scenario_rules(world, sim::Rules::original()) == nullptr);  // nothing to do
+    op->revert(world);
+    CHECK(!world.scenario_info().has_value());
 }

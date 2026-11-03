@@ -102,6 +102,10 @@ constexpr Id kRelationsPage = 161;
 constexpr Id kRelationPartner = 162;
 constexpr Id kRelationPeace = 163;
 constexpr Id kRelationTrade = 164;
+constexpr Id kRulesPage = 165;
+constexpr Id kRulesOwn = 166;          ///< the scenario's own settings, or the player's
+constexpr Id kRulesOriginal = 167;     ///< all as in the original
+constexpr Id kRulesOpen1602 = 168;     ///< all as Open1602 has them
 constexpr Id kFirstGoodLess = 120;     ///< + the row on the page "Stock"
 constexpr Id kFirstGoodMore = 140;     ///< + the row on the page "Stock"
 constexpr std::size_t kGoodRows = 20;  ///< rows of the page "Stock" at most
@@ -331,6 +335,9 @@ void EditorPanel::layout(const EditorModel& model) {
         case Page::Relations:
             layout_relations(model);
             break;
+        case Page::Rules:
+            layout_rules(model);
+            break;
     }
 }
 
@@ -377,7 +384,7 @@ void EditorPanel::layout_document(const EditorModel& model) {
         y += pitch;
     };
     full(kNew, "editor.new");
-    pair(kOpen, "editor.open", true, kCheck, "editor.check", true);
+    full(kOpen, "editor.open");
     full(kSave, "editor.save");
     full(kSaveAs, "editor.save_as");
     full(kUndo, "editor.undo", model.can_undo);
@@ -386,7 +393,8 @@ void EditorPanel::layout_document(const EditorModel& model) {
     full(kTerrainPage, "editor.terrain.edit");
     full(kObjectsPage, "editor.objects.edit");
     full(kWorldSizePage, "editor.world_size.edit");
-    pair(kPlayersPage, "editor.players.edit", true, kView, "editor.view", true);
+    pair(kPlayersPage, "editor.players.edit", true, kRulesPage, "editor.rules.edit", true);
+    pair(kView, "editor.view", true, kCheck, "editor.check", true);
     full(kClose, "editor.close");
     // The notice where two lines fit: in a small window the buttons take the room, and the status
     // bar shows it.
@@ -674,6 +682,43 @@ void EditorPanel::layout_relations(const EditorModel& model) {
           ui::tr(s.trade ? "editor.relations.trade_yes" : "editor.relations.trade_no"), s.peace);
     y += kGap;
     note_and_back(model, y, "editor.relations.note", "editor.relations.note", kPlayersBack, "editor.relations.back");
+}
+
+void EditorPanel::layout_rules(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.rules.title"), Align::Left, Tone::Heading);
+    y += 28;
+    f.cycle_button(kRulesOwn, Rect{kX, y, kW, kButtonH},
+                   ui::tr(model.rules_own ? "editor.rules.own" : "editor.rules.players"));
+    y += kButtonH + kGap;
+    const std::int32_t half = (kW - kGap) / 2;
+    f.button(kRulesOriginal, Rect{kX, y, half, kButtonH}, ui::tr("editor.rules.original"), true,
+             model.rules_own && model.rules_original);
+    f.button(kRulesOpen1602, Rect{kX + half + kGap, y, kW - half - kGap, kButtonH}, ui::tr("editor.rules.open1602"));
+    y += kButtonH + kGap;
+    // As many settings as fit above the pages' buttons and the way back.
+    constexpr std::int32_t kRuleH = 18 + kButtonH + 2;
+    const std::int32_t bottom = m_top + m_height - 4 - 2 * (kButtonH + kGap);
+    const std::size_t n = model.rules.size();
+    const auto fit = static_cast<std::size_t>(std::max<std::int32_t>(1, (bottom - y) / kRuleH));
+    m_page_rows = std::min<std::size_t>(fit, 20);
+    // Pages of whole rows: the last shows what is left, nothing twice.
+    m_first = n == 0 ? 0 : std::min(m_first, (n - 1) / m_page_rows * m_page_rows);
+    for (std::size_t row = 0; row < m_page_rows && m_first + row < n; ++row) {
+        const EditorRule& r = model.rules[m_first + row];
+        const bool on = model.rules_own && r.enabled;
+        f.label(Rect{kX, y, kW, 18}, r.label, Align::Left, on ? Tone::Normal : Tone::Dim);
+        y += 18;
+        f.cycle_button(kFirstRow + static_cast<Id>(row), Rect{kX, y, kW, kButtonH}, r.value, on);
+        y += kButtonH + 2;
+    }
+    y = std::max(y + 4, bottom);
+    f.button(kPrevious, Rect{kX, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
+    f.button(kNext, Rect{kX + half + kGap, y, kW - half - kGap, kButtonH}, ui::tr("editor.next"),
+             m_first + m_page_rows < n);
+    y += kButtonH + kGap;
+    f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
 }
 
 void EditorPanel::layout_city_goods(const EditorModel& model) {
@@ -1120,6 +1165,16 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
         case kView:
             m_page = Page::View;
             return std::nullopt;
+        case kRulesPage:
+            m_page = Page::Rules;
+            m_first = 0;
+            return std::nullopt;
+        case kRulesOwn:
+            return EditorRequest{EditorRequest::Kind::RulesPreset, model.rules_own ? 0U : 3U};
+        case kRulesOriginal:
+            return EditorRequest{EditorRequest::Kind::RulesPreset, 1};
+        case kRulesOpen1602:
+            return EditorRequest{EditorRequest::Kind::RulesPreset, 2};
         case kCheck:
             m_page = Page::Check;
             m_first = 0;
@@ -1445,12 +1500,14 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
         }
         case kPrevious: {
             // The check list and the stock go back by the lines their page shows.
-            const std::size_t rows = m_page == Page::Check || m_page == Page::CityGoods ? m_page_rows : kRows;
+            const std::size_t rows =
+                m_page == Page::Check || m_page == Page::CityGoods || m_page == Page::Rules ? m_page_rows : kRows;
             m_first = m_first > rows ? m_first - rows : 0;
             return std::nullopt;
         }
         case kNext:
-            m_first += m_page == Page::Check || m_page == Page::CityGoods ? m_page_rows : kRows;
+            m_first +=
+                m_page == Page::Check || m_page == Page::CityGoods || m_page == Page::Rules ? m_page_rows : kRows;
             return std::nullopt;
         default:
             break;
@@ -1485,6 +1542,15 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
         EditorRequest r{EditorRequest::Kind::Overlay};
         r.index = static_cast<std::size_t>(*id - kFirstOverlay);
         return r;
+    }
+    if (*id >= kFirstRow && *id < kFirstRow + 20 && m_page == Page::Rules) {
+        const std::size_t index = m_first + static_cast<std::size_t>(*id - kFirstRow);
+        if (index < model.rules.size() && model.rules_own) {
+            EditorRequest r{EditorRequest::Kind::RuleStep, index};
+            r.amount = forward ? 1U : 0U;
+            return r;
+        }
+        return std::nullopt;
     }
     if (*id >= kFirstRow && m_page == Page::IslandFiles) {
         const std::size_t index = m_first + static_cast<std::size_t>(*id - kFirstRow);

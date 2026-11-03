@@ -3973,7 +3973,7 @@ void MapViewer::apply_menu() {
                               ? load_game(e.path, e.setup ? &e.setup->rules : nullptr)
                               : start_package_scenario(e.package_scenario, e.setup ? &e.setup->rules : nullptr,
                                                        e.package_campaign, e.level);
-                if (started && e.setup && !(e.setup->rules == m_app_settings.scenario.rules)) {
+                if (started && e.setup && !e.scenario_rules && !(e.setup->rules == m_app_settings.scenario.rules)) {
                     m_app_settings.scenario = *e.setup;
                     save_settings();
                 }

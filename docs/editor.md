@@ -179,6 +179,19 @@ peace or at war, with a trade treaty or without. A change applies to both sides,
 the two remember of each other (tribute, trade, damage). A trade treaty needs peace; war ends it.
 Adding a player keeps the relations of the others; the new one starts at peace with everyone.
 
+## Rules
+
+**Rules** sets the game settings the scenario is made for, the same ones the start dialog offers
+for a scenario: disasters, construction, ships and trade, limits, opponents, and the bugs of the
+original. **The player's rules** leaves them to the player, as for any scenario; a click switches
+to **The map's own rules**, which begin from those the player last started a scenario with. **As
+original** sets every one as in the original, **Open1602** as Open1602 has them. Each setting goes
+to its next value with the left button and back with the right one; one that does not matter with
+the others as they are is greyed out. Each change is one step of undo.
+
+When a player starts the scenario, the start dialog begins from its own rules; the player can still
+change them, and they are not kept as the player's own for the next scenario.
+
 ## Keys
 
 | Key | What it does |

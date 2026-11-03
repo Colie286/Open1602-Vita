@@ -687,3 +687,40 @@ TEST_CASE("save game: a part of the state from a later Open1602 is skipped if op
     REQUIRE(!damaged.ok());
     CHECK(damaged.error().message.find("MILI: 4 bytes not read") != std::string::npos);
 }
+
+TEST_CASE("save game: a scenario's own settings come back, and the head of the file has them") {
+    const auto buildings = make_buildings();
+    sim::World world = make_world(buildings);
+    sim::ScenarioInfo info;
+    info.names = {{"en", "Hard Times"}};
+    info.briefings = {{"en", std::string(12'000, 'x')}};  // long texts come after the settings
+    sim::Rules rules = sim::Rules::original();
+    rules.max_army = 123;
+    info.rules = rules;
+    world.set_scenario_info(info);
+    auto bytes = sim::write_game(world, buildings);
+    REQUIRE(bytes.ok());
+    auto head = sim::save_info(std::span<const std::uint8_t>(*bytes).first(std::min(bytes->size(), sim::kSaveInfoHead)),
+                               bytes->size());
+    REQUIRE(head.ok());
+    if (head->meta) {  // a build without zlib packs nothing and reads META anyway
+        REQUIRE(head->meta->scenario.has_value());
+        REQUIRE(head->meta->scenario->rules.has_value());
+        CHECK(head->meta->scenario->rules->max_army == 123);
+        CHECK(head->meta->scenario->names.front().text == "Hard Times");
+    }
+    auto loaded = sim::read_game(*bytes, buildings);
+    REQUIRE(loaded.ok());
+    REQUIRE(loaded->scenario_info().has_value());
+    CHECK(loaded->scenario_info()->rules == info.rules);
+    CHECK(!loaded->saved_rules().has_value());  // not the settings of a game played
+
+    // Without them the file has none.
+    info.rules.reset();
+    world.set_scenario_info(info);
+    bytes = sim::write_game(world, buildings);
+    REQUIRE(bytes.ok());
+    loaded = sim::read_game(*bytes, buildings);
+    REQUIRE(loaded.ok());
+    CHECK(!loaded->scenario_info()->rules.has_value());
+}

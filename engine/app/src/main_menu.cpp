@@ -16,6 +16,7 @@
 #include "o1602/assets/chunk_file.hpp"
 #include "o1602/core/file.hpp"
 #include "o1602/core/text.hpp"
+#include "o1602/sim/save_game.hpp"
 #include "o1602/ui/list_scroll.hpp"
 #include "o1602/ui/localization.hpp"
 
@@ -373,6 +374,22 @@ std::optional<CampaignPart> campaign_part_of(const std::filesystem::path& file) 
         }
     }
     return std::nullopt;
+}
+
+std::optional<sim::Rules> scenario_rules_of(const std::filesystem::path& file) {
+    if (lower(core::path_to_utf8(file.extension())) != ".o1602") {
+        return std::nullopt;
+    }
+    // Only the head of the file: the settings come right after its first section.
+    const auto head = core::read_file_head(file, sim::kSaveInfoHead);
+    if (!head) {
+        return std::nullopt;
+    }
+    const auto info = sim::save_info(head->bytes, head->size);
+    if (!info || !info->meta || !info->meta->scenario) {
+        return std::nullopt;
+    }
+    return info->meta->scenario->rules;
 }
 
 const std::string& MainMenu::default_name() {
@@ -878,11 +895,14 @@ std::vector<MenuEvent> MainMenu::mouse(std::int32_t x, std::int32_t y, bool down
         switch (m_settings.mouse(x, y, down, button)) {
             case GameSettingsMenu::Result::Start: {
                 if (m_settings.scope() == SetupScope::Scenario) {
-                    m_scenario = m_settings.setup();
                     MenuEvent ev{MenuEvent::Kind::Scenario};
+                    if (!m_scenario_own_rules) {
+                        m_scenario = m_settings.setup();
+                    }
                     ev.path = chosen_file();
                     ev.name = m_name;
-                    ev.setup = m_scenario;
+                    ev.setup = m_settings.setup();
+                    ev.scenario_rules = m_scenario_own_rules;
                     const MenuScenario& chosen = m_scenarios[m_chosen];
                     ev.package_scenario = chosen.package_scenario;
                     if (!chosen.package_campaign.empty()) {
@@ -1035,7 +1055,14 @@ std::vector<MenuEvent> MainMenu::mouse(std::int32_t x, std::int32_t y, bool down
                         m_name_fresh = true;
                     } else if (s.header.mission_number != kTutorial) {
                         // The rules first (Open1602's own dialog; the original starts here).
-                        m_settings.open(m_scenario, SetupScope::Scenario);
+                        // A scenario of the editor made for settings of its own begins from them.
+                        EndlessSetup setup = m_scenario;
+                        const std::optional<sim::Rules> own = scenario_rules_of(chosen_file());
+                        m_scenario_own_rules = own.has_value();
+                        if (own) {
+                            setup.rules = *own;
+                        }
+                        m_settings.open(setup, SetupScope::Scenario);
                         m_screen = Screen::Settings;
                     } else {
                         // The tutorial teaches the game as it is: no settings.
@@ -1125,7 +1152,9 @@ bool MainMenu::back() {
             }
             // Kept for the next time.
             if (m_settings.scope() == SetupScope::Scenario) {
-                m_scenario = m_settings.setup();
+                if (!m_scenario_own_rules) {
+                    m_scenario = m_settings.setup();
+                }
                 m_screen = Screen::Mission;
             } else {
                 m_endless = m_settings.setup();

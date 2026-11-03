@@ -720,6 +720,10 @@ sim::World make_world(const assets::BuildingTable& buildings, bool wide) {
         info.author = "Merlin";
         info.version = "1.2";
         info.original_limits = true;
+        // SRUL came later still.
+        sim::Rules scenario_rules = sim::Rules::original();
+        scenario_rules.max_army = 321;  // fixed: the values drawn after it stay
+        info.rules = scenario_rules;
         world.set_scenario_info(info);
         sim::ScenarioMarker harbour{"harbour", sim::ScenarioMarker::Shape::Point, 0, 0, 1, 1};
         harbour.x = v.next<std::uint32_t>() % 400;
@@ -857,6 +861,7 @@ constexpr Golden kSaveNarrow[] = {
 
 constexpr Golden kSaveWide[] = {
     {"META", 1, 0, 38, 0xB89CD646},
+    {"SRUL", 1, 0, 160, 0x791C0FDE},
     {"SCNI", 1, 0, 111, 0x88CEF8A7},
     {"MAPW", 2, 1, 5724, 0x3F3E2223},
     {"RULE", 1, 1, 82, 0xCC115664},

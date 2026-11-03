@@ -174,6 +174,13 @@ struct EditorPlayer {
     std::vector<Standing> relations;
 };
 
+/// A game setting as the page "Rules" shows it.
+struct EditorRule {
+    std::string label;    ///< Windows-1252
+    std::string value;    ///< Windows-1252
+    bool enabled = true;  ///< false: it does not matter with the others as they are
+};
+
 /// What the panel shows; the viewer fills it every frame.
 struct EditorModel {
     std::string file;  ///< the document's name (Windows-1252), empty: a new map not saved yet
@@ -263,6 +270,12 @@ struct EditorModel {
     std::vector<EditorPlayer> player_slots;
     bool can_add_player = false;
     bool can_remove_player = false;
+    /// The page "Rules": whether the scenario has settings of its own (else the player's apply),
+    /// whether they are the original's, and each setting a scenario can have, in the start
+    /// dialog's order.
+    bool rules_own = false;
+    bool rules_original = false;
+    std::vector<EditorRule> rules;
 };
 
 /// What a click or a key asked for.
@@ -310,6 +323,11 @@ struct EditorRequest {
         RemovePlayer,  ///< the last slot taken away
         /// `player.slot` and slot `index` standing at the start as `player.relations[0]`.
         SetRelations,
+        /// The scenario's settings: `index` 0 none (the player's), 1 the original's, 2 Open1602's,
+        /// 3 those the player last started a scenario with.
+        RulesPreset,
+        /// The setting EditorModel::rules[`index`] to its next value (`amount` 1) or the one before (0).
+        RuleStep,
     };
     Kind kind = Kind::Close;
     std::size_t index = 0;
@@ -352,7 +370,8 @@ public:
         CityGoods,
         Players,
         PlayerName,
-        Relations
+        Relations,
+        Rules
     };
 
     explicit EditorPanel(ui::FormStyle style = {}) : m_form(style) {}
@@ -429,6 +448,7 @@ private:
     void layout_players(const EditorModel& model);
     void layout_player_name(const EditorModel& model);
     void layout_relations(const EditorModel& model);
+    void layout_rules(const EditorModel& model);
     /// The notice (or the note `note_key`, `short_key` where it does not fit whole) from `y`
     /// down and the button `back` labelled `back_key` at the panel's foot.
     void note_and_back(const EditorModel& model, std::int32_t y, const char* note_key, const char* short_key,

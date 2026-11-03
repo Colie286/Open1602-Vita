@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The editor's side panel (editor_panel.hpp): its pages and what their buttons and keys ask for.
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <string>
@@ -1045,4 +1046,65 @@ TEST_CASE("editor panel: the page Relations sets how two players stand at the st
     CHECK(says(panel, "War"));
     CHECK(!click_id(panel, m, ui::Form::Id{160}).has_value());  // back
     CHECK(panel.page() == EditorPanel::Page::Players);
+}
+
+TEST_CASE("editor panel: the page Rules sets the scenario's own settings, page by page") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(200, 560);
+    EditorModel m = document();
+    for (int i = 0; i < 30; ++i) {
+        m.rules.push_back(app::EditorRule{"Setting " + std::to_string(i), "Value " + std::to_string(i), i != 3});
+    }
+    CHECK(!click(panel, m, "Rules").has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::Rules);
+    // The player's settings: the values are shown, not changed.
+    auto r = click(panel, m, "The player's rules");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::RulesPreset);
+    CHECK(r->index == 3);
+    CHECK(!click(panel, m, "Value 0").has_value());
+    m.rules_own = true;
+    r = click(panel, m, "Original");
+    REQUIRE(r.has_value());
+    CHECK(r->index == 1);
+    r = click(panel, m, "Value 1", ui::MouseButton::Right);
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::RuleStep);
+    CHECK(r->index == 1);
+    CHECK(r->amount == 0);
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        CHECK(w.rect.y + w.rect.h <= 760);
+        if (w.text == "Value 3") {
+            CHECK(!w.enabled);
+        }
+    }
+    // The next page goes on where this one ended.
+    panel.layout(m);
+    int rows = 0;
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        rows += w.text.rfind("Value ", 0) == 0 ? 1 : 0;
+    }
+    REQUIRE(rows > 0);
+    CHECK(!find(panel, "Value 29").has_value());
+    for (int page = 0; page < 10 && !find(panel, "Value 29").has_value(); ++page) {
+        CHECK(!click(panel, m, "More").has_value());
+    }
+    // The last page shows what is left, nothing of the page before again.
+    CHECK(!find(panel, "Value 0").has_value());
+    int lowest = 99;
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        if (w.text.rfind("Value ", 0) == 0) {
+            lowest = std::min(lowest, std::stoi(w.text.substr(6)));
+        }
+    }
+    CHECK(lowest % rows == 0);  // where a page of whole rows begins
+    r = click(panel, m, "Value 29");
+    REQUIRE(r.has_value());
+    CHECK(r->index == 29);
+    r = click(panel, m, "The map's own rules");
+    REQUIRE(r.has_value());
+    CHECK(r->index == 0);  // back to the player's
+    CHECK(!click(panel, m, "Back to the map").has_value());
+    CHECK(panel.page() == EditorPanel::Page::Document);
 }

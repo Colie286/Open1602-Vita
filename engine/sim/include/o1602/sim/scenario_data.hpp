@@ -12,9 +12,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "o1602/sim/rules.hpp"
 
 namespace o1602::sim {
 
@@ -44,6 +47,9 @@ struct ScenarioInfo {
     /// The editor keeps the scenario within the original's limits (ADR 0013): its size, islands,
     /// players, the original's buildings and goods only, no packages and no script.
     bool original_limits = false;
+    /// The game settings the author made the scenario for (section SRUL): the start dialog begins
+    /// from them, the player can still change them. Nothing: the player's own, as for any scenario.
+    std::optional<Rules> rules;
 
     friend bool operator==(const ScenarioInfo&, const ScenarioInfo&) = default;
 };

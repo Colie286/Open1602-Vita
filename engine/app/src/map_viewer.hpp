@@ -360,6 +360,9 @@ private:
     void editor_players_model(EditorModel& m) const;
     /// A slot changed, added or taken away (EditorRequest SetPlayer, AddPlayer, RemovePlayer).
     void editor_players_request(const EditorRequest& request);
+    /// The page "Rules": the scenario's game settings (editor_rules.cpp).
+    void editor_rules_model(EditorModel& m) const;
+    void editor_rules_request(const EditorRequest& request);
     /// The buildings' tools' settings from the panel.
     void editor_objects_request(const EditorRequest& request);
     /// The order that places the chosen building about the world tile (x, y) for the chosen owner,

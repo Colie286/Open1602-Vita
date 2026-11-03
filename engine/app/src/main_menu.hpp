@@ -95,6 +95,10 @@ struct CampaignPart {
 /// Nothing for a file outside the campaigns or not in a scenario folder (a savegame).
 [[nodiscard]] std::optional<CampaignPart> campaign_part_of(const std::filesystem::path& file);
 
+/// The settings a scenario of the editor is made for (sim::ScenarioInfo::rules), from the head of
+/// its file; nothing for one without them or another kind of file.
+[[nodiscard]] std::optional<sim::Rules> scenario_rules_of(const std::filesystem::path& file);
+
 struct MenuEvent {
     enum class Kind : std::uint8_t {
         Quit,          ///< leave the program (after a question)
@@ -122,6 +126,9 @@ struct MenuEvent {
     std::size_t slot = 0;
     /// The settings of the start dialog; for a scenario only its rules count.
     std::optional<EndlessSetup> setup{};
+    /// Scenario: `setup` began from the scenario's own settings (the editor's), so they are not the
+    /// player's to keep for the next scenario.
+    bool scenario_rules = false;
     /// Scenario: the chapter of the tutorial, nothing for another scenario.
     std::optional<std::uint8_t> tutorial_chapter{};
     /// Scenario: the id of a package's scenario (`path` is its map), empty for another.
@@ -276,6 +283,8 @@ private:
     ui::Form m_base_form;
     EndlessSetup m_endless;
     EndlessSetup m_scenario;
+    /// The start dialog shows a scenario's own settings (sim::ScenarioInfo::rules), not m_scenario.
+    bool m_scenario_own_rules = false;
     std::vector<assets::PackageScenario> m_package_scenarios;
     std::vector<assets::PackageCampaign> m_package_campaigns;
     /// The banners in the hall of the colour screen (FARBWAHL.GAD), which show a further colour.

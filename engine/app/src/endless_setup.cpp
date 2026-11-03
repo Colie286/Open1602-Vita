@@ -672,10 +672,11 @@ void choose(EndlessSetup& setup, SetupItem item, std::size_t choice) {
     sim::WorldSettings& w = setup.world;
     switch (item) {
         case SetupItem::Refund:
-            if (choice == 0) {
-                r.demolish_refund = sim::Refund::None;
-            } else if (choice > kRefundPercents.size()) {
-                r.demolish_refund = sim::Refund::Full;
+            if (choice == 0 || choice > kRefundPercents.size()) {
+                // No share then: the percent goes back to its default, so that the rules are the
+                // same as before a step there and back.
+                r.demolish_refund = choice == 0 ? sim::Refund::None : sim::Refund::Full;
+                r.refund_percent = sim::Rules{}.refund_percent;
             } else {
                 r.demolish_refund = sim::Refund::Partial;
                 r.refund_percent = kRefundPercents[choice - 1];

@@ -1428,3 +1428,20 @@ TEST_CASE("game setup: the page of the balance changes, each on its own") {
     }
     ui::set_language(ui::kFallbackLanguage);
 }
+
+TEST_CASE("endless setup: a step of the refund there and back gives the same rules") {
+    for (const sim::Rules& start : {sim::Rules::original(), sim::Rules::open1602()}) {
+        EndlessSetup setup;
+        setup.rules = start;
+        for (std::size_t n = 0; n < setup_choices(SetupItem::Refund); ++n) {
+            EndlessSetup s = setup;
+            for (std::size_t k = 0; k < n; ++k) {
+                choose_next(s, SetupItem::Refund);
+            }
+            for (std::size_t k = 0; k < n; ++k) {
+                choose_previous(s, SetupItem::Refund);
+            }
+            CHECK(s.rules == start);
+        }
+    }
+}

@@ -147,6 +147,10 @@ constexpr std::uint32_t kCampaign = tag("CAMP");
 /// one, right after META so that a list of files finds it in the head. Optional: without it the file
 /// is an ordinary savegame.
 constexpr std::uint32_t kScenarioInfo = tag("SCNI");
+/// The game settings a scenario of the editor is made for (ScenarioInfo::rules), only written for
+/// one that has them, between META and SCNI so that the start dialog finds them in the head of the
+/// file. Optional: without them the player's own settings apply.
+constexpr std::uint32_t kScenarioRules = tag("SRUL");
 /// The scenario's named places and areas (World::markers()), only written when there are any.
 /// Optional: without them a script finds no marker.
 constexpr std::uint32_t kMarkers = tag("MARK");
@@ -243,6 +247,7 @@ constexpr std::array kKnownSections = {kRules,
                                        kLevelMessages,
                                        kBlueprints,
                                        kScenarioInfo,
+                                       kScenarioRules,
                                        kMarkers,
                                        kScenarioScript,
                                        kEditorState,
@@ -587,6 +592,9 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
                 o.string(p != nullptr ? p->name : std::string());
             },
             Need::Optional);
+        if (const auto& info = world.scenario_info(); info && info->rules) {
+            section(out, kScenarioRules, [&](Writer& o) { write_rules(o, *info->rules); }, Need::Optional);
+        }
         if (const auto& info = world.scenario_info()) {
             section(out, kScenarioInfo, [&](Writer& o) { write_scenario_info(o, *info); }, Need::Optional);
         }
@@ -1098,12 +1106,29 @@ std::optional<SaveMeta> read_meta(std::span<const std::uint8_t> sections) {
     if (!in.ok()) {
         return std::nullopt;
     }
-    // A scenario's SCNI follows META. The head may end inside it: the names come before the long
-    // texts, and what is cut off is left out.
-    const auto next = reader.u32();
-    (void)reader.u16();  // version
+    // A scenario's SCNI follows META, its settings (SRUL) between them. The head may end inside
+    // SCNI: the names come before the long texts, and what is cut off is left out.
+    auto next = reader.u32();
+    const auto next_version = reader.u16();
     (void)reader.u16();  // flags
-    const auto next_size = reader.u32();
+    auto next_size = reader.u32();
+    std::optional<Rules> rules;
+    if (next && *next == kScenarioRules && next_size) {
+        const auto rules_body = reader.bytes(*next_size);
+        if (rules_body && next_version && *next_version <= max_version(kScenarioRules)) {
+            core::ByteReader rr(*rules_body);
+            StateIn rules_state(rr);
+            Reader rules_in(rules_state);
+            const Rules r = read_rules(rules_in);
+            if (rules_state.ok()) {
+                rules = r;
+            }
+        }
+        next = reader.u32();
+        (void)reader.u16();  // version
+        (void)reader.u16();  // flags
+        next_size = reader.u32();
+    }
     if (next && *next == kScenarioInfo && next_size) {
         const auto rest = sections.subspan(sections.size() - reader.remaining());
         core::ByteReader ir(rest.subspan(0, std::min<std::size_t>(rest.size(), *next_size)));
@@ -1122,6 +1147,7 @@ std::optional<SaveMeta> read_meta(std::span<const std::uint8_t> sections) {
         }
         summary.original_limits = (flags & 1U) != 0;
         summary.stars = std::min(summary.stars, ScenarioInfo::kMaxStars);
+        summary.rules = rules;
         meta.scenario = std::move(summary);
     }
     return meta;
@@ -1630,6 +1656,9 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                 d.scenario_info = std::move(info);
                 break;
             }
+            case kScenarioRules:
+                d.scenario_rules = read_rules(in);
+                break;
             case kMarkers: {
                 std::vector<ScenarioMarker> markers;
                 read_markers(in, markers);
