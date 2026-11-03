@@ -373,7 +373,8 @@ EditorModel MapViewer::editor_model() const {
     }
     m.players =
         static_cast<std::size_t>(std::count_if(world.players().begin(), world.players().end(), [](const auto& p) {
-            return p.role == sim::PlayerRole::Human || p.role == sim::PlayerRole::Computer;
+            return (p.role == sim::PlayerRole::Human || p.role == sim::PlayerRole::Computer) &&
+                   p.status != sim::PlayerStatus::Absent;  // not a slot that only holds a place
         }));
     m.can_undo = doc.history().can_undo();
     m.can_redo = doc.history().can_redo();

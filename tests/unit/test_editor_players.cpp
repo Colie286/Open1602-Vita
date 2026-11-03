@@ -3,6 +3,7 @@
 
 #include "../test_framework.hpp"
 
+#include "o1602/editor/original_check.hpp"
 #include "o1602/editor/players.hpp"
 #include "o1602/editor/scenario_rules.hpp"
 #include "o1602/sim/world.hpp"
@@ -108,6 +109,12 @@ TEST_CASE("editor players: a map of four slots gets its fifth player behind thre
     CHECK(world.players()[4].status == sim::PlayerStatus::Absent);
     CHECK(world.players()[7].status == sim::PlayerStatus::Playing);
     CHECK(editor::player_slots(world).size() == 5);
+    // The empty slots are not players with a start.
+    for (const editor::LimitProblem& p : editor::original_limit_problems(world)) {
+        if (p.kind == editor::LimitProblem::Kind::Players) {
+            CHECK(p.count == 5);
+        }
+    }
     auto gone = editor::remove_last_player(world);
     REQUIRE(gone.ok());
     (*gone)->apply(world);

@@ -414,6 +414,8 @@ class EditorPanel {
 public:
     /// The panel's width in design units: the editor's column right of the map (EditorChrome).
     static constexpr std::int32_t kWidth = 280;
+    /// The room left and right of the pages in the column.
+    static constexpr std::int32_t kMargin = 12;
     /// Rows of the list of files on one page.
     static constexpr std::size_t kRows = 12;
     /// The longest name a scenario can be saved under.
@@ -453,6 +455,19 @@ public:
         m_top = top;
         m_height = height;
     }
+
+    /// The window, design units, and where the column begins in it: the pages of the whole map
+    /// (players, rules, random elements, map size, check) open as dialogs in its middle. Without
+    /// it (width 0) they stay in the column.
+    void set_screen(std::int32_t width, std::int32_t height, std::int32_t column_x) noexcept {
+        m_screen_w = width;
+        m_screen_h = height;
+        m_column_x = column_x;
+    }
+    /// Whether the page is a dialog over the map (it takes every click, Escape closes it).
+    [[nodiscard]] bool dialog() const noexcept;
+    /// The dialog's frame, design units from the column's top left (left of it: negative).
+    [[nodiscard]] ui::Rect dialog_rect() const noexcept;
 
     [[nodiscard]] Page page() const noexcept { return m_page; }
     /// Back to the document's page (a new document, or Escape).
@@ -505,6 +520,8 @@ public:
     [[nodiscard]] static bool name_taken(const EditorModel& model, std::string_view name);
 
 private:
+    /// The page's widgets within m_x, m_w, m_top, m_height.
+    void layout_page(const EditorModel& model);
     void layout_document(const EditorModel& model);
     void layout_new(const EditorModel& model);
     void layout_open(const EditorModel& model);
@@ -525,6 +542,11 @@ private:
     void layout_rules(const EditorModel& model);
     void layout_random(const EditorModel& model);
     void layout_preview(const EditorModel& model);
+    /// The dialogs' wide forms: every player in a row, the diplomacy as a table, the settings in
+    /// two columns.
+    void layout_players_table(const EditorModel& model);
+    void layout_relations_table(const EditorModel& model);
+    void layout_settings_grid(const EditorModel& model, bool rules);
     /// The notice (or the note `note_key`, `short_key` where it does not fit whole) from `y`
     /// down and the button `back` labelled `back_key` at the panel's foot.
     void note_and_back(const EditorModel& model, std::int32_t y, const char* note_key, const char* short_key,
@@ -538,6 +560,10 @@ private:
 
     ui::Form m_form;
     Page m_page = Page::Document;
+    /// Where the page is laid out, design units from the column's top left: the column below
+    /// the minimap, or a dialog's inside.
+    std::int32_t m_x = kMargin;
+    std::int32_t m_w = kWidth - 2 * kMargin;
     std::int32_t m_top = 0;
     std::int32_t m_height = 400;
     std::string m_text;  ///< the name being typed
@@ -546,10 +572,17 @@ private:
     /// The size the page "Map size" offers.
     std::uint32_t m_size_width = 0;
     std::uint32_t m_size_height = 0;
-    std::size_t m_first = 0;      ///< the first file shown on the page "Open", the first line on "Check"
-    std::size_t m_page_rows = 1;  ///< lines of the check list on its page as laid out last
-    std::size_t m_player = 0;     ///< the slot the page "Players" shows
-    std::size_t m_partner = 0;    ///< the other slot the page "Relations" shows
+    std::size_t m_first = 0;         ///< the first file shown on the page "Open", the first line on "Check"
+    std::size_t m_page_rows = 1;     ///< lines of the check list on its page as laid out last
+    std::size_t m_player = 0;        ///< the slot the page "Players" shows
+    std::size_t m_partner = 0;       ///< the other slot the page "Relations" shows
+    std::size_t m_first_column = 0;  ///< the first slot of the diplomacy table's columns
+    std::int32_t m_screen_w = 0;     ///< the window, design units (0: no dialogs)
+    std::int32_t m_screen_h = 0;
+    std::int32_t m_column_x = 0;        ///< where the column begins in the window
+    Page m_laid_page = Page::Document;  ///< the page laid out last
+    std::int32_t m_check_h = 580;       ///< the height the check list's dialog wants
+    bool m_previewing = false;          ///< the dice preview, as laid out last (its page is the column's)
 };
 
 }  // namespace o1602::app

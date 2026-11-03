@@ -50,7 +50,8 @@ std::vector<LimitProblem> original_limit_problems(const sim::World& world) {
     at_most(problems, Kind::Towers, world.towers().size(), original::kMaxTowers);
     std::size_t starting = 0;
     for (const sim::Player& p : world.players()) {
-        starting += p.role == sim::PlayerRole::Neutral ? 0U : 1U;
+        // Not the trader, the pirates or the natives, nor a slot that only holds a place.
+        starting += p.role == sim::PlayerRole::Neutral || p.status == sim::PlayerStatus::Absent ? 0U : 1U;
     }
     at_most(problems, Kind::Players, starting, original::kMaxStartPlayers);
     if (!world.own_buildings().empty() || !world.own_figures().empty() || !world.goods().own_goods().empty()) {

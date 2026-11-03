@@ -119,9 +119,20 @@ constexpr Id kFirstGoodLess = 120;     ///< + the row on the page "Stock"
 constexpr Id kFirstGoodMore = 140;     ///< + the row on the page "Stock"
 constexpr std::size_t kGoodRows = 20;  ///< rows of the page "Stock" at most
 constexpr Id kFirstRow = 100;          ///< + the row on the page
+constexpr Id kTabPlayers = 180;        ///< the players dialog's tab of the players
+constexpr Id kTabRelations = 181;      ///< the players dialog's tab of the diplomacy
+constexpr Id kColumnsBack = 182;       ///< the diplomacy table's columns before
+constexpr Id kColumnsOn = 183;         ///< the diplomacy table's columns after
+constexpr Id kPlayerTable = 300;       ///< + 8 * the row + the column of the players' table
+constexpr std::size_t kTableRows = 16;
+constexpr Id kRelationTable = 500;  ///< + 16 * the row + the column of the diplomacy table
+constexpr std::size_t kTableSide = 16;
+/// The dialogs' widths at most: wide for tables, narrow for the other pages.
+constexpr std::int32_t kWideDialog = 980;
+constexpr std::int32_t kNarrowDialog = 560;
+/// Below this width the dialogs keep the column's forms.
+constexpr std::int32_t kWideForm = 600;
 
-constexpr std::int32_t kX = 12;
-constexpr std::int32_t kW = EditorPanel::kWidth - 2 * kX;
 constexpr std::int32_t kButtonH = 30;
 constexpr std::int32_t kGap = 6;
 constexpr std::int32_t kLine = 24;
@@ -434,14 +445,75 @@ std::optional<EditorTool> EditorPanel::active_tool(const EditorModel& model) con
     }
 }
 
+bool EditorPanel::dialog() const noexcept {
+    using P = Page;
+    return m_screen_w > 0 && !m_previewing &&
+           (m_page == P::Players || m_page == P::PlayerName || m_page == P::Relations || m_page == P::Rules ||
+            m_page == P::Random || m_page == P::WorldSize || m_page == P::Check);
+}
+
+ui::Rect EditorPanel::dialog_rect() const noexcept {
+    using P = Page;
+    const bool wide = m_page == P::Players || m_page == P::Relations || m_page == P::Rules || m_page == P::Random;
+    // Right of the tool bar, between the menu bar and the status line; as tall as the page needs.
+    constexpr std::int32_t kToolBar = 42;
+    constexpr std::int32_t kBars = 26 + 24;
+    const std::int32_t room_w = m_screen_w - kToolBar - 16;
+    const std::int32_t room_h = m_screen_h - kBars - 16;
+    const std::int32_t want = m_page == P::PlayerName  ? 230
+                              : m_page == P::WorldSize ? 440
+                              : m_page == P::Check     ? m_check_h
+                              : wide                   ? 620
+                                                       : 580;
+    const std::int32_t w = std::max(kWidth, std::min(room_w, wide ? kWideDialog : kNarrowDialog));
+    const std::int32_t h = std::max(200, std::min(room_h, want));
+    return Rect{kToolBar + 8 + (room_w - w) / 2 - m_column_x, 26 + 8 + (room_h - h) / 2, w, h};
+}
+
 void EditorPanel::layout(const EditorModel& model) {
     m_form.clear();
-    m_form.panel(Rect{kX - 6, m_top, kWidth - 2 * (kX - 6), m_height});
+    if (m_page != m_laid_page) {
+        // Another page: a button held on the last one is not this one's.
+        m_form.cancel_press();
+        m_laid_page = m_page;
+    }
+    m_previewing = model.previewing;
     if (model.previewing) {
         // The plan waits: nothing but another roll or the way back to it.
+        m_form.panel(Rect{m_x - 6, m_top, kWidth - 2 * (m_x - 6), m_height});
         layout_preview(model);
         return;
     }
+    if (m_page == Page::Check) {
+        // The check list's dialog as tall as its lines (up to its room; then it has pages).
+        std::int32_t h = 16 + 6 + 32 + (kButtonH + kGap) + 6 + 8;
+        for (const EditorCheckLine& line : model.check) {
+            h += line.kind == EditorCheckLine::Kind::Heading ? 2 * 20 + 2 : 3 * 20;
+        }
+        m_check_h = h;
+    }
+    if (dialog()) {
+        // A page of the whole map: a dialog in the window's middle, laid out inside its frame.
+        const Rect d = dialog_rect();
+        m_form.panel(d);
+        const std::array<std::int32_t, 4> column = {m_x, m_w, m_top, m_height};
+        m_x = d.x + 18;
+        m_w = d.w - 36;
+        m_top = d.y + 8;
+        m_height = d.h - 16;
+        layout_page(model);
+        m_x = column[0];
+        m_w = column[1];
+        m_top = column[2];
+        m_height = column[3];
+        return;
+    }
+    m_form.panel(Rect{m_x - 6, m_top, kWidth - 2 * (m_x - 6), m_height});
+    layout_page(model);
+}
+
+void EditorPanel::layout_page(const EditorModel& model) {
+    const bool wide = m_w >= kWideForm;
     switch (m_page) {
         case Page::Document:
             layout_document(model);
@@ -489,19 +561,19 @@ void EditorPanel::layout(const EditorModel& model) {
             layout_city_goods(model);
             break;
         case Page::Players:
-            layout_players(model);
+            wide ? layout_players_table(model) : layout_players(model);
             break;
         case Page::PlayerName:
             layout_player_name(model);
             break;
         case Page::Relations:
-            layout_relations(model);
+            wide ? layout_relations_table(model) : layout_relations(model);
             break;
         case Page::Rules:
-            layout_rules(model);
+            wide ? layout_settings_grid(model, true) : layout_rules(model);
             break;
         case Page::Random:
-            layout_random(model);
+            wide ? layout_settings_grid(model, false) : layout_random(model);
             break;
     }
 }
@@ -509,34 +581,34 @@ void EditorPanel::layout(const EditorModel& model) {
 void EditorPanel::layout_document(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 4;
-    f.label(Rect{kX, y, kW, 24}, ui::tr("editor.title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 24}, ui::tr("editor.title"), Align::Left, Tone::Heading);
     y += 26;
     std::string file = model.file.empty() ? ui::tr("editor.untitled") : model.file;
     if (model.modified) {
         file += " *";
     }
-    f.label(Rect{kX, y, kW, kLine}, file);
+    f.label(Rect{m_x, y, m_w, kLine}, file);
     y += kLine;
-    f.entry(Rect{kX, y, kW, kLine}, ui::tr("editor.map_size"),
+    f.entry(Rect{m_x, y, m_w, kLine}, ui::tr("editor.map_size"),
             ui::tr("editor.size", {count(model.width), count(model.height)}), Tone::Dim);
     y += kLine;
     if (model.planned_islands > 0) {
-        f.entry(Rect{kX, y, kW, kLine}, ui::tr("editor.islands"),
+        f.entry(Rect{m_x, y, m_w, kLine}, ui::tr("editor.islands"),
                 ui::tr("editor.islands_planned", {count(model.planned_islands)}), Tone::Dim);
     } else {
-        f.entry(Rect{kX, y, kW, kLine}, ui::tr("editor.islands"), count(model.islands), Tone::Dim);
+        f.entry(Rect{m_x, y, m_w, kLine}, ui::tr("editor.islands"), count(model.islands), Tone::Dim);
     }
     y += kLine;
-    f.entry(Rect{kX, y, kW, kLine}, ui::tr("editor.players"), count(model.players), Tone::Dim);
+    f.entry(Rect{m_x, y, m_w, kLine}, ui::tr("editor.players"), count(model.players), Tone::Dim);
     y += kLine + 4;
     // What the files, the pages of the whole map and the tools are: the menu bar above the map and
     // the tool bar left of it (EditorChrome) have them, and each its key.
     const std::int32_t bottom = m_top + m_height - 4;
-    f.paragraph(Rect{kX, y, kW, std::max(0, std::min(5 * 20, bottom - y))}, ui::tr("editor.document.hint"), Tone::Dim,
+    f.paragraph(Rect{m_x, y, m_w, std::max(0, std::min(5 * 20, bottom - y))}, ui::tr("editor.document.hint"), Tone::Dim,
                 20, ui::tr("editor.document.hint_short"));
     y += 5 * 20 + kGap;
     if (!model.notice.empty() && bottom - y - 2 >= 2 * 20) {
-        f.paragraph(Rect{kX, y + 2, kW, std::max(0, bottom - y - 2)}, model.notice,
+        f.paragraph(Rect{m_x, y + 2, m_w, std::max(0, bottom - y - 2)}, model.notice,
                     model.notice_is_error ? Tone::Warning : Tone::Dim, 20);
     }
 }
@@ -544,12 +616,12 @@ void EditorPanel::layout_document(const EditorModel& model) {
 void EditorPanel::layout_new(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.new.title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.new.title"), Align::Left, Tone::Heading);
     y += 28;
     const auto value = [&](Id id, const char* label, std::string text, bool enabled = true) {
-        f.label(Rect{kX, y, kW, kLine}, ui::tr(label), Align::Left, enabled ? Tone::Normal : Tone::Dim);
+        f.label(Rect{m_x, y, m_w, kLine}, ui::tr(label), Align::Left, enabled ? Tone::Normal : Tone::Dim);
         y += kLine;
-        f.cycle_button(id, Rect{kX, y, kW, kButtonH}, std::move(text), enabled);
+        f.cycle_button(id, Rect{m_x, y, m_w, kButtonH}, std::move(text), enabled);
         y += kButtonH + kGap;
     };
     std::string size = ui::tr("editor.size", {count(m_new.width()), count(m_new.height())});
@@ -564,19 +636,19 @@ void EditorPanel::layout_new(const EditorModel& model) {
         value(kLandscape, "editor.new.landscape", model.landscapes[m_new.landscape], islands);
     }
     value(kPlayers, "editor.new.players", count(m_new.players), islands);
-    f.entry(Rect{kX, y, kW, kLine}, ui::tr("editor.new.seed"), std::to_string(m_new.seed),
+    f.entry(Rect{m_x, y, m_w, kLine}, ui::tr("editor.new.seed"), std::to_string(m_new.seed),
             islands ? Tone::Normal : Tone::Dim, Tone::Dim);
     y += kLine + 2;
-    f.button(kReroll, Rect{kX, y, kW, kButtonH}, ui::tr("editor.new.reroll"), islands);
+    f.button(kReroll, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.new.reroll"), islands);
     y += kButtonH + kGap + 4;
-    const std::int32_t half = (kW - kGap) / 2;
-    f.button(kCreate, Rect{kX, y, half, kButtonH}, ui::tr("editor.new.create"));
-    f.button(kCancel, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
+    const std::int32_t half = (m_w - kGap) / 2;
+    f.button(kCreate, Rect{m_x, y, half, kButtonH}, ui::tr("editor.new.create"));
+    f.button(kCancel, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
     y += kButtonH + kGap;
     // The note where it fits: in a small window the settings and the buttons take the room.
     const std::int32_t room = std::min(kNote, m_top + m_height - 4 - y);
     if (room >= 2 * 20) {
-        f.paragraph(Rect{kX, y, kW, room}, ui::tr(islands ? "editor.new.note_islands" : "editor.new.note_sea"),
+        f.paragraph(Rect{m_x, y, m_w, room}, ui::tr(islands ? "editor.new.note_islands" : "editor.new.note_sea"),
                     Tone::Dim, 20);
     }
 }
@@ -585,11 +657,11 @@ void EditorPanel::layout_open(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
     const bool islands = m_page == Page::IslandFiles;
-    f.label(Rect{kX, y, kW, 28}, ui::tr(islands ? "editor.islands.load_title" : "editor.open.title"), Align::Left,
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr(islands ? "editor.islands.load_title" : "editor.open.title"), Align::Left,
             Tone::Heading);
     y += 32;
     if (model.files.empty()) {
-        f.paragraph(Rect{kX, y, kW, 60}, ui::tr(islands ? "editor.islands.no_files" : "editor.open.empty"), Tone::Dim,
+        f.paragraph(Rect{m_x, y, m_w, 60}, ui::tr(islands ? "editor.islands.no_files" : "editor.open.empty"), Tone::Dim,
                     20);
         y += 64;
     } else {
@@ -601,53 +673,54 @@ void EditorPanel::layout_open(const EditorModel& model) {
             const EditorFile& file = model.files[i];
             if (file.group != group) {
                 group = file.group;
-                f.label(Rect{kX, y, kW, kRowH}, group, Align::Left, Tone::Heading);
+                f.label(Rect{m_x, y, m_w, kRowH}, group, Align::Left, Tone::Heading);
                 y += kRowH;
             }
             const auto row = static_cast<Id>(i - m_first);
-            f.row(kFirstRow + row, Rect{kX, y, kW, kRowH - 2}, false);
-            f.label(Rect{kX + 4, y, kW - 8, kRowH - 2}, file.name);
+            f.row(kFirstRow + row, Rect{m_x, y, m_w, kRowH - 2}, false);
+            f.label(Rect{m_x + 4, y, m_w - 8, kRowH - 2}, file.name);
             y += kRowH;
             ++shown;
         }
         y += 4;
-        const std::int32_t half = (kW - kGap) / 2;
-        f.button(kPrevious, Rect{kX, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
-        f.button(kNext, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.next"), m_first + kRows < n);
+        const std::int32_t half = (m_w - kGap) / 2;
+        f.button(kPrevious, Rect{m_x, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
+        f.button(kNext, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.next"), m_first + kRows < n);
         y += kButtonH + kGap;
     }
-    f.button(islands ? kIslandPage : kCancel, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
+    f.button(islands ? kIslandPage : kCancel, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.cancel"));
 }
 
 void EditorPanel::layout_save(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.save.title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.save.title"), Align::Left, Tone::Heading);
     y += 34;
-    f.label(Rect{kX, y, kW, kLine}, ui::tr("editor.save.name"));
+    f.label(Rect{m_x, y, m_w, kLine}, ui::tr("editor.save.name"));
     y += kLine;
-    f.field(kField, Rect{kX, y, kW, 32}, m_text);
+    f.field(kField, Rect{m_x, y, m_w, 32}, m_text);
     y += 38;
     const std::string name = clean_name(m_text);
     const bool taken = !name.empty() && name_taken(model, name);
-    f.paragraph(Rect{kX, y, kW, kNote}, ui::tr(taken ? "editor.save.taken" : "editor.save.where"),
+    f.paragraph(Rect{m_x, y, m_w, kNote}, ui::tr(taken ? "editor.save.taken" : "editor.save.where"),
                 taken ? Tone::Warning : Tone::Dim, 20);
     y += kNote + 4;
-    const std::int32_t half = (kW - kGap) / 2;
-    f.button(kStore, Rect{kX, y, half, kButtonH}, ui::tr(taken ? "editor.save.replace" : "editor.save"), !name.empty());
-    f.button(kCancel, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
+    const std::int32_t half = (m_w - kGap) / 2;
+    f.button(kStore, Rect{m_x, y, half, kButtonH}, ui::tr(taken ? "editor.save.replace" : "editor.save"),
+             !name.empty());
+    f.button(kCancel, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
 }
 
 void EditorPanel::layout_selection(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.selection.title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.selection.title"), Align::Left, Tone::Heading);
     y += 30;
     if (model.selection.empty()) {
-        f.paragraph(Rect{kX, y, kW, 5 * 20}, ui::tr("editor.selection.none"), Tone::Dim, 20);
+        f.paragraph(Rect{m_x, y, m_w, 5 * 20}, ui::tr("editor.selection.none"), Tone::Dim, 20);
         y += 5 * 20 + 4;
     } else {
-        f.paragraph(Rect{kX, y, kW, 2 * kLine}, model.selection, Tone::Normal, kLine);
+        f.paragraph(Rect{m_x, y, m_w, 2 * kLine}, model.selection, Tone::Normal, kLine);
         y += 2 * kLine + 4;
         // Room for the buttons below: back, and an island's three rows or a city's two.
         const std::int32_t rows = model.island || model.placeholder ? 4 : model.city ? 3 : 1;
@@ -656,7 +729,7 @@ void EditorPanel::layout_selection(const EditorModel& model) {
             if (y + kLine > bottom) {
                 break;
             }
-            f.entry(Rect{kX, y, kW, kLine}, p.label, p.value, Tone::Dim);
+            f.entry(Rect{m_x, y, m_w, kLine}, p.label, p.value, Tone::Dim);
             y += kLine;
         }
         y += kGap;
@@ -665,16 +738,16 @@ void EditorPanel::layout_selection(const EditorModel& model) {
         } else if (model.placeholder) {
             layout_placeholder_actions(model, y);
         } else if (model.city) {
-            const std::int32_t half = (kW - kGap) / 2;
-            f.button(kCityNamePage, Rect{kX, y, half, kButtonH}, ui::tr("editor.city.rename"));
-            f.button(kCityGoodsPage, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.city.stock"),
+            const std::int32_t half = (m_w - kGap) / 2;
+            f.button(kCityNamePage, Rect{m_x, y, half, kButtonH}, ui::tr("editor.city.rename"));
+            f.button(kCityGoodsPage, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.city.stock"),
                      model.city->room > 0);
             y += kButtonH + kGap;
-            f.cycle_button(kCityOwner, Rect{kX, y, kW, kButtonH}, ui::tr("editor.city.owner", {model.city->owner}));
+            f.cycle_button(kCityOwner, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.city.owner", {model.city->owner}));
             y += kButtonH + kGap;
         }
     }
-    f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+    f.button(kBack, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.back"));
 }
 
 void EditorPanel::layout_city_name(const EditorModel& model) {
@@ -685,62 +758,62 @@ void EditorPanel::layout_city_name(const EditorModel& model) {
     }
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.city.rename_title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.city.rename_title"), Align::Left, Tone::Heading);
     y += 34;
-    f.label(Rect{kX, y, kW, kLine}, ui::tr("editor.city.name"));
+    f.label(Rect{m_x, y, m_w, kLine}, ui::tr("editor.city.name"));
     y += kLine;
-    f.field(kField, Rect{kX, y, kW, 32}, m_text);
+    f.field(kField, Rect{m_x, y, m_w, 32}, m_text);
     y += 38;
     const bool valid = sim::valid_name(m_text, sim::CityOrder::kMaxNameLength);
-    const std::int32_t half = (kW - kGap) / 2;
-    f.button(kStore, Rect{kX, y, half, kButtonH}, ui::tr("editor.city.rename_ok"), valid);
-    f.button(kCitySelection, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
+    const std::int32_t half = (m_w - kGap) / 2;
+    f.button(kStore, Rect{m_x, y, half, kButtonH}, ui::tr("editor.city.rename_ok"), valid);
+    f.button(kCitySelection, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
 }
 
 void EditorPanel::layout_players(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.players.title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.players.title"), Align::Left, Tone::Heading);
     y += 28;
     const std::size_t n = model.player_slots.size();
     const EditorPlayer* p = n > 0 ? &model.player_slots[std::min(m_player, n - 1)] : nullptr;
     const bool on = p != nullptr;
     const Tone tone = on ? Tone::Normal : Tone::Dim;
-    const std::int32_t half = (kW - kGap) / 2;
-    const std::int32_t right = kX + half + kGap;
-    const std::int32_t rest = kW - half - kGap;
-    f.label(Rect{kX, y, kW, 18},
+    const std::int32_t half = (m_w - kGap) / 2;
+    const std::int32_t right = m_x + half + kGap;
+    const std::int32_t rest = m_w - half - kGap;
+    f.label(Rect{m_x, y, m_w, 18},
             on ? ui::tr("editor.players.slot", {count(std::min(m_player, n - 1) + 1), count(n)})
                : ui::tr("editor.players.slot", {"-", "-"}),
             Align::Left, tone);
     y += 18;
-    f.cycle_button(kPlayerSlot, Rect{kX, y, kW, kButtonH}, on ? p->name : ui::tr("editor.objects.no_owner"), on);
+    f.cycle_button(kPlayerSlot, Rect{m_x, y, m_w, kButtonH}, on ? p->name : ui::tr("editor.objects.no_owner"), on);
     y += kButtonH + 2;
     // Two values side by side: a label over each half and its button below.
     const auto pair = [&](const char* left_label, Id left, std::string left_text, const char* right_label, Id right_id,
                           std::string right_text) {
-        f.label(Rect{kX, y, half, 18}, ui::tr(left_label), Align::Left, tone);
+        f.label(Rect{m_x, y, half, 18}, ui::tr(left_label), Align::Left, tone);
         f.label(Rect{right, y, rest, 18}, ui::tr(right_label), Align::Left, tone);
         y += 18;
-        f.cycle_button(left, Rect{kX, y, half, kButtonH}, std::move(left_text), on);
+        f.cycle_button(left, Rect{m_x, y, half, kButtonH}, std::move(left_text), on);
         f.cycle_button(right_id, Rect{right, y, rest, kButtonH}, std::move(right_text), on);
         y += kButtonH + 2;
     };
     pair("editor.players.role", kPlayerRole,
          ui::tr(on && p->human ? "editor.players.human" : "editor.players.computer"), "editor.players.colour",
          kPlayerColour, on ? p->colour : std::string("-"));
-    f.label(Rect{kX, y, kW, 18}, ui::tr("editor.players.money"), Align::Left, tone);
+    f.label(Rect{m_x, y, m_w, 18}, ui::tr("editor.players.money"), Align::Left, tone);
     y += 18;
-    f.cycle_button(kPlayerMoney, Rect{kX, y, kW, kButtonH},
+    f.cycle_button(kPlayerMoney, Rect{m_x, y, m_w, kButtonH},
                    on ? ui::tr("editor.players.money_value", {std::to_string(p->money)}) : std::string("-"), on);
     y += kButtonH + 2;
     pair("editor.players.monuments", kPlayerMonuments, on ? count(p->monuments_allowed) : "-", "editor.players.arches",
          kPlayerArches, on ? count(p->arches_allowed) : "-");
     y += kGap - 2;
-    f.button(kPlayerNamePage, Rect{kX, y, half, kButtonH}, ui::tr("editor.players.rename"), on);
+    f.button(kPlayerNamePage, Rect{m_x, y, half, kButtonH}, ui::tr("editor.players.rename"), on);
     f.button(kRelationsPage, Rect{right, y, rest, kButtonH}, ui::tr("editor.players.relations"), n > 1);
     y += kButtonH + kGap;
-    f.button(kPlayerAdd, Rect{kX, y, half, kButtonH}, ui::tr("editor.players.add"), model.can_add_player);
+    f.button(kPlayerAdd, Rect{m_x, y, half, kButtonH}, ui::tr("editor.players.add"), model.can_add_player);
     f.button(kPlayerRemove, Rect{right, y, rest, kButtonH}, ui::tr("editor.players.remove"), model.can_remove_player);
     y += kButtonH + kGap;
     note_and_back(model, y, "editor.players.note", "editor.players.note_short", kBack, "editor.back");
@@ -756,10 +829,10 @@ void EditorPanel::note_and_back(const EditorModel& model, std::int32_t y, const 
         // Where the whole note does not fit, its first sentence alone: none is cut off.
         const bool notice = !model.notice.empty();
         const std::string note = notice ? model.notice : ui::tr(note_key);
-        f.paragraph(Rect{kX, y, kW, lines * 20}, note, notice && model.notice_is_error ? Tone::Warning : Tone::Dim, 20,
-                    notice ? std::string() : ui::tr(short_key));
+        f.paragraph(Rect{m_x, y, m_w, lines * 20}, note, notice && model.notice_is_error ? Tone::Warning : Tone::Dim,
+                    20, notice ? std::string() : ui::tr(short_key));
     }
-    f.button(back, Rect{kX, foot, kW, kButtonH}, ui::tr(back_key));
+    f.button(back, Rect{m_x, foot, m_w, kButtonH}, ui::tr(back_key));
 }
 
 void EditorPanel::layout_player_name(const EditorModel& model) {
@@ -770,18 +843,18 @@ void EditorPanel::layout_player_name(const EditorModel& model) {
     }
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.players.rename_title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.players.rename_title"), Align::Left, Tone::Heading);
     y += 34;
-    f.label(Rect{kX, y, kW, kLine}, ui::tr("editor.players.name"));
+    f.label(Rect{m_x, y, m_w, kLine}, ui::tr("editor.players.name"));
     y += kLine;
-    f.field(kField, Rect{kX, y, kW, 32}, m_text);
+    f.field(kField, Rect{m_x, y, m_w, 32}, m_text);
     y += 38;
-    f.paragraph(Rect{kX, y, kW, 2 * 20}, ui::tr("editor.players.name_note"), Tone::Dim, 20);
+    f.paragraph(Rect{m_x, y, m_w, 2 * 20}, ui::tr("editor.players.name_note"), Tone::Dim, 20);
     y += 2 * 20 + 4;
     const bool valid = m_text.empty() || sim::valid_name(m_text, sim::CityOrder::kMaxNameLength);
-    const std::int32_t half = (kW - kGap) / 2;
-    f.button(kStore, Rect{kX, y, half, kButtonH}, ui::tr("editor.city.rename_ok"), valid);
-    f.button(kPlayersBack, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
+    const std::int32_t half = (m_w - kGap) / 2;
+    f.button(kStore, Rect{m_x, y, half, kButtonH}, ui::tr("editor.city.rename_ok"), valid);
+    f.button(kPlayersBack, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
 }
 
 void EditorPanel::layout_relations(const EditorModel& model) {
@@ -793,7 +866,7 @@ void EditorPanel::layout_relations(const EditorModel& model) {
     }
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.relations.title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.relations.title"), Align::Left, Tone::Heading);
     y += 28;
     const std::size_t a = std::min(m_player, n - 1);
     if (m_partner >= n || m_partner == a) {
@@ -802,14 +875,14 @@ void EditorPanel::layout_relations(const EditorModel& model) {
     const EditorPlayer& p = model.player_slots[a];
     const EditorPlayer& q = model.player_slots[m_partner];
     const EditorPlayer::Standing s = m_partner < p.relations.size() ? p.relations[m_partner] : EditorPlayer::Standing{};
-    f.label(Rect{kX, y, kW, 18}, ui::tr("editor.relations.of"), Align::Left, Tone::Normal);
+    f.label(Rect{m_x, y, m_w, 18}, ui::tr("editor.relations.of"), Align::Left, Tone::Normal);
     y += 18;
-    f.label(Rect{kX, y, kW, kButtonH}, p.name, Align::Left, Tone::Normal);
+    f.label(Rect{m_x, y, m_w, kButtonH}, p.name, Align::Left, Tone::Normal);
     y += kButtonH + 2;
     const auto value = [&](Id id, const std::string& label, std::string text, bool enabled) {
-        f.label(Rect{kX, y, kW, 18}, label, Align::Left, enabled ? Tone::Normal : Tone::Dim);
+        f.label(Rect{m_x, y, m_w, 18}, label, Align::Left, enabled ? Tone::Normal : Tone::Dim);
         y += 18;
-        f.cycle_button(id, Rect{kX, y, kW, kButtonH}, std::move(text), enabled);
+        f.cycle_button(id, Rect{m_x, y, m_w, kButtonH}, std::move(text), enabled);
         y += kButtonH + 2;
     };
     value(kRelationPartner, ui::tr("editor.relations.with"), q.name, true);
@@ -824,17 +897,17 @@ void EditorPanel::layout_relations(const EditorModel& model) {
 void EditorPanel::layout_rules(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.rules.title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.rules.title"), Align::Left, Tone::Heading);
     y += 28;
-    f.cycle_button(kRulesOwn, Rect{kX, y, kW, kButtonH},
+    f.cycle_button(kRulesOwn, Rect{m_x, y, m_w, kButtonH},
                    ui::tr(model.rules_own ? "editor.rules.own" : "editor.rules.players"));
     y += kButtonH + kGap;
-    const std::int32_t half = (kW - kGap) / 2;
-    f.button(kRulesOriginal, Rect{kX, y, half, kButtonH}, ui::tr("editor.rules.original"), true,
+    const std::int32_t half = (m_w - kGap) / 2;
+    f.button(kRulesOriginal, Rect{m_x, y, half, kButtonH}, ui::tr("editor.rules.original"), true,
              model.rules_own && model.rules_original);
-    f.button(kRulesOpen1602, Rect{kX + half + kGap, y, kW - half - kGap, kButtonH}, ui::tr("editor.rules.open1602"));
+    f.button(kRulesOpen1602, Rect{m_x + half + kGap, y, m_w - half - kGap, kButtonH}, ui::tr("editor.rules.open1602"));
     y += kButtonH + kGap;
-    f.button(kRandomPage, Rect{kX, y, kW, kButtonH}, ui::tr("editor.random.edit"), model.has_plan);
+    f.button(kRandomPage, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.random.edit"), model.has_plan);
     y += kButtonH + kGap;
     // As many settings as fit above the pages' buttons and the way back.
     constexpr std::int32_t kRuleH = 18 + kButtonH + 2;
@@ -847,17 +920,17 @@ void EditorPanel::layout_rules(const EditorModel& model) {
     for (std::size_t row = 0; row < m_page_rows && m_first + row < n; ++row) {
         const EditorRule& r = model.rules[m_first + row];
         const bool on = model.rules_own && r.enabled;
-        f.label(Rect{kX, y, kW, 18}, r.label, Align::Left, on ? Tone::Normal : Tone::Dim);
+        f.label(Rect{m_x, y, m_w, 18}, r.label, Align::Left, on ? Tone::Normal : Tone::Dim);
         y += 18;
-        f.cycle_button(kFirstRow + static_cast<Id>(row), Rect{kX, y, kW, kButtonH}, r.value, on);
+        f.cycle_button(kFirstRow + static_cast<Id>(row), Rect{m_x, y, m_w, kButtonH}, r.value, on);
         y += kButtonH + 2;
     }
     y = std::max(y + 4, bottom);
-    f.button(kPrevious, Rect{kX, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
-    f.button(kNext, Rect{kX + half + kGap, y, kW - half - kGap, kButtonH}, ui::tr("editor.next"),
+    f.button(kPrevious, Rect{m_x, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
+    f.button(kNext, Rect{m_x + half + kGap, y, m_w - half - kGap, kButtonH}, ui::tr("editor.next"),
              m_first + m_page_rows < n);
     y += kButtonH + kGap;
-    f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+    f.button(kBack, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.back"));
 }
 
 void EditorPanel::layout_random(const EditorModel& model) {
@@ -868,12 +941,12 @@ void EditorPanel::layout_random(const EditorModel& model) {
     }
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.random.title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.random.title"), Align::Left, Tone::Heading);
     y += 28;
-    f.paragraph(Rect{kX, y, kW, 2 * 20}, ui::tr("editor.random.note"), Tone::Dim, 20,
+    f.paragraph(Rect{m_x, y, m_w, 2 * 20}, ui::tr("editor.random.note"), Tone::Dim, 20,
                 ui::tr("editor.random.note_short"));
     y += 2 * 20 + 4;
-    const std::int32_t half = (kW - kGap) / 2;
+    const std::int32_t half = (m_w - kGap) / 2;
     constexpr std::int32_t kEntryH = 18 + kButtonH + 2;
     const std::int32_t bottom = m_top + m_height - 4 - 3 * (kButtonH + kGap);
     const std::size_t n = model.randoms.size();
@@ -882,36 +955,36 @@ void EditorPanel::layout_random(const EditorModel& model) {
     m_first = n == 0 ? 0 : std::min(m_first, (n - 1) / m_page_rows * m_page_rows);
     for (std::size_t row = 0; row < m_page_rows && m_first + row < n; ++row) {
         const EditorRandom& r = model.randoms[m_first + row];
-        f.label(Rect{kX, y, kW, 18}, r.label);
+        f.label(Rect{m_x, y, m_w, 18}, r.label);
         y += 18;
-        f.cycle_button(kFirstRow + static_cast<Id>(row), Rect{kX, y, kW, kButtonH},
+        f.cycle_button(kFirstRow + static_cast<Id>(row), Rect{m_x, y, m_w, kButtonH},
                        ui::tr("editor.random.value", {count(r.random), count(r.fixed)}));
         y += kButtonH + 2;
     }
     y = std::max(y + 4, bottom);
-    f.button(kPrevious, Rect{kX, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
-    f.button(kNext, Rect{kX + half + kGap, y, kW - half - kGap, kButtonH}, ui::tr("editor.next"),
+    f.button(kPrevious, Rect{m_x, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
+    f.button(kNext, Rect{m_x + half + kGap, y, m_w - half - kGap, kButtonH}, ui::tr("editor.next"),
              m_first + m_page_rows < n);
     y += kButtonH + kGap;
-    f.button(kRandomRoll, Rect{kX, y, kW, kButtonH}, ui::tr("editor.random.roll"));
+    f.button(kRandomRoll, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.random.roll"));
     y += kButtonH + kGap;
-    f.button(kRandomBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.random.back"));
+    f.button(kRandomBack, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.random.back"));
 }
 
 void EditorPanel::layout_preview(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.preview.title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.preview.title"), Align::Left, Tone::Heading);
     y += 28;
-    f.label(Rect{kX, y, kW, kLine},
+    f.label(Rect{m_x, y, m_w, kLine},
             ui::tr("editor.preview.roll", {count(model.preview_roll), count(model.preview_islands)}));
     y += kLine + 4;
-    f.paragraph(Rect{kX, y, kW, kNote}, ui::tr("editor.preview.note"), Tone::Dim, 20,
+    f.paragraph(Rect{m_x, y, m_w, kNote}, ui::tr("editor.preview.note"), Tone::Dim, 20,
                 ui::tr("editor.preview.note_short"));
     y += kNote + kGap;
-    f.button(kRandomRoll, Rect{kX, y, kW, kButtonH}, ui::tr("editor.preview.again"));
+    f.button(kRandomRoll, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.preview.again"));
     y += kButtonH + kGap;
-    f.button(kPreviewEnd, Rect{kX, y, kW, kButtonH}, ui::tr("editor.preview.back"));
+    f.button(kPreviewEnd, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.preview.back"));
 }
 
 void EditorPanel::layout_city_goods(const EditorModel& model) {
@@ -922,9 +995,9 @@ void EditorPanel::layout_city_goods(const EditorModel& model) {
     }
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.city.stock_title", {model.city->name}), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.city.stock_title", {model.city->name}), Align::Left, Tone::Heading);
     y += 28;
-    f.paragraph(Rect{kX, y, kW, 3 * 20}, ui::tr("editor.city.room", {count(model.city->room / 32)}), Tone::Dim, 20);
+    f.paragraph(Rect{m_x, y, m_w, 3 * 20}, ui::tr("editor.city.room", {count(model.city->room / 32)}), Tone::Dim, 20);
     y += 3 * 20 + 4;
     // As many rows as fit above the buttons below: back, and the pages.
     constexpr std::int32_t kGoodH = 26;
@@ -938,61 +1011,61 @@ void EditorPanel::layout_city_goods(const EditorModel& model) {
         const EditorGood& g = model.city->goods[m_first + row];
         const auto id = static_cast<Id>(row);
         constexpr std::int32_t kAmount = 40;  // "999" (tons, as the hint says) in the panel's font
-        f.label(Rect{kX, y, kW - 2 * kStep - kAmount - 4, kGoodH - 2}, g.name);
-        f.label(Rect{kX + kW - 2 * kStep - kAmount - 4, y, kAmount, kGoodH - 2},
+        f.label(Rect{m_x, y, m_w - 2 * kStep - kAmount - 4, kGoodH - 2}, g.name);
+        f.label(Rect{m_x + m_w - 2 * kStep - kAmount - 4, y, kAmount, kGoodH - 2},
                 ui::tr("editor.city.tons", {count(g.amount / 32)}), Align::Right);
         // Cycle buttons: the right button takes a ton.
-        f.cycle_button(kFirstGoodLess + id, Rect{kX + kW - 2 * kStep - 2, y, kStep, kGoodH - 2}, "-", g.amount > 0);
-        f.cycle_button(kFirstGoodMore + id, Rect{kX + kW - kStep, y, kStep, kGoodH - 2}, "+",
+        f.cycle_button(kFirstGoodLess + id, Rect{m_x + m_w - 2 * kStep - 2, y, kStep, kGoodH - 2}, "-", g.amount > 0);
+        f.cycle_button(kFirstGoodMore + id, Rect{m_x + m_w - kStep, y, kStep, kGoodH - 2}, "+",
                        g.amount < model.city->room);
         y += kGoodH;
     }
     y += 4;
-    const std::int32_t half = (kW - kGap) / 2;
-    f.button(kPrevious, Rect{kX, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
-    f.button(kNext, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.next"), m_first + m_page_rows < n);
+    const std::int32_t half = (m_w - kGap) / 2;
+    f.button(kPrevious, Rect{m_x, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
+    f.button(kNext, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.next"), m_first + m_page_rows < n);
     y += kButtonH + kGap;
-    f.button(kCitySelection, Rect{kX, y, kW, kButtonH}, ui::tr("editor.city.back"));
+    f.button(kCitySelection, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.city.back"));
 }
 
 void EditorPanel::layout_island_actions(const EditorModel& model, std::int32_t& y) {
     ui::Form& f = m_form;
-    const std::int32_t half = (kW - kGap) / 2;
+    const std::int32_t half = (m_w - kGap) / 2;
     if (model.placing) {
-        f.paragraph(Rect{kX, y, kW, 3 * 20}, ui::tr("editor.islands.placing"), Tone::Dim, 20);
+        f.paragraph(Rect{m_x, y, m_w, 3 * 20}, ui::tr("editor.islands.placing"), Tone::Dim, 20);
         y += 3 * 20 + 4;
-        f.button(kStopPlacing, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
+        f.button(kStopPlacing, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.cancel"));
         y += kButtonH + kGap;
         return;
     }
-    f.button(kMove, Rect{kX, y, half, kButtonH}, ui::tr("editor.islands.move"));
-    f.button(kRotate, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.islands.rotate"), model.island_free);
+    f.button(kMove, Rect{m_x, y, half, kButtonH}, ui::tr("editor.islands.move"));
+    f.button(kRotate, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.islands.rotate"), model.island_free);
     y += kButtonH + kGap;
-    f.button(kCopy, Rect{kX, y, half, kButtonH}, ui::tr("editor.islands.copy"), model.island_free);
-    f.button(kRemove, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.islands.remove"), model.island_free);
+    f.button(kCopy, Rect{m_x, y, half, kButtonH}, ui::tr("editor.islands.copy"), model.island_free);
+    f.button(kRemove, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.islands.remove"), model.island_free);
     y += kButtonH + kGap;
-    f.button(kFertilityPage, Rect{kX, y, half, kButtonH}, ui::tr("editor.fertility.edit"));
-    f.button(kSaveIsland, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.islands.save"), model.island_free);
+    f.button(kFertilityPage, Rect{m_x, y, half, kButtonH}, ui::tr("editor.fertility.edit"));
+    f.button(kSaveIsland, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.islands.save"), model.island_free);
     y += kButtonH + kGap;
 }
 
 void EditorPanel::layout_placeholder_actions(const EditorModel& model, std::int32_t& y) {
     ui::Form& f = m_form;
-    const std::int32_t half = (kW - kGap) / 2;
+    const std::int32_t half = (m_w - kGap) / 2;
     if (model.placing) {
-        f.paragraph(Rect{kX, y, kW, 3 * 20}, ui::tr("editor.placeholder.placing"), Tone::Dim, 20);
+        f.paragraph(Rect{m_x, y, m_w, 3 * 20}, ui::tr("editor.placeholder.placing"), Tone::Dim, 20);
         y += 3 * 20 + 4;
-        f.button(kStopPlacing, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
+        f.button(kStopPlacing, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.cancel"));
         y += kButtonH + kGap;
         return;
     }
-    f.button(kMove, Rect{kX, y, half, kButtonH}, ui::tr("editor.islands.move"));
-    f.button(kRemove, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.islands.remove"));
+    f.button(kMove, Rect{m_x, y, half, kButtonH}, ui::tr("editor.islands.move"));
+    f.button(kRemove, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.islands.remove"));
     y += kButtonH + kGap;
-    f.cycle_button(kPlaceholderClimate, Rect{kX, y, kW, kButtonH},
+    f.cycle_button(kPlaceholderClimate, Rect{m_x, y, m_w, kButtonH},
                    ui::tr(kPlaceholderClimateTexts[model.placeholder_climate % kPlaceholderClimateTexts.size()]));
     y += kButtonH + kGap;
-    f.cycle_button(kPlaceholderSize, Rect{kX, y, kW, kButtonH},
+    f.cycle_button(kPlaceholderSize, Rect{m_x, y, m_w, kButtonH},
                    ui::tr(kIslandSizeTexts[model.placeholder_size % kIslandSizeTexts.size()]));
     y += kButtonH + kGap;
 }
@@ -1004,9 +1077,9 @@ void EditorPanel::layout_fertility(const EditorModel& model) {
     }
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.fertility.title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.fertility.title"), Align::Left, Tone::Heading);
     y += 28;
-    f.label(Rect{kX, y, kW, kLine}, model.selection);
+    f.label(Rect{m_x, y, m_w, kLine}, model.selection);
     y += kLine + 4;
     for (std::size_t i = 0; i < kCropTexts.size(); ++i) {
         std::string text = ui::tr(kCropTexts[i]);
@@ -1014,13 +1087,13 @@ void EditorPanel::layout_fertility(const EditorModel& model) {
         if (!own && (model.island_crops >> (kCropWares[i] - assets::ware::kCornField) & 1U) != 0) {
             text = ui::tr("editor.fertility.half", {text});
         }
-        f.check(kFirstCrop + static_cast<Id>(i), Rect{kX, y, kW, kButtonH}, std::move(text), own);
+        f.check(kFirstCrop + static_cast<Id>(i), Rect{m_x, y, m_w, kButtonH}, std::move(text), own);
         y += kButtonH + kGap;
     }
     constexpr std::int32_t kFertilityNote = 4 * 20;
-    f.paragraph(Rect{kX, y, kW, kFertilityNote}, ui::tr("editor.fertility.note"), Tone::Dim, 20);
+    f.paragraph(Rect{m_x, y, m_w, kFertilityNote}, ui::tr("editor.fertility.note"), Tone::Dim, 20);
     y += kFertilityNote + 4;
-    f.button(kSelectionPage, Rect{kX, y, kW, kButtonH}, ui::tr("editor.fertility.back"));
+    f.button(kSelectionPage, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.fertility.back"));
 }
 
 void EditorPanel::layout_terrain(const EditorModel& model) {
@@ -1029,15 +1102,15 @@ void EditorPanel::layout_terrain(const EditorModel& model) {
     const EditorTerrain& t = model.terrain;
     using Tool = EditorTerrain::Tool;
     // The tool chosen in the tool bar is the heading; its settings below it.
-    f.label(Rect{kX, y, kW, 28},
+    f.label(Rect{m_x, y, m_w, 28},
             ui::tr(kTerrainToolTitles[static_cast<std::size_t>(t.tool) % kTerrainToolTitles.size()]), Align::Left,
             Tone::Heading);
     y += 28;
     // Each setting's name above its value, which takes the panel's width.
     const auto value = [&](Id id, const char* label, std::string text, bool enabled) {
-        f.label(Rect{kX, y, kW, 18}, ui::tr(label), Align::Left, enabled ? Tone::Normal : Tone::Dim);
+        f.label(Rect{m_x, y, m_w, 18}, ui::tr(label), Align::Left, enabled ? Tone::Normal : Tone::Dim);
         y += 18;
-        f.cycle_button(id, Rect{kX, y, kW, kButtonH}, std::move(text), enabled);
+        f.cycle_button(id, Rect{m_x, y, m_w, kButtonH}, std::move(text), enabled);
         y += kButtonH + 2;
     };
     std::string note = ui::tr(kTerrainToolNotes[static_cast<std::size_t>(t.tool)]);
@@ -1045,16 +1118,16 @@ void EditorPanel::layout_terrain(const EditorModel& model) {
         // The copy: what it holds, and copying, turning and mirroring it, in the place of the
         // four settings of the other tools.
         const bool copied = model.clip_width > 0 && model.clip_height > 0;
-        f.label(Rect{kX, y, kW, 18},
+        f.label(Rect{m_x, y, m_w, 18},
                 copied ? ui::tr("editor.terrain.copy_size", {count(model.clip_width), count(model.clip_height)})
                        : ui::tr("editor.terrain.no_copy"),
                 Align::Left, copied ? Tone::Normal : Tone::Dim);
         y += 18;
-        f.button(kTerrainCopy, Rect{kX, y, kW, kButtonH}, ui::tr("editor.terrain.copy"), model.terrain_selected);
+        f.button(kTerrainCopy, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.terrain.copy"), model.terrain_selected);
         y += kButtonH + 4;
-        f.button(kTerrainTurn, Rect{kX, y, kW, kButtonH}, ui::tr("editor.terrain.turn"), copied);
+        f.button(kTerrainTurn, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.terrain.turn"), copied);
         y += kButtonH + 4;
-        f.button(kTerrainMirror, Rect{kX, y, kW, kButtonH}, ui::tr("editor.terrain.mirror"), copied);
+        f.button(kTerrainMirror, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.terrain.mirror"), copied);
         y += kButtonH + 4;
         y += 4 * (18 + kButtonH + 2) - (18 + 3 * (kButtonH + 4));  // as tall as the four settings
     } else {
@@ -1082,14 +1155,14 @@ void EditorPanel::layout_terrain(const EditorModel& model) {
             const std::size_t at = t.brush % kTerrainBrushes.size();
             const std::uint32_t side = kTerrainBrushes[at];
             const Tone tone = brush ? Tone::Normal : Tone::Dim;
-            f.label(Rect{kX, y, kW, 18}, ui::tr("editor.terrain.brush"), Align::Left, tone);
-            f.label(Rect{kX, y, kW, 18}, ui::tr("editor.size", {count(side), count(side)}), Align::Right, tone);
+            f.label(Rect{m_x, y, m_w, 18}, ui::tr("editor.terrain.brush"), Align::Left, tone);
+            f.label(Rect{m_x, y, m_w, 18}, ui::tr("editor.size", {count(side), count(side)}), Align::Right, tone);
             y += 18;
             constexpr std::int32_t kStep = 30;
-            f.button(kTerrainSmaller, Rect{kX, y, kStep, kButtonH}, "-", brush && at > 0);
-            f.slider(kTerrainSlider, Rect{kX + kStep + 6, y, kW - 2 * (kStep + 6), kButtonH},
+            f.button(kTerrainSmaller, Rect{m_x, y, kStep, kButtonH}, "-", brush && at > 0);
+            f.slider(kTerrainSlider, Rect{m_x + kStep + 6, y, m_w - 2 * (kStep + 6), kButtonH},
                      static_cast<double>(at) / static_cast<double>(kTerrainBrushes.size() - 1), brush);
-            f.button(kTerrainBigger, Rect{kX + kW - kStep, y, kStep, kButtonH}, "+",
+            f.button(kTerrainBigger, Rect{m_x + m_w - kStep, y, kStep, kButtonH}, "+",
                      brush && at + 1 < kTerrainBrushes.size());
             y += kButtonH + 2;
             if (t.tool != Tool::Brush || single) {
@@ -1108,12 +1181,12 @@ void EditorPanel::layout_terrain(const EditorModel& model) {
                      t.tool == Tool::Pipette;
     const std::int32_t note_h = (few ? 6 : 4) * 20;
     if (!model.notice.empty()) {
-        f.paragraph(Rect{kX, y, kW, note_h}, model.notice, model.notice_is_error ? Tone::Warning : Tone::Dim, 20);
+        f.paragraph(Rect{m_x, y, m_w, note_h}, model.notice, model.notice_is_error ? Tone::Warning : Tone::Dim, 20);
     } else {
-        f.paragraph(Rect{kX, y, kW, note_h}, note, Tone::Dim, 20);
+        f.paragraph(Rect{m_x, y, m_w, note_h}, note, Tone::Dim, 20);
     }
     y += note_h + 4;
-    f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+    f.button(kBack, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.back"));
 }
 
 void EditorPanel::layout_objects(const EditorModel& model) {
@@ -1121,8 +1194,9 @@ void EditorPanel::layout_objects(const EditorModel& model) {
     std::int32_t y = m_top + 6;
     const EditorObjects& o = model.objects;
     // The tool chosen in the tool bar is the heading; its settings below it.
-    f.label(Rect{kX, y, kW, 28}, ui::tr(kObjectToolTitles[static_cast<std::size_t>(o.tool) % kObjectToolTitles.size()]),
-            Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28},
+            ui::tr(kObjectToolTitles[static_cast<std::size_t>(o.tool) % kObjectToolTitles.size()]), Align::Left,
+            Tone::Heading);
     y += 28;
     using Tool = EditorObjects::Tool;
     const bool build = o.tool == Tool::Build;
@@ -1137,9 +1211,9 @@ void EditorPanel::layout_objects(const EditorModel& model) {
                                : o.tool == Tool::Resource ? o.resource
                                                           : o.piece;
     const auto value = [&](Id id, const std::string& label, std::string text, bool enabled) {
-        f.label(Rect{kX, y, kW, 18}, label, Align::Left, enabled ? Tone::Normal : Tone::Dim);
+        f.label(Rect{m_x, y, m_w, 18}, label, Align::Left, enabled ? Tone::Normal : Tone::Dim);
         y += 18;
-        f.cycle_button(id, Rect{kX, y, kW, kButtonH}, std::move(text), enabled);
+        f.cycle_button(id, Rect{m_x, y, m_w, kButtonH}, std::move(text), enabled);
         y += kButtonH + 2;
     };
     value(kObjectsGroup, ui::tr("editor.objects.group"), model.object_group, build && model.object_groups > 0);
@@ -1166,23 +1240,24 @@ void EditorPanel::layout_objects(const EditorModel& model) {
     }
     constexpr std::int32_t kObjectsNote = 4 * 20;
     if (!model.notice.empty()) {
-        f.paragraph(Rect{kX, y, kW, kObjectsNote}, model.notice, model.notice_is_error ? Tone::Warning : Tone::Dim, 20);
+        f.paragraph(Rect{m_x, y, m_w, kObjectsNote}, model.notice, model.notice_is_error ? Tone::Warning : Tone::Dim,
+                    20);
     } else {
-        f.paragraph(Rect{kX, y, kW, kObjectsNote}, note, Tone::Dim, 20);
+        f.paragraph(Rect{m_x, y, m_w, kObjectsNote}, note, Tone::Dim, 20);
     }
     y += kObjectsNote + 4;
-    f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+    f.button(kBack, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.back"));
 }
 
 void EditorPanel::layout_islands(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.islands.title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.islands.title"), Align::Left, Tone::Heading);
     y += 28;
     const auto value = [&](Id id, const char* label, std::string text) {
-        f.label(Rect{kX, y, kW, kLine}, ui::tr(label));
+        f.label(Rect{m_x, y, m_w, kLine}, ui::tr(label));
         y += kLine;
-        f.cycle_button(id, Rect{kX, y, kW, kButtonH}, std::move(text));
+        f.cycle_button(id, Rect{m_x, y, m_w, kButtonH}, std::move(text));
         y += kButtonH + kGap;
     };
     if (!model.has_plan) {
@@ -1200,22 +1275,22 @@ void EditorPanel::layout_islands(const EditorModel& model) {
           : m_island.climate == 0 ? ui::tr("editor.prop.north")
                                   : ui::tr("editor.prop.south"));
     value(kIslandSize, "editor.islands.size", ui::tr(kIslandSizeTexts[m_island.size % kIslandSizeTexts.size()]));
-    f.button(kOtherIsland, Rect{kX, y, kW, kButtonH}, ui::tr("editor.islands.other"),
+    f.button(kOtherIsland, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.islands.other"),
              !model.placing && !m_island.placeholder);
     y += kButtonH + kGap;
     if (!m_island.own_shape && !m_island.placeholder && !model.island_template.empty()) {
-        f.label(Rect{kX, y, kW, kLine}, model.island_template, Align::Left, Tone::Dim);
+        f.label(Rect{m_x, y, m_w, kLine}, model.island_template, Align::Left, Tone::Dim);
         y += kLine + 2;
     }
-    f.button(kPlace, Rect{kX, y, kW, kButtonH}, ui::tr("editor.islands.place"), !model.placing);
+    f.button(kPlace, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.islands.place"), !model.placing);
     y += kButtonH + kGap;
-    f.button(kLoadIsland, Rect{kX, y, kW, kButtonH}, ui::tr("editor.islands.load"), !model.placing);
+    f.button(kLoadIsland, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.islands.load"), !model.placing);
     y += kButtonH + kGap;
     // The note where its three lines fit above the buttons below: a sentence cut reads wrong.
     const std::int32_t below = (model.placing ? 2 : 1) * (kButtonH + kGap) + 4;
     constexpr std::int32_t note = 3 * 20;
     if (m_top + m_height - 4 - below - y >= note) {
-        f.paragraph(Rect{kX, y, kW, note},
+        f.paragraph(Rect{m_x, y, m_w, note},
                     ui::tr(!model.placing         ? "editor.islands.note"
                            : m_island.placeholder ? "editor.placeholder.placing"
                                                   : "editor.islands.placing"),
@@ -1223,99 +1298,321 @@ void EditorPanel::layout_islands(const EditorModel& model) {
         y += note + 4;
     }
     if (model.placing) {
-        f.button(kStopPlacing, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
+        f.button(kStopPlacing, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.cancel"));
         y += kButtonH + kGap;
     }
-    f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+    f.button(kBack, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.back"));
+}
+
+void EditorPanel::layout_players_table(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    const std::size_t n = model.player_slots.size();
+    // The heading, and the dialog's two tabs at its right.
+    constexpr std::int32_t kTab = 150;
+    f.label(Rect{m_x, y, m_w - 2 * (kTab + kGap), 28}, ui::tr("editor.players.title"), Align::Left, Tone::Heading);
+    f.button(kTabPlayers, Rect{m_x + m_w - 2 * kTab - kGap, y, kTab, kButtonH}, ui::tr("editor.players.tab_players"),
+             true, true);
+    f.button(kTabRelations, Rect{m_x + m_w - kTab, y, kTab, kButtonH}, ui::tr("editor.players.tab_relations"), n > 1);
+    y += kButtonH + kGap + 4;
+    // Every slot in a row: its number, then a button for each of its values.
+    constexpr std::int32_t kNumber = 40;
+    constexpr std::array<std::int32_t, 6> kShares = {30, 12, 16, 16, 13, 13};  // percent of the room
+    constexpr std::array<const char*, 6> kHeads = {"editor.players.name",      "editor.players.role",
+                                                   "editor.players.colour",    "editor.players.money",
+                                                   "editor.players.monuments", "editor.players.arches"};
+    const std::int32_t room = m_w - kNumber - 6 * kGap;
+    std::array<std::int32_t, 7> x{};
+    x[0] = m_x + kNumber + kGap;
+    for (std::size_t c = 0; c < kShares.size(); ++c) {
+        x[c + 1] = x[c] + room * kShares[c] / 100 + kGap;
+    }
+    for (std::size_t c = 0; c < kHeads.size(); ++c) {
+        f.label(Rect{x[c], y, x[c + 1] - x[c] - kGap, 18}, ui::tr(kHeads[c]), Align::Left, Tone::Dim);
+    }
+    y += 20;
+    // As many rows as fit above the note and the foot's buttons; the others on pages.
+    constexpr std::int32_t kRow = kButtonH + 2;
+    const std::int32_t foot = m_top + m_height - kButtonH - 4;
+    const std::int32_t bottom = foot - 2 * 20 - kGap;
+    m_page_rows = std::clamp<std::size_t>(static_cast<std::size_t>(std::max(1, (bottom - y) / kRow)), 1, kTableRows);
+    m_first = n == 0 ? 0 : std::min(m_first, (n - 1) / m_page_rows * m_page_rows);
+    for (std::size_t row = 0; row < m_page_rows && m_first + row < n; ++row) {
+        const std::size_t i = m_first + row;
+        const EditorPlayer& p = model.player_slots[i];
+        const Id base = kPlayerTable + static_cast<Id>(row) * 8;
+        const auto cell = [&](std::size_t c) { return Rect{x[c], y, x[c + 1] - x[c] - kGap, kButtonH}; };
+        f.label(Rect{m_x, y, kNumber, kButtonH}, count(i + 1), Align::Right, Tone::Dim);
+        f.button(base, cell(0), p.name, true, i == m_player);
+        f.cycle_button(base + 1, cell(1), ui::tr(p.human ? "editor.players.human" : "editor.players.computer"));
+        f.cycle_button(base + 2, cell(2), p.colour);
+        f.cycle_button(base + 3, cell(3), ui::tr("editor.players.money_value", {std::to_string(p.money)}));
+        f.cycle_button(base + 4, cell(4), count(p.monuments_allowed));
+        f.cycle_button(base + 5, cell(5), count(p.arches_allowed));
+        y += kRow;
+    }
+    // The notice or the note, then adding, taking away, the pages and the way back.
+    const bool notice = !model.notice.empty();
+    f.paragraph(Rect{m_x, bottom, m_w, 2 * 20}, notice ? model.notice : ui::tr("editor.players.table_note"),
+                notice && model.notice_is_error ? Tone::Warning : Tone::Dim, 20,
+                notice ? std::string() : ui::tr("editor.players.note_short"));
+    const std::int32_t quarter = (m_w - 3 * kGap) / 4;
+    f.button(kPlayerAdd, Rect{m_x, foot, quarter, kButtonH}, ui::tr("editor.players.add"), model.can_add_player);
+    f.button(kPlayerRemove, Rect{m_x + quarter + kGap, foot, quarter, kButtonH}, ui::tr("editor.players.remove"),
+             model.can_remove_player);
+    if (n > m_page_rows) {
+        const std::int32_t eighth = (quarter - kGap) / 2;
+        const std::int32_t px = m_x + 2 * (quarter + kGap);
+        f.button(kPrevious, Rect{px, foot, eighth, kButtonH}, "<", m_first > 0);
+        f.button(kNext, Rect{px + eighth + kGap, foot, quarter - eighth - kGap, kButtonH}, ">",
+                 m_first + m_page_rows < n);
+    }
+    f.button(kBack, Rect{m_x + m_w - quarter, foot, quarter, kButtonH}, ui::tr("editor.dialog.close"));
+}
+
+void EditorPanel::layout_relations_table(const EditorModel& model) {
+    const std::size_t n = model.player_slots.size();
+    if (n < 2) {
+        m_page = Page::Players;
+        layout_players_table(model);
+        return;
+    }
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    constexpr std::int32_t kTab = 150;
+    f.label(Rect{m_x, y, m_w - 2 * (kTab + kGap), 28}, ui::tr("editor.relations.title"), Align::Left, Tone::Heading);
+    f.button(kTabPlayers, Rect{m_x + m_w - 2 * kTab - kGap, y, kTab, kButtonH}, ui::tr("editor.players.tab_players"));
+    f.button(kTabRelations, Rect{m_x + m_w - kTab, y, kTab, kButtonH}, ui::tr("editor.players.tab_relations"), true,
+             true);
+    y += kButtonH + kGap + 4;
+    // The players down the left and along the top by their numbers; each cell how the two stand.
+    constexpr std::int32_t kNames = 220;
+    constexpr std::int32_t kCell = 84;  // room for the longest standing in the smaller screens' font
+    const auto columns = static_cast<std::size_t>(std::max<std::int32_t>(1, (m_w - kNames) / (kCell + 2)));
+    const std::size_t shown = std::min({n, columns, kTableSide});
+    m_first_column = n <= shown ? 0 : std::min(m_first_column, n - shown);
+    const std::int32_t cell = std::min<std::int32_t>(110, (m_w - kNames) / static_cast<std::int32_t>(shown) - 2);
+    for (std::size_t c = 0; c < shown; ++c) {
+        const std::size_t b = m_first_column + c;
+        f.label(Rect{m_x + kNames + static_cast<std::int32_t>(c) * (cell + 2), y, cell, 18}, count(b + 1),
+                Align::Centre, Tone::Dim);
+    }
+    y += 20;
+    constexpr std::int32_t kRow = kButtonH + 2;
+    const std::int32_t foot = m_top + m_height - kButtonH - 4;
+    const std::int32_t bottom = foot - 2 * 20 - kGap;
+    m_page_rows = std::clamp<std::size_t>(static_cast<std::size_t>(std::max(1, (bottom - y) / kRow)), 1, kTableSide);
+    m_first = std::min(m_first, (n - 1) / m_page_rows * m_page_rows);
+    for (std::size_t row = 0; row < m_page_rows && m_first + row < n; ++row) {
+        const std::size_t a = m_first + row;
+        const EditorPlayer& p = model.player_slots[a];
+        // The number, and the player's own name or else its colour (the colour's name is shorter).
+        f.label(Rect{m_x, y, 40, kButtonH}, count(a + 1), Align::Right, Tone::Dim);
+        f.label(Rect{m_x + 42, y, kNames - 42 - kGap, kButtonH}, p.own_name.empty() ? p.colour : p.own_name,
+                Align::Left, Tone::Normal);
+        for (std::size_t c = 0; c < shown; ++c) {
+            const std::size_t b = m_first_column + c;
+            const Rect r{m_x + kNames + static_cast<std::int32_t>(c) * (cell + 2), y, cell, kButtonH};
+            if (a == b) {
+                f.label(r, "-", Align::Centre, Tone::Dim);
+                continue;
+            }
+            const EditorPlayer::Standing s = b < p.relations.size() ? p.relations[b] : EditorPlayer::Standing{};
+            const char* text = !s.peace  ? "editor.relations.war"
+                               : s.trade ? "editor.relations.trade_short"
+                                         : "editor.relations.peace";
+            f.cycle_button(kRelationTable + static_cast<Id>(row * kTableSide + c), r, ui::tr(text));
+        }
+        y += kRow;
+    }
+    const bool notice = !model.notice.empty();
+    f.paragraph(Rect{m_x, bottom, m_w, 2 * 20}, notice ? model.notice : ui::tr("editor.relations.table_note"),
+                notice && model.notice_is_error ? Tone::Warning : Tone::Dim, 20,
+                notice ? std::string() : ui::tr("editor.relations.note"));
+    const std::int32_t quarter = (m_w - 3 * kGap) / 4;
+    if (n > m_page_rows) {
+        const std::int32_t eighth = (quarter - kGap) / 2;
+        f.button(kPrevious, Rect{m_x, foot, eighth, kButtonH}, "<", m_first > 0);
+        f.button(kNext, Rect{m_x + eighth + kGap, foot, quarter - eighth - kGap, kButtonH}, ">",
+                 m_first + m_page_rows < n);
+    }
+    if (n > shown) {
+        const std::int32_t eighth = (quarter - kGap) / 2;
+        const std::int32_t px = m_x + quarter + kGap;
+        f.button(kColumnsBack, Rect{px, foot, eighth, kButtonH}, "<<", m_first_column > 0);
+        f.button(kColumnsOn, Rect{px + eighth + kGap, foot, quarter - eighth - kGap, kButtonH}, ">>",
+                 m_first_column + shown < n);
+    }
+    f.button(kBack, Rect{m_x + m_w - quarter, foot, quarter, kButtonH}, ui::tr("editor.dialog.close"));
+}
+
+void EditorPanel::layout_settings_grid(const EditorModel& model, bool rules) {
+    if (!rules && !model.has_plan) {
+        m_page = Page::Rules;
+        layout_settings_grid(model, true);
+        return;
+    }
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr(rules ? "editor.rules.title" : "editor.random.title"), Align::Left,
+            Tone::Heading);
+    y += 30;
+    const std::int32_t quarter = (m_w - 3 * kGap) / 4;
+    if (rules) {
+        // Whose settings, the two presets and the plan's random elements in one row.
+        // Whose rules takes two fifths, its name being the longest.
+        const std::int32_t fifth = (m_w - 3 * kGap) / 5;
+        const std::int32_t own = m_w - 3 * kGap - 3 * fifth;
+        f.cycle_button(kRulesOwn, Rect{m_x, y, own, kButtonH},
+                       ui::tr(model.rules_own ? "editor.rules.own" : "editor.rules.players"));
+        std::int32_t bx = m_x + own + kGap;
+        f.button(kRulesOriginal, Rect{bx, y, fifth, kButtonH}, ui::tr("editor.rules.original"), true,
+                 model.rules_own && model.rules_original);
+        bx += fifth + kGap;
+        f.button(kRulesOpen1602, Rect{bx, y, fifth, kButtonH}, ui::tr("editor.rules.open1602"));
+        bx += fifth + kGap;
+        f.button(kRandomPage, Rect{bx, y, fifth, kButtonH}, ui::tr("editor.random.edit"), model.has_plan);
+        y += kButtonH + kGap + 4;
+    } else {
+        f.paragraph(Rect{m_x, y, m_w, 20}, ui::tr("editor.random.note_short"), Tone::Dim, 20);
+        y += 24;
+    }
+    // Two columns of settings, each a label and its value beside it; the rest on pages.
+    constexpr std::int32_t kRow = kButtonH + 4;
+    const std::int32_t foot = m_top + m_height - kButtonH - 4;
+    const std::int32_t bottom = foot - kGap;
+    const std::int32_t column = (m_w - 2 * kGap) / 2;
+    const std::int32_t label = column * 55 / 100;
+    const auto per_column = static_cast<std::size_t>(std::max(1, (bottom - y) / kRow));
+    const std::size_t n = rules ? model.rules.size() : model.randoms.size();
+    m_page_rows = std::min<std::size_t>(2 * per_column, 20);
+    m_first = n == 0 ? 0 : std::min(m_first, (n - 1) / m_page_rows * m_page_rows);
+    const std::size_t rows = (m_page_rows + 1) / 2;
+    for (std::size_t k = 0; k < m_page_rows && m_first + k < n; ++k) {
+        const std::int32_t cx = m_x + static_cast<std::int32_t>(k / rows) * (column + 2 * kGap);
+        const std::int32_t cy = y + static_cast<std::int32_t>(k % rows) * kRow;
+        const Id id = kFirstRow + static_cast<Id>(k);
+        if (rules) {
+            const EditorRule& r = model.rules[m_first + k];
+            const bool on = model.rules_own && r.enabled;
+            f.label(Rect{cx, cy, label - kGap, kButtonH}, r.label, Align::Left, on ? Tone::Normal : Tone::Dim);
+            f.cycle_button(id, Rect{cx + label, cy, column - label, kButtonH}, r.value, on);
+        } else {
+            const EditorRandom& r = model.randoms[m_first + k];
+            f.label(Rect{cx, cy, label - kGap, kButtonH}, r.label);
+            f.cycle_button(id, Rect{cx + label, cy, column - label, kButtonH},
+                           ui::tr("editor.random.value", {count(r.random), count(r.fixed)}));
+        }
+    }
+    // The foot: the pages, the dice preview or the way back to the rules, and closing.
+    const std::int32_t eighth = (quarter - kGap) / 2;
+    if (n > m_page_rows) {
+        f.button(kPrevious, Rect{m_x, foot, eighth, kButtonH}, "<", m_first > 0);
+        f.button(kNext, Rect{m_x + eighth + kGap, foot, quarter - eighth - kGap, kButtonH}, ">",
+                 m_first + m_page_rows < n);
+    }
+    if (!rules) {
+        f.button(kRandomBack, Rect{m_x + quarter + kGap, foot, quarter, kButtonH}, ui::tr("editor.random.back"));
+        f.button(kRandomRoll, Rect{m_x + 2 * (quarter + kGap), foot, quarter, kButtonH}, ui::tr("editor.random.roll"));
+    }
+    f.button(kBack, Rect{m_x + m_w - quarter, foot, quarter, kButtonH}, ui::tr("editor.dialog.close"));
 }
 
 void EditorPanel::layout_world_size(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.world_size.title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.world_size.title"), Align::Left, Tone::Heading);
     y += 28;
-    f.entry(Rect{kX, y, kW, kLine}, ui::tr("editor.world_size.now"),
+    f.entry(Rect{m_x, y, m_w, kLine}, ui::tr("editor.world_size.now"),
             ui::tr("editor.size", {count(model.width), count(model.height)}), Tone::Dim);
     y += kLine;
-    f.entry(Rect{kX, y, kW, kLine}, ui::tr("editor.world_size.new"),
+    f.entry(Rect{m_x, y, m_w, kLine}, ui::tr("editor.world_size.new"),
             ui::tr("editor.size", {count(m_size_width), count(m_size_height)}));
     y += kLine + 4;
-    const std::int32_t half = (kW - kGap) / 2;
+    const std::int32_t half = (m_w - kGap) / 2;
     const auto side = [&](const char* label, Id less, Id more, std::uint32_t value, std::uint32_t used) {
-        f.label(Rect{kX, y, kW, kLine}, ui::tr(label));
+        f.label(Rect{m_x, y, m_w, kLine}, ui::tr(label));
         y += kLine;
-        f.button(less, Rect{kX, y, half, kButtonH}, ui::tr("editor.world_size.less", {count(kSizeStep)}),
+        f.button(less, Rect{m_x, y, half, kButtonH}, ui::tr("editor.world_size.less", {count(kSizeStep)}),
                  value > std::max<std::uint32_t>(used, 1));
-        f.button(more, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.world_size.more", {count(kSizeStep)}),
+        f.button(more, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.world_size.more", {count(kSizeStep)}),
                  value < sim::kMaxWorldSide);
         y += kButtonH + kGap;
     };
     side("editor.world_size.width", kWidthLess, kWidthMore, m_size_width, model.used_width);
     side("editor.world_size.height", kHeightLess, kHeightMore, m_size_height, model.used_height);
-    f.button(kFitSize, Rect{kX, y, kW, kButtonH}, ui::tr("editor.world_size.fit"));
+    f.button(kFitSize, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.world_size.fit"));
     y += kButtonH + kGap;
     constexpr std::int32_t kSizeNote = 4 * 20;
-    f.paragraph(Rect{kX, y, kW, kSizeNote}, ui::tr("editor.world_size.note"), Tone::Dim, 20);
+    f.paragraph(Rect{m_x, y, m_w, kSizeNote}, ui::tr("editor.world_size.note"), Tone::Dim, 20);
     y += kSizeNote + 4;
     const bool changed = m_size_width != model.width || m_size_height != model.height;
-    f.button(kApplySize, Rect{kX, y, kW, kButtonH}, ui::tr("editor.world_size.apply"), changed);
+    f.button(kApplySize, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.world_size.apply"), changed);
     y += kButtonH + kGap;
-    f.button(kCancel, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
+    f.button(kCancel, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.cancel"));
 }
 
 void EditorPanel::layout_view(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.view.title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.view.title"), Align::Left, Tone::Heading);
     y += 34;
     for (std::size_t i = 0; i < kEditorOverlays; ++i) {
-        f.check(kFirstOverlay + static_cast<Id>(i), Rect{kX, y, kW, kButtonH}, ui::tr(kOverlayTexts[i]),
+        f.check(kFirstOverlay + static_cast<Id>(i), Rect{m_x, y, m_w, kButtonH}, ui::tr(kOverlayTexts[i]),
                 model.overlays[i]);
         y += kButtonH + kGap;
     }
     y += kGap;
-    f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+    f.button(kBack, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.back"));
 }
 
 void EditorPanel::layout_check(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
-    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.check.title"), Align::Left, Tone::Heading);
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.check.title"), Align::Left, Tone::Heading);
     y += 32;
     // Each line gets three lines of text, a heading two; as many as the room holds above the
     // buttons, the rest on the next pages.
     constexpr std::int32_t kItem = 3 * 20;
     constexpr std::int32_t kHeading = 2 * 20 + 2;
-    const std::int32_t bottom = m_top + m_height - 2 * (kButtonH + kGap) - 6;
     const std::size_t n = model.check.size();
     m_first = std::min(m_first, n == 0 ? 0 : n - 1);
+    using Kind = EditorCheckLine::Kind;
+    // Room for the pages' buttons only where the lines left do not fit without them.
+    std::int32_t rest = 0;
+    for (std::size_t k = m_first; k < n; ++k) {
+        rest += model.check[k].kind == Kind::Heading ? kHeading : kItem;
+    }
+    const std::int32_t one_row = m_top + m_height - (kButtonH + kGap) - 6;
+    const std::int32_t bottom = m_first == 0 && y + rest <= one_row ? one_row : one_row - (kButtonH + kGap);
     std::size_t i = m_first;
     for (; i < n; ++i) {
         const EditorCheckLine& line = model.check[i];
-        using Kind = EditorCheckLine::Kind;
         const std::int32_t h = line.kind == Kind::Heading ? kHeading : kItem;
-        if (y + h > bottom && i > m_first) {
+        // A heading goes to the next page with its first line.
+        const std::int32_t needs = line.kind == Kind::Heading && i + 1 < n ? h + kItem : h;
+        if (y + needs > bottom && i > m_first) {
             break;
         }
         if (line.kind == Kind::Heading) {
-            f.paragraph(Rect{kX, y, kW, kHeading - 2}, line.text, Tone::Heading, 20);
+            f.paragraph(Rect{m_x, y, m_w, kHeading - 2}, line.text, Tone::Heading, 20);
         } else {
             const Tone tone = line.kind == Kind::Error || line.kind == Kind::Warning ? Tone::Warning
                               : line.kind == Kind::Fine                              ? Tone::Normal
                                                                                      : Tone::Dim;
-            f.paragraph(Rect{kX + 8, y, kW - 8, kItem}, line.text, tone, 20);
+            f.paragraph(Rect{m_x + 8, y, m_w - 8, kItem}, line.text, tone, 20);
         }
         y += h;
     }
     m_page_rows = std::max<std::size_t>(1, i - m_first);
     y += 4;
     if (m_first > 0 || i < n) {
-        const std::int32_t half = (kW - kGap) / 2;
-        f.button(kPrevious, Rect{kX, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
-        f.button(kNext, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.next"), i < n);
+        const std::int32_t half = (m_w - kGap) / 2;
+        f.button(kPrevious, Rect{m_x, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
+        f.button(kNext, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.next"), i < n);
         y += kButtonH + kGap;
     }
-    f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+    f.button(kBack, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.back"));
 }
 
 std::vector<ui::DrawItem> EditorPanel::draw(const EditorModel& model,
@@ -1640,7 +1937,22 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
         case kStore:
             return commit_name();
         case kPlayersPage:
+        case kTabPlayers:
             m_page = Page::Players;
+            m_first = 0;
+            return std::nullopt;
+        case kTabRelations:
+            if (model.player_slots.size() > 1) {
+                m_page = Page::Relations;
+                m_first = 0;
+                m_first_column = 0;
+            }
+            return std::nullopt;
+        case kColumnsBack:
+            m_first_column = m_first_column > kTableSide / 2 ? m_first_column - kTableSide / 2 : 0;
+            return std::nullopt;
+        case kColumnsOn:
+            m_first_column += kTableSide / 2;
             return std::nullopt;
         case kPlayerSlot:
             if (!model.player_slots.empty()) {
@@ -1762,6 +2074,39 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
             return std::nullopt;
         default:
             break;
+    }
+    if (*id >= kPlayerTable && *id < kPlayerTable + static_cast<Id>(8 * kTableRows)) {
+        // A cell of the players' table: its row's slot, then what its button on the column's
+        // page does.
+        const auto row = static_cast<std::size_t>((*id - kPlayerTable) / 8);
+        const auto column = (*id - kPlayerTable) % 8;
+        if (m_first + row >= model.player_slots.size()) {
+            return std::nullopt;
+        }
+        m_player = m_first + row;
+        constexpr std::array<Id, 6> kCells = {kPlayerNamePage, kPlayerRole,      kPlayerColour,
+                                              kPlayerMoney,    kPlayerMonuments, kPlayerArches};
+        return column < 6 ? press(kCells[static_cast<std::size_t>(column)], model, forward) : std::nullopt;
+    }
+    if (*id >= kRelationTable && *id < kRelationTable + static_cast<Id>(kTableSide * kTableSide)) {
+        // A cell of the diplomacy table: war, peace, peace and trade, round (the right button back).
+        const auto a = m_first + static_cast<std::size_t>(*id - kRelationTable) / kTableSide;
+        const auto b = m_first_column + static_cast<std::size_t>(*id - kRelationTable) % kTableSide;
+        const std::size_t n = model.player_slots.size();
+        if (a >= n || b >= n || a == b) {
+            return std::nullopt;
+        }
+        const EditorPlayer& p = model.player_slots[a];
+        EditorPlayer::Standing s = b < p.relations.size() ? p.relations[b] : EditorPlayer::Standing{};
+        const std::size_t now = !s.peace ? 0 : s.trade ? 2 : 1;
+        const std::size_t next = step(now, 3, forward);
+        s.peace = next > 0;
+        s.trade = next == 2;
+        EditorRequest r{EditorRequest::Kind::SetRelations};
+        r.player.slot = p.slot;
+        r.player.relations = {s};
+        r.index = model.player_slots[b].slot;
+        return r;
     }
     if (*id >= kFirstCrop && *id < kFirstCrop + static_cast<Id>(kCropTexts.size())) {
         if (!model.island) {

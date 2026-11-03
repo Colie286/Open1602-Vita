@@ -873,6 +873,9 @@ bool Hud::covers(std::int32_t x, std::int32_t y) const noexcept {
     if (m_editing && m_chrome && m_chrome->covers(x, y)) {
         return true;
     }
+    if (m_editing && m_editor && m_editor->dialog()) {
+        return true;  // a dialog of the editor takes every click
+    }
     return m_menu_active || m_question.has_value() || m_display_open || m_goods_open ||
            (chat_open() && chat_rect().contains(x, y)) || (m_blueprint_at && blueprint_rect().contains(x, y)) ||
            (templates_open() && templates_rect().contains(x, y)) || m_regions.side_panel.contains(x, y) ||
@@ -910,6 +913,10 @@ void Hud::place_editor_panel() {
     const auto height = static_cast<std::int32_t>(m_regions.side_panel.h / std::max(s, 0.01));
     m_editor->set_scale(s);
     m_editor->set_room(top + 12, std::max(0, height - top - 20));
+    // The whole map's pages as dialogs in the window's middle.
+    const double unit = std::max(s, 0.01);
+    m_editor->set_screen(static_cast<std::int32_t>(m_layout_w / unit), static_cast<std::int32_t>(m_layout_h / unit),
+                         static_cast<std::int32_t>(m_regions.side_panel.x / unit));
 }
 
 void Hud::editor_tool(EditorTool tool) {
@@ -2110,8 +2117,10 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
     if (m_editing) {
         if (m_editor) {
             place_editor_panel();
-            m_renderer->draw(m_editor->draw(m_editor_model, m_renderer->fonts(s)), m_regions.side_panel.x,
-                             m_regions.side_panel.y, s);
+            if (!m_editor->dialog()) {  // a dialog goes over the minimap and the bars, at the end
+                m_renderer->draw(m_editor->draw(m_editor_model, m_renderer->fonts(s)), m_regions.side_panel.x,
+                                 m_regions.side_panel.y, s);
+            }
             if (!m_editor_model.notice.empty()) {
                 status = m_editor_model.notice;
             }
@@ -2273,6 +2282,11 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
         chrome.status = m_editor_model.notice.empty() ? m_status : m_editor_model.notice;
         chrome.status_error = !m_editor_model.notice.empty() && m_editor_model.notice_is_error;
         const std::optional<EditorTool> active = m_editor ? m_editor->active_tool(m_editor_model) : std::nullopt;
+        if (m_editor && m_editor->dialog()) {
+            // Over the minimap, below an open menu of the bar.
+            m_renderer->draw(m_editor->draw(m_editor_model, m_renderer->fonts(s)), m_regions.side_panel.x,
+                             m_regions.side_panel.y, s);
+        }
         m_renderer->draw(m_chrome->draw(m_editor_model, chrome, active, m_renderer->fonts(s)), 0, 0, s);
         draw_question();
         draw_help();

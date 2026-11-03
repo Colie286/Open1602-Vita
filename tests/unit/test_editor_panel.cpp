@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -1225,4 +1226,175 @@ TEST_CASE("editor panel: the dice preview shows a roll and only leads back to th
     m.has_plan = true;
     panel.layout(m);
     CHECK(panel.page() == EditorPanel::Page::Random);
+}
+
+namespace {
+
+/// A world of four slots, the first human, all at peace without trade.
+EditorModel four_players() {
+    EditorModel m = document();
+    for (std::uint8_t i = 0; i < 4; ++i) {
+        app::EditorPlayer p;
+        p.slot = i;
+        p.name = i == 0 ? "Merlin" : "Computer " + std::to_string(i);
+        p.own_name = i == 0 ? "Merlin" : "";
+        p.human = i == 0;
+        p.banner = i;
+        p.money = 20000 + i;
+        p.colour = "Colour " + std::to_string(i);
+        p.relations.resize(4);
+        m.player_slots.push_back(p);
+    }
+    m.can_add_player = true;
+    return m;
+}
+
+/// The middle of the n-th widget that says `text`, counted from 0.
+std::optional<std::array<std::int32_t, 2>> find_nth(const EditorPanel& panel, const std::string& text, std::size_t n) {
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        if (w.text == text && n-- == 0) {
+            return std::array<std::int32_t, 2>{w.rect.x + w.rect.w / 2, w.rect.y + w.rect.h / 2};
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<EditorRequest> click_nth(EditorPanel& panel, const EditorModel& m, const std::string& text, std::size_t n,
+                                       ui::MouseButton button = ui::MouseButton::Left) {
+    panel.layout(m);
+    const auto at = find_nth(panel, text, n);
+    REQUIRE(at.has_value());
+    (void)panel.mouse((*at)[0], (*at)[1], true, m, button);
+    return panel.mouse((*at)[0], (*at)[1], false, m, button);
+}
+
+}  // namespace
+
+TEST_CASE("editor panel: the whole map's pages open as dialogs in the window's middle") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(184, 564);
+    EditorModel m = four_players();
+    // Without the window's size they stay in the column.
+    (void)panel.command(app::EditorCommand::Players, m);
+    CHECK(!panel.dialog());
+    panel.set_screen(1024, 768, 1024 - EditorPanel::kWidth);
+    CHECK(panel.dialog());
+    const ui::Rect d = panel.dialog_rect();
+    CHECK(d.x < 0);  // over the map, left of the column
+    // Right of the tool bar, between the menu bar and the status line.
+    CHECK(d.x + (1024 - EditorPanel::kWidth) >= 42);
+    CHECK(d.x + (1024 - EditorPanel::kWidth) + d.w <= 1024);
+    CHECK(d.y >= 26);
+    CHECK(d.y + d.h <= 768 - 24);
+    for (const auto command : {app::EditorCommand::Players, app::EditorCommand::Rules, app::EditorCommand::WorldSize,
+                               app::EditorCommand::Check}) {
+        (void)panel.command(command, m);
+        CHECK(panel.dialog());
+        (void)panel.draw(m, kNoFonts);
+        const ui::Rect r = panel.dialog_rect();
+        for (const ui::Form::Widget& w : panel.form().widgets()) {
+            CHECK(w.rect.x >= r.x);
+            CHECK(w.rect.y >= r.y);
+            CHECK(w.rect.x + w.rect.w <= r.x + r.w);
+            CHECK(w.rect.y + w.rect.h <= r.y + r.h);
+        }
+    }
+    // Back to the map: the column again.
+    CHECK(panel.back());
+    CHECK(!panel.dialog());
+    // A tool's page stays in the column.
+    (void)panel.choose_tool(app::EditorTool::Land, m);
+    CHECK(!panel.dialog());
+}
+
+TEST_CASE("editor panel: the players dialog shows every player in a row and the diplomacy as a table") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(184, 564);
+    panel.set_screen(1024, 768, 1024 - EditorPanel::kWidth);
+    EditorModel m = four_players();
+    (void)panel.command(app::EditorCommand::Players, m);
+    (void)panel.draw(m, kNoFonts);
+    // Every slot at once, each value on its own button.
+    for (const char* text : {"Merlin", "Computer 1", "Computer 2", "Computer 3", "Colour 2", "20003 gold"}) {
+        CHECK(find(panel, text).has_value());
+    }
+    // The third row's kind: its slot changes, not the one chosen before.
+    auto r = click_nth(panel, m, "Computer", 1);  // rows 1 to 3 are computers
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::SetPlayer);
+    CHECK(r->player.slot == 2);
+    CHECK(r->player.human);
+    CHECK(panel.chosen_player() == 2);
+    r = click(panel, m, "20001 gold");
+    REQUIRE(r.has_value());
+    CHECK(r->player.slot == 1);
+    CHECK(r->player.money == 21001);
+    // A click on a name renames that player.
+    CHECK(!click(panel, m, "Computer 3").has_value());
+    CHECK(panel.page() == EditorPanel::Page::PlayerName);
+    CHECK(panel.chosen_player() == 3);
+    CHECK(panel.dialog());
+    CHECK(!click(panel, m, "Cancel").has_value());
+    CHECK(panel.page() == EditorPanel::Page::Players);
+    r = click(panel, m, "Add");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::AddPlayer);
+
+    // The diplomacy: a cell steps peace, trade, war.
+    CHECK(!click(panel, m, "Diplomacy").has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::Relations);
+    (void)panel.draw(m, kNoFonts);
+    std::size_t cells = 0;
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        cells += w.text == "Peace" ? 1U : 0U;
+    }
+    CHECK(cells == 12);                   // four by four, the diagonal left out
+    r = click_nth(panel, m, "Peace", 0);  // row 1, column 2
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::SetRelations);
+    CHECK(r->player.slot == 0);
+    CHECK(r->index == 1);
+    REQUIRE(r->player.relations.size() == 1);
+    CHECK(r->player.relations[0].peace);
+    CHECK(r->player.relations[0].trade);
+    r = click_nth(panel, m, "Peace", 0, ui::MouseButton::Right);
+    REQUIRE(r.has_value());
+    CHECK(!r->player.relations[0].peace);
+    CHECK(!r->player.relations[0].trade);
+    m.player_slots[0].relations[1] = {true, true};
+    m.player_slots[1].relations[0] = {true, true};
+    (void)panel.draw(m, kNoFonts);
+    CHECK(find(panel, "Trade").has_value());
+    CHECK(!click(panel, m, "Players").has_value());
+    CHECK(panel.page() == EditorPanel::Page::Players);
+    CHECK(!click(panel, m, "Close").has_value());
+    CHECK(!panel.dialog());
+}
+
+TEST_CASE("editor panel: the rules dialog shows its settings in two columns") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(184, 564);
+    panel.set_screen(1024, 768, 1024 - EditorPanel::kWidth);
+    EditorModel m = document();
+    m.rules_own = true;
+    for (int i = 0; i < 14; ++i) {
+        m.rules.push_back(app::EditorRule{"Setting " + std::to_string(i), "Value " + std::to_string(i), true});
+    }
+    (void)panel.command(app::EditorCommand::Rules, m);
+    (void)panel.draw(m, kNoFonts);
+    // All fourteen on one page, half of them in the right column.
+    std::set<std::int32_t> columns;
+    for (int i = 0; i < 14; ++i) {
+        const auto at = find(panel, "Value " + std::to_string(i));
+        REQUIRE(at.has_value());
+        columns.insert((*at)[0]);
+    }
+    CHECK(columns.size() == 2);
+    const auto r = click(panel, m, "Value 9");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::RuleStep);
+    CHECK(r->index == 9);
 }

@@ -71,6 +71,8 @@ public:
 
     /// Takes all widgets away for a new layout; the pressed and the focused widget stay by Id.
     void clear() { m_widgets.clear(); }
+    /// Forgets the button held: its release clicks nothing (the widgets changed beneath it).
+    void cancel_press() noexcept { m_pressed.reset(); }
 
     /// A framed background.
     void panel(Rect r);

@@ -29,6 +29,9 @@ The editor has a frame of its own around the map instead of the game's panel:
   the command (its settings, or what is selected).
 - **The status line** below the map: what happened last (saved, or why something was refused), and
   the tile under the mouse with its island.
+- **Dialogs** in the window's middle for the pages of the whole map: Players (with Diplomacy), Rules
+  (with Random elements), Map size and Check. A dialog takes every click until it is closed with
+  its button **Close** or with Escape; a tool chosen meanwhile closes it too.
 
 The window's title names the map instead of the game's time.
 
@@ -184,24 +187,26 @@ buttons on the Selection page, each change one step of undo:
 
 ## Players
 
-**Players** lists the slots of the humans and computers, up to twelve (the free trader, the pirates
-and the natives keep theirs and are not listed). Each change is one step of undo.
+**Players** lists the slots of the humans and computers, one row each (the free trader, the pirates
+and the natives keep theirs and are not listed); a click on a value changes it, the right button
+steps it back. Each change is one step of undo.
 
 | Setting | What it does |
 |---|---|
-| Player | The slot shown, by name. |
 | Kind | Human or computer. |
 | Colour | The player's colour; one another player has goes to it in exchange. |
 | Starting money | The gold the player starts with: 1000 a click, 10 000 above 50 000; the right button takes it off again. |
 | Monuments, Arches | How many monuments and triumphal arches the player may build (0 to 9). |
-| Name | The player's name; left empty, the game calls the player after its colour. |
+| Name | A click on it renames the player; left empty, the game calls the player after its colour. |
 | Add, Remove | A computer player in the next slot (the fifth and those after it go behind the trader, the pirates and the natives), with the money of the first computer; the last slot taken away again, as long as it owns no city, ship or soldier. The first four slots stay. |
 
 A player without a city and a ship is out of the game (defeated) as soon as it starts: give a new player a ship or a Kontor on the
 page **Place objects**.
 
-**Diplomacy** sets how the player shown stands with each other player when the game starts: at
-peace or at war, with a trade treaty or without. A change applies to both sides, and clears what
+The tab **Diplomacy** shows how the players stand with each other when the game starts, as a
+table: the players down its left and, by their numbers, along its top. A click on a cell steps it
+from war to peace to peace with a trade treaty and back to war; the right button goes the other
+way. A change applies to both sides, and clears what
 the two remember of each other (tribute, trade, damage). A trade treaty needs peace; war ends it.
 Adding a player keeps the relations of the others; the new one starts at peace with everyone.
 
@@ -213,7 +218,7 @@ original. **The player's rules** leaves them to the player, as for any scenario;
 to **The map's own rules**, which begin from those the player last started a scenario with. **As
 original** sets every one as in the original, **Open1602** as Open1602 has them. Each setting goes
 to its next value with the left button and back with the right one; one that does not matter with
-the others as they are is greyed out. Each change is one step of undo.
+the others as they are is greyed out. The settings stand in two columns, each beside its name. Each change is one step of undo.
 
 When a player starts the scenario, the start dialog begins from its own rules; the player can still
 change them, and they are not kept as the player's own for the next scenario.
