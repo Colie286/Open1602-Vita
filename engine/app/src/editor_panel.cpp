@@ -113,11 +113,13 @@ std::uint64_t next_seed(std::uint64_t seed) {
 
 /// The steps of the page "Map size", and the sea it leaves around what the map holds when fitted.
 constexpr std::array<const char*, EditorTerrain::kTools> kTerrainToolTexts = {
-    "editor.terrain.tool.brush", "editor.terrain.tool.random", "editor.terrain.tool.fill",
-    "editor.terrain.tool.replace", "editor.terrain.tool.pipette"};
+    "editor.terrain.tool.brush",  "editor.terrain.tool.land", "editor.terrain.tool.water",
+    "editor.terrain.tool.random", "editor.terrain.tool.fill", "editor.terrain.tool.replace",
+    "editor.terrain.tool.pipette"};
 constexpr std::array<const char*, EditorTerrain::kTools> kTerrainToolNotes = {
-    "editor.terrain.note.brush", "editor.terrain.note.random", "editor.terrain.note.fill",
-    "editor.terrain.note.replace", "editor.terrain.note.pipette"};
+    "editor.terrain.note.brush",  "editor.terrain.note.land", "editor.terrain.note.water",
+    "editor.terrain.note.random", "editor.terrain.note.fill", "editor.terrain.note.replace",
+    "editor.terrain.note.pipette"};
 /// By editor::TerrainGroup.
 constexpr std::array<const char*, 8> kTerrainGroupTexts = {"editor.terrain.group.ground", "editor.terrain.group.forest",
                                                            "editor.terrain.group.rock",   "editor.terrain.group.slope",
@@ -514,34 +516,35 @@ void EditorPanel::layout_terrain(const EditorModel& model) {
     y += 28;
     const EditorTerrain& t = model.terrain;
     using Tool = EditorTerrain::Tool;
-    // A label on the left, its value on the right: five settings fit a small window.
-    constexpr std::int32_t kLabelW = 82;
+    // Each setting's name above its value, which takes the panel's width.
     const auto value = [&](Id id, const char* label, std::string text, bool enabled) {
-        f.label(Rect{kX, y + 3, kLabelW, kLine}, ui::tr(label), Align::Left, enabled ? Tone::Normal : Tone::Dim);
-        f.cycle_button(id, Rect{kX + kLabelW, y, kW - kLabelW, kButtonH}, std::move(text), enabled);
-        y += kButtonH + kGap;
+        f.label(Rect{kX, y, kW, 20}, ui::tr(label), Align::Left, enabled ? Tone::Normal : Tone::Dim);
+        y += 20;
+        f.cycle_button(id, Rect{kX, y, kW, kButtonH}, std::move(text), enabled);
+        y += kButtonH + 4;
     };
     value(kTerrainTool, "editor.terrain.tool", ui::tr(kTerrainToolTexts[static_cast<std::size_t>(t.tool)]), true);
+    const bool shaping = t.tool == Tool::Land || t.tool == Tool::Water;
     value(kTerrainGroup, "editor.terrain.group", ui::tr(kTerrainGroupTexts[t.group % kTerrainGroupTexts.size()]),
-          t.tool != Tool::Pipette);
+          t.tool != Tool::Pipette && !shaping);
     std::string piece = ui::tr("editor.terrain.no_piece");
     if (model.terrain_pieces > 0) {
         piece = ui::tr("editor.terrain.piece_value",
                        {count(model.terrain_id), count(t.piece + 1), count(model.terrain_pieces)});
     }
-    const bool pieces = model.terrain_pieces > 0 && t.tool != Tool::Random && t.tool != Tool::Pipette;
+    const bool pieces = model.terrain_pieces > 0 && t.tool != Tool::Random && t.tool != Tool::Pipette && !shaping;
     value(kTerrainPiece, "editor.terrain.piece", std::move(piece), pieces);
     value(kTerrainRotation, "editor.terrain.rotation", ui::tr(kTerrainRotationTexts[t.rotation & 3U]),
           pieces && model.terrain_turns);
     const std::uint32_t side = kTerrainBrushes[t.brush % kTerrainBrushes.size()];
     const bool single = model.terrain_width == 1 && model.terrain_height == 1;
     value(kTerrainBrush, "editor.terrain.brush", ui::tr("editor.size", {count(side), count(side)}),
-          t.tool == Tool::Random || (t.tool == Tool::Brush && single));
+          t.tool == Tool::Random || shaping || (t.tool == Tool::Brush && single));
     std::string note = ui::tr(kTerrainToolNotes[static_cast<std::size_t>(t.tool)]);
     if (pieces && !single) {
         note = ui::tr("editor.terrain.note.large", {count(model.terrain_width), count(model.terrain_height)});
     }
-    constexpr std::int32_t kTerrainNote = 4 * 20;
+    constexpr std::int32_t kTerrainNote = 5 * 20;
     f.paragraph(Rect{kX, y, kW, kTerrainNote}, note, Tone::Dim, 20);
     y += kTerrainNote + 4;
     f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));

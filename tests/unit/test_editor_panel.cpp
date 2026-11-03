@@ -524,7 +524,7 @@ TEST_CASE("editor panel: the terrain tools go through their tools, kinds, pieces
     auto r = click(panel, m, "Brush");
     REQUIRE(r.has_value());
     CHECK(r->kind == EditorRequest::Kind::Terrain);
-    CHECK(r->terrain.tool == app::EditorTerrain::Tool::Random);
+    CHECK(r->terrain.tool == app::EditorTerrain::Tool::Land);
     r = click(panel, m, "Brush", ui::MouseButton::Right);
     REQUIRE(r.has_value());
     CHECK(r->terrain.tool == app::EditorTerrain::Tool::Pipette);

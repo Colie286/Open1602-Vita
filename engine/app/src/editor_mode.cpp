@@ -22,6 +22,7 @@
 #include "o1602/editor/original_check.hpp"
 #include "o1602/render/world_renderer.hpp"
 #include "o1602/sim/growth.hpp"
+#include "o1602/sim/island_shapes.hpp"
 #include "o1602/sim/save_game.hpp"
 #include "o1602/sim/validate.hpp"
 #include "o1602/ui/build_menu.hpp"
@@ -1188,7 +1189,8 @@ void MapViewer::draw_editor_marks() {
             std::uint32_t w = 1;
             std::uint32_t h = 1;
             const assets::BuildingType* b = editor_terrain_piece();
-            if (t.tool == Tool::Random || (t.tool == Tool::Brush && b != nullptr && b->size_x == 1 && b->size_y == 1)) {
+            if (t.tool == Tool::Random || t.tool == Tool::Land || t.tool == Tool::Water ||
+                (t.tool == Tool::Brush && b != nullptr && b->size_x == 1 && b->size_y == 1)) {
                 w = h = editor::kBrushSizes[t.brush % editor::kBrushSizes.size()];
             } else if (t.tool == Tool::Brush && b != nullptr) {
                 sim::rotated_size(*b, t.rotation, w, h);
@@ -1277,6 +1279,10 @@ std::string terrain_refusal(editor::TerrainStroke::Refusal refusal) {
             return ui::tr("editor.terrain.refused.unit");
         case Refusal::RunningGame:
             return ui::tr("editor.islands.in_use.game");
+        case Refusal::Edge:
+            return ui::tr("editor.terrain.refused.edge");
+        case Refusal::Level:
+            return ui::tr("editor.terrain.refused.level");
     }
     return {};
 }
@@ -1334,6 +1340,45 @@ void MapViewer::editor_paint(editor::TerrainStroke& stroke, std::int64_t x, std:
     const EditorTerrain& t = m_editor->terrain;
     const std::uint32_t side = editor::kBrushSizes[t.brush % editor::kBrushSizes.size()];
     const sim::World& world = m_state->world;
+    if (t.tool == EditorTerrain::Tool::Land || t.tool == EditorTerrain::Tool::Water) {
+        const auto brush = editor::brush_tiles(x, y, side, world.width(), world.height());
+        if (brush.empty()) {
+            return;
+        }
+        // The stroke drawn (not the preview's): land may first need room, which ends it and starts
+        // another.
+        const bool live = &stroke == m_editor->stroke.get();
+        if (t.tool == EditorTerrain::Tool::Land && live) {
+            const std::int64_t half = (std::int64_t{side} - 1) / 2;
+            editor_make_room(x - half, y - half, x - half + side - 1, y - half + side - 1);
+            if (!m_editor->stroke) {
+                return;
+            }
+        }
+        editor::TerrainStroke& into = live ? *m_editor->stroke : stroke;
+        // The brush's tiles by island; the coast about them is laid anew.
+        std::vector<std::pair<std::uint16_t, std::vector<std::pair<std::uint32_t, std::uint32_t>>>> by_island;
+        for (const auto& [tx, ty] : brush) {
+            const sim::World::Cell& c = world.cell(tx, ty);
+            if (c.island == sim::World::kSea) {
+                continue;
+            }
+            auto it =
+                std::find_if(by_island.begin(), by_island.end(), [&](const auto& e) { return e.first == c.island; });
+            if (it == by_island.end()) {
+                by_island.emplace_back(c.island, std::vector<std::pair<std::uint32_t, std::uint32_t>>{});
+                it = by_island.end() - 1;
+            }
+            it->second.emplace_back(c.local_x, c.local_y);
+        }
+        if (by_island.empty()) {
+            into.note(editor::TerrainStroke::Refusal::NoIsland);
+        }
+        for (const auto& [island, tiles] : by_island) {
+            (void)into.shape(island, tiles, t.tool == EditorTerrain::Tool::Land, tile_seed(m_editor->strokes, x, y));
+        }
+        return;
+    }
     if (t.tool == EditorTerrain::Tool::Random) {
         for (const auto& [tx, ty] : editor::brush_tiles(x, y, side, world.width(), world.height())) {
             const sim::World::Cell& c = world.cell(tx, ty);
@@ -1369,6 +1414,105 @@ void MapViewer::editor_paint(editor::TerrainStroke& stroke, std::int64_t x, std:
     if (stroke.stamp_world(ox, oy, *b, t.rotation) && &stroke == m_editor->stroke.get()) {
         m_editor->stroke_large = {ox, oy};
     }
+}
+
+void MapViewer::editor_make_room(std::int64_t x0, std::int64_t y0, std::int64_t x1, std::int64_t y1) {
+    const sim::World& world = m_state->world;
+    const auto W = static_cast<std::int64_t>(world.width());
+    const auto H = static_cast<std::int64_t>(world.height());
+    constexpr std::int64_t kRoom = 2;   // a tile of surf and one of water beyond the land
+    constexpr std::int64_t kMore = 12;  // grown further, so that a stroke does not grow it at every tile
+    constexpr std::int64_t kNear = 8;   // land painted this close to an island grows it
+    const std::int64_t nx0 = std::max<std::int64_t>(0, x0 - kRoom);
+    const std::int64_t ny0 = std::max<std::int64_t>(0, y0 - kRoom);
+    const std::int64_t nx1 = std::min<std::int64_t>(W - 1, x1 + kRoom);
+    const std::int64_t ny1 = std::min<std::int64_t>(H - 1, y1 + kRoom);
+    if (nx0 > nx1 || ny0 > ny1) {
+        return;
+    }
+    const std::int64_t cx = std::clamp<std::int64_t>((x0 + x1) / 2, 0, W - 1);
+    const std::int64_t cy = std::clamp<std::int64_t>((y0 + y1) / 2, 0, H - 1);
+    std::optional<std::size_t> island;
+    if (const sim::World::Cell& c = world.cell(static_cast<std::uint32_t>(cx), static_cast<std::uint32_t>(cy));
+        c.island != sim::World::kSea) {
+        island = c.island;
+    } else {
+        std::int64_t best = kNear + 1;
+        for (std::size_t i = 0; i < world.islands().size(); ++i) {
+            const sim::WorldIsland& isl = world.islands()[i];
+            const std::int64_t ix0 = isl.x;
+            const std::int64_t iy0 = isl.y;
+            const std::int64_t ix1 = ix0 + isl.map.width() - 1;
+            const std::int64_t iy1 = iy0 + isl.map.height() - 1;
+            const std::int64_t d = std::max({ix0 - cx, cx - ix1, iy0 - cy, cy - iy1, std::int64_t{0}});
+            if (d < best) {
+                best = d;
+                island = i;
+            }
+        }
+    }
+    const auto restart = [&](std::unique_ptr<editor::Operation> room) {
+        if (std::unique_ptr<editor::Operation> drawn = m_editor->stroke->finish("terrain")) {
+            m_editor->document.perform(std::move(drawn));
+        }
+        m_editor->document.perform(std::move(room));
+        editor_islands_changed();
+        m_editor->stroke = std::make_unique<editor::TerrainStroke>(m_state->world, m_buildings);
+    };
+    if (island) {
+        const sim::WorldIsland& isl = world.islands()[*island];
+        const std::int64_t ix0 = isl.x;
+        const std::int64_t iy0 = isl.y;
+        const std::int64_t ix1 = ix0 + isl.map.width() - 1;
+        const std::int64_t iy1 = iy0 + isl.map.height() - 1;
+        if (nx0 >= ix0 && ny0 >= iy0 && nx1 <= ix1 && ny1 <= iy1) {
+            return;  // room enough
+        }
+        if (world.island_use(*island) != sim::World::IslandUse::None) {
+            return;  // an island with cities keeps its size; the brush stops at its edge
+        }
+        const auto grow = [&](std::int64_t more) {
+            const auto side = [](std::int64_t need, std::int64_t room) {
+                return static_cast<std::uint32_t>(std::clamp<std::int64_t>(need, 0, room));
+            };
+            const std::uint32_t left = nx0 < ix0 ? side(ix0 - nx0 + more, ix0) : 0;
+            const std::uint32_t top = ny0 < iy0 ? side(iy0 - ny0 + more, iy0) : 0;
+            const std::uint32_t right = nx1 > ix1 ? side(nx1 - ix1 + more, W - 1 - ix1) : 0;
+            const std::uint32_t bottom = ny1 > iy1 ? side(ny1 - iy1 + more, H - 1 - iy1) : 0;
+            return editor::grow_island(m_editor->document.world(), *island, left, top, right, bottom, m_buildings);
+        };
+        auto op = grow(kMore);
+        if (!op) {
+            op = grow(0);
+        }
+        if (!op) {
+            editor_notice(ui::tr("editor.terrain.no_growth"), true, op.error().message);
+            return;
+        }
+        restart(std::move(op).value());
+        editor_notice(ui::tr("editor.terrain.grown", {number(*island + 1)}), false, "island grown");
+        return;
+    }
+    // Open sea: a new island about the brush, as large as the smallest the editor makes.
+    constexpr std::int64_t kSide = sim::shapes::kMinSide;
+    std::int64_t sx0 = nx0 - kMore;
+    std::int64_t sy0 = ny0 - kMore;
+    std::int64_t sx1 = std::max(nx1 + kMore, sx0 + kSide - 1);
+    std::int64_t sy1 = std::max(ny1 + kMore, sy0 + kSide - 1);
+    sx0 = std::max<std::int64_t>(0, sx0);
+    sy0 = std::max<std::int64_t>(0, sy0);
+    sx1 = std::min<std::int64_t>(W - 1, sx1);
+    sy1 = std::min<std::int64_t>(H - 1, sy1);
+    const std::uint8_t climate = 0;
+    auto op = editor::add_sea_island(m_editor->document.world(), static_cast<std::uint32_t>(sx0),
+                                     static_cast<std::uint32_t>(sy0), static_cast<std::uint32_t>(sx1 - sx0 + 1),
+                                     static_cast<std::uint32_t>(sy1 - sy0 + 1), climate, m_buildings);
+    if (!op) {
+        editor_notice(ui::tr("editor.terrain.no_growth"), true, op.error().message);
+        return;
+    }
+    restart(std::move(op).value());
+    editor_notice(ui::tr("editor.terrain.new_island", {number(m_state->world.islands().size())}), false, "island made");
 }
 
 void MapViewer::editor_end_stroke() {
@@ -1417,6 +1561,13 @@ bool MapViewer::editor_stroke(std::optional<render::TilePos> tile, Stroke phase)
                     return true;
                 }
                 const editor::TerrainPiece piece{b->id, m_editor->terrain.rotation};
+                if (const auto clicked = editor::terrain_at(m_state->world, m_buildings, x, y)) {
+                    const assets::BuildingType* there = m_buildings.by_id(clicked->id);
+                    if (there != nullptr && editor::terrain_level(*there) != editor::terrain_level(*b)) {
+                        editor_notice(ui::tr("editor.terrain.refused.level"), true, "terrain of another level");
+                        return true;
+                    }
+                }
                 auto op = tool == Tool::Fill ? editor::fill_terrain(m_state->world, m_buildings, x, y, piece)
                                              : editor::replace_terrain(m_state->world, m_buildings, x, y, piece);
                 if (op) {

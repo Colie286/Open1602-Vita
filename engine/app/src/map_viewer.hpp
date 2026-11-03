@@ -333,6 +333,10 @@ private:
     /// The terrain tool lays at the world tile (x, y) into `stroke`; `going_on`: the mouse moved
     /// there with the button held (a piece of several tiles is not laid over the last one).
     void editor_paint(editor::TerrainStroke& stroke, std::int64_t x, std::int64_t y, bool going_on);
+    /// Room for land painted at the world tiles (x0, y0) to (x1, y1): the island there, or the
+    /// nearest, grows over them with a margin, or a new island of open sea is made there. Each is a
+    /// step of its own; the stroke drawn so far is one before it.
+    void editor_make_room(std::int64_t x0, std::int64_t y0, std::int64_t x1, std::int64_t y1);
     /// The stroke being drawn ends: one step of undo, or a note why nothing changed.
     void editor_end_stroke();
     /// The terrain tool's settings from the panel.

@@ -380,6 +380,56 @@ core::Result<std::unique_ptr<Operation>> add_island(const sim::World& world, sim
     return edit(std::move(after), "island_new");
 }
 
+core::Result<std::unique_ptr<Operation>> grow_island(const sim::World& world, std::size_t index, std::uint32_t left,
+                                                     std::uint32_t top, std::uint32_t right, std::uint32_t bottom,
+                                                     const assets::BuildingTable& buildings) {
+    const assets::BuildingType* sea = buildings.by_id(assets::id::island_shape::kDarkSea);
+    if (sea == nullptr) {
+        return make_error(ErrorCode::NotFound, "no open sea in the buildings");
+    }
+    sim::World after = world;
+    if (auto status = after.grow_island(index, left, top, right, bottom, *sea, &buildings); !status) {
+        return status.error();
+    }
+    return edit(std::move(after), "island_grow");
+}
+
+core::Result<std::unique_ptr<Operation>> add_sea_island(const sim::World& world, std::uint32_t x, std::uint32_t y,
+                                                        std::uint32_t width, std::uint32_t height, std::uint8_t climate,
+                                                        const assets::BuildingTable& buildings) {
+    const assets::BuildingType* sea = buildings.by_id(assets::id::island_shape::kDarkSea);
+    if (sea == nullptr) {
+        return make_error(ErrorCode::NotFound, "no open sea in the buildings");
+    }
+    const auto number = world.free_island_number();
+    if (!number) {
+        return make_error(ErrorCode::LimitExceeded, "no island number is free");
+    }
+    if (width == 0 || height == 0 || width > sim::shapes::kMaxSide || height > sim::shapes::kMaxSide) {
+        return make_error(ErrorCode::OutOfRange, "an island of that size cannot be made");
+    }
+    sim::IslandMap map(width, height);
+    const std::uint32_t phases = std::max<std::uint32_t>(sea->anim_count, 1);
+    for (std::uint32_t ty = 0; ty < height; ++ty) {
+        for (std::uint32_t tx = 0; tx < width; ++tx) {
+            sim::MapCell cell;
+            cell.sprite = static_cast<std::uint16_t>(sea->gfx);
+            cell.anim_phase = static_cast<std::uint8_t>((3U * (x + tx) + y + ty) % phases & 0xFU);
+            map.set_top_cell(tx, ty, cell);
+            map.set_ground_cell(tx, ty, cell);
+        }
+    }
+    assets::IslandHeader header;
+    header.chunk_name = "INSEL5";
+    header.number = *number;
+    header.width = static_cast<std::uint16_t>(width);
+    header.height = static_cast<std::uint16_t>(height);
+    header.climate = static_cast<std::uint8_t>(climate & 1U);
+    header.fertility = kNewFertility;
+    header.stored_complete = true;
+    return add_island(world, sim::WorldIsland{header, std::move(map), 0, 0}, x, y, buildings);
+}
+
 core::Result<std::unique_ptr<Operation>> move_island(const sim::World& world, std::size_t index, std::uint32_t x,
                                                      std::uint32_t y, const assets::BuildingTable& buildings) {
     sim::World after = world;

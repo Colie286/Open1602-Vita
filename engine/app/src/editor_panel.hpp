@@ -54,11 +54,12 @@ inline constexpr std::array<std::uint8_t, 5> kTerrainBrushes = {1, 2, 3, 5, 9};
 
 /// The settings of the terrain tools (the page "Terrain").
 struct EditorTerrain {
-    /// Brush: the piece where the mouse goes; Random: pieces of the group drawn tile by tile; Fill:
-    /// the tiles joined to the one clicked that show the same; Replace: every tile of the island
-    /// that shows the same; Pipette: takes the piece of the tile clicked.
-    enum class Tool : std::uint8_t { Brush, Random, Fill, Replace, Pipette };
-    static constexpr std::size_t kTools = 5;
+    /// Brush: the piece where the mouse goes; Land, Water: land or sea with the coast laid
+    /// about it; Random: pieces of the group drawn tile by tile; Fill: the tiles joined to the one
+    /// clicked that show the same; Replace: every tile of the island that shows the same; Pipette:
+    /// takes the piece of the tile clicked.
+    enum class Tool : std::uint8_t { Brush, Land, Water, Random, Fill, Replace, Pipette };
+    static constexpr std::size_t kTools = 7;
     Tool tool = Tool::Brush;
     std::uint8_t group = 0;     ///< editor::TerrainGroup
     std::size_t piece = 0;      ///< index into the group's pieces

@@ -8,6 +8,7 @@
 
 #include "o1602/assets/game_data.hpp"
 #include "o1602/sim/island_map.hpp"
+#include "o1602/sim/island_shapes.hpp"
 
 namespace o1602::editor {
 
@@ -52,6 +53,40 @@ std::uint64_t mix(std::uint64_t x) noexcept {
     x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
     x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
     return x ^ (x >> 31);
+}
+
+/// Whether a tile is water for the coast: the sea, the surf and the surf before a river mouth;
+/// an empty tile too.
+bool water(const assets::BuildingTable& buildings, const sim::MapCell& cell) {
+    const assets::BuildingType* b = record_of(buildings, cell);
+    if (b == nullptr) {
+        return true;
+    }
+    namespace kind = assets::kind;
+    return b->kind == kind::kSea || b->kind == kind::kSurf || b->kind == kind::kSurfCorner ||
+           b->kind == kind::kRiverMouth;
+}
+
+// Directions 0..7: N, NE, E, SE, S, SW, W, NW (sim::shapes::coast_tile's neighbour bits).
+constexpr std::array<int, 8> kDirX = {0, 1, 1, 1, 0, -1, -1, -1};
+constexpr std::array<int, 8> kDirY = {-1, -1, 0, 1, 1, 1, 0, -1};
+
+template <std::size_t N>
+bool listed(const std::array<std::uint32_t, N>& ids, std::uint32_t id) {
+    return std::find(ids.begin(), ids.end(), id) != ids.end();
+}
+
+/// One of `ids` drawn by `random`, of those the table has (the next one if not).
+template <std::size_t N>
+std::uint32_t drawn(const assets::BuildingTable& buildings, const std::array<std::uint32_t, N>& ids,
+                    std::uint64_t random) {
+    for (std::size_t k = 0; k < N; ++k) {
+        const std::uint32_t id = ids[(random + k) % N];
+        if (buildings.by_id(id) != nullptr) {
+            return id;
+        }
+    }
+    return 0;
 }
 
 }  // namespace
@@ -102,6 +137,25 @@ std::optional<TerrainGroup> terrain_group(const assets::BuildingTable& buildings
         return std::nullopt;
     }
     return group;
+}
+
+std::uint8_t terrain_level(const assets::BuildingType& building) noexcept {
+    namespace kind = assets::kind;
+    switch (building.kind) {
+        case kind::kSea:
+        case kind::kSurf:
+        case kind::kSurfCorner:
+        case kind::kRiverMouth:
+            return 0;
+        case kind::kBeach:
+        case kind::kBeachMouth:
+        case kind::kBeachOuter:
+        case kind::kBeachInner:
+        case kind::kBeachVariant:
+            return 1;
+        default:
+            return 2;
+    }
 }
 
 bool is_terrain(const assets::BuildingTable& buildings, const assets::BuildingType& building) noexcept {
@@ -293,10 +347,17 @@ bool TerrainStroke::stamp(std::uint16_t island, std::int64_t x, std::int64_t y, 
         note(Refusal::NoIsland);
         return false;
     }
+    const std::uint8_t level = terrain_level(piece);
     for (std::uint32_t j = 0; j < fh; ++j) {
         for (std::uint32_t i = 0; i < fw; ++i) {
             if (const Refusal r = refusal(island, x + i, y + j); r != Refusal::Free) {
                 note(r);
+                return false;
+            }
+            const assets::BuildingType* now =
+                record_of(*m_buildings, map.top(static_cast<std::uint32_t>(x + i), static_cast<std::uint32_t>(y + j)));
+            if (!m_shaping && (now != nullptr ? terrain_level(*now) : 0) != level) {
+                note(Refusal::Level);
                 return false;
             }
         }
@@ -336,6 +397,229 @@ bool TerrainStroke::stamp(std::uint16_t island, std::int64_t x, std::int64_t y, 
         put(island, ux, uy, cell);
     });
     return true;
+}
+
+bool TerrainStroke::shape(std::uint16_t island, std::span<const std::pair<std::uint32_t, std::uint32_t>> tiles,
+                          bool land, std::uint64_t seed) {
+    namespace ids = assets::id::island_shape;
+    using sim::shapes::Coast;
+    if (island >= m_world->islands().size() || tiles.empty()) {
+        return false;
+    }
+    const sim::IslandMap& map = m_world->islands()[island].map;
+    const auto w = static_cast<std::int64_t>(map.width());
+    const auto h = static_cast<std::int64_t>(map.height());
+    // The rectangle worked on: the tiles and a margin, whose outer ring keeps its kind so that
+    // the coast beyond it stays as it is.
+    constexpr std::int64_t kMargin = 4;
+    std::int64_t x0 = w;
+    std::int64_t y0 = h;
+    std::int64_t x1 = -1;
+    std::int64_t y1 = -1;
+    for (const auto& [tx, ty] : tiles) {
+        x0 = std::min<std::int64_t>(x0, tx);
+        y0 = std::min<std::int64_t>(y0, ty);
+        x1 = std::max<std::int64_t>(x1, tx);
+        y1 = std::max<std::int64_t>(y1, ty);
+    }
+    if (x1 < 0) {
+        return false;
+    }
+    x0 = std::max<std::int64_t>(0, x0 - kMargin);
+    y0 = std::max<std::int64_t>(0, y0 - kMargin);
+    x1 = std::min<std::int64_t>(w - 1, x1 + kMargin);
+    y1 = std::min<std::int64_t>(h - 1, y1 + kMargin);
+    const std::int64_t rw = x1 - x0 + 1;
+    const std::int64_t rh = y1 - y0 + 1;
+    const auto at = [&](std::int64_t x, std::int64_t y) { return static_cast<std::size_t>((y - y0) * rw + (x - x0)); };
+    // 1 land, 0 water; `fixed`: a tile that cannot change (a building, the ring, the edge).
+    std::vector<std::uint8_t> grid(static_cast<std::size_t>(rw * rh));
+    std::vector<std::uint8_t> fixed(grid.size());
+    std::vector<std::uint8_t> brushed(grid.size());
+    for (std::int64_t y = y0; y <= y1; ++y) {
+        for (std::int64_t x = x0; x <= x1; ++x) {
+            const auto ux = static_cast<std::uint32_t>(x);
+            const auto uy = static_cast<std::uint32_t>(y);
+            grid[at(x, y)] = water(*m_buildings, map.top(ux, uy)) ? 0 : 1;
+            const bool ring =
+                (x == x0 && x0 > 0) || (y == y0 && y0 > 0) || (x == x1 && x1 < w - 1) || (y == y1 && y1 < h - 1);
+            fixed[at(x, y)] = ring || refusal(island, x, y) != Refusal::Free ? 1 : 0;
+        }
+    }
+    // Land keeps a tile of water to the island's edge, for the surf.
+    const auto may_be = [&](std::int64_t x, std::int64_t y, bool l) {
+        if (fixed[at(x, y)] != 0) {
+            return false;
+        }
+        return !l || (x > 0 && y > 0 && x < w - 1 && y < h - 1);
+    };
+    for (const auto& [tx, ty] : tiles) {
+        if (tx < x0 || ty < y0 || tx > x1 || ty > y1) {
+            continue;
+        }
+        if (!may_be(tx, ty, land)) {
+            note(refusal(island, tx, ty) != Refusal::Free ? refusal(island, tx, ty) : Refusal::Edge);
+            continue;
+        }
+        grid[at(tx, ty)] = land ? 1 : 0;
+        brushed[at(tx, ty)] = 1;
+    }
+    const auto is_land = [&](std::int64_t x, std::int64_t y) -> bool {
+        if (x < 0 || y < 0 || x >= w || y >= h) {
+            return false;
+        }
+        if (x < x0 || y < y0 || x > x1 || y > y1) {
+            return !water(*m_buildings, map.top(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y)));
+        }
+        return grid[at(x, y)] != 0;
+    };
+    const auto neighbours = [&](std::int64_t x, std::int64_t y) {
+        std::uint8_t n = 0;
+        for (std::size_t d = 0; d < 8; ++d) {
+            if (is_land(x + kDirX[d], y + kDirY[d])) {
+                n = static_cast<std::uint8_t>(n | (1U << d));
+            }
+        }
+        return n;
+    };
+    const auto fits = [&](std::int64_t x, std::int64_t y) {
+        return sim::shapes::coast_tile(is_land(x, y), neighbours(x, y)).has_value();
+    };
+    // Shapes the game has no tiles for: the tiles about them take the brush's kind; a tile of the
+    // brush's kind not brushed gives way as a last resort.
+    for (std::uint32_t pass = 0; pass < 16; ++pass) {
+        bool changed = false;
+        for (std::int64_t y = y0; y <= y1; ++y) {
+            for (std::int64_t x = x0; x <= x1; ++x) {
+                if (fits(x, y)) {
+                    continue;
+                }
+                const bool own = is_land(x, y) == land;
+                if (!own && may_be(x, y, land)) {
+                    grid[at(x, y)] = land ? 1 : 0;
+                    changed = true;
+                    continue;
+                }
+                // The tile is of the brush's kind: its neighbours that are not take it.
+                for (std::size_t d = 0; d < 8; ++d) {
+                    const std::int64_t nx = x + kDirX[d];
+                    const std::int64_t ny = y + kDirY[d];
+                    if (nx >= x0 && ny >= y0 && nx <= x1 && ny <= y1 && is_land(nx, ny) != land &&
+                        may_be(nx, ny, land)) {
+                        grid[at(nx, ny)] = land ? 1 : 0;
+                        changed = true;
+                    }
+                }
+                if (!changed && own && brushed[at(x, y)] == 0 && may_be(x, y, !land)) {
+                    grid[at(x, y)] = land ? 0 : 1;
+                    changed = true;
+                }
+            }
+        }
+        if (!changed) {
+            break;
+        }
+    }
+    // The tiles laid anew where their kind or their coast changed.
+    const bool before = m_changed;
+    m_changed = false;
+    m_shaping = true;
+    for (std::int64_t y = y0; y <= y1; ++y) {
+        for (std::int64_t x = x0; x <= x1; ++x) {
+            if (fixed[at(x, y)] != 0) {
+                continue;
+            }
+            const bool l = is_land(x, y);
+            const auto coast = sim::shapes::coast_tile(l, neighbours(x, y));
+            const auto ux = static_cast<std::uint32_t>(x);
+            const auto uy = static_cast<std::uint32_t>(y);
+            const sim::MapCell& cell = m_world->islands()[island].map.top(ux, uy);
+            const assets::BuildingType* now = record_of(*m_buildings, cell);
+            const std::uint32_t id = now != nullptr ? now->id : 0;
+            const std::uint8_t turn = cell.rotation & 3U;
+            const std::uint64_t r = mix(seed ^ (std::uint64_t{ux} << 32 | uy));
+            const auto phase = static_cast<std::uint8_t>((r >> 20) % 6);
+            std::uint32_t lay = 0;
+            std::uint8_t rotation = 0;
+            if (!coast) {
+                // Still a shape without tiles (between fixed tiles): plain ground or sea.
+                if (l == !water(*m_buildings, cell)) {
+                    continue;
+                }
+                lay = l ? assets::id::kMeadow : ids::kLightSea;
+            } else {
+                rotation = coast->rotation;
+                const auto keep = [&](bool same) { return same && turn == rotation; };
+                switch (coast->coast) {
+                    case Coast::Inland: {
+                        const auto g = now != nullptr ? terrain_group(*m_buildings, *now) : std::nullopt;
+                        const bool coastal = g == TerrainGroup::Beach || g == TerrainGroup::Coast ||
+                                             g == TerrainGroup::Sea || (now != nullptr && water(*m_buildings, cell));
+                        if (now != nullptr && !coastal) {
+                            continue;
+                        }
+                        lay = assets::id::kMeadow;
+                        rotation = 0;
+                        break;
+                    }
+                    case Coast::Beach:
+                        if (keep(listed(ids::kBeach, id) ||
+                                 (now != nullptr && (now->kind == assets::kind::kBeachMouth ||
+                                                     now->kind == assets::kind::kBeachVariant)))) {
+                            continue;
+                        }
+                        lay = drawn(*m_buildings, ids::kBeach, r);
+                        break;
+                    case Coast::OuterCorner:
+                        if (keep(listed(ids::kOuterCorner, id))) {
+                            continue;
+                        }
+                        lay = drawn(*m_buildings, ids::kOuterCorner, r);
+                        break;
+                    case Coast::InnerCorner:
+                        if (keep(listed(ids::kInnerCorner, id))) {
+                            continue;
+                        }
+                        lay = drawn(*m_buildings, ids::kInnerCorner, r);
+                        break;
+                    case Coast::OpenSea:
+                        if (now != nullptr && now->kind == assets::kind::kSea) {
+                            continue;
+                        }
+                        lay = ids::kLightSea;
+                        rotation = 0;
+                        break;
+                    case Coast::Surf:
+                        if (keep(listed(ids::kSurf, id) ||
+                                 (now != nullptr && now->kind == assets::kind::kRiverMouth))) {
+                            continue;
+                        }
+                        lay = drawn(*m_buildings, ids::kSurf, r);
+                        break;
+                    case Coast::SurfCorner:
+                        if (keep(listed(ids::kSurfCorner, id))) {
+                            continue;
+                        }
+                        lay = drawn(*m_buildings, ids::kSurfCorner, r);
+                        break;
+                    case Coast::SurfBay:
+                        if (keep(listed(ids::kSurfBay, id))) {
+                            continue;
+                        }
+                        lay = drawn(*m_buildings, ids::kSurfBay, r);
+                        break;
+                }
+            }
+            if (const assets::BuildingType* b = m_buildings->by_id(lay)) {
+                const bool sea = !l;
+                (void)stamp(island, x, y, *b, rotation, sea ? phase : 0);
+            }
+        }
+    }
+    m_shaping = false;
+    const bool now_changed = m_changed;
+    m_changed = before || now_changed;
+    return now_changed;
 }
 
 bool TerrainStroke::stamp_world(std::int64_t x, std::int64_t y, const assets::BuildingType& piece,

@@ -313,6 +313,107 @@ core::Status World::rotate_island(std::size_t index, const assets::BuildingTable
     return core::Ok{};
 }
 
+core::Status World::grow_island(std::size_t index, std::uint32_t left, std::uint32_t top, std::uint32_t right,
+                                std::uint32_t bottom, const assets::BuildingType& sea,
+                                const assets::BuildingTable* buildings) {
+    if (index >= m_islands.size()) {
+        return make_error(ErrorCode::OutOfRange, "no island " + std::to_string(index));
+    }
+    if (const IslandUse use = island_use(index); use != IslandUse::None) {
+        return make_error(ErrorCode::Unsupported, std::string("the island cannot grow: ") + use_text(use));
+    }
+    const WorldIsland& old = m_islands[index];
+    const std::uint32_t w = old.map.width();
+    const std::uint32_t h = old.map.height();
+    const std::uint64_t nw = std::uint64_t{w} + left + right;
+    const std::uint64_t nh = std::uint64_t{h} + top + bottom;
+    if (left > old.x || top > old.y || std::uint64_t{old.x} - left + nw > m_width ||
+        std::uint64_t{old.y} - top + nh > m_height) {
+        return make_error(ErrorCode::OutOfRange, "the island would leave the world map");
+    }
+    if (nw > kMaxIslandSide || nh > kMaxIslandSide) {
+        return make_error(ErrorCode::OutOfRange, "the island would grow too large");
+    }
+    WorldIsland island = old;
+    island.x = old.x - left;
+    island.y = old.y - top;
+    island.map = IslandMap(static_cast<std::uint32_t>(nw), static_cast<std::uint32_t>(nh));
+    const std::uint32_t phases = std::max<std::uint32_t>(sea.anim_count, 1);
+    for (std::uint32_t y = 0; y < nh; ++y) {
+        for (std::uint32_t x = 0; x < nw; ++x) {
+            MapCell top_cell;
+            MapCell ground;
+            if (x >= left && y >= top && x - left < w && y - top < h) {
+                top_cell = old.map.top(x - left, y - top);
+                ground = old.map.ground(x - left, y - top);
+            } else {
+                // The world's open sea goes on: its phase is that of its place (as the generator's).
+                top_cell.sprite = static_cast<std::uint16_t>(sea.gfx);
+                top_cell.anim_phase = static_cast<std::uint8_t>((3U * (island.x + x) + island.y + y) % phases & 0xFU);
+                ground = top_cell;
+            }
+            island.map.set_top_cell(x, y, top_cell);
+            island.map.set_ground_cell(x, y, ground);
+        }
+    }
+    island.header.width = static_cast<std::uint16_t>(nw);
+    island.header.height = static_cast<std::uint16_t>(nh);
+    island.header.pos_x = static_cast<std::uint16_t>(std::min<std::uint32_t>(island.x, 0xFFFF));
+    island.header.pos_y = static_cast<std::uint16_t>(std::min<std::uint32_t>(island.y, 0xFFFF));
+    for (assets::IslandHeader::Deposit& d : island.header.deposits) {
+        d.x = static_cast<std::uint16_t>(d.x + left);
+        d.y = static_cast<std::uint16_t>(d.y + top);
+    }
+    for (Crater& c : island.craters) {
+        c.x = static_cast<std::uint16_t>(c.x + left);
+        c.y = static_cast<std::uint16_t>(c.y + top);
+    }
+    for (assets::IslandHeader::Crater& c : island.header.craters) {  // the copy loaded with the island
+        c.x = static_cast<std::uint8_t>(std::min<std::uint32_t>(c.x + left, 0xFF));
+        c.y = static_cast<std::uint8_t>(std::min<std::uint32_t>(c.y + top, 0xFF));
+    }
+    for (DeerSpot& spot : island.deer_spots) {
+        if (spot.used) {
+            spot.x = static_cast<std::uint16_t>(spot.x + left);
+            spot.y = static_cast<std::uint16_t>(spot.y + top);
+        }
+    }
+    WorldIsland kept = std::move(m_islands[index]);
+    m_islands[index] = std::move(island);
+    const std::vector<Cell> old_cells = m_cells;
+    if (auto status = place_islands(buildings); !status) {
+        m_islands[index] = std::move(kept);
+        m_cells = old_cells;
+        return status;
+    }
+    for (Animal& a : m_animals) {
+        if (a.island == index) {
+            a.x = static_cast<std::uint16_t>(a.x + left);
+            a.y = static_cast<std::uint16_t>(a.y + top);
+        }
+    }
+    for (GrowthEntry& e : m_growth.entries) {
+        if (e.island == index) {
+            e.x = static_cast<std::uint16_t>(e.x + left);
+            e.y = static_cast<std::uint16_t>(e.y + top);
+        }
+    }
+    const auto shift = [&](CraterRef& c) {
+        if (c.island == index) {
+            c.x = static_cast<std::uint16_t>(c.x + left);
+            c.y = static_cast<std::uint16_t>(c.y + top);
+        }
+    };
+    for (Eruption& e : m_volcanoes.eruptions) {
+        shift(e.crater);
+    }
+    if (m_volcanoes.last) {
+        shift(*m_volcanoes.last);
+    }
+    std::erase_if(m_volcanoes.lava, [index](const LavaLump& l) { return l.island == index; });
+    return core::Ok{};
+}
+
 core::Status World::copy_island(std::size_t index, std::uint32_t x, std::uint32_t y, std::uint16_t number,
                                 const assets::BuildingTable* buildings) {
     if (index >= m_islands.size()) {

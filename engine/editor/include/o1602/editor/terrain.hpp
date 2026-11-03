@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <unordered_set>
 #include <vector>
@@ -41,6 +42,10 @@ inline constexpr std::size_t kTerrainGroups = 8;
 /// The group of a terrain record; nothing for any other.
 [[nodiscard]] std::optional<TerrainGroup> terrain_group(const assets::BuildingTable& buildings,
                                                         const assets::BuildingType& building) noexcept;
+/// The level of a terrain record in the map's picture: 0 water (sea, surf), 1 shore (beach), 2
+/// land. Pieces of one level fit together; the coast between levels is laid by
+/// TerrainStroke::shape().
+[[nodiscard]] std::uint8_t terrain_level(const assets::BuildingType& building) noexcept;
 /// The records of a group, by id.
 [[nodiscard]] std::vector<const assets::BuildingType*> terrain_pieces(const assets::BuildingTable& buildings,
                                                                       TerrainGroup group);
@@ -94,7 +99,9 @@ public:
     ~TerrainStroke() = default;
 
     /// Why a tile cannot be painted; Free if it can.
-    enum class Refusal : std::uint8_t { Free, NoIsland, NotTerrain, City, Unit, RunningGame };
+    /// Level: a piece of another level than the tile's (water, shore, land), which would leave a gap
+    /// in the map's picture; the coast changes with shape().
+    enum class Refusal : std::uint8_t { Free, NoIsland, NotTerrain, City, Unit, RunningGame, Edge, Level };
     /// Whether the island tile (x, y) can be painted.
     [[nodiscard]] Refusal refusal(std::uint16_t island, std::int64_t x, std::int64_t y);
 
@@ -102,12 +109,23 @@ public:
     /// the piece's on both layers (the ground under them too), keeping whose land they are; a
     /// mountain, river bend or other piece of several tiles that it covers in part becomes meadow
     /// where it is not covered. False, and nothing changed, if the footprint leaves the island or
-    /// one of its tiles cannot be painted.
+    /// one of its tiles cannot be painted, or is of another level than the piece (terrain_level()).
     bool stamp(std::uint16_t island, std::int64_t x, std::int64_t y, const assets::BuildingType& piece,
                std::uint8_t rotation, std::uint8_t phase = 0);
     /// The same at the world tile (x, y), on the island it belongs to.
     bool stamp_world(std::int64_t x, std::int64_t y, const assets::BuildingType& piece, std::uint8_t rotation,
                      std::uint8_t phase = 0);
+    /// The automatic brushes: the island's tiles `tiles` become land (`land`) or sea, and the coast
+    /// around them is laid anew as the game's islands have it: beach and its corners at the land's
+    /// edge, surf before it, meadow inland where the coast was, light sea out from the surf. Where
+    /// the coast would take a form the game has no tiles for (a strip one tile wide, land touching
+    /// at a corner only), the tiles around follow the brush. Land keeps a tile of sea to the
+    /// island's edge (Refusal::Edge). `seed` draws the beach's and surf's variants. False if
+    /// nothing changed.
+    bool shape(std::uint16_t island, std::span<const std::pair<std::uint32_t, std::uint32_t>> tiles, bool land,
+               std::uint64_t seed);
+    /// Keeps `refusal` as the first one met, unless one was met before (a tool that found nothing to paint).
+    void note(Refusal refusal) noexcept;
     /// The first refusal met, for the tools' note (Free if none).
     [[nodiscard]] Refusal first_refusal() const noexcept { return m_first_refusal; }
     /// Whether the stroke changed anything so far.
@@ -123,13 +141,13 @@ private:
     void put(std::uint16_t island, std::uint32_t x, std::uint32_t y, const sim::MapCell& cell);
     void remove_object(std::uint16_t island, const sim::SubTile& object);
     void keep_features(std::uint16_t island);
-    void note(Refusal refusal) noexcept;
     const std::unordered_set<std::uint64_t>& units_on(std::uint16_t island);
 
     sim::World* m_world;
     const assets::BuildingTable* m_buildings;
     TileEditBuilder m_builder;
     bool m_changed = false;
+    bool m_shaping = false;  ///< shape() lays the coast: any level on any other
     std::vector<TerrainEdit::Features> m_features;
     /// Island tiles with a ship or a land unit, by island (made when first asked).
     std::vector<std::optional<std::unordered_set<std::uint64_t>>> m_units;
