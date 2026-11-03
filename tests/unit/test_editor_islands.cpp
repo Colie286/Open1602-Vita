@@ -442,7 +442,7 @@ TEST_CASE("editor islands: placeholders of the world plan are set, changed and t
     CHECK(islands[1].number == 2);  // 0 and 1 are taken
     CHECK(islands[1].climate == 1);
     CHECK(islands[1].template_number == assets::ScenarioPlan::kRandomTemplate);
-    CHECK(document.history().next_undo() == "placeholder");
+    CHECK(document.history().next_undo() == "placeholder_new");
     CHECK(editor::placeholder_at(document.world(), 249, 151) == std::optional<std::size_t>{1});  // 50 x 52
     CHECK(!editor::placeholder_at(document.world(), 250, 100).has_value());
     CHECK(!editor::free_place(document.world(), 210, 110, 10, 8));  // no island on a placeholder

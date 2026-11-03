@@ -287,7 +287,9 @@ void EditorPanel::layout_document(const EditorModel& model) {
     full(kView, "editor.view");
     full(kCheck, "editor.check");
     full(kClose, "editor.close");
-    if (!model.notice.empty()) {
+    // The notice where two lines fit: in a small window the buttons take the room, and the status
+    // bar shows it.
+    if (!model.notice.empty() && bottom - y - 2 >= 2 * 20) {
         f.paragraph(Rect{kX, y + 2, kW, std::max(0, bottom - y - 2)}, model.notice,
                     model.notice_is_error ? Tone::Warning : Tone::Dim, 20);
     }

@@ -74,16 +74,18 @@ private:
 /// The world plan changed: keeps it before and after.
 class PlanEdit final : public Operation {
 public:
-    PlanEdit(std::optional<sim::PlannedIslands> before, std::optional<sim::PlannedIslands> after)
-        : m_before(std::move(before)), m_after(std::move(after)) {}
+    /// `kind` names the change (operation.hpp).
+    PlanEdit(std::optional<sim::PlannedIslands> before, std::optional<sim::PlannedIslands> after, std::string_view kind)
+        : m_before(std::move(before)), m_after(std::move(after)), m_kind(kind) {}
     void apply(sim::World& world) override { world.set_planned_islands(m_after); }
     void revert(sim::World& world) override { world.set_planned_islands(m_before); }
     [[nodiscard]] std::size_t memory() const noexcept override;
-    [[nodiscard]] std::string_view kind() const noexcept override { return "placeholder"; }
+    [[nodiscard]] std::string_view kind() const noexcept override { return m_kind; }
 
 private:
     std::optional<sim::PlannedIslands> m_before;
     std::optional<sim::PlannedIslands> m_after;
+    std::string m_kind;
 };
 
 /// Whether the placeholder `index` of the plan is still made when a game starts: no island of the

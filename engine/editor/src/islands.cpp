@@ -126,11 +126,12 @@ bool overlaps(std::int64_t ax, std::int64_t ay, std::int64_t aw, std::int64_t ah
 }
 
 /// The world with its plan as `planned`, if the plan holds together in it.
-core::Result<std::unique_ptr<Operation>> plan_edit(const sim::World& world, sim::PlannedIslands planned) {
+core::Result<std::unique_ptr<Operation>> plan_edit(const sim::World& world, sim::PlannedIslands planned,
+                                                   std::string_view kind) {
     if (auto problems = sim::check_planned_islands(planned, world.width(), world.height()); !problems.empty()) {
         return make_error(ErrorCode::InvalidFormat, "world plan: " + problems.front());
     }
-    return std::unique_ptr<Operation>(std::make_unique<PlanEdit>(world.planned_islands(), std::move(planned)));
+    return std::unique_ptr<Operation>(std::make_unique<PlanEdit>(world.planned_islands(), std::move(planned), kind));
 }
 
 }  // namespace
@@ -211,7 +212,7 @@ core::Result<std::unique_ptr<Operation>> add_placeholder(const sim::World& world
     }
     sim::PlannedIslands after = *planned;
     after.plan.islands.push_back(island);
-    return plan_edit(world, std::move(after));
+    return plan_edit(world, std::move(after), "placeholder_new");
 }
 
 core::Result<std::unique_ptr<Operation>> change_placeholder(const sim::World& world, std::size_t index,
@@ -228,8 +229,9 @@ core::Result<std::unique_ptr<Operation>> change_placeholder(const sim::World& wo
         return make_error(ErrorCode::InvalidFormat, "the place is not free");
     }
     sim::PlannedIslands after = planned;
+    const bool moved = after.plan.islands[index].x != changed.x || after.plan.islands[index].y != changed.y;
     after.plan.islands[index] = changed;
-    return plan_edit(world, std::move(after));
+    return plan_edit(world, std::move(after), moved ? "placeholder_move" : "placeholder");
 }
 
 core::Result<std::unique_ptr<Operation>> remove_placeholder(const sim::World& world, std::size_t index) {
@@ -238,7 +240,7 @@ core::Result<std::unique_ptr<Operation>> remove_placeholder(const sim::World& wo
     }
     sim::PlannedIslands after = *world.planned_islands();
     after.plan.islands.erase(after.plan.islands.begin() + static_cast<std::ptrdiff_t>(index));
-    return plan_edit(world, std::move(after));
+    return plan_edit(world, std::move(after), "placeholder_remove");
 }
 
 std::size_t world_memory(const sim::World& world) noexcept {
