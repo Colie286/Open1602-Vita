@@ -103,9 +103,13 @@ constexpr Id kRelationPartner = 162;
 constexpr Id kRelationPeace = 163;
 constexpr Id kRelationTrade = 164;
 constexpr Id kRulesPage = 165;
-constexpr Id kRulesOwn = 166;          ///< the scenario's own settings, or the player's
-constexpr Id kRulesOriginal = 167;     ///< all as in the original
-constexpr Id kRulesOpen1602 = 168;     ///< all as Open1602 has them
+constexpr Id kRulesOwn = 166;       ///< the scenario's own settings, or the player's
+constexpr Id kRulesOriginal = 167;  ///< all as in the original
+constexpr Id kRulesOpen1602 = 168;  ///< all as Open1602 has them
+constexpr Id kRandomPage = 169;
+constexpr Id kRandomBack = 170;        ///< from the random elements to the rules
+constexpr Id kRandomRoll = 171;        ///< the dice preview, or another roll of it
+constexpr Id kPreviewEnd = 172;        ///< from the dice preview back to the plan
 constexpr Id kFirstGoodLess = 120;     ///< + the row on the page "Stock"
 constexpr Id kFirstGoodMore = 140;     ///< + the row on the page "Stock"
 constexpr std::size_t kGoodRows = 20;  ///< rows of the page "Stock" at most
@@ -187,6 +191,12 @@ std::uint32_t size_step(std::uint32_t value, std::uint32_t least, bool more) {
 std::uint32_t fitted(std::uint32_t used) {
     const std::uint32_t v = (used + kFitMargin + 9) / 10 * 10;
     return std::min(v, sim::kMaxWorldSide);
+}
+
+/// Whether a page goes back and on by the rows it shows (else by kRows).
+bool paged_by_rows(EditorPanel::Page page) noexcept {
+    using P = EditorPanel::Page;
+    return page == P::Check || page == P::CityGoods || page == P::Rules || page == P::Random;
 }
 
 std::string count(std::size_t n) {
@@ -280,6 +290,11 @@ bool EditorPanel::back() noexcept {
 void EditorPanel::layout(const EditorModel& model) {
     m_form.clear();
     m_form.panel(Rect{kX - 6, m_top, kWidth - 2 * (kX - 6), m_height});
+    if (model.previewing) {
+        // The plan waits: nothing but another roll or the way back to it.
+        layout_preview(model);
+        return;
+    }
     switch (m_page) {
         case Page::Document:
             layout_document(model);
@@ -337,6 +352,9 @@ void EditorPanel::layout(const EditorModel& model) {
             break;
         case Page::Rules:
             layout_rules(model);
+            break;
+        case Page::Random:
+            layout_random(model);
             break;
     }
 }
@@ -697,6 +715,8 @@ void EditorPanel::layout_rules(const EditorModel& model) {
              model.rules_own && model.rules_original);
     f.button(kRulesOpen1602, Rect{kX + half + kGap, y, kW - half - kGap, kButtonH}, ui::tr("editor.rules.open1602"));
     y += kButtonH + kGap;
+    f.button(kRandomPage, Rect{kX, y, kW, kButtonH}, ui::tr("editor.random.edit"), model.has_plan);
+    y += kButtonH + kGap;
     // As many settings as fit above the pages' buttons and the way back.
     constexpr std::int32_t kRuleH = 18 + kButtonH + 2;
     const std::int32_t bottom = m_top + m_height - 4 - 2 * (kButtonH + kGap);
@@ -719,6 +739,60 @@ void EditorPanel::layout_rules(const EditorModel& model) {
              m_first + m_page_rows < n);
     y += kButtonH + kGap;
     f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+}
+
+void EditorPanel::layout_random(const EditorModel& model) {
+    if (!model.has_plan) {
+        m_page = Page::Rules;
+        layout_rules(model);
+        return;
+    }
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.random.title"), Align::Left, Tone::Heading);
+    y += 28;
+    f.paragraph(Rect{kX, y, kW, 2 * 20}, ui::tr("editor.random.note"), Tone::Dim, 20,
+                ui::tr("editor.random.note_short"));
+    y += 2 * 20 + 4;
+    const std::int32_t half = (kW - kGap) / 2;
+    constexpr std::int32_t kEntryH = 18 + kButtonH + 2;
+    const std::int32_t bottom = m_top + m_height - 4 - 3 * (kButtonH + kGap);
+    const std::size_t n = model.randoms.size();
+    const auto fit = static_cast<std::size_t>(std::max<std::int32_t>(1, (bottom - y) / kEntryH));
+    m_page_rows = std::min<std::size_t>(fit, 20);
+    m_first = n == 0 ? 0 : std::min(m_first, (n - 1) / m_page_rows * m_page_rows);
+    for (std::size_t row = 0; row < m_page_rows && m_first + row < n; ++row) {
+        const EditorRandom& r = model.randoms[m_first + row];
+        f.label(Rect{kX, y, kW, 18}, r.label);
+        y += 18;
+        f.cycle_button(kFirstRow + static_cast<Id>(row), Rect{kX, y, kW, kButtonH},
+                       ui::tr("editor.random.value", {count(r.random), count(r.fixed)}));
+        y += kButtonH + 2;
+    }
+    y = std::max(y + 4, bottom);
+    f.button(kPrevious, Rect{kX, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
+    f.button(kNext, Rect{kX + half + kGap, y, kW - half - kGap, kButtonH}, ui::tr("editor.next"),
+             m_first + m_page_rows < n);
+    y += kButtonH + kGap;
+    f.button(kRandomRoll, Rect{kX, y, kW, kButtonH}, ui::tr("editor.random.roll"));
+    y += kButtonH + kGap;
+    f.button(kRandomBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.random.back"));
+}
+
+void EditorPanel::layout_preview(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.preview.title"), Align::Left, Tone::Heading);
+    y += 28;
+    f.label(Rect{kX, y, kW, kLine},
+            ui::tr("editor.preview.roll", {count(model.preview_roll), count(model.preview_islands)}));
+    y += kLine + 4;
+    f.paragraph(Rect{kX, y, kW, kNote}, ui::tr("editor.preview.note"), Tone::Dim, 20,
+                ui::tr("editor.preview.note_short"));
+    y += kNote + kGap;
+    f.button(kRandomRoll, Rect{kX, y, kW, kButtonH}, ui::tr("editor.preview.again"));
+    y += kButtonH + kGap;
+    f.button(kPreviewEnd, Rect{kX, y, kW, kButtonH}, ui::tr("editor.preview.back"));
 }
 
 void EditorPanel::layout_city_goods(const EditorModel& model) {
@@ -1169,6 +1243,20 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
             m_page = Page::Rules;
             m_first = 0;
             return std::nullopt;
+        case kRandomPage:
+            if (model.has_plan) {
+                m_page = Page::Random;
+                m_first = 0;
+            }
+            return std::nullopt;
+        case kRandomRoll:
+            return EditorRequest{EditorRequest::Kind::RandomRoll};
+        case kPreviewEnd:
+            return EditorRequest{EditorRequest::Kind::RandomPreviewEnd};
+        case kRandomBack:
+            m_page = Page::Rules;
+            m_first = 0;
+            return std::nullopt;
         case kRulesOwn:
             return EditorRequest{EditorRequest::Kind::RulesPreset, model.rules_own ? 0U : 3U};
         case kRulesOriginal:
@@ -1500,14 +1588,12 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
         }
         case kPrevious: {
             // The check list and the stock go back by the lines their page shows.
-            const std::size_t rows =
-                m_page == Page::Check || m_page == Page::CityGoods || m_page == Page::Rules ? m_page_rows : kRows;
+            const std::size_t rows = paged_by_rows(m_page) ? m_page_rows : kRows;
             m_first = m_first > rows ? m_first - rows : 0;
             return std::nullopt;
         }
         case kNext:
-            m_first +=
-                m_page == Page::Check || m_page == Page::CityGoods || m_page == Page::Rules ? m_page_rows : kRows;
+            m_first += paged_by_rows(m_page) ? m_page_rows : kRows;
             return std::nullopt;
         default:
             break;
@@ -1547,6 +1633,15 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
         const std::size_t index = m_first + static_cast<std::size_t>(*id - kFirstRow);
         if (index < model.rules.size() && model.rules_own) {
             EditorRequest r{EditorRequest::Kind::RuleStep, index};
+            r.amount = forward ? 1U : 0U;
+            return r;
+        }
+        return std::nullopt;
+    }
+    if (*id >= kFirstRow && *id < kFirstRow + 20 && m_page == Page::Random) {
+        const std::size_t index = m_first + static_cast<std::size_t>(*id - kFirstRow);
+        if (index < model.randoms.size()) {
+            EditorRequest r{EditorRequest::Kind::RandomStep, index};
             r.amount = forward ? 1U : 0U;
             return r;
         }

@@ -1108,3 +1108,72 @@ TEST_CASE("editor panel: the page Rules sets the scenario's own settings, page b
     CHECK(!click(panel, m, "Back to the map").has_value());
     CHECK(panel.page() == EditorPanel::Page::Document);
 }
+
+TEST_CASE("editor panel: the page Random elements counts the plan's entries up and down") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(200, 560);
+    EditorModel m = document();
+    CHECK(!click(panel, m, "Rules").has_value());
+    panel.layout(m);
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        if (w.text == "Random elements") {
+            CHECK(!w.enabled);  // a world without a plan has none
+        }
+    }
+    m.has_plan = true;
+    m.randoms = {{"Villages in the north", 2, 1}, {"Gold", 0, 3}};
+    CHECK(!click(panel, m, "Random elements").has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::Random);
+    auto r = click(panel, m, "0 at random, 3 fixed");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::RandomStep);
+    CHECK(r->index == 1);
+    CHECK(r->amount == 1);
+    r = click(panel, m, "2 at random, 1 fixed", ui::MouseButton::Right);
+    REQUIRE(r.has_value());
+    CHECK(r->index == 0);
+    CHECK(r->amount == 0);
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        CHECK(w.rect.y + w.rect.h <= 760);
+    }
+    CHECK(!click(panel, m, "Back to the rules").has_value());
+    CHECK(panel.page() == EditorPanel::Page::Rules);
+}
+
+TEST_CASE("editor panel: the dice preview shows a roll and only leads back to the plan") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(200, 560);
+    EditorModel m = document();
+    m.has_plan = true;
+    m.randoms = {{"Gold", 2, 0}};
+    CHECK(!click(panel, m, "Rules").has_value());
+    CHECK(!click(panel, m, "Random elements").has_value());
+    auto r = click(panel, m, "Dice preview");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::RandomRoll);
+    // The viewer rolled: the plan waits, the panel shows the roll and nothing else to edit.
+    m.previewing = true;
+    m.has_plan = false;
+    m.preview_roll = 1;
+    m.preview_islands = 23;
+    panel.layout(m);
+    bool roll_shown = false;
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        roll_shown = roll_shown || w.text == "Roll 1: 23 islands";
+        CHECK(w.text != "Back to the rules");
+        CHECK(w.rect.y + w.rect.h <= 760);
+    }
+    CHECK(roll_shown);
+    r = click(panel, m, "Roll again");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::RandomRoll);
+    r = click(panel, m, "Back to the plan");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::RandomPreviewEnd);
+    m.previewing = false;
+    m.has_plan = true;
+    panel.layout(m);
+    CHECK(panel.page() == EditorPanel::Page::Random);
+}

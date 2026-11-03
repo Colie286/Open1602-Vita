@@ -322,6 +322,9 @@ void MapViewer::editor_save(const std::filesystem::path& file) {
 }
 
 void MapViewer::leave_editor() {
+    if (m_editor && m_editor->preview_plan) {
+        editor_end_preview();
+    }
     m_editor.reset();
     m_editor_pending.reset();
     m_input->set_editor(false);
@@ -458,6 +461,18 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
     if (m_editor->stroke) {
         editor_end_stroke();  // a key while the button is held (undo, save)
     }
+    if (m_editor->preview_plan) {
+        // The dice preview shows a roll, not the document: the plan back before anything else.
+        if (request.kind == Kind::RandomRoll || request.kind == Kind::RandomPreviewEnd) {
+            editor_rules_request(request);
+            return;
+        }
+        if (request.kind != Kind::New && request.kind != Kind::Open && request.kind != Kind::Close) {
+            editor_notice(ui::tr("editor.preview.busy"), true, "the dice preview shows a roll");
+            return;
+        }
+        editor_end_preview();
+    }
     const bool loses = request.kind == Kind::New || request.kind == Kind::Open || request.kind == Kind::Close;
     if (loses && !confirmed && m_editor->document.modified() && m_hud) {
         m_editor_pending = request;
@@ -567,6 +582,9 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
             break;
         case Kind::RulesPreset:
         case Kind::RuleStep:
+        case Kind::RandomStep:
+        case Kind::RandomRoll:
+        case Kind::RandomPreviewEnd:
             editor_rules_request(request);
             break;
         case Kind::TerrainCopy: {
@@ -916,7 +934,7 @@ std::pair<std::int64_t, std::int64_t> MapViewer::editor_place_origin(const rende
 }
 
 bool MapViewer::editor_place(const render::TilePos& tile) {
-    if (!m_editor || !m_editor->placing) {
+    if (!m_editor || !m_editor->placing || m_editor->preview_plan) {
         return false;
     }
     using Kind = EditorSession::Placing::Kind;
@@ -1010,7 +1028,7 @@ bool MapViewer::editor_cancel_place() {
 }
 
 void MapViewer::editor_pick(const EditorPick& pick) {
-    if (!m_editor || !m_hud || m_hud->editor_panel() == nullptr) {
+    if (!m_editor || m_editor->preview_plan || !m_hud || m_hud->editor_panel() == nullptr) {
         return;
     }
     if (m_hud->editor_panel()->show_selection()) {
@@ -1934,7 +1952,7 @@ void MapViewer::editor_paste(std::int64_t x, std::int64_t y) {
 }
 
 bool MapViewer::editor_stroke(std::optional<render::TilePos> tile, Stroke phase) {
-    if (!m_editor) {
+    if (!m_editor || m_editor->preview_plan) {
         return false;
     }
     const EditorPanel* panel = m_hud ? m_hud->editor_panel() : nullptr;

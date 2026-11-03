@@ -363,6 +363,9 @@ private:
     /// The page "Rules": the scenario's game settings (editor_rules.cpp).
     void editor_rules_model(EditorModel& m) const;
     void editor_rules_request(const EditorRequest& request);
+    /// The dice preview: another roll of the plan shown on the map, or the plan back.
+    void editor_roll();
+    void editor_end_preview();
     /// The buildings' tools' settings from the panel.
     void editor_objects_request(const EditorRequest& request);
     /// The order that places the chosen building about the world tile (x, y) for the chosen owner,
@@ -772,6 +775,10 @@ private:
         std::vector<std::unique_ptr<editor::Operation>> object_steps{};
         std::optional<std::pair<std::int64_t, std::int64_t>> object_at{};
         bool object_drag = false;
+        /// The dice preview (the page "Random elements"): the document's world with its plan while
+        /// the map shows a roll of it, and the rolls made since the preview began.
+        std::optional<sim::World> preview_plan{};
+        std::uint32_t preview_rolls = 0;
     };
     std::optional<EditorSession> m_editor;
     /// A request of the editor waiting for the answer to "discard the changes?".

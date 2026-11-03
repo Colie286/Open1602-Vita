@@ -192,6 +192,18 @@ the others as they are is greyed out. Each change is one step of undo.
 When a player starts the scenario, the start dialog begins from its own rules; the player can still
 change them, and they are not kept as the player's own for the next scenario.
 
+### Random elements
+
+On a map with a world plan, **Random elements** lists what the plan spreads at random when a game
+starts: the native villages of the north and the south, iron (small and large veins), gold, the
+treasures, and the islands fertile for each crop. Each entry reads "x at random, y fixed": x is
+what the plan places at the start, y what the map already has in place. The left button adds one
+to the random ones, the right button takes one away; each change is one step of undo.
+
+**Dice preview** makes the islands as one start of a game makes them and shows them on the map.
+**Roll again** makes another start, **Back to the plan** brings the plan back. The preview is never
+saved and cannot be edited; undo, save and the other pages wait until the plan is back.
+
 ## Keys
 
 | Key | What it does |

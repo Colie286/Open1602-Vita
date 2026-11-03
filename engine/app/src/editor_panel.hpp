@@ -181,6 +181,13 @@ struct EditorRule {
     bool enabled = true;  ///< false: it does not matter with the others as they are
 };
 
+/// An entry of the world plan as the page "Random elements" shows it: x at random, y on the map.
+struct EditorRandom {
+    std::string label;  ///< Windows-1252
+    std::uint32_t random = 0;
+    std::uint32_t fixed = 0;
+};
+
 /// What the panel shows; the viewer fills it every frame.
 struct EditorModel {
     std::string file;  ///< the document's name (Windows-1252), empty: a new map not saved yet
@@ -276,6 +283,13 @@ struct EditorModel {
     bool rules_own = false;
     bool rules_original = false;
     std::vector<EditorRule> rules;
+    /// The page "Random elements": the world plan's entries (only a world that has a plan).
+    std::vector<EditorRandom> randoms;
+    /// The dice preview: the map shows the islands of the plan as one start of a game makes them
+    /// (roll `preview_roll` of this preview, `preview_islands` islands); the plan waits meanwhile.
+    bool previewing = false;
+    std::uint32_t preview_roll = 0;
+    std::size_t preview_islands = 0;
 };
 
 /// What a click or a key asked for.
@@ -328,6 +342,12 @@ struct EditorRequest {
         RulesPreset,
         /// The setting EditorModel::rules[`index`] to its next value (`amount` 1) or the one before (0).
         RuleStep,
+        /// The entry EditorModel::randoms[`index`] one more at random (`amount` 1) or one fewer (0).
+        RandomStep,
+        /// The plan's islands made as a game's start makes them, shown instead of the plan (again:
+        /// another roll); nothing of it is kept.
+        RandomRoll,
+        RandomPreviewEnd,  ///< the plan back from the dice preview
     };
     Kind kind = Kind::Close;
     std::size_t index = 0;
@@ -371,7 +391,8 @@ public:
         Players,
         PlayerName,
         Relations,
-        Rules
+        Rules,
+        Random
     };
 
     explicit EditorPanel(ui::FormStyle style = {}) : m_form(style) {}
@@ -449,6 +470,8 @@ private:
     void layout_player_name(const EditorModel& model);
     void layout_relations(const EditorModel& model);
     void layout_rules(const EditorModel& model);
+    void layout_random(const EditorModel& model);
+    void layout_preview(const EditorModel& model);
     /// The notice (or the note `note_key`, `short_key` where it does not fit whole) from `y`
     /// down and the button `back` labelled `back_key` at the panel's foot.
     void note_and_back(const EditorModel& model, std::int32_t y, const char* note_key, const char* short_key,
