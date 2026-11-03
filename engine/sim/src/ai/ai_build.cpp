@@ -333,7 +333,7 @@ void Engine::task_building(AiPlayer& p, std::uint8_t task) {
         task_workshop(p);
         return;
     }
-    if (public_task(task) != nullptr) {
+    if (public_task(task)) {
         task_public(p, task);
         return;
     }
@@ -497,9 +497,9 @@ void Engine::task_houses(AiPlayer& p) {
 }
 
 void Engine::task_public(AiPlayer& p, std::uint8_t task) {
-    const PublicTask* def = public_task(task);
+    const std::optional<PublicTask> def = public_task(task);
     CityPlan* r = current_plan(p);
-    if (def == nullptr || r == nullptr) {
+    if (!def || r == nullptr) {
         pop(p);
         refund(p);
         return;

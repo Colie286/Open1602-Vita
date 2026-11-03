@@ -5,9 +5,12 @@
 #include <cstdint>
 #include <optional>
 #include <set>
+#include <string>
 
 #include "../../engine/sim/src/ai/ai_tables.hpp"
 #include "../test_framework.hpp"
+
+#include "o1602/sim/computer_slots.hpp"
 
 namespace o1602::sim::ai {
 namespace {
@@ -101,14 +104,49 @@ TEST_CASE("ai tables: the producer table counts every ware, raw material and rec
 
 TEST_CASE("ai tables: Needs and public tasks name each slot once") {
     std::set<std::uint8_t> slots;
-    for (const NeedDef& d : kNeeds) {
-        REQUIRE(slots.insert(d.slot).second);
-        REQUIRE(need_def(d.slot) == &d);
+    std::set<std::string> names;
+    std::size_t needs = 0;
+    std::size_t publics = 0;
+    for (const o1602::sim::ComputerSlot& c : o1602::sim::original_computer_slots()) {
+        REQUIRE(slots.insert(c.number).second);
+        REQUIRE(names.insert(c.name).second);
+        REQUIRE(o1602::sim::computer_slot(o1602::sim::original_computer_slots(), c.number) == &c);
+        REQUIRE(o1602::sim::find_computer_slot(o1602::sim::original_computer_slots(), c.name) == &c);
+        if (const auto d = need_def(c.number)) {
+            ++needs;
+            REQUIRE(d->slot == c.number);
+        }
+        if (c.kind == o1602::sim::ComputerSlot::Kind::Public) {
+            ++publics;
+            const auto t = public_task(c.task);
+            REQUIRE(t.has_value());
+            REQUIRE(t->slot == c.number);
+        }
     }
-    for (const PublicTask& t : kPublicTasks) {
-        REQUIRE(slots.insert(t.slot).second);
-        REQUIRE(public_task(t.task) == &t);
-    }
+    // The original's 55 slots but the unused 0x2A, its 32 Needs and 10 public buildings.
+    CHECK(slots.size() == kSlots - 1);
+    CHECK(slots.count(0x2A) == 0);
+    CHECK(needs == 32);
+    CHECK(publics == 10);
+    // A few Needs as the original's table had them.
+    const auto bakery = need_def(kSlotBakery);
+    REQUIRE(bakery.has_value());
+    CHECK(bakery->task == kBakery);
+    CHECK(bakery->ware == o1602::sim::ware::kFood);
+    CHECK(bakery->raw == o1602::sim::ware::kFlour);
+    CHECK(bakery->type == NeedType::B);
+    CHECK(bakery->after == kSlotMill);
+    const auto gold = need_def(kSlotGoldMine);
+    REQUIRE(gold.has_value());
+    CHECK(gold->fixed == id::kGoldMine);
+    CHECK(gold->attempts == 1);
+    CHECK(gold->from_start);
+    CHECK(need_def(kSlotStoneTower)->type == NeedType::D);
+    CHECK(!need_def(kSlotKontor).has_value());
+    const auto church = public_task(kKirche);
+    REQUIRE(church.has_value());
+    CHECK(church->min_houses == 16);
+    CHECK(!public_task(kGalgen)->roads_on_fail);
 }
 
 TEST_CASE("ai tables: a city on a large island grows its orders with its free land") {

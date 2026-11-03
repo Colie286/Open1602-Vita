@@ -110,5 +110,7 @@ TEST_CASE("ai chains: the original's Need of a raw material") {
     CHECK(original_need_slot(sim::ware::kIron) == kSlotSmelter);
     CHECK(original_need_slot(sim::ware::kCannons) == kSlotCannons);
     CHECK(original_need_slot(sim::ware::kBricks) == kSlotStonemason);
+    CHECK(original_need_slot(sim::ware::kFood) == kSlotBakery);
+    CHECK(original_need_slot(sim::ware::kAlcohol) == kSlotWine);
     CHECK(original_need_slot(60) == kNoSlot);
 }

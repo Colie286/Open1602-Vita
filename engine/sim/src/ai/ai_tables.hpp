@@ -18,58 +18,23 @@
 
 #include "o1602/sim/balance.hpp"
 #include "o1602/sim/computer_orders.hpp"
+#include "o1602/sim/computer_slots.hpp"
 #include "o1602/sim/houses.hpp"
 
 namespace o1602::sim::ai {
 
-/// How the survey (task 8) recognises a producer: its ware, its raw material (0: any) and its
-/// record (0: any). The first matching row wins, so specific rows come before the general one.
-struct ProducerCount {
-    std::uint8_t slot;
-    std::uint8_t ware;
-    std::uint8_t raw = 0;
-    std::uint32_t id = 0;
-};
-
-inline constexpr std::array<ProducerCount, 30> kProducerCounts{{
-    {kSlotWoodcutter, ware::kWood},
-    {kSlotHunter, ware::kFood, ware::kGame},
-    {kSlotBakery, ware::kFood, ware::kFlour},
-    {kSlotFisher, ware::kFood, ware::kFish},  // the original counts them as hunters too (S-098)
-    {kSlotButcher, ware::kFood, ware::kMeat},
-    {kSlotGrain, ware::kGrain},
-    {kSlotMill, ware::kFlour},
-    {kSlotQuarry, ware::kStone},
-    {kSlotStonemason, ware::kBricks},
-    {kSlotCotton, ware::kWool, ware::kCottonField},
-    {kSlotSheep, ware::kWool},
-    {kSlotWebstube, ware::kCloth, 0, id::kWebstube},
-    {kSlotWeberei, ware::kCloth},
-    // The original counts every alcohol producer as a cocoa plantation too (S-098).
-    {kSlotWine, ware::kAlcohol, ware::kWineField},
-    {kSlotRum, ware::kAlcohol},
-    {kSlotSpices, ware::kSpices},
-    {kSlotCocoa, ware::kCocoa},
-    {kSlotTobacco, ware::kTobacco},
-    {kSlotTobaccoGoods, ware::kTobaccoGoods},
-    {kSlotSugar, ware::kSugar},
-    {kSlotCattle, ware::kMeat},
-    {kSlotIronMine, ware::kOre},
-    {kSlotGoldMine, ware::kGold},
-    {kSlotSmelter, ware::kIron},
-    {kSlotToolsmith, ware::kTools},
-    {kSlotTailor, ware::kClothes},
-    {kSlotSwords, ware::kSwords},
-    {kSlotMuskets, ware::kMuskets},
-    {kSlotCannons, ware::kCannons},
-    {kSlotGoldsmith, ware::kJewellery},
-}};
-
-/// The slot a producer of ware `w` from `raw` (record `building_id`) counts for in the survey.
+/// The slot a producer of ware `w` from `raw` (record `building_id`) counts for in the survey: the
+/// first slot of the original's (computer_slots.hpp) that counts it, those that name a raw material
+/// or a record before those that name only the ware.
 inline std::optional<std::uint8_t> producer_slot(std::uint8_t w, std::uint8_t raw, std::uint32_t building_id) noexcept {
-    for (const ProducerCount& c : kProducerCounts) {
-        if (c.ware == w && (c.raw == 0 || c.raw == raw) && (c.id == 0 || c.id == building_id)) {
-            return c.slot;
+    const std::vector<ComputerSlot>& slots = original_computer_slots();
+    for (const bool specific : {true, false}) {
+        for (const ComputerSlot& c : slots) {
+            if (c.count_ware != 0 && c.count_ware == w && (c.count_raw != 0 || c.count_building != 0) == specific &&
+                (c.count_raw == 0 || c.count_raw == raw) &&
+                (c.count_building == 0 || c.count_building == building_id)) {
+                return c.number;
+            }
         }
     }
     return std::nullopt;
@@ -91,55 +56,16 @@ struct NeedDef {
     std::uint8_t after = kNoProducer;
 };
 
-inline constexpr std::array<NeedDef, 32> kNeeds{{
-    {kSlotHunter, kHunter, 0, 0, id::kHunter, 0, NeedType::A, 2, 0, false},
-    {kSlotWoodcutter, kWoodcutter, ware::kWood, ware::kTree, 0, ware::kTree, NeedType::B, 2, 0, false},
-    {kSlotGrain, kGrainFarm, ware::kGrain, ware::kCornField, 0, ware::kCornField, NeedType::B, 2, ware::kCornField,
-     false},
-    {kSlotMill, kMill, ware::kFlour, ware::kGrain, 0, 0, NeedType::B, 2, ware::kCornField, false},
-    {kSlotBakery, kBakery, ware::kFood, ware::kFlour, 0, 0, NeedType::B, 2, 0, false, kSlotMill},
-    {kSlotQuarry, kQuarry, ware::kStone, 0, 0, 0, NeedType::A, 1, 0, true},
-    {kSlotStonemason, kStonemason, ware::kBricks, ware::kStone, 0, 0, NeedType::B, 1, 0, false},
-    {kSlotFisher, kFisher, ware::kFood, ware::kFish, 0, 0, NeedType::B, 2, 0, false},
-    {kSlotCotton, kCotton, ware::kWool, ware::kCottonField, 0, ware::kCottonField, NeedType::B, 2, ware::kCottonField,
-     false},
-    {kSlotWebstube, kWeaving, 0, 0, id::kWebstube, 0, NeedType::B, 2, 0, false, kSlotSheep},
-    {kSlotWeberei, kWeaving, 0, 0, id::kWeberei, 0, NeedType::B, 2, 0, false, kSlotCotton},
-    {kSlotTailor, kTailor, ware::kClothes, ware::kCloth, 0, 0, NeedType::B, 2, 0, false},
-    {kSlotCattle, kCattle, ware::kMeat, ware::kGrass, 0, ware::kGrass, NeedType::B, 2, 0, false},
-    {kSlotButcher, kButcher, ware::kFood, ware::kMeat, 0, 0, NeedType::B, 2, 0, false, kSlotCattle},
-    {kSlotTobacco, kTobacco, ware::kTobacco, ware::kTobaccoField, 0, ware::kTobaccoField, NeedType::B, 2,
-     ware::kTobaccoField, false},
-    {kSlotTobaccoGoods, kTobaccoGoods, ware::kTobaccoGoods, ware::kTobacco, 0, 0, NeedType::B, 2, 0, false,
-     kSlotTobacco},
-    {kSlotSpices, kSpices, ware::kSpices, ware::kSpiceField, 0, ware::kSpiceField, NeedType::B, 2, ware::kSpiceField,
-     false},
-    {kSlotWine, kWine, ware::kAlcohol, ware::kWineField, 0, ware::kWineField, NeedType::B, 2, ware::kWineField, false},
-    {kSlotSugar, kSugar, ware::kSugar, ware::kSugarField, 0, ware::kSugarField, NeedType::B, 2, ware::kSugarField,
-     false},
-    {kSlotRum, kRum, ware::kAlcohol, ware::kSugar, 0, 0, NeedType::B, 2, 0, false, kSlotSugar},
-    {kSlotCocoa, kCocoa, ware::kCocoa, ware::kCocoaField, 0, ware::kCocoaField, NeedType::B, 2, ware::kCocoaField,
-     false},
-    {kSlotSheep, kSheep, ware::kWool, ware::kGrass, 0, ware::kGrass, NeedType::B, 2, 0, false},
-    {kSlotSmelter, kSmelter, ware::kIron, ware::kOre, 0, 0, NeedType::A, 2, 0, false},
-    {kSlotToolsmith, kToolsmith, ware::kTools, ware::kIron, 0, 0, NeedType::A, 2, 0, false, kSlotSmelter},
-    {kSlotSwords, kSwords, ware::kSwords, ware::kIron, 0, 0, NeedType::A, 2, 0, false, kSlotSmelter},
-    {kSlotMuskets, kMuskets, ware::kMuskets, ware::kIron, 0, 0, NeedType::A, 2, 0, false, kSlotSmelter},
-    {kSlotCannons, kCannonFoundry, ware::kCannons, ware::kIron, 0, 0, NeedType::D, 2, 0, false, kSlotSmelter},
-    {kSlotGoldsmith, kGoldsmith, ware::kJewellery, ware::kGold, 0, 0, NeedType::A, 2, 0, false},
-    {kSlotIronMine, kIronMine, 0, 0, id::kOreMine, 0, NeedType::A, 2, 0, true},
-    {kSlotGoldMine, kGoldMine, 0, 0, id::kGoldMine, 0, NeedType::A, 1, 0, true},
-    {kSlotStoneTower, kTowers, 0, 0, id::kStoneTower, 0, NeedType::D, 2, 0, false},
-    {kSlotWoodTower, kTowers, 0, 0, id::kWoodTower, 0, NeedType::D, 2, 0, false},
-}};
-
-inline const NeedDef* need_def(std::uint8_t slot) {
-    for (const NeedDef& d : kNeeds) {
-        if (d.slot == slot) {
-            return &d;
-        }
+/// The Need of the original's slot `slot` (computer_slots.hpp: a producer or a tower); nothing
+/// for a slot without one.
+inline std::optional<NeedDef> need_def(std::uint8_t slot) {
+    const ComputerSlot* c = computer_slot(original_computer_slots(), slot);
+    if (c == nullptr || (c->kind != ComputerSlot::Kind::Producer && c->kind != ComputerSlot::Kind::Tower)) {
+        return std::nullopt;
     }
-    return nullptr;
+    return NeedDef{
+        c->number,   c->task,    c->ware,       c->raw,  c->building, c->field, static_cast<NeedType>(c->wait),
+        c->attempts, c->fertile, c->from_start, c->after};
 }
 
 static_assert(static_cast<std::uint8_t>(NeedType::D) == static_cast<std::uint8_t>(ProducerWait::Placed) &&
@@ -149,8 +75,8 @@ static_assert(static_cast<std::uint8_t>(NeedType::D) == static_cast<std::uint8_t
 /// The Need of `slot` with the changes of the packages (Balance::computer_producers): their
 /// building, attempts, crop, producer first and wait over the original's. Nothing for no Need.
 inline std::optional<NeedDef> need_def(std::uint8_t slot, const std::vector<ComputerProducer>& changes) {
-    const NeedDef* d = need_def(slot);
-    if (d == nullptr) {
+    const std::optional<NeedDef> d = need_def(slot);
+    if (!d) {
         return std::nullopt;
     }
     NeedDef out = *d;
@@ -191,28 +117,15 @@ struct PublicTask {
     bool roads_on_fail;
 };
 
-inline constexpr std::array<PublicTask, 10> kPublicTasks{{
-    {kKapelle, id::kKapelle, kSlotKapelle, city_flag::kKapelle, house_service::kKapelle | house_service::kKirche, 3,
-     true},
-    {kWirt, id::kWirt, kSlotWirt, city_flag::kWirt, house_service::kWirtshaus, 8, true},
-    {kSchule, id::kSchule, kSlotSchule, city_flag::kSchule, house_service::kSchule | house_service::kHochschule, 8,
-     true},
-    {kKlinik, id::kKlinik, kSlotKlinik, city_flag::kKlinik, house_service::kKlinik, 8, true},
-    {kKirche, id::kKirche, kSlotKirche, city_flag::kKirche, house_service::kKirche, 16, true},
-    {kBadehaus, id::kBadehaus, kSlotBadehaus, city_flag::kBadehaus, house_service::kBadehaus, 8, true},
-    {kHochschule, id::kHochschule, kSlotHochschule, city_flag::kHochschule, house_service::kHochschule, 10, true},
-    {kTheater, id::kTheater, kSlotTheater, city_flag::kTheater, house_service::kTheater, 10, true},
-    {kGalgen, id::kGalgen, kSlotGalgen, city_flag::kGalgen, house_service::kGalgen, 10, false},
-    {kBrunnen, id::kBrunnen, kSlotBrunnen, city_flag::kBrunnen, house_service::kBrunnen, 6, false},
-}};
-
-inline const PublicTask* public_task(std::uint8_t task) {
-    for (const PublicTask& t : kPublicTasks) {
-        if (t.task == task) {
-            return &t;
+/// The public building task `task` of the original's slots (computer_slots.hpp), nothing for
+/// another task.
+inline std::optional<PublicTask> public_task(std::uint8_t task) {
+    for (const ComputerSlot& c : original_computer_slots()) {
+        if (c.kind == ComputerSlot::Kind::Public && c.task == task) {
+            return PublicTask{c.task, c.building, c.number, c.flag, c.service, c.min_houses, c.roads_on_fail};
         }
     }
-    return nullptr;
+    return std::nullopt;
 }
 
 /// Open1602: once its stage's orders are done, a city past the settlers with more than kGrowFrom

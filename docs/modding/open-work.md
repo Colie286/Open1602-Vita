@@ -246,6 +246,14 @@ name them; a package's goods count in slots after them. What stays in the code: 
 cotton swaps, the stonemason's quarries, the goldsmith's gold, the smelter's cap and the mines'
 deposits.
 
+Part 7 begun on 2026-11-03 (item 5 of the summary, the slots as data; plan of five steps): step 1,
+the table of the slots (`engine/sim/include/o1602/sim/computer_slots.hpp`): each of the original's
+slots by number with its name (as `computers.toml` names it), its Need, how the survey counts it and
+the public building it stands for, in place of the tables `kNeeds`, `kProducerCounts` and
+`kPublicTasks`. The slots keep their numbers; the rules that name a slot of the original name it by
+its number. Next: those rules as fields of a slot, `slots.toml` for packages (with section `SLOT`),
+public buildings of a package and the stages' thresholds as data.
+
 ### 6. Lua scripts (section 6)
 
 `engine/script` exists only as a README. Needed: Lua 5.4 with a deterministic, sandboxed interface

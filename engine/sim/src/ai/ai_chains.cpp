@@ -66,9 +66,9 @@ std::uint8_t original_need_slot(std::uint8_t w) {
         default:
             break;
     }
-    for (const NeedDef& d : kNeeds) {
-        if (d.ware == w && d.fixed == 0) {
-            return d.slot;
+    for (const ComputerSlot& c : original_computer_slots()) {
+        if (c.kind == ComputerSlot::Kind::Producer && c.ware == w && c.building == 0) {
+            return c.number;
         }
     }
     return kNoSlot;

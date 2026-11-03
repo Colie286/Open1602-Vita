@@ -10,6 +10,7 @@
 #include "o1602/assets/original_names.hpp"
 #include "o1602/assets/own_buildings.hpp"
 #include "o1602/core/data_file.hpp"
+#include "o1602/sim/computer_slots.hpp"
 
 namespace o1602::sim {
 
@@ -36,58 +37,10 @@ struct SlotName {
     std::uint8_t slot;
 };
 
-/// The producers `Kind::Building` names: the original's Needs (ai_tables.hpp).
-constexpr std::array<SlotName, 30> kBuildingNames = {{
-    {"woodcutter", ai::kSlotWoodcutter},
-    {"hunter", ai::kSlotHunter},
-    {"grain_farm", ai::kSlotGrain},
-    {"mill", ai::kSlotMill},
-    {"bakery", ai::kSlotBakery},
-    {"quarry", ai::kSlotQuarry},
-    {"stonemason", ai::kSlotStonemason},
-    {"cotton", ai::kSlotCotton},
-    {"weaving_hut", ai::kSlotWebstube},
-    {"weaving_mill", ai::kSlotWeberei},
-    {"wine", ai::kSlotWine},
-    {"spices", ai::kSlotSpices},
-    {"cocoa", ai::kSlotCocoa},
-    {"cattle", ai::kSlotCattle},
-    {"butcher", ai::kSlotButcher},
-    {"tobacco", ai::kSlotTobacco},
-    {"tobacco_goods", ai::kSlotTobaccoGoods},
-    {"iron_mine", ai::kSlotIronMine},
-    {"smelter", ai::kSlotSmelter},
-    {"toolsmith", ai::kSlotToolsmith},
-    {"tailor", ai::kSlotTailor},
-    {"sheep", ai::kSlotSheep},
-    {"sugar", ai::kSlotSugar},
-    {"rum", ai::kSlotRum},
-    {"fisher", ai::kSlotFisher},
-    {"swords", ai::kSlotSwords},
-    {"muskets", ai::kSlotMuskets},
-    {"cannons", ai::kSlotCannons},
-    {"gold_mine", ai::kSlotGoldMine},
-    {"goldsmith", ai::kSlotGoldsmith},
-}};
-
-/// The public buildings `Kind::Public` names (Engine::need_public).
-constexpr std::array<SlotName, 10> kPublicNames = {{
-    {"chapel", ai::kSlotKapelle},
-    {"tavern", ai::kSlotWirt},
-    {"school", ai::kSlotSchule},
-    {"doctor", ai::kSlotKlinik},
-    {"gallows", ai::kSlotGalgen},
-    {"fire_brigade", ai::kSlotBrunnen},
-    {"church", ai::kSlotKirche},
-    {"bath_house", ai::kSlotBadehaus},
-    {"college", ai::kSlotHochschule},
-    {"theatre", ai::kSlotTheater},
-}};
-
 /// What a kind without a slot is called and what its count may be.
 struct KindInfo {
     Kind kind;
-    std::string_view name;  ///< empty: named by its slot (kBuildingNames, kPublicNames, a good)
+    std::string_view name;  ///< empty: named by its slot (kProducers, kPublic, a good)
     bool counted;           ///< takes a count
     std::uint32_t min;
     std::uint32_t max;
@@ -166,6 +119,21 @@ std::string_view name_of(std::span<const SlotName> names, std::uint8_t slot) {
         }
     }
     return {};
+}
+
+/// The producers `Kind::Building` names and the public buildings `Kind::Public` names: the slots of
+/// that kind (computer_slots.hpp).
+constexpr ComputerSlot::Kind kProducers = ComputerSlot::Kind::Producer;
+constexpr ComputerSlot::Kind kPublic = ComputerSlot::Kind::Public;
+
+std::optional<std::uint8_t> slot_of(ComputerSlot::Kind kind, std::string_view name) {
+    const ComputerSlot* s = find_computer_slot(original_computer_slots(), name);
+    return s != nullptr && s->kind == kind ? std::optional<std::uint8_t>(s->number) : std::nullopt;
+}
+
+std::string_view name_of(ComputerSlot::Kind kind, std::uint8_t slot) {
+    const ComputerSlot* s = computer_slot(original_computer_slots(), slot);
+    return s != nullptr && s->kind == kind ? std::string_view(s->name) : std::string_view{};
 }
 
 /// The word of a flag or a condition `w` after `prefix`; empty for When::Never.
@@ -554,10 +522,10 @@ std::optional<ComputerNeed> read_need(std::string_view text, const assets::Goods
         return std::nullopt;
     }
     ComputerNeed need;
-    if (const auto slot = slot_of(kBuildingNames, w[0])) {
+    if (const auto slot = slot_of(kProducers, w[0])) {
         need.kind = Kind::Building;
         need.slot = *slot;
-    } else if (const auto pub = slot_of(kPublicNames, w[0])) {
+    } else if (const auto pub = slot_of(kPublic, w[0])) {
         need.kind = Kind::Public;
         need.slot = *pub;
     } else if (const auto crop_ware = slot_of(kCropNames, w[0])) {
@@ -627,7 +595,7 @@ std::optional<std::uint32_t> building_of(std::string_view id, std::span<const as
 void read_producer(const core::DataTable& table, std::string_view name, const std::string& where,
                    std::vector<ComputerProducer>& producers, std::span<const assets::OwnBuilding> own,
                    std::vector<std::string>& warnings) {
-    const auto slot = slot_of(kBuildingNames, name);
+    const auto slot = slot_of(kProducers, name);
     if (!slot) {
         warnings.push_back(line_of(where, table.line) + "there is no producer '" + std::string(name) +
                            "' (the producers of an order: woodcutter, bakery, ...)");
@@ -666,7 +634,7 @@ void read_producer(const core::DataTable& table, std::string_view name, const st
         } else if (e.key == "after") {
             if (text != nullptr && text->empty()) {
                 p.after = kNoProducer;
-            } else if (const auto first = text != nullptr ? slot_of(kBuildingNames, *text) : std::nullopt;
+            } else if (const auto first = text != nullptr ? slot_of(kProducers, *text) : std::nullopt;
                        first && *first != *slot) {
                 p.after = first;
             } else {
@@ -753,9 +721,9 @@ bool valid(const ComputerNeed& need) noexcept {
     }
     switch (need.kind) {
         case Kind::Building:
-            return !name_of(kBuildingNames, need.slot).empty();
+            return !name_of(kProducers, need.slot).empty();
         case Kind::Public:
-            return !name_of(kPublicNames, need.slot).empty();
+            return !name_of(kPublic, need.slot).empty();
         case Kind::Package:
             return need.slot >= assets::ware::kFirstOwn;
         case Kind::Crop:
@@ -863,10 +831,10 @@ std::string order_text(std::span<const ComputerNeed> needs, const assets::Goods&
         }
         switch (n.kind) {
             case Kind::Building:
-                out += name_of(kBuildingNames, n.slot);
+                out += name_of(kProducers, n.slot);
                 break;
             case Kind::Public:
-                out += name_of(kPublicNames, n.slot);
+                out += name_of(kPublic, n.slot);
                 break;
             case Kind::Crop:
                 out += name_of(kCropNames, n.slot);
@@ -906,10 +874,10 @@ const ComputerProducer* producer_change(const std::vector<ComputerProducer>& pro
 bool valid(const std::vector<ComputerProducer>& producers) noexcept {
     for (std::size_t i = 0; i < producers.size(); ++i) {
         const ComputerProducer& p = producers[i];
-        const bool known = !name_of(kBuildingNames, p.slot).empty();
+        const bool known = !name_of(kProducers, p.slot).empty();
         const bool fertile = !p.fertile || *p.fertile == 0 || !name_of(kFertileNames, *p.fertile).empty();
         const bool after =
-            !p.after || *p.after == kNoProducer || (*p.after != p.slot && !name_of(kBuildingNames, *p.after).empty());
+            !p.after || *p.after == kNoProducer || (*p.after != p.slot && !name_of(kProducers, *p.after).empty());
         if (!known || (i > 0 && producers[i - 1].slot >= p.slot) || (p.attempts && *p.attempts == 0) || !fertile ||
             !after || (p.wait && static_cast<std::uint8_t>(*p.wait) >= kProducerWaits) ||
             p.counts.size() > kMaxProducerCounts || (p.building && *p.building == 0)) {
@@ -920,7 +888,7 @@ bool valid(const std::vector<ComputerProducer>& producers) noexcept {
 }
 
 std::string producer_text(const ComputerProducer& p) {
-    std::string out = "[producer." + std::string(name_of(kBuildingNames, p.slot)) + "]";
+    std::string out = "[producer." + std::string(name_of(kProducers, p.slot)) + "]";
     if (p.building) {
         out += " building = anno1602:" + std::to_string(*p.building);
     }
@@ -931,7 +899,7 @@ std::string producer_text(const ComputerProducer& p) {
         out += " fertile = \"" + std::string(name_of(kFertileNames, *p.fertile)) + "\"";
     }
     if (p.after) {
-        out += " after = \"" + std::string(name_of(kBuildingNames, *p.after)) + "\"";
+        out += " after = \"" + std::string(name_of(kProducers, *p.after)) + "\"";
     }
     if (p.wait) {
         out += " wait = " + std::string(kWaitNames[static_cast<std::size_t>(*p.wait)]);

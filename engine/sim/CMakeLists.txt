@@ -70,6 +70,7 @@ add_library(o1602_sim
     src/faction.cpp
     src/balance.cpp
     src/computer_orders.cpp
+    src/computer_slots.cpp
     src/production_cycle.cpp
     src/simulation.cpp
     src/soldiers.cpp
