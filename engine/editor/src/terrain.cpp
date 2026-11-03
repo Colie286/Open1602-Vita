@@ -787,11 +787,11 @@ std::vector<SeaTile> sea_depth(const sim::World& world, const assets::BuildingTa
             const std::int64_t rim = std::min({x, y, w - 1 - x, h - 1 - y});
             const std::int64_t least = 7 - 2 * rim;
             const int v = wobble(static_cast<std::int64_t>(isl.x) + x, static_cast<std::int64_t>(isl.y) + y);
-            // Thresholds near the middle: the interpolated noise seldom reaches its ends.
-            const std::int64_t level = d + (v < 450 ? -1 : v > 574 ? 1 : 0);
+            // Up to two tiles out, one in (the interpolated noise seldom reaches its ends).
+            const std::int64_t level = d + std::clamp<std::int64_t>((v - 512) / 96, -1, 2);
             int want = band_of(std::max(level, least));
             if (d == 2) {
-                want = std::min(want, kMiddle);  // never dark next to the surf
+                want = kLight;  // always light past the surf
             }
             const int lo = std::min(want, band_of(std::max(d - 1, least)));
             const int hi = want;
