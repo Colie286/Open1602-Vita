@@ -12,6 +12,7 @@
 #include "o1602/core/byte_reader.hpp"
 #include "o1602/core/byte_writer.hpp"
 #include "o1602/sim/ships.hpp"
+#include "o1602/sim/simulation.hpp"
 #include "o1602/sim/world.hpp"
 
 using namespace o1602;
@@ -190,4 +191,36 @@ TEST_CASE("explore: a running exploration is saved with the fleet (S-092)") {
     REQUIRE(loaded.load(in, c.fleet->state_version()));
     CHECK(c.world.ship(id)->explore_steps == steps);
     CHECK(c.world.ship(id)->explore_next_ms == next);
+}
+
+TEST_CASE("explore: with the island resources known from the start every island is explored by everyone") {
+    Coast c;
+    CHECK(!c.world.islands()[0].explored_by(0));
+    CHECK(!sim::deposit_known(c.world.islands()[0].header.deposits[0], 1));
+    c.world.explore_islands();
+    const sim::WorldIsland& isl = c.world.islands()[0];
+    for (const sim::PlayerId p : {sim::PlayerId{0}, sim::PlayerId{1}}) {
+        CHECK(isl.explored_by(p));
+        for (const auto& d : isl.header.deposits) {
+            CHECK(sim::deposit_known(d, p));
+        }
+    }
+    CHECK(!isl.discovered_by(0));  // which towns are known is the other setting (Rules::reveal)
+    // Nothing is left to explore, and no ship reports anything.
+    const std::uint32_t id = c.add(41, 21);
+    CHECK(c.fleet->explore_state(*c.world.ship(id), 0) == sim::ExploreState::Done);
+    CHECK(c.events.empty());
+}
+
+TEST_CASE("explore: a game with the island resources known starts with them explored, the original's way not") {
+    for (const bool known : {false, true}) {
+        Coast c;
+        sim::Rules rules = sim::Rules::open1602();
+        rules.reveal_resources = known;
+        const sim::Simulation s(c.world, c.buildings, c.figures, rules);
+        CHECK(c.world.islands()[0].explored_by(1) == known);
+        CHECK(sim::deposit_known(c.world.islands()[0].header.deposits.back(), 0) == known);
+    }
+    CHECK(!sim::Rules::open1602().reveal_resources);
+    CHECK(!sim::Rules::original().reveal_resources);
 }

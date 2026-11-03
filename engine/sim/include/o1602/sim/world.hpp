@@ -632,6 +632,9 @@ public:
     /// leaves alone; it shows an island only when a city is founded there). No ship event: nobody
     /// sailed there.
     void reveal_islands(Reveal reveal, std::uint16_t island = kSea);
+    /// Rules::reveal_resources: every player has explored every island, its crops and all its ore
+    /// and gold deposits, as if a ship of theirs had explored it. No ship event: nobody sailed there.
+    void explore_islands();
     /// Removes a city (it was dissolved); pointers to cities become invalid.
     void remove_city(std::uint16_t island, std::uint8_t index);
     /// Mutable lookup for the simulation.

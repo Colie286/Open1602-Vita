@@ -142,6 +142,20 @@ void World::reveal_islands(Reveal reveal, std::uint16_t island) {
     }
 }
 
+void World::explore_islands() {
+    for (WorldIsland& isl : m_islands) {
+        for (std::size_t p = 0; p < m_players.size(); ++p) {
+            const auto id = static_cast<PlayerId>(p);
+            isl.explore(id);
+            if (p < 32) {
+                for (auto& d : isl.header.deposits) {
+                    d.mask |= 1U << p;
+                }
+            }
+        }
+    }
+}
+
 void World::set_cities(std::vector<City> cities) {
     m_cities = std::move(cities);
     index_cities();

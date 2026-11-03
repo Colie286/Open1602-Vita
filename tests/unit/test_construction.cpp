@@ -698,6 +698,7 @@ TEST_CASE("construction: the rule for fertile fields is kept in the savegame") {
         rules.fertile_fields = all;
         rules.climate_crops = all;
         rules.big_ore_veins = all;
+        rules.reveal_resources = all;
         world.set_saved_rules(rules);
         auto bytes = sim::write_game(world, buildings);
         REQUIRE(bytes.ok());
@@ -707,6 +708,7 @@ TEST_CASE("construction: the rule for fertile fields is kept in the savegame") {
         CHECK(loaded->saved_rules()->fertile_fields == all);
         CHECK(loaded->saved_rules()->climate_crops == all);
         CHECK(loaded->saved_rules()->big_ore_veins == all);
+        CHECK(loaded->saved_rules()->reveal_resources == all);
     }
     CHECK(!sim::Rules::original().climate_crops);
     CHECK(!sim::Rules::original().big_ore_veins);

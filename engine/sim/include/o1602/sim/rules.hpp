@@ -280,6 +280,10 @@ struct Rules {
     /// S-019: random worlds contain at least one deposit of every resource that a building needs
     /// (the original can generate endless games without gold).
     bool guarantee_resources = true;
+    /// Open1602: every player knows the fertility and the ore and gold deposits of every island
+    /// from the start, without exploring it by ship (World::explore_islands). Which towns are
+    /// known is Rules::reveal. Off by default and with the original's settings.
+    bool reveal_resources = false;
 
     /// L-004: highest game speed factor (original: 4, with an unintended 8 via Shift+F8).
     std::uint32_t max_game_speed = 8;
@@ -375,6 +379,7 @@ struct Rules {
         r.max_ships_per_player = 33;
         r.max_army = 100;
         r.guarantee_resources = false;
+        r.reveal_resources = false;
         r.max_game_speed = 4;
         r.demolish_refund = Refund::None;
         r.moving = Moving::Off;

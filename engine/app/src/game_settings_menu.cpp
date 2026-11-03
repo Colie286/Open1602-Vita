@@ -112,7 +112,7 @@ constexpr Group kDisasterGroups[] = {
 constexpr Group kIslandGroups[] = {
     {"setup.group.island_shapes", SetupItem::IslandPreset, SetupItem::Outline, kLeft},
     {"setup.group.island_sizes", SetupItem::LandShare, SetupItem::IslandGap, kLeft},
-    {"setup.group.island_nature", SetupItem::Forest, SetupItem::BigOreVeins, kLeft},
+    {"setup.group.island_nature", SetupItem::Forest, SetupItem::RevealResources, kLeft},
 };
 
 // The preview: its frame in the right column, the picture inside it at most this large.

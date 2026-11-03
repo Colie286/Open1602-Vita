@@ -453,6 +453,7 @@ std::size_t setup_choices(SetupItem item) noexcept {
         case SetupItem::Map:
         case SetupItem::Starts:
         case SetupItem::Resources:
+        case SetupItem::RevealResources:
         case SetupItem::WinEliminate:
         case SetupItem::WinAll:
         case SetupItem::WinComputers:
@@ -606,6 +607,8 @@ std::size_t setup_choice(const EndlessSetup& setup, SetupItem item) noexcept {
             return w.starts == Starts::Together ? 1 : 0;
         case SetupItem::Resources:
             return r.guarantee_resources ? 0 : 1;
+        case SetupItem::RevealResources:
+            return r.reveal_resources ? 1 : 0;
         case SetupItem::BugFireRisk:
         case SetupItem::BugGallows:
         case SetupItem::BugRobberVictims:
@@ -822,6 +825,9 @@ void choose(EndlessSetup& setup, SetupItem item, std::size_t choice) {
             break;
         case SetupItem::Resources:
             r.guarantee_resources = choice == 0;
+            break;
+        case SetupItem::RevealResources:
+            r.reveal_resources = choice == 1;
             break;
         case SetupItem::BugFireRisk:
         case SetupItem::BugGallows:
@@ -1224,6 +1230,7 @@ std::string setup_label(SetupItem item) {
         "setup.ore_mountains",
         "setup.climate_crops",
         "setup.big_ore_veins",
+        "setup.reveal_resources",
         "setup.win.inhabitants",
         "setup.win.class",
         "setup.win.class_inhabitants",
@@ -1378,6 +1385,8 @@ std::string setup_value(SetupItem item, std::size_t choice) {
             return ui::tr(choice == 1 ? "setup.starts.together" : "setup.starts.spread");
         case SetupItem::Resources:
             return ui::tr(choice == 0 ? "setup.on" : "setup.off");
+        case SetupItem::RevealResources:
+            return ui::tr(choice == 1 ? "setup.reveal_resources.all" : "setup.reveal_resources.original");
         case SetupItem::BugFireRisk:
         case SetupItem::BugGallows:
         case SetupItem::BugRobberVictims:
@@ -1685,6 +1694,10 @@ bool read_setup_line(EndlessSetup& setup, std::string_view key, std::string_view
         if (value == "on" || value == "off") {
             r.guarantee_resources = value == "on";
         }
+    } else if (key == "reveal_resources") {
+        if (value == "all" || value == "original") {
+            r.reveal_resources = value == "all";
+        }
     } else if (key == "ai") {
         if (value == "classic" || value == "open1602") {
             r.bugs.classic_ai = value == "classic";
@@ -1783,6 +1796,7 @@ std::string write_setup(const EndlessSetup& setup, std::string_view prefix) {
     line("plagues", kOutbreakNames[enum_choice(r.plagues, kOutbreakNames.size())]);
     line("fires", kOutbreakNames[enum_choice(r.fires, kOutbreakNames.size())]);
     line("resources", on_off(r.guarantee_resources));
+    line("reveal_resources", r.reveal_resources ? "all" : "original");
     line("ai", r.bugs.classic_ai ? "classic" : "open1602");
     line("ship_purchases", r.computers_buy_ships ? "on" : "off");
     line("computers", kComputerNames[std::min<std::size_t>(static_cast<std::size_t>(r.computer_players), 2)]);

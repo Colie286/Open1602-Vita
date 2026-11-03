@@ -96,6 +96,24 @@ TEST_CASE("endless setup: the values reach the rules and the world") {
     CHECK(s.rules.trader_prices == sim::TraderPrices::Market);
     app::choose(s, SetupItem::Resources, 1);
     CHECK(!s.rules.guarantee_resources);
+    // The island resources: by ship as in the original by default, on their own beside every raw
+    // material, so that a fully explored world goes with any of the other settings.
+    CHECK(!s.rules.reveal_resources);
+    CHECK(value_of(s, SetupItem::RevealResources) == ui::tr("setup.reveal_resources.original"));
+    app::choose(s, SetupItem::RevealResources, 1);
+    CHECK(s.rules.reveal_resources);
+    CHECK(!s.rules.guarantee_resources);
+    CHECK(value_of(s, SetupItem::RevealResources) == ui::tr("setup.reveal_resources.all"));
+    CHECK(app::write_setup(s).find("endless.reveal_resources = all\n") != std::string::npos);
+    {
+        EndlessSetup back;
+        app::read_setup(back, app::write_setup(s));
+        CHECK(back.rules.reveal_resources);
+        CHECK(app::read_setup_line(back, "reveal_resources", "original"));
+        CHECK(!back.rules.reveal_resources);
+    }
+    CHECK(!EndlessSetup::original().rules.reveal_resources);
+    CHECK(!app::setup_item_offered(app::SetupScope::Scenario, SetupItem::RevealResources));
     CHECK(!s.rules.bugs.classic_ai);  // Open1602's computer players by default
     app::choose(s, SetupItem::ClassicAi, 1);
     CHECK(s.rules.bugs.classic_ai);
@@ -1188,7 +1206,7 @@ TEST_CASE("game setup: the islands' page ends above its hint, in English and Ger
                 }
                 if (d.text.size() > 20 && hint.compare(0, 20, d.text, 0, 20) == 0) {
                     hint_y = std::min(hint_y, d.y);
-                } else if (d.text == app::setup_label(SetupItem::OreMountains)) {
+                } else if (d.text == app::setup_label(SetupItem::RevealResources)) {  // the last row
                     rows_y = d.y;
                 }
             }

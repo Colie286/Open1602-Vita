@@ -79,6 +79,10 @@ Simulation::Simulation(World& world, const assets::BuildingTable& buildings, con
     }
     // The towns the settings show from the start; a saved game has them discovered already.
     world.reveal_islands(m_rules.reveal);
+    // The islands' crops and deposits the settings show from the start; a saved game has them already.
+    if (m_rules.reveal_resources) {
+        world.explore_islands();
+    }
     if (const std::vector<std::uint8_t> state = world.take_simulation_state(); !state.empty()) {
         // Each part loads whole or not at all, but a later part may fail after an earlier one
         // was taken over: then all go back to how they are now, fresh.

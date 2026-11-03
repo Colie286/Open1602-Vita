@@ -339,6 +339,14 @@ core::Result<CommandLine> parse_command_line(int argc, const char* const* argv) 
             } else {
                 return bad(i);
             }
+        } else if (arg == "--reveal-resources" && has_value) {
+            // Game setting: whether the islands' crops and deposits are known from the start.
+            const std::string_view mode = argv[++i];
+            if (mode == "original" || mode == "all") {
+                options.rules.reveal_resources = mode == "all";
+            } else {
+                return bad(i);
+            }
         } else if (arg == "--ore-veins" && has_value) {
             // Game setting: large iron veins as the game says, run out, or endless for the deep mine.
             // "original" is the name finite veins had before "game" came.

@@ -49,18 +49,19 @@ enum RuleKey : std::uint16_t {
     kRevealNone = 41,       // 1: Reveal::None, under its own key so older versions read the original's way
     kNoShipPurchases = 42,  // 1: the computers buy no ships (Rules::computers_buy_ships off)
     kBugNativeLand = 43,
-    kOneCart = 44,        // 1: one trade cart per player and island (Rules::more_carts off)
-    kFertileFields = 45,  // 1: poor ground takes nothing from a field (Rules::fertile_fields)
-    kMoving = 46,         // Rules::moving other than Moving::Free
-    kClimateCrops = 47,   // 1: every island grew its climate's crops fully (Rules::climate_crops)
-    kBigOreVeins = 48,    // 1: every iron vein was a big one at the start (Rules::big_ore_veins)
-    kWiderHunting = 49,   // 1: the hunter's hut reaches further (Rules::wider_hunting)
-    kCheats = 50,         // Rules::cheats (Code when missing)
-    kPlagues = 51,        // Rules::plagues, when not the original's
-    kFires = 52,          // Rules::fires, when not the original's
-    kRareEruptions = 53,  // 1: Volcanoes::Rare, under its own key so older versions read the game's way
-    kEventSpeed = 54,     // no longer read: the speed at events became an option of each computer
-    kShipHolds = 55,      // 1: the large merchant ship has 8 holds, the warship 6 (Rules::large_ship_holds)
+    kOneCart = 44,          // 1: one trade cart per player and island (Rules::more_carts off)
+    kFertileFields = 45,    // 1: poor ground takes nothing from a field (Rules::fertile_fields)
+    kMoving = 46,           // Rules::moving other than Moving::Free
+    kClimateCrops = 47,     // 1: every island grew its climate's crops fully (Rules::climate_crops)
+    kBigOreVeins = 48,      // 1: every iron vein was a big one at the start (Rules::big_ore_veins)
+    kWiderHunting = 49,     // 1: the hunter's hut reaches further (Rules::wider_hunting)
+    kCheats = 50,           // Rules::cheats (Code when missing)
+    kPlagues = 51,          // Rules::plagues, when not the original's
+    kFires = 52,            // Rules::fires, when not the original's
+    kRareEruptions = 53,    // 1: Volcanoes::Rare, under its own key so older versions read the game's way
+    kEventSpeed = 54,       // no longer read: the speed at events became an option of each computer
+    kShipHolds = 55,        // 1: the large merchant ship has 8 holds, the warship 6 (Rules::large_ship_holds)
+    kRevealResources = 56,  // 1: every island explored by everyone from the start (Rules::reveal_resources)
     // The victory conditions (VictoryConditions).
     kWinInhabitants = 11,
     kWinResidentClass = 12,
@@ -223,6 +224,9 @@ void write_rules(Writer& out, const Rules& r) {
     }
     if (r.big_ore_veins) {
         values.emplace_back(kBigOreVeins, 1U);
+    }
+    if (r.reveal_resources) {
+        values.emplace_back(kRevealResources, 1U);
     }
     if (r.cheats != Cheats::Code) {
         values.emplace_back(kCheats, static_cast<std::uint32_t>(r.cheats));
@@ -387,6 +391,9 @@ Rules read_rules(Reader& in) {
                 break;
             case kBigOreVeins:
                 r.big_ore_veins = v != 0;
+                break;
+            case kRevealResources:
+                r.reveal_resources = v != 0;
                 break;
             case kCheats:
                 r.cheats = v <= static_cast<std::uint32_t>(Cheats::Off) ? static_cast<Cheats>(v) : Cheats::Code;
