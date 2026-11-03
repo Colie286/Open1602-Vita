@@ -1781,11 +1781,24 @@ public:
         c.island = m_island;
         c.index = index;
         c.owner = owner;
-        // The next name of Text.cod's [STAEDTE], round robin.
+        // The next name of Text.cod's [STAEDTE], round robin, passing over the names a city has
+        // already (a native village, a city of a world with more players than the list has room
+        // for at once); all taken, the next one.
         if (!names.empty()) {
-            const std::uint32_t n = m_world.city_name_index() % static_cast<std::uint32_t>(names.size());
+            const auto count = static_cast<std::uint32_t>(names.size());
+            const std::uint32_t first = m_world.city_name_index() % count;
+            std::uint32_t n = first;
+            for (std::uint32_t tries = 0; tries < count; ++tries) {
+                const std::uint32_t candidate = (first + tries) % count;
+                const auto taken = std::any_of(m_world.cities().begin(), m_world.cities().end(),
+                                               [&](const City& other) { return other.name == names[candidate]; });
+                if (!taken) {
+                    n = candidate;
+                    break;
+                }
+            }
             c.name = names[n];
-            m_world.set_city_name_index((n + 1) % static_cast<std::uint32_t>(names.size()));
+            m_world.set_city_name_index((n + 1) % count);
         }  // else the name stays empty, and the game shows one in its language (MD-10)
         c.inhabitants.assign(classes, 0);
         c.satisfaction.assign(classes, 0);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <algorithm>
+#include <string>
 
 #include "../test_framework.hpp"
 
@@ -170,6 +171,25 @@ TEST_CASE("carts: a city's owner gets one cart per island at the Kontor, for not
     CHECK(!fleet.order(sim::ShipOrder{0, kogge, sim::Target::other_ship(id)}));
     // The other player gets their own.
     CHECK(fleet.request_cart(sim::CartRequest{1, 0, 1, 25, 18}) != 0);
+}
+
+TEST_CASE("ships: a new ship's name passes over the names ships have already") {
+    Land land;
+    sim::Fleet fleet(land.world, land.buildings, land.figures, land.rules);
+    fleet.set_ship_names({"Altair", "Beteigeuze", "Capella"});
+    land.world.add_ship(sim::make_ship("Altair", 5, 5, 21, 0));
+    land.world.add_ship(sim::make_ship("", 6, 5, 21, 0));
+    land.world.add_ship(sim::make_ship("", 7, 5, 21, 0));
+    fleet.name_unnamed_ships();
+    const auto& ships = land.world.ships();
+    // The two new ones take the names no ship has, each its own.
+    const std::string a = ships[ships.size() - 2].name;
+    const std::string b = ships[ships.size() - 1].name;
+    CHECK(a != "Altair");
+    CHECK(b != "Altair");
+    CHECK(a != b);
+    CHECK((a == "Beteigeuze" || a == "Capella"));
+    CHECK((b == "Beteigeuze" || b == "Capella"));
 }
 
 TEST_CASE("carts: asked for in a market's window, the cart comes out of that market") {

@@ -236,6 +236,21 @@ struct Island {
 
 }  // namespace
 
+TEST_CASE("construction: a new city passes over a name a city has already") {
+    Island island;
+    sim::City village;  // a native village with the list's next name
+    village.island = 0;
+    village.index = 5;
+    village.owner = 1;
+    village.name = island.names[0];
+    island.world.add_city(std::move(village));
+    const sim::BuildPlan plan = island.build({{kKontor, 5, 10, 0, 0}}, 0);
+    REQUIRE(plan.placed == 1);
+    REQUIRE(island.world.city(0, 0) != nullptr);
+    CHECK(island.world.city(0, 0)->name == island.names[1]);
+    CHECK(island.world.city_name_index() == 0);  // after the last, the first again
+}
+
 TEST_CASE("construction: the first Kontor at the coast founds a city, paid from the ship") {
     Island island;
     CHECK(!island.world.islands()[0].discovered_by(1));

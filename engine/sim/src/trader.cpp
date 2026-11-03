@@ -517,11 +517,24 @@ void Fleet::name_unnamed_ships() {
 }
 
 std::string Fleet::next_ship_name() {
-    if (m_ship_names.empty()) {
+    // Round robin, passing over the names a ship has already (the start ships of many players);
+    // all taken, the next one.
+    const std::size_t count = m_ship_names.size();
+    if (count == 0) {
         return {};  // the game shows a name in its language (MD-10)
     }
-    const std::string& name = m_ship_names[m_name_index % m_ship_names.size()];
-    ++m_name_index;
+    std::size_t skip = 0;  // all taken: none passed over
+    for (std::size_t tries = 0; tries < count; ++tries) {
+        const std::string& name = m_ship_names[(m_name_index + tries) % count];
+        const auto taken = std::any_of(m_world->ships().begin(), m_world->ships().end(),
+                                       [&](const Ship& ship) { return ship.name == name; });
+        if (!taken) {
+            skip = tries;
+            break;
+        }
+    }
+    const std::string& name = m_ship_names[(m_name_index + skip) % count];
+    m_name_index += static_cast<std::uint32_t>(skip + 1);
     return name;
 }
 
