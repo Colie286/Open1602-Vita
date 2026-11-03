@@ -12,11 +12,13 @@
 #include <string>
 #include <vector>
 
+#include "mod_rules.hpp"
 #include "tool.hpp"
 
 #include "o1602/assets/building_table.hpp"
 #include "o1602/assets/chunk_file.hpp"
 #include "o1602/assets/figure_table.hpp"
+#include "o1602/assets/game_content.hpp"
 #include "o1602/assets/game_directory.hpp"
 #include "o1602/assets/text_table.hpp"
 #include "o1602/core/file.hpp"
@@ -152,7 +154,40 @@ int cmd_bench(const Args& args) {
     if (!figures) {
         return fail(figures.error());
     }
+    // The rules of the packages of a mods folder, as a new game of the game takes them.
+    std::vector<assets::ModPackage> packages;
+    std::optional<app::ModRules> rules;
+    if (const auto it = args.options.find("--mods"); it != args.options.end()) {
+        const fs::path mods(std::string(it->second));
+        std::error_code ec;
+        if (!fs::is_directory(mods, ec)) {
+            return fail(
+                core::make_error(core::ErrorCode::NotFound, std::string(it->second) + ": no folder of packages"));
+        }
+        std::vector<std::string> problems;
+        packages = assets::load_mod_packages(mods, problems);
+        rules = app::load_mod_rules(packages, *buildings, *figures, problems);
+        for (const std::string& p : problems) {
+            std::fprintf(stderr, "mod problem: %s\n", p.c_str());
+        }
+        std::printf("%zu packages from %s, %zu problems\n", packages.size(), std::string(it->second).c_str(),
+                    problems.size());
+    }
     std::vector<std::string> warnings;
+    const auto use_rules = [&](core::Result<sim::World> world) {
+        if (world && rules) {
+            world->set_factions(rules->factions);
+            world->replace_factions(rules->faction_replacements);
+            world->set_balance(rules->balance);
+            world->set_packages(assets::content_of(packages));
+            world->set_own_buildings(rules->own);
+            world->set_own_figures(rules->own_figures);
+            world->set_goods(rules->goods);
+            world->set_resident_classes(rules->classes);
+            world->set_infra_levels(rules->levels);
+        }
+        return world;
+    };
     const auto make_world = [&]() -> core::Result<sim::World> {
         if (!args.positional.empty()) {
             auto bytes = core::read_file(fs::path(args.positional[0]));
@@ -166,7 +201,7 @@ int cmd_bench(const Args& args) {
             if (!file) {
                 return file.error();
             }
-            return sim::load_world(*file, *buildings, *game, &warnings);
+            return use_rules(sim::load_world(*file, *buildings, *game, &warnings));
         }
         auto texts = assets::TextTable::load(*game);
         if (!texts) {
@@ -185,7 +220,10 @@ int cmd_bench(const Args& args) {
             settings.height = static_cast<std::uint32_t>(std::max(0, size->second));
         }
         options.custom = settings;
-        return sim::start_new_game(*game, *buildings, *texts, options, &warnings);
+        if (rules) {
+            options.world.climates = rules->balance.climates;
+        }
+        return use_rules(sim::start_new_game(*game, *buildings, *texts, options, &warnings));
     };
     auto world = make_world();
     if (!world) {

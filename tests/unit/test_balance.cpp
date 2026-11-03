@@ -216,6 +216,36 @@ TEST_CASE("balance: when the computers' cities move on is [computer_stages], sav
     CHECK(sim::balance_version(cheats) == sim::kBalanceWithComputers);
 }
 
+TEST_CASE("balance: the rest of the stages' numbers are [computer_stages] too, saved in BALA version 4") {
+    sim::Balance balance;
+    CHECK(balance.ai_colony_buildings == 7);
+    CHECK(balance.ai_founded_abandon_seconds == 480);
+    CHECK(balance.ai_pioneers_abandon_seconds == 1200);
+    CHECK(balance.ai_settlers_luxury_settlers == 135);
+    CHECK(balance.ai_merchants2_kontor == 4);
+    std::vector<std::string> warnings;
+    sim::apply_balance_file(balance, "slow",
+                            "[computer_stages]\n"
+                            "pioneers_abandon_seconds = 3600\n"
+                            "colony_animals = 2\n"
+                            "merchants2_kontor = 6\n",
+                            warnings);
+    CHECK(balance.ai_pioneers_abandon_seconds == 3600);
+    CHECK(balance.ai_colony_animals == 2);
+    CHECK(balance.ai_merchants2_kontor == 4);  // a Kontor has at most level 4; 5 for never
+    CHECK(warnings.size() == 1);
+    CHECK(sim::balance_version(balance) == sim::kBalanceWithMoreStages);
+
+    const auto buildings = make_buildings();
+    sim::World world(60, 40);
+    world.set_balance(balance);
+    auto bytes = sim::write_game(world, buildings);
+    REQUIRE(bytes.ok());
+    auto loaded = sim::read_game(*bytes, buildings);
+    REQUIRE(loaded.ok());
+    CHECK(loaded->balance() == balance);
+}
+
 TEST_CASE("balance: a package changes values of the original's buildings") {
     sim::Balance balance;
     std::vector<std::string> warnings;

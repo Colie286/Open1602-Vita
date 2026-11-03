@@ -140,6 +140,23 @@ struct Balance {
     std::uint32_t ai_aristocrats_money = 15'001;     ///< ... and gold
     std::uint32_t ai_aristocrats_land = 1101;        ///< with less free land the city stays small
     std::uint32_t ai_aristocrats2_money = 8001;  ///< the aristocrats' second stage, with their luxury goods in stock
+    /// The rest of the stages' numbers ([computer_stages], version kBalanceWithMoreStages).
+    std::uint32_t ai_colony_buildings = 7;             ///< a city founded with more buildings becomes a colony ...
+    std::uint32_t ai_colony_other_people = 4;          ///< ... or with more than one other city of so many people
+    std::uint32_t ai_colony_large_city = 1200;         ///< ... or another city of so many people
+    std::uint32_t ai_founded_abandon_seconds = 480;    ///< a city founded is given up after so long
+    std::uint32_t ai_pioneers_abandon_seconds = 1200;  ///< the pioneers' city the same
+    std::uint32_t ai_colony_animal_tiles = 120;        ///< a colony without crops: a farm of animals per so many tiles
+    std::uint32_t ai_colony_animals = 6;               ///< ... at most so many
+    std::uint32_t ai_colony_luxury_tiles = 120;        ///< a colony with crops: a field per so many tiles
+    std::uint32_t ai_grown_income = 11;                ///< grown, also with every city earning so much a minute
+    std::uint32_t ai_settlers_luxury_settlers = 135;   ///< settlers that wait build workshops and luxury from so many
+    std::uint32_t ai_settlers_luxury_fields = 4;       ///< ... so many fields of luxury crops
+    std::uint32_t ai_main_idle_money = 4000;           ///< the main city grows on with so much gold
+    std::uint32_t ai_citizens_luxury = 1;      ///< on to the citizens with more luxury goods in stock than this ...
+    std::uint32_t ai_citizens_kontor = 2;      ///< ... or a Kontor above this level
+    std::uint32_t ai_merchants2_kontor = 4;    ///< the merchants' second stage also with a Kontor of this level
+    std::uint32_t ai_aristocrats2_luxury = 3;  ///< the aristocrats' second stage with more luxury goods than this
     /// Changed values of buildings, sorted by id and field, each at most once.
     std::vector<BuildingValue> buildings;
     /// Changed values of figures, sorted by number and field, each at most once.
@@ -172,9 +189,11 @@ struct BalanceField {
 inline constexpr std::uint16_t kBalanceWithComputers = 2;
 /// The version of the section BALA with the computers' stages.
 inline constexpr std::uint16_t kBalanceWithStages = 3;
+/// The version of the section BALA with the rest of the computers' stages.
+inline constexpr std::uint16_t kBalanceWithMoreStages = 4;
 
 /// Every value, in the order of the section BALA.
-inline constexpr std::array<BalanceField, 49> kBalanceFields = {{
+inline constexpr std::array<BalanceField, 65> kBalanceFields = {{
     {"trader", "max_held", &Balance::trader_max_held, 1, 200},
     {"trader", "max_buy", &Balance::trader_max_buy, 1, 200},
     {"trader", "restock_seconds", &Balance::trader_restock_s, 1, 3600},
@@ -224,6 +243,25 @@ inline constexpr std::array<BalanceField, 49> kBalanceFields = {{
     {"computer_stages", "aristocrats_money", &Balance::ai_aristocrats_money, 0, 10'000'000, kBalanceWithStages},
     {"computer_stages", "aristocrats_land", &Balance::ai_aristocrats_land, 0, 1'000'000, kBalanceWithStages},
     {"computer_stages", "aristocrats2_money", &Balance::ai_aristocrats2_money, 0, 10'000'000, kBalanceWithStages},
+    {"computer_stages", "colony_buildings", &Balance::ai_colony_buildings, 0, 100'000, kBalanceWithMoreStages},
+    {"computer_stages", "colony_other_people", &Balance::ai_colony_other_people, 0, 1'000'000, kBalanceWithMoreStages},
+    {"computer_stages", "colony_large_city", &Balance::ai_colony_large_city, 0, 1'000'000, kBalanceWithMoreStages},
+    {"computer_stages", "founded_abandon_seconds", &Balance::ai_founded_abandon_seconds, 1, 1'000'000,
+     kBalanceWithMoreStages},
+    {"computer_stages", "pioneers_abandon_seconds", &Balance::ai_pioneers_abandon_seconds, 1, 1'000'000,
+     kBalanceWithMoreStages},
+    {"computer_stages", "colony_animal_tiles", &Balance::ai_colony_animal_tiles, 1, 1'000'000, kBalanceWithMoreStages},
+    {"computer_stages", "colony_animals", &Balance::ai_colony_animals, 0, 1000, kBalanceWithMoreStages},
+    {"computer_stages", "colony_luxury_tiles", &Balance::ai_colony_luxury_tiles, 1, 1'000'000, kBalanceWithMoreStages},
+    {"computer_stages", "grown_income", &Balance::ai_grown_income, 0, 100'000, kBalanceWithMoreStages},
+    {"computer_stages", "settlers_luxury_settlers", &Balance::ai_settlers_luxury_settlers, 0, 1'000'000,
+     kBalanceWithMoreStages},
+    {"computer_stages", "settlers_luxury_fields", &Balance::ai_settlers_luxury_fields, 0, 1000, kBalanceWithMoreStages},
+    {"computer_stages", "main_idle_money", &Balance::ai_main_idle_money, 0, 10'000'000, kBalanceWithMoreStages},
+    {"computer_stages", "citizens_luxury", &Balance::ai_citizens_luxury, 0, 100, kBalanceWithMoreStages},
+    {"computer_stages", "citizens_kontor", &Balance::ai_citizens_kontor, 0, 4, kBalanceWithMoreStages},
+    {"computer_stages", "merchants2_kontor", &Balance::ai_merchants2_kontor, 1, 5, kBalanceWithMoreStages},
+    {"computer_stages", "aristocrats2_luxury", &Balance::ai_aristocrats2_luxury, 0, 100, kBalanceWithMoreStages},
 }};
 
 /// The version of the section BALA that `balance` needs: the first that holds every value that is

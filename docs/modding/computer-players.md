@@ -69,7 +69,10 @@ merchants_citizens = 200
 merchants_rich_money = 15000
 ```
 
-A game keeps them (savegame `BALA` version 3).
+The same table holds the rest of a stage's numbers: when a city just founded becomes a colony or is
+given up, how many farms and fields a colony lays out, when the settlers start on workshops and
+luxury, and the luxury goods in stock and Kontor levels the later stages wait for. A game keeps them
+(savegame `BALA` version 3, version 4 for those from `colony_buildings` on).
 
 ## In which order
 

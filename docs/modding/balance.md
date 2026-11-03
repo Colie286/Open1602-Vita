@@ -44,6 +44,17 @@ are needed; the needs of the inhabitants and the prices of the wares are still o
 | `computer_stages` | `aristocrats_merchants`, `aristocrats_money` | 500, 15001 | 0–1000000, 0–10000000 | on to the aristocrats with merchants and above and gold |
 | `computer_stages` | `aristocrats_land` | 1101 | 0–1000000 | with less free land than this the city stays small instead |
 | `computer_stages` | `aristocrats2_money` | 8001 | 0–10000000 | the aristocrats' second stage, with their luxury goods in stock |
+| `computer_stages` | `colony_buildings` | 7 | 0–100000 | a city just founded becomes a colony with more buildings than this ... |
+| `computer_stages` | `colony_other_people`, `colony_large_city` | 4, 1200 | 0–1000000 | ... or when the computer has more than one other city of the first number of inhabitants, or one of the second |
+| `computer_stages` | `founded_abandon_seconds`, `pioneers_abandon_seconds` | 480, 1200 | 1–1000000 | a city just founded, and the pioneers' city, is given up after so long in its stage |
+| `computer_stages` | `colony_animal_tiles`, `colony_animals` | 120, 6 | 1–1000000, 0–1000 | a colony on an island without crops: a sheep farm or cattle farm for every so many tiles of free land, at most the second number |
+| `computer_stages` | `colony_luxury_tiles` | 120 | 1–1000000 | a colony on an island with crops: a luxury field for every so many tiles |
+| `computer_stages` | `grown_income` | 11 | 0–100000 | grown, the settlers also move on when every city of the computer earns at least so much gold a minute |
+| `computer_stages` | `settlers_luxury_settlers`, `settlers_luxury_fields` | 135, 4 | 0–1000000, 0–1000 | settlers that have not grown yet build workshops and up to the second number of luxury fields once they are so many |
+| `computer_stages` | `main_idle_money` | 4000 | 0–10000000 | the main city with nothing to do grows on with so much gold |
+| `computer_stages` | `citizens_luxury`, `citizens_kontor` | 1, 2 | 0–100, 0–4 | on to the citizens also only with more luxury goods in stock than the first number or a Kontor above the second level |
+| `computer_stages` | `merchants2_kontor` | 4 | 1–5 | the merchants' second stage also with a Kontor of this level (5: never) |
+| `computer_stages` | `aristocrats2_luxury` | 3 | 0–100 | the aristocrats' second stage with more of their luxury goods in stock than this |
 
 The `computers` values are the original's cheats: what the computer players get from nowhere, on
 every difficulty ([computer-players.md](computer-players.md#what-they-get-from-nowhere)). Values of
@@ -54,7 +65,7 @@ of the class named and the classes above it, gold is what the computer has.
 A game keeps the values it started with: they are saved with it (section `BALA` of
 [o1602-save.md](../formats/o1602-save.md), written only when they differ from the original's; version
 2 holds the `computers` values and is written only when one of them differs, version 3 the
-`computer_stages` values the same way), so a
+`computer_stages` values the same way, version 4 those from `colony_buildings` on), so a
 mod installed or removed later does not change a running game, and every computer of a multiplayer
 game plays with the host's.
 

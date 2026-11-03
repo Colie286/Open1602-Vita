@@ -27,9 +27,9 @@ namespace fs = std::filesystem;
 /// The options that take no value: the word after one of them is a positional argument
 /// ("render-world --owners a.gam out.png").
 inline constexpr std::string_view kFlags[] = {
-    "--no-template", "--original-data", "--original-limits", "--original-flags",   "--original-sheets",
-    "--owners",      "--production",    "--sheet",           "--together",         "--via-own",
-    "--walkers",     "--wall",          "--wares",           "--without-original",
+    "--buildings",       "--no-template", "--original-data", "--original-limits", "--original-flags",
+    "--original-sheets", "--owners",      "--production",    "--sheet",           "--together",
+    "--via-own",         "--walkers",     "--wall",          "--wares",           "--without-original",
 };
 /// The options whose value is a whole number.
 inline constexpr std::string_view kNumbers[] = {

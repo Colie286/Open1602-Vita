@@ -13,10 +13,12 @@
 #include <utility>
 #include <vector>
 
+#include "mod_rules.hpp"
 #include "tool.hpp"
 
 #include "o1602/assets/building_table.hpp"
 #include "o1602/assets/chunk_file.hpp"
+#include "o1602/assets/figure_table.hpp"
 #include "o1602/assets/game_content.hpp"
 #include "o1602/assets/game_directory.hpp"
 #include "o1602/assets/island.hpp"
@@ -98,12 +100,13 @@ int cmd_savegames(const Args& args) {
 }
 
 /// A savegame of Open1602's own (.o1602) with the original's building table, which it needs to be
-/// read (ANNO1602_DIR); nullopt when the file is none.
+/// read (ANNO1602_DIR) and, with `mods`, the buildings of the packages of that folder; nullopt
+/// when the file is none.
 struct OwnSave {
     assets::BuildingTable buildings;
     sim::World world;
 };
-std::optional<core::Result<OwnSave>> read_own_save(const fs::path& path) {
+std::optional<core::Result<OwnSave>> read_own_save(const fs::path& path, const std::string_view* mods = nullptr) {
     auto bytes = core::read_file(path);
     if (!bytes || !sim::is_open1602_save(*bytes)) {
         return std::nullopt;
@@ -117,6 +120,15 @@ std::optional<core::Result<OwnSave>> read_own_save(const fs::path& path) {
         return core::Result<OwnSave>(buildings.error());
     }
     std::vector<std::string> warnings;
+    if (mods != nullptr) {
+        auto figures = assets::FigureTable::load(*game);
+        if (!figures) {
+            return core::Result<OwnSave>(figures.error());
+        }
+        const std::vector<assets::ModPackage> packages =
+            assets::load_mod_packages(fs::path(std::string(*mods)), warnings);
+        (void)app::load_mod_rules(packages, *buildings, *figures, warnings);
+    }
     auto world = sim::read_game(*bytes, *buildings, &warnings);
     for (const auto& text : warnings) {
         std::fprintf(stderr, "warning: %s\n", text.c_str());
@@ -218,7 +230,8 @@ int cmd_state(const Args& args) {
     if (args.positional.size() != 1) {
         return usage();
     }
-    if (auto own = read_own_save(fs::path(args.positional[0]))) {
+    const auto mods = args.options.find("--mods");
+    if (auto own = read_own_save(fs::path(args.positional[0]), mods != args.options.end() ? &mods->second : nullptr)) {
         return *own ? own_state((*own)->world, (*own)->buildings, args.flag("--buildings")) : fail(own->error());
     }
     auto file = assets::ChunkFile::load(fs::path(args.positional[0]));

@@ -17,8 +17,6 @@ namespace o1602::sim::ai {
 namespace {
 
 constexpr std::uint64_t kRefreshMs = 5100;  // a refresh every 5.1 s
-constexpr std::uint64_t kStage0AbandonMs = 480'000;
-constexpr std::uint64_t kStage14AbandonMs = 1'200'000;
 
 }  // namespace
 
@@ -750,18 +748,19 @@ void Engine::run_stage(AiPlayer& p, City& c, CityPlan& r) {
             bool large = false;
             for (const City& o : m_world.cities()) {
                 if (o.owner == p.player && &o != &c) {
-                    big_cities += population(o) >= 4 ? 1U : 0U;
-                    large = large || population(o) >= 1200;
+                    big_cities += population(o) >= at.ai_colony_other_people ? 1U : 0U;
+                    large = large || population(o) >= at.ai_colony_large_city;
                 }
             }
-            if (r.land < at.ai_colony_below_land || building_count(c) > 7 || big_cities > 1 || large) {
+            if (r.land < at.ai_colony_below_land || building_count(c) > at.ai_colony_buildings || big_cities > 1 ||
+                large) {
                 set_stage(p, r, stage::kColony);
                 return;
             }
             if (needs(ComputerList::Founded)) {
                 return;
             }
-            if (now_ms() - r.stage_ms >= kStage0AbandonMs) {
+            if (now_ms() - r.stage_ms >= std::uint64_t{at.ai_founded_abandon_seconds} * 1000) {
                 r.flags |= city_flag::kAbandon;
             }
             return;
@@ -771,11 +770,12 @@ void Engine::run_stage(AiPlayer& p, City& c, CityPlan& r) {
                 return;
             }
             if (full_crops(c.island) == 0) {
-                const std::uint32_t n = std::min(r.land / 120, grown(r, 6, true));
+                const std::uint32_t n =
+                    std::min(r.land / at.ai_colony_animal_tiles, grown(r, at.ai_colony_animals, true));
                 if (need(p, kSlotSheep, n) || need(p, kSlotCattle, n)) {
                     return;
                 }
-            } else if (colony_luxury(p, c, r, 120)) {
+            } else if (colony_luxury(p, c, r, at.ai_colony_luxury_tiles)) {
                 return;
             }
             if (needs(ComputerList::ColonyMaterials)) {
@@ -793,7 +793,7 @@ void Engine::run_stage(AiPlayer& p, City& c, CityPlan& r) {
             if (needs(ComputerList::Pioneers)) {
                 return;
             }
-            if (now_ms() - r.stage_ms >= kStage14AbandonMs) {
+            if (now_ms() - r.stage_ms >= std::uint64_t{at.ai_pioneers_abandon_seconds} * 1000) {
                 r.flags |= city_flag::kAbandon;
             }
             return;
@@ -809,7 +809,7 @@ void Engine::run_stage(AiPlayer& p, City& c, CityPlan& r) {
                 if (kontor_level(c) == 1 && p.cities < 2 && (!p.colony_failed || classic()) &&
                     !player(p).scenario.has(scenario_flag::kNoColonies)) {
                     want_colony(p, 1, true, true);
-                } else if (has(at.ai_grown_money) || incomes_ok(p, 11)) {
+                } else if (has(at.ai_grown_money) || incomes_ok(p, static_cast<std::int32_t>(at.ai_grown_income))) {
                     const std::int32_t rank = land_rank(p);
                     if (rank == 0) {
                         set_stage(p, r, stage::kSecond);
@@ -824,8 +824,8 @@ void Engine::run_stage(AiPlayer& p, City& c, CityPlan& r) {
             if (needs(ComputerList::Settlers)) {
                 return;
             }
-            if (population(c, 1) >= 135) {
-                (void)(processing(p) || luxury(p, 4, true));
+            if (population(c, 1) >= at.ai_settlers_luxury_settlers) {
+                (void)(processing(p) || luxury(p, at.ai_settlers_luxury_fields, true));
             }
             return;
         }
@@ -861,14 +861,14 @@ void Engine::run_stage(AiPlayer& p, City& c, CityPlan& r) {
             if (needs(ComputerList::Main) || needs(ComputerList::MainRich)) {
                 return;
             }
-            if (money >= 4000) {
+            if (has(at.ai_main_idle_money)) {
                 idle();
             }
             return;
         }
         case stage::kMain2: {
             if (has(at.ai_citizens_money) && !want_colony(p, 2, false, true) &&
-                (luxury_in_stock(p, c, r, 2) > 1 || kontor_level(c) > 2)) {
+                (luxury_in_stock(p, c, r, 2) > at.ai_citizens_luxury || kontor_level(c) > at.ai_citizens_kontor)) {
                 set_stage(p, r, stage::kCitizens);
                 return;
             }
@@ -910,7 +910,7 @@ void Engine::run_stage(AiPlayer& p, City& c, CityPlan& r) {
             return;
         }
         case stage::kMerchants: {
-            if (population(c, 3) >= at.ai_merchants2_merchants || kontor_level(c) >= 4) {
+            if (population(c, 3) >= at.ai_merchants2_merchants || kontor_level(c) >= at.ai_merchants2_kontor) {
                 set_stage(p, r, stage::kMerchants2);
                 return;
             }
@@ -944,7 +944,7 @@ void Engine::run_stage(AiPlayer& p, City& c, CityPlan& r) {
             if (want_colony(p, 4, false, false)) {
                 return;
             }
-            if (luxury_in_stock(p, c, r, 4) > 3 && has(at.ai_aristocrats2_money)) {
+            if (luxury_in_stock(p, c, r, 4) > at.ai_aristocrats2_luxury && has(at.ai_aristocrats2_money)) {
                 set_stage(p, r, stage::kAristocrats2);
                 return;
             }

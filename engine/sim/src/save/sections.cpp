@@ -316,7 +316,7 @@ constexpr std::uint16_t max_version(std::uint32_t id) noexcept {
         return kSlotsWithPublic;
     }
     if (id == kBalance) {
-        return kBalanceWithStages;
+        return kBalanceWithMoreStages;
     }
     if (id == kFactions) {
         return kScriptedFactions;

@@ -264,8 +264,12 @@ own_buildings.toml gives a building a service of its own (the free bits 13 and 1
 services, so two in a game), classes need it by its id, and `kind = "public"` in slots.toml adds a
 slot the computers plan (slots 0xFE and 0xFD, tasks 0x3E and 0x3F, "covered" flags 0x2000 and
 0x4000; section `SLOT` version 2). More than two kinds would need a wider service field of houses
-and of the classes' needs (savegame sections of houses and `CPUB`). Next: the stages' thresholds as
-data.
+and of the classes' needs (savegame sections of houses and `CPUB`). Step 5, the rest of the
+stages' numbers as values of `[computer_stages]` in balance.toml (section `BALA` version 4): when a
+city founded becomes a colony or is given up, the colonies' farms and fields, the settlers' early
+workshops and luxury, the main city's gold to grow on, the luxury goods and Kontor levels the
+citizens', merchants' and aristocrats' stages wait for. What stays code: the order in which a
+stage asks (land rank, colonies first), which the orders of computers.toml already change.
 
 ### 6. Lua scripts (section 6)
 
