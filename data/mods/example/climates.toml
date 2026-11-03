@@ -1,0 +1,11 @@
+# Climates for new own worlds (climates.md).
+
+# Highlands: islands like the north's, a quarter of them in a new own world (not the homes), that
+# grow tobacco and wine but no sugar cane, in a forest of mixed trees only.
+[highlands]
+like = "north"
+name = "Highlands"
+name.de = "Hochland"
+crops = "tobacco, wine"
+forest = "anno1602:mixed_forest"
+share = 25

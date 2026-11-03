@@ -58,6 +58,7 @@ add_library(o1602_sim
     src/world_plan.cpp
     src/package_islands.cpp
     src/package_landscapes.cpp
+    src/climates.cpp
     src/new_game.cpp
     src/sea_paths.cpp
     src/ship_orders.cpp

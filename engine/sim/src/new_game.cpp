@@ -13,6 +13,7 @@
 #include "o1602/assets/scenario.hpp"
 #include "o1602/core/file.hpp"
 #include "o1602/core/text.hpp"
+#include "o1602/sim/construction.hpp"
 #include "o1602/sim/game_data.hpp"
 #include "o1602/sim/savegame_extension.hpp"
 #include "o1602/sim/savegame_writer.hpp"
@@ -232,21 +233,31 @@ core::Result<assets::ChunkFile> new_game_scenario(const assets::ChunkFile& endle
 
 namespace {
 
+/// The packages' climates of a new own world and its islands that took one (GeneratedIsland::own_climate).
+void give_climates(World& world, const std::vector<Climate>& climates, const std::vector<GeneratedIsland>& islands) {
+    if (climates.empty()) {
+        return;
+    }
+    Balance balance = world.balance();
+    balance.climates = climates;
+    world.set_balance(balance);
+    for (const GeneratedIsland& g : islands) {
+        for (std::size_t i = 0; i < world.islands().size(); ++i) {
+            if (world.islands()[i].header.number == g.number) {
+                world.island(static_cast<std::uint16_t>(i)).climate = g.own_climate;
+            }
+        }
+    }
+}
+
 /// Rules::climate_crops and Rules::big_ore_veins on the islands of a new endless game.
 void enrich_islands(World& world, const WorldStart& start) {
-    const auto bit = [](std::uint8_t crop) { return 1U << (crop - ware::kCornField); };
-    const std::uint32_t north = bit(ware::kTobaccoField) | bit(ware::kSugarField) | bit(ware::kWineField);
-    const std::uint32_t south = bit(ware::kSpiceField) | bit(ware::kCottonField) | bit(ware::kCocoaField);
     constexpr std::uint16_t kBigIron = 0x1E00;  // 240 t, as the world plan gives a big vein
     for (std::size_t i = 0; i < world.islands().size(); ++i) {
         assets::IslandHeader& header = world.island(static_cast<std::uint16_t>(i)).header;
         if (start.climate_crops) {
             // The crops a climate grows at least half (see island_fertility) now grow fully.
-            if (header.climate == climate::kNorth) {
-                header.fertility |= north;
-            } else if (header.climate == climate::kSouth) {
-                header.fertility |= south;
-            }
+            header.fertility |= climate_crops(world.balance().climates, world.islands()[i]);
         }
         if (start.big_ore_veins) {
             for (assets::IslandHeader::Deposit& d : header.deposits) {
@@ -312,6 +323,7 @@ core::Result<World> start_new_game(const assets::GameDirectory& game, const asse
     if (auto status = add_players(*world, *plan, settings.players); !status) {
         return status.error();
     }
+    give_climates(*world, start.climates, generated->islands);
     enrich_islands(*world, start);
     return world;
 }

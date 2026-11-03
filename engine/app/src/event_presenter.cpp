@@ -126,20 +126,35 @@ bool slows_down(EventSpeed setting, MessageId message) noexcept {
     return false;
 }
 
-std::array<std::pair<std::uint8_t, std::uint32_t>, 3> island_crops(const sim::WorldIsland& island) {
+std::vector<std::pair<std::uint8_t, std::uint32_t>> island_crops(const sim::WorldIsland& island,
+                                                                 std::span<const sim::Climate> climates) {
     static constexpr std::array<std::uint8_t, 3> kNorth = {46, 50, 48};  // tobacco, grapes, sugar cane
     static constexpr std::array<std::uint8_t, 3> kSouth = {51, 49, 47};  // cocoa, cotton, spices
-    std::array<std::pair<std::uint8_t, std::uint32_t>, 3> crops{};
-    const std::array<std::uint8_t, 3>& wares = island.header.climate == sim::climate::kSouth ? kSouth : kNorth;
-    for (std::size_t i = 0; i < crops.size(); ++i) {
-        crops[i] = {wares[i], sim::island_fertility(island, wares[i]) * 100 / 128};
+    std::vector<std::pair<std::uint8_t, std::uint32_t>> crops;
+    const auto add = [&](std::uint8_t ware) {
+        crops.emplace_back(ware, sim::island_fertility(climates, island, ware) * 100 / 128);
+    };
+    if (sim::island_climate(climates, island) == nullptr) {
+        for (const std::uint8_t ware : island.header.climate == sim::climate::kSouth ? kSouth : kNorth) {
+            add(ware);
+        }
+        return crops;
+    }
+    // A package's climate: the crops it grows, the north's first, in the same order.
+    const std::uint32_t own = sim::climate_crops(climates, island);
+    for (const auto& wares : {kNorth, kSouth}) {
+        for (const std::uint8_t ware : wares) {
+            if ((own >> (ware - sim::ware::kCornField) & 1U) != 0) {
+                add(ware);
+            }
+        }
     }
     return crops;
 }
 
-std::string crops_text(const sim::WorldIsland& island) {
+std::string crops_text(const sim::WorldIsland& island, std::span<const sim::Climate> climates) {
     std::string text;
-    for (const auto& [ware, percent] : island_crops(island)) {
+    for (const auto& [ware, percent] : island_crops(island, climates)) {
         if (!text.empty()) {
             text += ", ";
         }
@@ -296,7 +311,7 @@ std::vector<Notice> EventPresenter::ship_events(const sim::World& world, sim::Pl
                 break;
             case sim::ShipEvent::Kind::CropsExplored:
                 std::fprintf(stderr, "the crops of island %u are explored: %s\n", number,
-                             crops_text(world.islands()[e.island]).c_str());
+                             crops_text(world.islands()[e.island], world.balance().climates).c_str());
                 break;
             case sim::ShipEvent::Kind::DepositFound:
                 std::fprintf(stderr, "%s on island %u (%u,%u)!\n",

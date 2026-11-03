@@ -156,6 +156,9 @@ constexpr std::uint32_t kEditorState = tag("EDIT");
 /// The plan of islands still to be made when the game starts (World::planned_islands()), only
 /// written for such a world. Required: without it the game would have no islands.
 constexpr std::uint32_t kPlannedIslands = tag("PLAN");
+/// The packages' climates (Balance::climates) and the islands that have one (WorldIsland::climate),
+/// only written when there are any. Required: crops would grow otherwise.
+constexpr std::uint32_t kClimates = tag("CLIM");
 /// SCRP version 2: each script's table `campaign` after its table `state`.
 constexpr std::uint16_t kScriptsWithCampaign = 2;
 
@@ -164,17 +167,17 @@ constexpr std::size_t kMaxScenarioIdLength = 2 * assets::kMaxPackageIdLength + 1
 
 /// Every section this version reads; others are of a later version.
 constexpr std::array kKnownSections = {
-    kRules,         kWorld,          kIslands,         kTiles,      kPlayers,        kCities,
-    kProductions,   kHouses,         kGrowth,          kCosts,      kShips,          kSoldiers,
-    kAnimals,       kDisasters,      kVolcanoes,       kSimulation, kFleet,          kEpochs,
-    kArmy,          kDiplomacy,      kExplored,        kMap,        kWorld2,         kMeta,
-    kMissions,      kPlayerState,    kCityState,       kOrigin,     kQueues,         kStances,
-    kScores,        kMaterialClocks, kPopulationMarks, kTutorial,   kGiveUps,        kFactions,
-    kLedgers,       kBalance,        kBuildingValues,  kPackages,   kFigureValues,   kOwnBuildings,
-    kGoods,         kClasses,        kLevels,          kUnlocked,   kGoodPictures,   kScripts,
-    kClassPublic,   kUnitGroups,     kScenario,        kCampaign,   kComputerOrders, kOwnFigures,
-    kLevelMessages, kBlueprints,     kScenarioInfo,    kMarkers,    kScenarioScript, kEditorState,
-    kPlannedIslands};
+    kRules,          kWorld,          kIslands,         kTiles,      kPlayers,        kCities,
+    kProductions,    kHouses,         kGrowth,          kCosts,      kShips,          kSoldiers,
+    kAnimals,        kDisasters,      kVolcanoes,       kSimulation, kFleet,          kEpochs,
+    kArmy,           kDiplomacy,      kExplored,        kMap,        kWorld2,         kMeta,
+    kMissions,       kPlayerState,    kCityState,       kOrigin,     kQueues,         kStances,
+    kScores,         kMaterialClocks, kPopulationMarks, kTutorial,   kGiveUps,        kFactions,
+    kLedgers,        kBalance,        kBuildingValues,  kPackages,   kFigureValues,   kOwnBuildings,
+    kGoods,          kClasses,        kLevels,          kUnlocked,   kGoodPictures,   kScripts,
+    kClassPublic,    kUnitGroups,     kScenario,        kCampaign,   kComputerOrders, kOwnFigures,
+    kLevelMessages,  kBlueprints,     kScenarioInfo,    kMarkers,    kScenarioScript, kEditorState,
+    kPlannedIslands, kClimates};
 
 /// Section flag (the u16 after the version): the section holds state the game cannot do without, so
 /// a reader that cannot read it (unknown identifier or later version) must not load the file. Other
@@ -558,6 +561,31 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
                     o.u8(static_cast<std::uint8_t>(n.flag));
                     o.u8(static_cast<std::uint8_t>(n.when));
                 });
+            });
+        });
+    }
+    if (!world.balance().climates.empty()) {
+        section(out, kClimates, [&](Writer& o) {
+            o.list(world.balance().climates, 16, [&](const Climate& c) {
+                o.string(c.id);
+                o.u8(c.like);
+                o.list(c.names, 8, [&](const auto& name) {
+                    o.string(name.first);
+                    o.string(name.second);
+                });
+                o.u32(c.crops);
+                o.u32s(c.forest);
+                o.u8(c.share);
+            });
+            std::vector<std::pair<std::uint16_t, std::uint8_t>> islands;
+            for (std::size_t i = 0; i < world.islands().size(); ++i) {
+                if (world.islands()[i].climate != 0) {
+                    islands.emplace_back(static_cast<std::uint16_t>(i), world.islands()[i].climate);
+                }
+            }
+            o.list(islands, 3, [&](const auto& island) {
+                o.u16(island.first);
+                o.u8(island.second);
             });
         });
     }
@@ -1062,6 +1090,36 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                     in.fail();  // a list, an entry or a condition of a later version
                 }
                 d.computer_orders = std::move(orders);
+                break;
+            }
+            case kClimates: {
+                Decoded::ClimatePart part;
+                in.list(part.climates, 16, [&](Climate& c) {
+                    in.string(c.id);
+                    in.u8(c.like);
+                    std::vector<std::pair<std::string, std::string>> names;
+                    in.list(names, 8, [&](std::pair<std::string, std::string>& name) {
+                        in.string(name.first);
+                        in.string(name.second);
+                    });
+                    c.names.insert(names.begin(), names.end());
+                    in.u32(c.crops);
+                    in.u32s(c.forest);
+                    in.u8(c.share);
+                });
+                in.list(part.islands, 3, [&](std::pair<std::uint16_t, std::uint8_t>& island) {
+                    in.u16(island.first);
+                    in.u8(island.second);
+                });
+                if (!valid(part.climates)) {
+                    in.fail();
+                }
+                for (const auto& [island, climate] : part.islands) {
+                    if (climate == 0 || climate > part.climates.size()) {
+                        in.fail();
+                    }
+                }
+                d.climates = std::move(part);
                 break;
             }
             case kGoods: {

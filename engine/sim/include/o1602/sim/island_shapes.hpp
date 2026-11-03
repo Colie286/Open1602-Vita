@@ -11,6 +11,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 #include "o1602/assets/game_data.hpp"
 #include "o1602/assets/island.hpp"
@@ -43,7 +44,9 @@ inline constexpr std::uint16_t kMinSide = 16;
 struct ShapeRequest {
     std::uint16_t width = 0;  ///< in tiles (at least 16, at most kMaxSide)
     std::uint16_t height = 0;
-    std::uint8_t climate = 0;          ///< 0 north, 1 south: the forest
+    std::uint8_t climate = 0;  ///< 0 north, 1 south: the forest
+    /// The trees of the forest (building Ids); none: the climate's (ids::kForestNorth, kForestSouth).
+    std::vector<std::uint32_t> trees;
     std::uint8_t size = 0;             ///< size class 0 lit .. 4 lar, for the header
     std::uint8_t number = 0;           ///< island number, kept in every tile
     std::uint8_t big_mountains = 0;    ///< ore mountains for big veins (4 x 4)

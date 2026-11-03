@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -19,7 +20,9 @@
 #include "o1602/assets/game_content.hpp"
 #include "o1602/assets/game_directory.hpp"
 #include "o1602/assets/package_scenarios.hpp"
+#include "o1602/core/file.hpp"
 #include "o1602/script/game_scripts.hpp"
+#include "o1602/sim/climates.hpp"
 #include "o1602/sim/package_islands.hpp"
 #include "o1602/sim/world.hpp"
 #include "o1602/ui/build_menu.hpp"
@@ -53,11 +56,11 @@ struct IconsInUse {
 
 TEST_CASE("the example package has every file a package can have") {
     for (const char* name :
-         {"mod.toml",       "messages.toml",  "build_menu.toml", "factions.toml",      "balance.toml",
-          "buildings.toml", "figures.toml",   "computers.toml",  "own_buildings.toml", "own_figures.toml",
-          "goods.toml",     "classes.toml",   "levels.toml",     "script.lua",         "scenarios.toml",
-          "campaigns.toml", "graphics.toml",  "icons.toml",      "figure_images.toml", "music.toml",
-          "sounds.toml",    "landscapes.toml"}) {
+         {"mod.toml",       "messages.toml",   "build_menu.toml", "factions.toml",      "balance.toml",
+          "buildings.toml", "figures.toml",    "computers.toml",  "own_buildings.toml", "own_figures.toml",
+          "goods.toml",     "classes.toml",    "levels.toml",     "script.lua",         "scenarios.toml",
+          "campaigns.toml", "graphics.toml",   "icons.toml",      "figure_images.toml", "music.toml",
+          "sounds.toml",    "landscapes.toml", "climates.toml"}) {
         if (!fs::is_regular_file(kMods / "example" / name)) {
             std::fprintf(stderr, "missing: %s\n", name);
             CHECK(false);
@@ -76,6 +79,14 @@ TEST_CASE("the example package loads without a warning, as far as it needs no or
     CHECK(ui::package_icon_sprite("example:pepper").has_value());
     const std::vector<sim::PackageLandscape> landscapes = app::load_package_landscapes(packages, problems);
     CHECK(landscapes.size() == 1);
+    std::vector<sim::Climate> climates;
+    if (const auto bytes = core::read_file(kMods / "example" / sim::kClimatesFile)) {
+        const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
+        sim::apply_climates_file(climates, "example", text, problems);
+    }
+    REQUIRE(climates.size() == 1);
+    CHECK(climates[0].id == "example:highlands");
+    CHECK(climates[0].share == 25);
     const std::vector<sim::PackageIsland> islands = sim::load_package_islands(packages, problems);
     REQUIRE(islands.size() == 1);
     CHECK(islands[0].id == "example:lagoon");
@@ -120,6 +131,7 @@ TEST_CASE("data: the example package loads without a warning") {
     const app::ModRules rules = app::load_mod_rules(packages, *buildings, *figures, problems);
     CHECK(rules.own.size() == 2);
     CHECK(rules.goods.own_goods().size() == 1);
+    CHECK(rules.balance.climates.size() == 1);  // its forest of the original's trees
     (void)ui::load_build_menu_mods(ui::original_build_menu(), packages, *buildings, problems, rules.own);
     require_none(problems);
 }

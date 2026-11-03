@@ -76,6 +76,8 @@ struct WorldIsland {
     /// Volcano craters, at most two (INSEL5 +0x17/+0x3C).
     std::vector<Crater> craters{};
     bool volcano_erupted = false;  ///< a volcano of the island has erupted (for the computer players)
+    /// A climate of a package (Balance::climates[climate - 1], climates.hpp); 0: the header's.
+    std::uint8_t climate = 0;
     /// Players who know the island: a ship of theirs came close.
     std::vector<bool> discovered{};
 

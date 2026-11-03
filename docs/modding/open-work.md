@@ -21,7 +21,7 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 | 6. Lua scripts | a sandboxed Lua 5.4 script per package that hears what happens and reads and changes the game (money, goods, missions, buildings, ships, land units, diplomacy, who wins) |
 | 7. Scenarios and campaigns | scenarios with maps, briefings, goals and scripts; campaigns of up to five parts that carry money and a script table on |
 | 8. Factions | factions of a package's own that take the base game's slots, and settlers or pirates left wholly to a script |
-| 9. Island generator | islands of their own shape and size with slopes, rivers with bends, volcanoes and native villages; kinds of island world as data (`landscapes.toml`); island templates of a package's own, which new own worlds draw with the original's (`islands.toml`, [islands.md](islands.md)) |
+| 9. Island generator | islands of their own shape and size with slopes, rivers with bends, volcanoes and native villages; kinds of island world as data (`landscapes.toml`); island templates of a package's own, which new own worlds draw with the original's (`islands.toml`, [islands.md](islands.md)); climates of a package's own with their crops, forest and share of the islands (`climates.toml`, [climates.md](climates.md)) |
 
 ### Still open
 
@@ -29,7 +29,7 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 |---|---|---|
 | 4 | videos in a modern format (today only Smacker and Bink 2) | medium: a decoder in `third_party` (e.g. a royalty-free format such as AV1 or VP9 in WebM) |
 | 5 | the original's 32 rows of needs (`kNeeds`), its 55 fixed building slots of a city and which building of the original produces what (`producer_slot`), all still compiled in | large: the AI's core tables |
-| 9 | climates of a package's own, with their ground, forest and crops (today north and south) | large: climate tables, the generator, fertility and the start dialog |
+| 9 | a climate's own ground, its share per kind of island world, island templates and the editor's choice of it | medium: the island shapes, landscapes.toml, islands.toml and the editor |
 
 ### Smaller adjustments
 
@@ -413,7 +413,13 @@ with a small mountain beside it whose river runs into it; other rivers try the w
 first. The open sea of an island of its own shape is no longer turned at random and takes the
 phase of the world's sea around it, so that no strip of other waves shows between two islands.
 
-Still open: the climates of the islands as data.
+Part 11 done on 2026-11-03 ([climates.md](climates.md)): climates of a package's own
+(`climates.toml`), each like the north or the south, with its name, its crops, the trees of its
+forest and its share of the islands of its like in new own worlds (not the homes, a random stream
+of their own). An island of such a climate grows its crops half and fully where the world gives
+them, keeps the original's climate in its header and its own in the savegame (section `CLIM`); the
+status line names it with its crops. Still open: a climate's own ground, its share per kind of
+island world, island templates of such a climate and the editor's choice of it.
 
 ## Order of work
 

@@ -1024,7 +1024,10 @@ assets::Island make_island(const ShapeRequest& request) {
                 continue;
             }
             if ((2 * forest.at(x, y) + fray.at(x, y)) / 3 >= forest_line) {
-                lay(pick(random, trees), x, y, 0, 0);
+                lay(request.trees.empty()
+                        ? pick(random, trees)
+                        : request.trees[random.below(static_cast<std::uint32_t>(request.trees.size()))],
+                    x, y, 0, 0);
             } else {
                 lay(ground(), x, y, static_cast<std::uint8_t>(random.below(4)), 0);
             }

@@ -284,7 +284,9 @@ core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDir
         if (!texts) {
             return texts.error();
         }
-        world = sim::start_new_game(game, *buildings, *texts, *options.new_game, &warnings);
+        sim::NewGameOptions start = *options.new_game;
+        start.world.climates = rules.balance.climates;
+        world = sim::start_new_game(game, *buildings, *texts, start, &warnings);
         if (world) {
             world->set_factions(rules.factions);
             world->replace_factions(rules.faction_replacements);
@@ -372,6 +374,7 @@ core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDir
     viewer->load_package_scenarios();
     set_package_island_presets(logged_landscapes(viewer->m_packages));
     viewer->m_options.world.package_islands = logged_islands(viewer->m_packages);
+    viewer->m_options.world.climates = viewer->m_balance.climates;
     {
         std::vector<std::string> problems;
         viewer->m_cached_packages = assets::cached_packages(data_folder() / "mods-cache", problems);
@@ -1203,7 +1206,7 @@ std::string MapViewer::tile_status() const {
         return {};
     }
     return app::tile_status(m_state->world.islands()[spot->island], spot->x, spot->y, m_local_player, m_buildings,
-                            *m_hud->texts());
+                            *m_hud->texts(), m_state->world.balance().climates);
 }
 
 sim::Catchment MapViewer::world_catchment(std::uint16_t island, sim::Catchment area) const {
@@ -2778,7 +2781,7 @@ std::string MapViewer::debug_title(double fps) {
     if (const auto spot = m_input->spot_at_mouse()) {
         const sim::WorldIsland& isl = m_state->world.islands()[spot->island];
         if (isl.explored_by(m_local_player)) {
-            title += " | " + crops_text(isl);
+            title += " | " + crops_text(isl, m_state->world.balance().climates);
         }
     }
     if (m_tool.active()) {
@@ -3488,6 +3491,7 @@ void MapViewer::reload_mods() {
     m_factions = std::move(rules.factions);
     m_faction_replacements = std::move(rules.faction_replacements);
     m_balance = rules.balance;
+    m_options.world.climates = m_balance.climates;
     m_own_buildings = std::move(rules.own);
     m_own_figures = std::move(rules.own_figures);
     m_own_units = std::move(rules.own_units);

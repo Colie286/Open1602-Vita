@@ -27,6 +27,8 @@
 #include "o1602/assets/scenario.hpp"
 #include "o1602/assets/text_table.hpp"
 #include "o1602/sim/ai.hpp"
+#include "o1602/sim/climates.hpp"
+#include "o1602/sim/construction.hpp"
 #include "o1602/sim/new_game.hpp"
 #include "o1602/sim/savegame_extension.hpp"
 #include "o1602/sim/score.hpp"
@@ -726,6 +728,53 @@ TEST_CASE("new game: an own world with six players: the plan's size and starts, 
     // And the same on every platform (golden hash, DS-2): a planned world, five computers.
     // The computers' state version 5 (the slots counted); the revised bread chain by default.
     test::check_golden("six players after 60 s", a.state_hash(), 0xf431ea0349d281aaULL);
+}
+
+TEST_CASE("new game: an own world gives a package's climate its share of the islands of its like") {
+    const auto& fake = installation();
+    sim::NewGameOptions o = options(5);
+    sim::WorldSettings settings;
+    settings.players = 4;
+    o.custom = settings;
+    auto plain = sim::start_new_game(fake.game, buildings(), texts(), o);
+    REQUIRE(plain.ok());
+    CHECK(plain->balance().climates.empty());
+
+    sim::Climate tundra;
+    tundra.id = "mod:tundra";
+    tundra.like = sim::climate::kNorth;
+    tundra.crops = 1U << (sim::ware::kCocoaField - sim::ware::kCornField);
+    tundra.share = 100;
+    o.world.climates = {tundra};
+    auto world = sim::start_new_game(fake.game, buildings(), texts(), o);
+    REQUIRE(world.ok());
+    CHECK(sim::validate(*world).ok());
+    REQUIRE(world->balance().climates.size() == 1);
+    CHECK(world->balance().climates[0] == tundra);
+    const std::uint32_t north = sim::original_climate_crops(sim::climate::kNorth);
+    std::size_t taken = 0;
+    for (const sim::WorldIsland& island : world->islands()) {
+        if (island.climate == 0) {
+            continue;
+        }
+        ++taken;
+        CHECK(island.climate == 1);
+        CHECK(island.header.climate == sim::climate::kNorth);  // the original's climate stays in the header
+        CHECK((island.header.fertility & north) == 0);         // only its own crops are given
+        CHECK(sim::island_fertility(*world, island, sim::ware::kCocoaField) >= 64);
+        CHECK(sim::island_fertility(*world, island, sim::ware::kTobaccoField) == 0);
+    }
+    // Every northern island but the homes.
+    std::size_t northern = 0;
+    for (const sim::WorldIsland& island : plain->islands()) {
+        northern += island.header.climate == sim::climate::kNorth ? 1U : 0U;
+    }
+    CHECK(taken > 0);
+    CHECK(taken < northern + 1);
+    // The same seed, the same world.
+    auto again = sim::start_new_game(fake.game, buildings(), texts(), o);
+    REQUIRE(again.ok());
+    CHECK(same_world(*world, *again));
 }
 
 TEST_CASE("new game: a colour the level's file does not have is swapped with the player who had it") {

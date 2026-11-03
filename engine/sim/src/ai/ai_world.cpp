@@ -262,7 +262,7 @@ const assets::BuildingType* Engine::producer(std::uint8_t w, std::uint8_t raw) c
 }
 
 std::uint32_t Engine::fertility(std::uint16_t island, std::uint8_t w) const {
-    return island < m_world.islands().size() ? island_fertility(m_world.islands()[island], w) : 0;
+    return island < m_world.islands().size() ? island_fertility(m_world, m_world.islands()[island], w) : 0;
 }
 
 std::uint32_t Engine::full_crops(std::uint16_t island) const {

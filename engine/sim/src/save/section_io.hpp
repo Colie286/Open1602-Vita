@@ -121,6 +121,12 @@ struct Decoded {
     std::optional<std::vector<FigureValue>> figure_values;
     /// The computers' build orders a package changed (AIOR).
     std::optional<std::vector<ComputerOrder>> computer_orders;
+    /// The packages' climates and the islands that have one (CLIM).
+    struct ClimatePart {
+        std::vector<Climate> climates;
+        std::vector<std::pair<std::uint16_t, std::uint8_t>> islands;  ///< island, WorldIsland::climate
+    };
+    std::optional<ClimatePart> climates;
     /// Missions and the end of the game (MISN).
     struct MissionPart {
         std::vector<Mission> missions;

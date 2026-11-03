@@ -30,6 +30,13 @@ core::Status check(const World& w, const Decoded& d) {
     if (d.islands && d.islands->size() != w.islands().size()) {
         return bad("islands do not match");
     }
+    if (d.climates) {
+        for (const auto& [island, climate] : d.climates->islands) {
+            if (!island_ok(w, island)) {
+                return bad("an island of a climate does not exist");
+            }
+        }
+    }
     if (d.markers && !check_markers(*d.markers, w.width(), w.height()).empty()) {
         return bad("a marker lies outside the world");
     }
@@ -225,6 +232,12 @@ core::Status apply_decoded(World& world, Decoded& d) {
     balance.buildings = d.building_values.value_or(std::vector<BuildingValue>{});
     balance.figures = d.figure_values.value_or(std::vector<FigureValue>{});
     balance.computer_orders = d.computer_orders.value_or(std::vector<ComputerOrder>{});
+    if (d.climates) {
+        balance.climates = std::move(d.climates->climates);
+        for (const auto& [island, climate] : d.climates->islands) {
+            world.island(island).climate = climate;
+        }
+    }
     world.set_balance(balance);
     if (d.script_states) {
         world.set_script_states(std::move(*d.script_states));

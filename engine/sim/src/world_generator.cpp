@@ -193,6 +193,7 @@ struct Slot {
     std::array<std::uint32_t, 2> mountains{};  ///< big (Erzbergnr 0) and small ones among the first 40
     bool own_shape = false;                    ///< `base` is an island of its own shape, no template
     bool package = false;                      ///< `base` is an island of a package (package_islands.hpp)
+    std::uint8_t climate = 0;                  ///< a climate of a package (WorldIsland::climate), 0: none
     /// An island of its own shape with a village: how far its native template's tiles and
     /// records were moved onto it.
     std::int32_t village_dx = 0;
@@ -277,11 +278,14 @@ public:
           m_shape_seed(shape_seed),
           m_shape_random(shape_seed, kShapeStream),
           m_own_islands(std::move(own_islands)),
-          m_landscape(landscape) {}
+          m_landscape(landscape),
+          m_climate_random(shape_seed, kClimateStream) {}
 
     core::Result<GeneratedWorld> run(const assets::ChunkFile& scenario, bool guarantee);
     /// The packages' island templates, which the plan may name after the original's.
     void use_package_islands(std::span<const PackageIsland> islands) { m_package_islands = islands; }
+    /// The packages' climates (Balance::climates), which take a share of the islands of an own world.
+    void use_climates(std::span<const Climate> climates) { m_climates = climates; }
 
 private:
     void warn(std::string text) {
@@ -292,6 +296,8 @@ private:
     void choose_templates();
     void choose_natives();
     [[nodiscard]] bool wants_own_shape(const ScenarioPlan::Island& e);
+    [[nodiscard]] std::uint8_t own_climate(const ScenarioPlan::Island& e);
+    [[nodiscard]] std::uint32_t climate_crops(const Slot& slot) const;
     bool load(Slot& slot);
     /// An island of a package as the template: no village, its tiles kept in the world.
     bool load_package_island(Slot& slot, const PackageIsland& island);
@@ -356,6 +362,11 @@ private:
     std::vector<WorldPlan::OwnIsland> m_own_islands;  ///< Shapes::Own: sides of the islands of their own shape
     WorldSettings::Landscape m_landscape;
     std::span<const PackageIsland> m_package_islands;
+    std::span<const Climate> m_climates;
+    /// Which islands take a climate of a package: a stream of its own, so that the original's draws
+    /// of the content stay as they are.
+    static constexpr std::uint64_t kClimateStream = 0x1602'C11AULL;
+    Random m_climate_random;
     std::vector<Slot> m_slots;       ///< in the order of the plan
     std::vector<Slot*> m_by_number;  ///< in the order of the island table (island number)
     std::uint32_t m_max_crops = 2;
@@ -533,6 +544,30 @@ bool Generator::load_package_island(Slot& slot, const PackageIsland& island) {
     return true;
 }
 
+std::uint8_t Generator::own_climate(const ScenarioPlan::Island& e) {
+    // Of the islands of a climate of the original, not the homes, each climate of a package that
+    // is like it takes its share: one draw per island of a climate that has any.
+    const auto like = [&](const Climate& c) { return c.like == e.climate && c.share != 0; };
+    if ((e.flags & kPlanNoVillage) != 0 || std::none_of(m_climates.begin(), m_climates.end(), like)) {
+        return 0;
+    }
+    std::uint32_t roll = m_climate_random.below(100);
+    for (std::size_t i = 0; i < m_climates.size(); ++i) {
+        if (!like(m_climates[i])) {
+            continue;
+        }
+        if (roll < m_climates[i].share) {
+            return static_cast<std::uint8_t>(i + 1);
+        }
+        roll -= m_climates[i].share;
+    }
+    return 0;
+}
+
+std::uint32_t Generator::climate_crops(const Slot& slot) const {
+    return slot.climate != 0 ? m_climates[slot.climate - 1U].crops : original_climate_crops(slot.plan.climate);
+}
+
 bool Generator::wants_own_shape(const ScenarioPlan::Island& e) {
     if ((e.flags & kPlanOwnShape) != 0) {
         return true;
@@ -562,6 +597,9 @@ void Generator::count_mountains(Slot& slot) const {
 void Generator::give_own_shape(Slot& slot) {
     shapes::ShapeRequest r;
     r.climate = slot.plan.climate;
+    if (slot.climate != 0 && !m_climates[slot.climate - 1U].forest.empty()) {
+        r.trees = m_climates[slot.climate - 1U].forest;
+    }
     r.size = slot.plan.size;
     r.number = slot.plan.number;
     r.seed = m_shape_seed;
@@ -836,6 +874,17 @@ std::vector<Slot*> Generator::crop_candidates(std::uint8_t ware, std::uint8_t mi
         }
         const bool north = s->plan.climate == climate::kNorth;
         bool ok = false;
+        if (s->climate != 0) {
+            // A climate of a package: its own crops, sugar and wine still not on one island.
+            const std::uint32_t other = ware == ware::kSugarField  ? 1U << (ware::kWineField - kFirstCrop)
+                                        : ware == ware::kWineField ? 1U << (ware::kSugarField - kFirstCrop)
+                                                                   : 0U;
+            ok = (climate_crops(*s) & bit) != 0 && (s->fertility & other) == 0;
+            if (ok) {
+                out.push_back(s);
+            }
+            continue;
+        }
         switch (ware) {
             case ware::kTobaccoField:
                 ok = north;
@@ -1313,7 +1362,7 @@ void Generator::fair_starts() {
                 // Only one northern island near: in an own world it may grow both.
                 Slot* best = nullptr;
                 for (Slot* s : near) {
-                    if (s->plan.climate == climate::kNorth && (s->fertility & bit) == 0 &&
+                    if ((climate_crops(*s) & bit) != 0 && (s->fertility & bit) == 0 &&
                         (best == nullptr || s->crops < best->crops)) {
                         best = s;
                     }
@@ -1601,13 +1650,13 @@ std::vector<std::uint8_t> Generator::village_records(const Slot& slot, const Sta
     // there, or beyond its edge. A growing tile is a single tile: the record must lie on a tile of
     // the village.
     const bool growth = std::strcmp(chunk.name, "ROHWACHS2") == 0;
-    std::vector<bool> on_village;
+    std::vector<std::uint8_t> on_village;  // bytes: GCC 13 sees a null pointer in vector<bool>::assign
     std::size_t village_width = 0;
     std::size_t village_height = 0;
     if (growth && slot.own_shape && slot.village && !slot.village->layers.empty()) {
         village_width = slot.base.header.width;
         village_height = slot.base.header.height;
-        on_village.assign(village_width * village_height, false);
+        on_village.assign(village_width * village_height, 0);
         for (const assets::IslandTile& t : slot.village->layers.front()) {
             const assets::BuildingType* b = m_buildings.by_id(t.cod_id());
             const bool turned = (t.rotation() & 1U) != 0;
@@ -1615,7 +1664,7 @@ std::vector<std::uint8_t> Generator::village_records(const Slot& slot, const Sta
             const std::size_t sy = b == nullptr ? 1U : (turned ? b->size_x : b->size_y);
             for (std::size_t y = t.y; y < std::size_t{t.y} + sy && y < village_height; ++y) {
                 for (std::size_t x = t.x; x < std::size_t{t.x} + sx && x < village_width; ++x) {
-                    on_village[y * village_width + x] = true;
+                    on_village[y * village_width + x] = 1;
                 }
             }
         }
@@ -1629,7 +1678,7 @@ std::vector<std::uint8_t> Generator::village_records(const Slot& slot, const Sta
             const std::int64_t y = std::int64_t{record[2]} + slot.village_dy;
             if (x < 0 || y < 0 || static_cast<std::size_t>(x) >= village_width ||
                 static_cast<std::size_t>(y) >= village_height ||
-                !on_village[static_cast<std::size_t>(y) * village_width + static_cast<std::size_t>(x)]) {
+                on_village[static_cast<std::size_t>(y) * village_width + static_cast<std::size_t>(x)] == 0) {
                 return;
             }
         }
@@ -1735,6 +1784,7 @@ core::Result<GeneratedWorld> Generator::run(const assets::ChunkFile& scenario, b
     for (const ScenarioPlan::Island& e : m_plan.islands) {
         Slot slot;
         slot.plan = e;
+        slot.climate = own_climate(e);
         slot.own_shape = wants_own_shape(e);
         if (load(slot)) {
             m_slots.push_back(std::move(slot));
@@ -1843,6 +1893,7 @@ core::Result<GeneratedWorld> Generator::run(const assets::ChunkFile& scenario, b
         GeneratedIsland info;
         info.number = s->plan.number;
         info.climate = s->plan.climate;
+        info.own_climate = s->climate;
         info.size = s->plan.size;
         info.template_number = s->own_shape || s->package ? assets::IslandHeader::kNoTemplate : s->plan.template_number;
         info.width = s->base.header.width;
@@ -1959,6 +2010,7 @@ core::Result<GeneratedWorld> generate_islands(const assets::ChunkFile& scenario,
                         plan.shared_start ? std::vector<StartArea>{} : plan.starts, plan.gold_islands, plan.shapes,
                         plan.seed, plan.own_islands, plan.landscape);
     generator.use_package_islands(start.package_islands);
+    generator.use_climates(start.climates);
     return generator.run(scenario, start.guarantee_resources);
 }
 

@@ -483,6 +483,29 @@ TEST_CASE("island shapes: mountains in a ring of slopes turned to them, ground o
     CHECK(grounds[1] > grounds[0]);
 }
 
+TEST_CASE("island shapes: the forest of the climate, or of the trees a climate of a package names") {
+    sim::shapes::ShapeRequest r;
+    r.width = 60;
+    r.height = 50;
+    r.size = 3;
+    r.seed = 5;
+    const auto count = [](const assets::Island& island, auto&& is_tree) {
+        std::size_t n = 0;
+        for (const assets::IslandTile& t : island.layers[0]) {
+            n += is_tree(t.cod_id()) ? 1U : 0U;
+        }
+        return n;
+    };
+    const assets::Island north = sim::shapes::make_island(r);
+    const std::size_t trees = count(north, [](std::uint32_t id) { return one_of(id, ids::kForestNorth); });
+    CHECK(trees > 0);
+    // Only the trees asked for, in the same places.
+    r.trees = {ids::kForestSouth[0], ids::kForestSouth[3]};
+    const assets::Island own = sim::shapes::make_island(r);
+    CHECK(count(own, [](std::uint32_t id) { return one_of(id, ids::kForestNorth); }) == 0);
+    CHECK(count(own, [&](std::uint32_t id) { return id == r.trees[0] || id == r.trees[1]; }) == trees);
+}
+
 TEST_CASE("island shapes: a volcano only where one is asked for, in its ring of slopes") {
     for (std::uint64_t seed = 0; seed < 10; ++seed) {
         sim::shapes::ShapeRequest r;

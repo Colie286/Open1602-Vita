@@ -37,6 +37,7 @@ package's own is in [open-work.md](open-work.md).
     music.toml         music of the package's own (sounds.md)
     sounds.toml        sounds of the package's buildings and figures (sounds.md)
     landscapes.toml    kinds of island world for new games (landscapes.md)
+    climates.toml      climates of the package's own (climates.md)
     islands.toml       island templates of the package's own (islands.md)
 ```
 

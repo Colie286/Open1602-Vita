@@ -20,6 +20,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -338,8 +339,22 @@ bool destroy_building(World& world, const assets::BuildingTable& buildings, std:
                                                            PlayerId player, std::uint16_t island, TilePos origin,
                                                            std::uint32_t field, std::uint32_t seed = 0);
 
+/// The climate of a package an island has (WorldIsland::climate) among `climates`
+/// (Balance::climates), nullptr for the original's.
+[[nodiscard]] const Climate* island_climate(std::span<const Climate> climates, const WorldIsland& island) noexcept;
+
+/// The crops an island's climate grows half without the island's bit, as fertility bits: those of
+/// its package climate, else the original's of its header (original_climate_crops).
+[[nodiscard]] std::uint32_t climate_crops(std::span<const Climate> climates, const WorldIsland& island) noexcept;
+
 /// How fertile an island is for a ware: crops and resources 45..58 from the
 /// fertility mask (128) or the climate's own crops (64); ore by its deposits (big 128, small 64).
-[[nodiscard]] std::uint32_t island_fertility(const WorldIsland& island, std::uint8_t ware) noexcept;
+[[nodiscard]] std::uint32_t island_fertility(std::span<const Climate> climates, const WorldIsland& island,
+                                             std::uint8_t ware) noexcept;
+/// The same with the climates of `world`.
+[[nodiscard]] inline std::uint32_t island_fertility(const World& world, const WorldIsland& island,
+                                                    std::uint8_t ware) noexcept {
+    return island_fertility(world.balance().climates, island, ware);
+}
 
 }  // namespace o1602::sim

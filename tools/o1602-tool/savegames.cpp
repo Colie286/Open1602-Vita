@@ -25,6 +25,7 @@
 #include "o1602/assets/text_table.hpp"
 #include "o1602/core/file.hpp"
 #include "o1602/core/text.hpp"
+#include "o1602/sim/climates.hpp"
 #include "o1602/sim/new_game.hpp"
 #include "o1602/sim/package_islands.hpp"
 #include "o1602/sim/save_game.hpp"
@@ -322,6 +323,13 @@ int cmd_new_world(const Args& args) {
         std::vector<std::string> problems;
         const auto packages = assets::load_mod_packages(fs::path(it->second), problems);
         options.world.package_islands = sim::load_package_islands(packages, problems);
+        // And their climates, which take a share of the islands (their forest of the original's trees).
+        for (const assets::ModPackage& package : packages) {
+            if (const auto bytes = core::read_file(package.folder / sim::kClimatesFile)) {
+                const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
+                sim::apply_climates_file(options.world.climates, package.id, text, problems, &*buildings);
+            }
+        }
         for (const std::string& p : problems) {
             std::fprintf(stderr, "warning: %s\n", p.c_str());
         }
@@ -409,6 +417,11 @@ int cmd_new_world(const Args& args) {
         volcano_islands += island.craters.empty() ? 0U : 1U;
     }
     std::printf("islands with a volcano %zu\n", volcano_islands);
+    for (std::size_t c = 0; c < world->balance().climates.size(); ++c) {
+        const auto n =
+            std::ranges::count(world->islands(), static_cast<std::uint8_t>(c + 1), &sim::WorldIsland::climate);
+        std::printf("islands of climate %s %td\n", world->balance().climates[c].id.c_str(), n);
+    }
     if (own_format && args.flag("--without-original")) {
         world->set_source(nullptr);  // no section ORIG: a map to pass on holds nothing of the original's files
     }

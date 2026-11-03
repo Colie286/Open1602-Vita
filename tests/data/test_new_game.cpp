@@ -617,8 +617,8 @@ TEST_CASE("data: a new endless game with the climate's crops full and every iron
         const bool north = h.climate == sim::climate::kNorth;
         const bool south = h.climate == sim::climate::kSouth;
         for (std::uint8_t ware = sim::ware::kCornField; ware <= sim::ware::kCocoaField; ++ware) {
-            const std::uint32_t before = sim::island_fertility(plain->islands()[i], ware);
-            const std::uint32_t after = sim::island_fertility(rich->islands()[i], ware);
+            const std::uint32_t before = sim::island_fertility(*plain, plain->islands()[i], ware);
+            const std::uint32_t after = sim::island_fertility(*rich, rich->islands()[i], ware);
             const bool northern =
                 ware == sim::ware::kTobaccoField || ware == sim::ware::kSugarField || ware == sim::ware::kWineField;
             const bool southern =

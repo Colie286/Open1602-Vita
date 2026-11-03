@@ -125,7 +125,7 @@ Facts::ShipState ship_state(const sim::Simulation& simulation, const assets::Bui
     s.loaded = ship->total_load() != 0;
     s.actions = ship_actions(simulation, buildings, *ship);
     if (const auto island = simulation.fleet().island_at_ship(*ship)) {
-        s.island_ore = sim::island_fertility(w.islands()[*island], sim::ware::kOre) != 0;
+        s.island_ore = sim::island_fertility(w, w.islands()[*island], sim::ware::kOre) != 0;
         s.island_city =
             std::any_of(w.cities().begin(), w.cities().end(), [&](const sim::City& c) { return c.island == *island; });
     }
