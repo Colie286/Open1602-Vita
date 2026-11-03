@@ -349,6 +349,17 @@ TEST_CASE("computer producers: a game keeps them in the savegame (AIPR), a wrong
     REQUIRE(loaded.ok());
     CHECK(loaded->balance() == balance);
 
+    // One producer without counted buildings is the smallest entry (14 bytes).
+    sim::Balance one;
+    one.computer_producers.push_back(balance.computer_producers[0]);
+    REQUIRE(one.computer_producers[0].counts.empty());
+    world.set_balance(one);
+    auto small = sim::write_game(world, buildings);
+    REQUIRE(small.ok());
+    auto small_loaded = sim::read_game(*small, buildings);
+    REQUIRE(small_loaded.ok());
+    CHECK(small_loaded->balance() == one);
+
     balance.computer_producers[1].attempts = 0;
     world.set_balance(balance);
     auto damaged = sim::write_game(world, buildings);

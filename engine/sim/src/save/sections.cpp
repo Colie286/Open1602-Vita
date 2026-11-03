@@ -569,7 +569,7 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
     }
     if (!world.balance().computer_producers.empty()) {
         section(out, kComputerProducers, [&](Writer& o) {
-            o.list(world.balance().computer_producers, 15, [&](const ComputerProducer& p) {
+            o.list(world.balance().computer_producers, 14, [&](const ComputerProducer& p) {
                 o.u8(p.slot);
                 // Which fields the package changed, bit by bit in the order that follows.
                 o.u8(static_cast<std::uint8_t>((p.building ? 1U : 0U) | (p.attempts ? 2U : 0U) | (p.fertile ? 4U : 0U) |
@@ -1113,7 +1113,7 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
             }
             case kComputerProducers: {
                 std::vector<ComputerProducer> producers;
-                in.list(producers, 15, [&](ComputerProducer& p) {
+                in.list(producers, 14, [&](ComputerProducer& p) {
                     std::uint8_t fields = 0;
                     std::uint32_t building = 0;
                     std::uint8_t attempts = 0;

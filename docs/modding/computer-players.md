@@ -183,6 +183,10 @@ counts = "anno1602:bakery"
 | `wait` | `none`, `money`, `unlock` or `placed` | how the stage goes on without it: `none` goes on to the next entry when the producer is locked or too dear; `money` waits while the money lacks; `unlock` also while it is locked; `placed` also goes on when it found no place (the original's types A to D) |
 | `counts` | a list of up to 16 buildings | buildings the city counts as this producer besides its own, such as a package's second bakery |
 
+A `building` should be one the stage that orders it can build: a building that is still locked
+there is never built, and a city whose next stage waits for that producer stays where it is (a
+weaving hut replaced by the tailor, locked for settlers, keeps the computers at the settlers).
+
 The survey counts a production building as the producer whose `building` or `counts` names it,
 before it looks at its good and raw material. A field that cannot be read or an unknown producer is
 passed over with a warning that names the file and the line.

@@ -26,6 +26,7 @@
 #include "o1602/core/file.hpp"
 #include "o1602/core/text.hpp"
 #include "o1602/sim/climates.hpp"
+#include "o1602/sim/computer_orders.hpp"
 #include "o1602/sim/new_game.hpp"
 #include "o1602/sim/package_islands.hpp"
 #include "o1602/sim/save_game.hpp"
@@ -126,8 +127,9 @@ std::optional<core::Result<OwnSave>> read_own_save(const fs::path& path) {
     return core::Result<OwnSave>(OwnSave{std::move(buildings).value(), std::move(world).value()});
 }
 
-/// `state` of a .o1602: players, cities with their goods, ships.
-int own_state(const sim::World& world) {
+/// `state` of a .o1602: players, cities with their goods, ships, the computers' producers a package
+/// changed; with `buildings_of_players`, how many buildings of each Id every player owns.
+int own_state(const sim::World& world, const assets::BuildingTable& buildings, bool buildings_of_players) {
     for (std::size_t i = 0; i < world.players().size(); ++i) {
         const sim::Player& p = world.players()[i];
         std::printf("player %zu: role %u, banner %u, money %d %s\n", i, static_cast<unsigned>(p.role),
@@ -144,6 +146,38 @@ int own_state(const sim::World& world) {
     for (const sim::Ship& s : world.ships()) {
         std::printf("ship \"%s\": figure %u, owner %u, at %u,%u\n", core::cp1252_to_utf8(s.name).c_str(), s.figure,
                     static_cast<unsigned>(s.owner), s.x, s.y);
+    }
+    for (const sim::ComputerProducer& p : world.balance().computer_producers) {
+        std::printf("computer producer changed: %s\n", sim::producer_text(p).c_str());
+    }
+    if (buildings_of_players) {
+        // Tiles by owner and building, then buildings by their footprint.
+        std::map<std::pair<unsigned, std::uint32_t>, std::size_t> tiles;
+        for (const sim::WorldIsland& island : world.islands()) {
+            const sim::IslandMap& map = island.map;
+            for (std::uint32_t y = 0; y < map.height(); ++y) {
+                for (std::uint32_t x = 0; x < map.width(); ++x) {
+                    const sim::MapCell& cell = map.top(x, y);
+                    const assets::BuildingType* b = cell.empty() ? nullptr : buildings.by_sprite(cell.sprite);
+                    if (b != nullptr && cell.owner < world.players().size()) {
+                        ++tiles[{static_cast<unsigned>(cell.owner), b->id}];
+                    }
+                }
+            }
+        }
+        unsigned last = ~0U;
+        for (const auto& [key, n] : tiles) {
+            const assets::BuildingType* b = buildings.by_id(key.second);
+            const std::size_t count = n / std::max<std::size_t>(b != nullptr ? b->tile_count() : 1, 1);
+            if (key.first != last) {
+                std::printf("%sbuildings of player %u:", last == ~0U ? "" : "\n", key.first);
+                last = key.first;
+            }
+            std::printf(" %u(x%zu)", key.second, count);
+        }
+        if (last != ~0U) {
+            std::printf("\n");
+        }
     }
     std::printf("%zu players, %zu cities, %zu ships, %zu soldiers\n", world.players().size(), world.cities().size(),
                 world.ships().size(), world.soldiers().size());
@@ -185,7 +219,7 @@ int cmd_state(const Args& args) {
         return usage();
     }
     if (auto own = read_own_save(fs::path(args.positional[0]))) {
-        return *own ? own_state((*own)->world) : fail(own->error());
+        return *own ? own_state((*own)->world, (*own)->buildings, args.flag("--buildings")) : fail(own->error());
     }
     auto file = assets::ChunkFile::load(fs::path(args.positional[0]));
     if (!file) {
