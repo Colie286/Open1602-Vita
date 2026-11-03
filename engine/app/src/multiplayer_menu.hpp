@@ -331,6 +331,11 @@ private:
     std::vector<sim::BannerId> m_banner_choices;  ///< the banners of the buttons shown, in order
     /// (Host) The roster entries and names of the spectators shown with a kick button.
     std::vector<std::pair<std::size_t, std::string>> m_watchers;
+    // The lobby's slots, scrolled when there are more than kSeatRows (a higher sim::kMaxPlayers).
+    std::size_t m_seat_first = 0;  ///< the first slot shown (of those not reserved)
+    std::size_t m_seat_rows = 0;   ///< slots shown at the last layout
+    std::size_t m_seat_count = 0;  ///< slots not reserved at the last layout
+    ui::Rect m_seat_box{};         ///< where the slots are, for the mouse wheel
     // While the game starts: the list of who is in it and how far they are with it.
     std::size_t m_start_first = 0;  ///< the first row shown
     std::size_t m_start_rows = 0;   ///< rows shown at the last layout (0: no list)

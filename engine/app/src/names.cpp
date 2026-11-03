@@ -26,7 +26,17 @@ std::string more_player_name(std::size_t more) {
                : ui::tr("player.default", {std::to_string(sim::kOriginalPlayers + more + 1)});
 }
 
+// The lobby's names of the colours, in the order of the players (BannerTable::add_more_players).
+constexpr std::array<const char*, 12> kLobbyColours = {"net.colour.red",   "net.colour.blue",   "net.colour.yellow",
+                                                       "net.colour.white", "net.colour.orange", "net.colour.green",
+                                                       "net.colour.teal",  "net.colour.pink",   "net.colour.magenta",
+                                                       "net.colour.grey",  "net.colour.purple", "net.colour.brown"};
+
 }  // namespace
+
+std::string player_colour_name(std::size_t n) {
+    return n < kLobbyColours.size() ? ui::tr(kLobbyColours[n]) : ui::tr("net.colour.number", {std::to_string(n + 1)});
+}
 
 void name_more_players(sim::World& world) {
     // Only a game that has not run yet: later a person may have taken a slot and its name.

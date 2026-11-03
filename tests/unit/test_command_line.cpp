@@ -9,6 +9,8 @@
 #include "../test_framework.hpp"
 #include "command_line.hpp"
 
+#include "o1602/sim/limits.hpp"
+
 using namespace o1602;
 
 namespace {
@@ -150,7 +152,8 @@ TEST_CASE("command line: wrong values are named, not taken in part") {
     CHECK(error_of({"--seed", "1x"}) == "bad value for --seed: 1x");
     CHECK(error_of({"--zoom", "3"}) == "bad value for --zoom: 3");
     CHECK(error_of({"--join", "host:0"}) == "bad value for --join: host:0");
-    CHECK(error_of({"--players", "13"}) == "bad value for --players: 13");
+    const std::string too_many = std::to_string(sim::kMaxPlayers + 1);
+    CHECK(error_of({"--players", too_many.c_str()}) == "bad value for --players: " + too_many);
     CHECK(error_of({"--bogus"}) == "unknown option or missing value: --bogus");
     CHECK(error_of({"--zoom"}) == "unknown option or missing value: --zoom");
 }

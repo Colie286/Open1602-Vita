@@ -78,8 +78,13 @@ constexpr Id kWatch = 64;
 constexpr Id kStartNow = 65;
 constexpr Id kStartUp = 66;
 constexpr Id kStartDown = 67;
+constexpr Id kSeatsUp = 68;
+constexpr Id kSeatsDown = 69;
 /// Rows of the list of who is in the game while it starts; more are scrolled.
 constexpr std::size_t kStartRows = 10;
+/// Slots the lobby shows at once: all of sim::kMaxPlayers = 12; more (a higher kMaxPlayers) are
+/// scrolled like the list of who is in the starting game.
+constexpr std::size_t kSeatRows = 12;
 constexpr std::size_t kChatLines = 12;
 constexpr Rect kChatBox{48, 0, 604, 28};  ///< a row of the lobby's chat (x and width)
 // Connecting
@@ -325,6 +330,11 @@ bool MultiplayerMenu::wheel(const MultiplayerModel& model, std::int32_t notches)
                 notches);
             return true;
         case Screen::Lobby: {
+            if (m_seat_rows > 0 && m_seat_box.contains(m_mouse_x, m_mouse_y)) {
+                // The slots, when there are more than the lobby shows at once.
+                m_seat_first = ui::wheel_scroll(m_seat_first, m_seat_count, m_seat_rows, notches);
+                return true;
+            }
             if (m_start_rows > 0 && m_start_box.contains(m_mouse_x, m_mouse_y)) {
                 // The list of who is in the starting game, under the mouse.
                 const std::size_t count = model.session != nullptr ? model.session->roster().size() : 0;
@@ -684,6 +694,7 @@ void MultiplayerMenu::layout_lobby(const MultiplayerModel& model) {
     // While the game starts, who is in it and how far they are with it; before, the slots.
     const bool starting = lobby.started && session->starting();
     m_start_rows = 0;
+    m_seat_rows = 0;
     const std::int32_t rows_end = starting ? layout_start_list(model) : layout_seats(model);
     const std::int32_t chat_top = rows_end + 50;
 
@@ -802,10 +813,14 @@ std::int32_t MultiplayerMenu::layout_seats(const MultiplayerModel& model) {
         }
     }
     const std::int32_t row_h = shown.size() <= 8 ? 36 : 30;
-    const auto rows_end = static_cast<std::int32_t>(96 + shown.size() * static_cast<std::size_t>(row_h));
-    f.panel(Rect{40, 84, 620, rows_end - 46});
-    for (std::size_t r = 0; r < shown.size(); ++r) {
-        const std::size_t s = shown[r];
+    m_seat_count = shown.size();
+    m_seat_rows = std::min(shown.size(), kSeatRows);
+    m_seat_first = std::min(m_seat_first, shown.size() - m_seat_rows);
+    const auto rows_end = static_cast<std::int32_t>(96 + m_seat_rows * static_cast<std::size_t>(row_h));
+    m_seat_box = Rect{40, 84, 620, rows_end - 46};
+    f.panel(m_seat_box);
+    for (std::size_t r = 0; r < m_seat_rows; ++r) {
+        const std::size_t s = shown[m_seat_first + r];
         const net::LobbySeat& seat = lobby.seats[s];
         const auto y = static_cast<std::int32_t>(96 + r * static_cast<std::size_t>(row_h));
         const std::int32_t h = row_h - 2;
@@ -867,8 +882,15 @@ std::int32_t MultiplayerMenu::layout_seats(const MultiplayerModel& model) {
             watchers += (watchers.empty() ? "" : ", ") + m.name;
         }
     }
-    f.label(Rect{48, rows_end + 4, 600, 30}, tr(MpText::Watchers, watchers.empty() ? tr(MpText::Nobody) : watchers),
-            Align::Left, Tone::Dim);
+    const bool scrolled = m_seat_rows < m_seat_count;
+    f.label(Rect{48, rows_end + 4, scrolled ? 520 : 600, 30},
+            tr(MpText::Watchers, watchers.empty() ? tr(MpText::Nobody) : watchers), Align::Left, Tone::Dim);
+    if (m_seat_first > 0) {
+        f.button(kSeatsUp, Rect{576, rows_end + 4, 36, 30}, "-");
+    }
+    if (m_seat_first + m_seat_rows < m_seat_count) {
+        f.button(kSeatsDown, Rect{616, rows_end + 4, 36, 30}, "+");
+    }
     return rows_end;
 }
 
@@ -1185,6 +1207,10 @@ void MultiplayerMenu::click(const MultiplayerModel& model, Id id, std::vector<Mu
                 event(MultiplayerEvent::Kind::Start);
             } else if (id == kStartNow) {
                 event(MultiplayerEvent::Kind::StartNow);
+            } else if (id == kSeatsUp) {
+                m_seat_first -= std::min(m_seat_first, m_seat_rows);
+            } else if (id == kSeatsDown) {
+                m_seat_first += m_seat_rows;  // kept within the list by the next layout
             } else if (id == kStartUp) {
                 m_start_first -= std::min(m_start_first, m_start_rows);
             } else if (id == kStartDown) {

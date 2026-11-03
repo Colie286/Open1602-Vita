@@ -40,9 +40,12 @@ constexpr std::int32_t kFirstMode = 30011;  // build, military, info, options
 constexpr std::int32_t kStatusLine = 100001;
 constexpr std::int32_t kFirstEvent = 100011;
 constexpr std::size_t kEvents = 3;
-// Open1602: the offers of treaties not answered yet, after the message icons (+ 0..10), each the
-// treaty message icon in the colour of the partner who made it.
+// Open1602: the offers of treaties not answered yet, after the message icons (+ 0..kOfferIcons - 1),
+// each the treaty message icon in the colour of the partner who made it.
 constexpr std::int32_t kFirstOffer = 100101;
+/// Icons of open offers the status bar has room for: one per partner of twelve players; with more
+/// (a higher sim::kMaxPlayers) further offers show as soon as earlier ones are answered.
+constexpr std::size_t kOfferIcons = std::min<std::size_t>(diplomacy::kMaxPartners, 11);
 constexpr std::int32_t kOfferGap = 12;  // design pixels between the message icons and the offers
 constexpr std::uint8_t kTreatyIcon = 1;
 // TOOLS.INC: the compass (GFXMAP + 1 + rotation) and the message icons (GFXLEISTE).
@@ -158,7 +161,7 @@ assets::GadgetLayout with_offer_icons(assets::GadgetLayout leist) {
     const assets::Gadget icon = *first;
     const std::int32_t step =
         leist.find(kFirstEvent + 1) != nullptr ? leist.find(kFirstEvent + 1)->pos[0] - icon.pos[0] : icon.size[0] + 3;
-    for (std::size_t k = 0; k < diplomacy::kMaxPartners; ++k) {
+    for (std::size_t k = 0; k < kOfferIcons; ++k) {
         assets::Gadget g = icon;
         g.id = kFirstOffer + static_cast<std::int32_t>(k);
         g.pos[0] =
@@ -261,7 +264,7 @@ Hud::Hud(SDL_Renderer* renderer, const assets::GameDirectory& game, const assets
     for (std::size_t i = 0; i < kEvents; ++i) {
         m_leist.set_hidden(kFirstEvent + static_cast<std::int32_t>(i), true);
     }
-    for (std::size_t k = 0; k < diplomacy::kMaxPartners; ++k) {
+    for (std::size_t k = 0; k < kOfferIcons; ++k) {
         m_leist.set_visible(kFirstOffer + static_cast<std::int32_t>(k), false);
     }
     m_leist.set_hidden(kLeistArt, true);
@@ -2079,7 +2082,7 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
     }
     // Offers not answered yet stay until they are (Open1602): the treaty icon in the partner's colour.
     m_offers = m_simulation != nullptr ? diplomacy::open_offers(world, m_local) : std::vector<diplomacy::Offer>{};
-    for (std::size_t k = 0; k < diplomacy::kMaxPartners; ++k) {
+    for (std::size_t k = 0; k < kOfferIcons; ++k) {
         const auto id = kFirstOffer + static_cast<std::int32_t>(k);
         const sim::Player* from = k < m_offers.size() ? world.player(m_offers[k].from) : nullptr;
         m_leist.set_visible(id, from != nullptr);

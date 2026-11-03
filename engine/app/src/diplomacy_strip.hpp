@@ -31,7 +31,8 @@ inline constexpr std::size_t kOriginalRows = 3;
 inline constexpr std::size_t kMaxPartners = sim::kMaxPlayers - 1;
 
 /// The strip: frames of 41 x 49 with the coat of arms (32 x 40) 2 pixels in, six in a row, one
-/// or two rows centred in the panel's 250 pixels from x = 6; in design units of the side panel.
+/// or two rows centred in the panel's 250 pixels from x = 6 (further rows below them for more than
+/// twelve partners, a higher sim::kMaxPlayers); in design units of the side panel.
 inline constexpr std::int32_t kFrameWidth = 41;
 inline constexpr std::int32_t kFrameHeight = 49;
 inline constexpr std::int32_t kArmsInset = 2;
@@ -41,9 +42,20 @@ inline constexpr std::int32_t kPanelWidth = 250;
 inline constexpr std::int32_t kFirstRowY = 355;
 inline constexpr std::int32_t kRowStep = 47;
 inline constexpr std::int32_t kSingleRowY = 378;
-/// How far the treaties and the hand of TRIBUT.GAD move down below the strip; the tribute's
-/// slider, amount and button stay where they are.
+/// How far the treaties and the hand of TRIBUT.GAD move down below a strip of two rows; the
+/// tribute's slider, amount and button stay where they are.
 inline constexpr std::int32_t kTreatiesShift = 96;
+
+/// Rows of the strip for this many partners.
+[[nodiscard]] constexpr std::size_t strip_rows(std::size_t partners) noexcept {
+    return partners <= kPerRow ? 1 : (partners + kPerRow - 1) / kPerRow;
+}
+/// How far the treaties move down below the strip of this many partners: kTreatiesShift, and a
+/// row more for every row beyond the second.
+[[nodiscard]] constexpr std::int32_t treaties_shift(std::size_t partners) noexcept {
+    const std::size_t rows = strip_rows(partners);
+    return kTreatiesShift + (rows > 2 ? static_cast<std::int32_t>(rows - 2) * kRowStep : 0);
+}
 
 /// Whether the window shows the strip for this many partners (`rows`: what VERTRAG.GAD has).
 [[nodiscard]] constexpr bool uses_strip(std::size_t partners, std::size_t rows = kOriginalRows) noexcept {

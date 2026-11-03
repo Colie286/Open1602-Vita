@@ -5,14 +5,12 @@
 
 #include <array>
 #include <string>
-#include <tuple>
 #include <vector>
 
 #include "../test_framework.hpp"
 
 #include "o1602/core/result.hpp"
 #include "o1602/net/protocol.hpp"
-#include "o1602/render/banner.hpp"
 #include "o1602/sim/limits.hpp"
 #include "o1602/sim/player.hpp"
 #include "o1602/sim/world.hpp"
@@ -22,8 +20,8 @@
 using namespace o1602;
 
 TEST_CASE("limits: the modules derive theirs from one place") {
-    // A colour of its own for every player with a start, and a slot below "nobody".
-    static_assert(std::tuple_size_v<decltype(render::BannerTable::kDefaultColours)> == sim::kMaxPlayers);
+    // A colour of its own for every player with a start (the hand-picked ones, generated beyond
+    // them: "banners: players five to twelve ..."), and a slot below "nobody".
     static_assert(sim::player_slot(sim::kMaxPlayers - 1) < sim::kNoPlayer);
     static_assert(sim::kMaxPlayerSlots == sim::kFirstExtraPlayer + sim::kMaxPlayers - sim::kOriginalPlayers);
     // The lobby shows every slot, a roster holds the host and every computer it takes.
@@ -35,7 +33,7 @@ TEST_CASE("limits: the modules derive theirs from one place") {
     static_assert(sim::World::kMaxSide == sim::kMaxWorldSide);
     static_assert(sim::WorldSettings::kMaxSide <= sim::kMaxWorldSide);
     static_assert(sim::kMaxCitiesPerIsland < sim::kCitySlotsPerIsland);
-    CHECK(sim::kMaxPlayerSlots == 15);
+    CHECK(sim::kMaxPlayerSlots == sim::kMaxPlayers + 3);  // 15 for twelve
 }
 
 TEST_CASE("limits: the world plan takes the players add_players places, not more") {

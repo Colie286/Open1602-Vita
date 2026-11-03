@@ -12,14 +12,20 @@
 namespace o1602::app::diplomacy {
 
 std::array<std::int32_t, 2> strip_slot(std::size_t index, std::size_t count) noexcept {
-    count = std::clamp<std::size_t>(count, 1, 2 * kPerRow);
+    count = std::max<std::size_t>(count, 1);
     index = std::min(index, count - 1);
-    // Two rows split the strip with the larger half on top (7: 4 + 3).
-    const std::size_t rows = count > kPerRow ? 2 : 1;
-    const std::size_t top = rows == 1 ? count : (count + 1) / 2;
-    const std::size_t row = index < top ? 0 : 1;
-    const std::size_t in_row = row == 0 ? top : count - top;
-    const std::size_t column = row == 0 ? index : index - top;
+    // The rows split the partners evenly, the larger ones on top (7: 4 + 3; 13: 5 + 4 + 4).
+    const std::size_t rows = strip_rows(count);
+    const std::size_t base = count / rows;
+    const std::size_t larger = count % rows;  // rows with base + 1
+    std::size_t row = 0;
+    std::size_t first = 0;  // the index the row starts with
+    while (row + 1 < rows && index >= first + base + (row < larger ? 1 : 0)) {
+        first += base + (row < larger ? 1 : 0);
+        ++row;
+    }
+    const std::size_t in_row = base + (row < larger ? 1 : 0);
+    const std::size_t column = index - first;
     const std::int32_t width = static_cast<std::int32_t>(in_row) * kFrameWidth;
     const std::int32_t x = kPanelLeft + (kPanelWidth - width) / 2 + static_cast<std::int32_t>(column) * kFrameWidth;
     const std::int32_t y = rows == 1 ? kSingleRowY : kFirstRowY + static_cast<std::int32_t>(row) * kRowStep;

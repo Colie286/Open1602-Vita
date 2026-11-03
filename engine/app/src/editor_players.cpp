@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The editor's players (ADR 0013): the page "Players" shows the humans' and computers' slots and
-// changes what each is and starts with, adds slots up to twelve and takes the last away, each
+// changes what each is and starts with, adds slots up to sim::kMaxPlayers and takes the last away, each
 // change a step of undo.
 
 #include <algorithm>
-#include <array>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -23,16 +22,12 @@ namespace {
 
 /// The colour of a banner as the multiplayer lobby names it, Windows-1252.
 std::string colour_name(sim::BannerId banner) {
-    static constexpr std::array<const char*, sim::kMaxPlayers> kColours = {
-        "net.colour.red",     "net.colour.blue",  "net.colour.yellow", "net.colour.white",
-        "net.colour.orange",  "net.colour.green", "net.colour.teal",   "net.colour.pink",
-        "net.colour.magenta", "net.colour.grey",  "net.colour.purple", "net.colour.brown"};
     const auto banners = editor::player_banners();
     const auto it = std::find(banners.begin(), banners.end(), banner);
     if (it == banners.end()) {
         return std::to_string(banner + 1);
     }
-    return ui::tr(kColours[static_cast<std::size_t>(it - banners.begin())]);
+    return player_colour_name(static_cast<std::size_t>(it - banners.begin()));
 }
 
 }  // namespace

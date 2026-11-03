@@ -65,7 +65,29 @@ TEST_CASE("diplomacy strip: one row up to six, two rows centred above that, neve
             CHECK(x >= diplomacy::kPanelLeft);
             CHECK(x + diplomacy::kFrameWidth <= diplomacy::kPanelLeft + diplomacy::kPanelWidth);
             // Above the treaties, which move down by kTreatiesShift from TRIBUT's 354.
-            CHECK(y + diplomacy::kFrameHeight <= 354 + diplomacy::kTreatiesShift + 2);
+            CHECK(y + diplomacy::kFrameHeight <= 354 + diplomacy::treaties_shift(count) + 2);
+            seen.insert({x, y});
+        }
+        CHECK(seen.size() == count);
+    }
+}
+
+TEST_CASE("diplomacy strip: more partners than twelve fill further rows, the treaties move down by them") {
+    CHECK(diplomacy::strip_rows(12) == 2);
+    CHECK(diplomacy::treaties_shift(12) == diplomacy::kTreatiesShift);
+    CHECK(diplomacy::strip_rows(13) == 3);
+    CHECK(diplomacy::treaties_shift(13) == diplomacy::kTreatiesShift + diplomacy::kRowStep);
+    // Thirteen: five, four and four.
+    CHECK((diplomacy::strip_slot(4, 13) == std::array<std::int32_t, 2>{6 + (250 - 5 * 41) / 2 + 4 * 41, 355}));
+    CHECK((diplomacy::strip_slot(5, 13) == std::array<std::int32_t, 2>{6 + (250 - 4 * 41) / 2, 402}));
+    CHECK((diplomacy::strip_slot(12, 13) == std::array<std::int32_t, 2>{6 + (250 - 4 * 41) / 2 + 3 * 41, 449}));
+    for (std::size_t count = 13; count <= 40; ++count) {
+        std::set<std::array<std::int32_t, 2>> seen;
+        for (std::size_t i = 0; i < count; ++i) {
+            const auto [x, y] = diplomacy::strip_slot(i, count);
+            CHECK(x >= diplomacy::kPanelLeft);
+            CHECK(x + diplomacy::kFrameWidth <= diplomacy::kPanelLeft + diplomacy::kPanelWidth);
+            CHECK(y + diplomacy::kFrameHeight <= 354 + diplomacy::treaties_shift(count) + 2);
             seen.insert({x, y});
         }
         CHECK(seen.size() == count);

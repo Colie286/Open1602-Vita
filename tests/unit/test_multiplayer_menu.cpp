@@ -686,7 +686,10 @@ TEST_CASE("multiplayer menu: a banner for every player, each slot its own") {
     const ui::Catalogue german = ui::builtin_catalogue("de");
     for (const render::Banner& b : table.banners()) {
         if (b.flag == render::FlagStyle::Tinted) {
-            const std::string key = "net.colour." + b.id.substr(b.id.find(':') + 1);
+            const std::string colour = b.id.substr(b.id.find(':') + 1);
+            // Beyond the twelve hand-picked colours generated ones, named "Colour N".
+            const std::string key =
+                colour.rfind("colour", 0) == 0 ? std::string("net.colour.number") : "net.colour." + colour;
             CHECK(english.find(key) != nullptr);
             CHECK(german.find(key) != nullptr);
         }

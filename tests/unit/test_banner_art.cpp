@@ -231,19 +231,20 @@ TEST_CASE("banner art: the colour screen draws the further colours' patterns ane
     auto banners = render::BannerTable::original();
     banners.add_more_players();
     const std::size_t more = banners.size() - sim::kFirstExtraBanner;
-    REQUIRE(more == 8);
-    std::array<std::uint8_t, 8> first{};
+    constexpr std::size_t kMore = sim::kMaxPlayers - sim::kOriginalPlayers;
+    REQUIRE(more == kMore);
+    std::array<std::uint8_t, kMore> first{};
     bool changed = false;
     for (std::uint32_t seed = 0; seed < 20; ++seed) {
         banners.shuffle_art_patterns(sim::kFirstExtraBanner, more, seed);
-        std::array<std::uint8_t, 8> now{};
+        std::array<std::uint8_t, kMore> now{};
         for (std::size_t n = 0; n < more; ++n) {
             now[n] = banners.get(static_cast<sim::BannerId>(sim::kFirstExtraBanner + n))->art_pattern;
         }
-        // Each side of four shows each of the four patterns once.
-        for (std::size_t side = 0; side < 2; ++side) {
+        // Each run of four (a side of the colour screen with twelve players) shows each pattern once.
+        for (std::size_t from = 0; from + 4 <= more; from += 4) {
             std::array<std::uint8_t, 4> run{};
-            std::copy_n(now.begin() + static_cast<std::ptrdiff_t>(side * 4), 4, run.begin());
+            std::copy_n(now.begin() + static_cast<std::ptrdiff_t>(from), 4, run.begin());
             std::sort(run.begin(), run.end());
             CHECK(run == (std::array<std::uint8_t, 4>{0, 1, 2, 3}));
         }

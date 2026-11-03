@@ -77,10 +77,15 @@ constexpr std::int32_t kNamePrompt = 35003;
 constexpr std::int32_t kFlag = 35011;    ///< + colour 0..3: the banners in the hall
 constexpr std::int32_t kBanner = 35021;  ///< + colour 0..3: their outlines, which take the click
 // Open1602's own: the further colours as coats of arms beside the name board.
-constexpr std::int32_t kMoreArms = 35031;       ///< + 0..7, banner kFirstExtraBanner + n
 constexpr std::int32_t kMoreArmsLabel = 35041;  ///< + side 0..1: the colour under the mouse
+constexpr std::int32_t kMoreArms = 35051;       ///< + 0..kMoreBanners - 1, banner kFirstExtraBanner + n
 constexpr std::size_t kMoreBanners = sim::kMaxPlayers - sim::kOriginalPlayers;
-constexpr std::size_t kArmsPerSide = kMoreBanners / 2;
+/// Half of the further colours on either side, the left one taking the odd one.
+constexpr std::size_t kArmsPerSide = (kMoreBanners + 1) / 2;
+/// Coats of arms side by side; more players than twelve (sim::kMaxPlayers) fill further rows.
+constexpr std::size_t kArmsColumns = 4;
+constexpr std::size_t kArmsColumnsUsed = kArmsPerSide < kArmsColumns ? kArmsPerSide : kArmsColumns;
+constexpr std::size_t kArmsRows = (kArmsPerSide + kArmsColumns - 1) / kArmsColumns;
 /// START.BSH: the end screen's buttons with a coat of arms (ENDE.GAD: GFXWAPPEN + 4, from GFXFARB
 /// on 14 + 7 + 4 further; red, blue, yellow, white) and the same with a golden frame, 4 further.
 constexpr std::int32_t kGfxArmsFromFarb = 25;
@@ -121,9 +126,9 @@ std::optional<ui::Panel> load_panel(const assets::GameDirectory& game, const cha
     return ui::Panel(std::move(layout).value(), 1.0);
 }
 
-/// FARBWAHL.GAD with the further colours: four coats of arms on either side of the name board,
-/// each side with a line below for the name of the colour under the mouse. Unchanged without the
-/// name board.
+/// FARBWAHL.GAD with the further colours: four coats of arms on either side of the name board (in
+/// further rows centred on the board when there are more than eight), each side with a line below
+/// for the name of the colour under the mouse. Unchanged without the name board.
 assets::GadgetLayout with_more_arms(assets::GadgetLayout farbwahl) {
     const assets::Gadget* name = farbwahl.find(kNameBox);  // as large as the board it is written on
     if (name == nullptr) {
@@ -131,8 +136,10 @@ assets::GadgetLayout with_more_arms(assets::GadgetLayout farbwahl) {
     }
     const std::int32_t gfx = farbwahl.constant("GFXFARB").value_or(kGfxFarb) + kGfxArmsFromFarb;
     const std::int32_t block = farbwahl.constant("BLK_START").value_or(1);
-    const std::int32_t top = name->pos[1] + (name->size[1] - kArmsHeight) / 2;
-    constexpr std::int32_t kSideWidth = static_cast<std::int32_t>(kArmsPerSide) * (kArmsWidth + kArmsGap) - kArmsGap;
+    constexpr std::int32_t kRowsHeight = static_cast<std::int32_t>(kArmsRows) * (kArmsHeight + kArmsGap) - kArmsGap;
+    const std::int32_t top = name->pos[1] + (name->size[1] - kRowsHeight) / 2;
+    constexpr std::int32_t kSideWidth =
+        static_cast<std::int32_t>(kArmsColumnsUsed) * (kArmsWidth + kArmsGap) - kArmsGap;
     const std::array<std::int32_t, 2> left = {name->pos[0] - kArmsBoardGap - kSideWidth,
                                               name->pos[0] + name->size[0] + kArmsBoardGap};
     const assets::Gadget label = *name;  // the name's font and colour (copied: the gadgets grow below)
@@ -145,7 +152,9 @@ assets::GadgetLayout with_more_arms(assets::GadgetLayout farbwahl) {
         arms.block = block;
         arms.gfx = gfx;
         arms.press_offset = kGfxArmsGold;
-        arms.pos = {left[side] + static_cast<std::int32_t>(n % kArmsPerSide) * (kArmsWidth + kArmsGap), top};
+        const std::size_t place = n % kArmsPerSide;
+        arms.pos = {left[side] + static_cast<std::int32_t>(place % kArmsColumns) * (kArmsWidth + kArmsGap),
+                    top + static_cast<std::int32_t>(place / kArmsColumns) * (kArmsHeight + kArmsGap)};
         arms.size = {kArmsWidth, kArmsHeight};
         farbwahl.gadgets.push_back(arms);
     }
@@ -155,7 +164,7 @@ assets::GadgetLayout with_more_arms(assets::GadgetLayout farbwahl) {
         line.kind = assets::GadgetKind::TextCentre;
         line.base = static_cast<std::int32_t>(farbwahl.gadgets.size());
         line.no_select = true;
-        line.pos = {left[side], top + kArmsHeight + 4};
+        line.pos = {left[side], top + kRowsHeight + 4};
         line.size = {kSideWidth, kArmsLabelHeight};
         line.offset = {static_cast<std::int16_t>(kSideWidth / 2), static_cast<std::int16_t>(kArmsLabelHeight - 4)};
         farbwahl.gadgets.push_back(line);
