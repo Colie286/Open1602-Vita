@@ -453,17 +453,6 @@ bool TerrainStroke::shape(std::uint16_t island, std::span<const std::pair<std::u
         }
         return !l || (x > 0 && y > 0 && x < w - 1 && y < h - 1);
     };
-    for (const auto& [tx, ty] : tiles) {
-        if (tx < x0 || ty < y0 || tx > x1 || ty > y1) {
-            continue;
-        }
-        if (!may_be(tx, ty, land)) {
-            note(refusal(island, tx, ty) != Refusal::Free ? refusal(island, tx, ty) : Refusal::Edge);
-            continue;
-        }
-        grid[at(tx, ty)] = land ? 1 : 0;
-        brushed[at(tx, ty)] = 1;
-    }
     const auto is_land = [&](std::int64_t x, std::int64_t y) -> bool {
         if (x < 0 || y < 0 || x >= w || y >= h) {
             return false;
@@ -485,6 +474,48 @@ bool TerrainStroke::shape(std::uint16_t island, std::span<const std::pair<std::u
     const auto fits = [&](std::int64_t x, std::int64_t y) {
         return sim::shapes::coast_tile(is_land(x, y), neighbours(x, y)).has_value();
     };
+    // The tiles whose coast has tiles before the brush: none of them may lose it.
+    std::vector<std::uint8_t> fitted(grid.size());
+    for (std::int64_t y = y0; y <= y1; ++y) {
+        for (std::int64_t x = x0; x <= x1; ++x) {
+            fitted[at(x, y)] = fits(x, y) ? 1 : 0;
+        }
+    }
+    for (const auto& [tx, ty] : tiles) {
+        if (tx < x0 || ty < y0 || tx > x1 || ty > y1) {
+            continue;
+        }
+        if (!may_be(tx, ty, land)) {
+            note(refusal(island, tx, ty) != Refusal::Free ? refusal(island, tx, ty) : Refusal::Edge);
+            continue;
+        }
+        grid[at(tx, ty)] = land ? 1 : 0;
+        brushed[at(tx, ty)] = 1;
+    }
+    // Widening stays near the brush (kReach tiles): a form it cannot widen there is refused
+    // rather than eating away the land or the water about it.
+    constexpr std::int64_t kReach = 2;  // a lake of one tile: its surf and its beach
+    std::vector<std::uint8_t> near(grid.size());
+    bool any = false;
+    for (std::int64_t y = y0; y <= y1; ++y) {
+        for (std::int64_t x = x0; x <= x1; ++x) {
+            if (brushed[at(x, y)] == 0) {
+                continue;
+            }
+            any = true;
+            for (std::int64_t ny = std::max(y0, y - kReach); ny <= std::min(y1, y + kReach); ++ny) {
+                for (std::int64_t nx = std::max(x0, x - kReach); nx <= std::min(x1, x + kReach); ++nx) {
+                    near[at(nx, ny)] = 1;
+                }
+            }
+        }
+    }
+    if (!any) {
+        return false;
+    }
+    const auto may_turn = [&](std::int64_t x, std::int64_t y, bool l) {
+        return near[at(x, y)] != 0 && may_be(x, y, l);
+    };
     // Shapes the game has no tiles for: the tiles about them take the brush's kind; a tile of the
     // brush's kind not brushed gives way as a last resort.
     for (std::uint32_t pass = 0; pass < 16; ++pass) {
@@ -495,7 +526,7 @@ bool TerrainStroke::shape(std::uint16_t island, std::span<const std::pair<std::u
                     continue;
                 }
                 const bool own = is_land(x, y) == land;
-                if (!own && may_be(x, y, land)) {
+                if (!own && may_turn(x, y, land)) {
                     grid[at(x, y)] = land ? 1 : 0;
                     changed = true;
                     continue;
@@ -505,12 +536,12 @@ bool TerrainStroke::shape(std::uint16_t island, std::span<const std::pair<std::u
                     const std::int64_t nx = x + kDirX[d];
                     const std::int64_t ny = y + kDirY[d];
                     if (nx >= x0 && ny >= y0 && nx <= x1 && ny <= y1 && is_land(nx, ny) != land &&
-                        may_be(nx, ny, land)) {
+                        may_turn(nx, ny, land)) {
                         grid[at(nx, ny)] = land ? 1 : 0;
                         changed = true;
                     }
                 }
-                if (!changed && own && brushed[at(x, y)] == 0 && may_be(x, y, !land)) {
+                if (!changed && own && brushed[at(x, y)] == 0 && may_turn(x, y, !land)) {
                     grid[at(x, y)] = land ? 0 : 1;
                     changed = true;
                 }
@@ -518,6 +549,14 @@ bool TerrainStroke::shape(std::uint16_t island, std::span<const std::pair<std::u
         }
         if (!changed) {
             break;
+        }
+    }
+    for (std::int64_t y = y0; y <= y1; ++y) {
+        for (std::int64_t x = x0; x <= x1; ++x) {
+            if (fitted[at(x, y)] != 0 && !fits(x, y)) {
+                note(Refusal::Shape);
+                return false;
+            }
         }
     }
     // The tiles laid anew where their kind or their coast changed.
@@ -702,9 +741,9 @@ std::vector<SeaTile> sea_depth(const sim::World& world, const assets::BuildingTa
         }
         return kFar;
     };
-    // Value noise on a lattice of 5 tiles, 0..1023.
+    // Value noise on a lattice of 4 tiles, 0..1023.
     const auto wobble = [](std::int64_t x, std::int64_t y) {
-        constexpr std::int64_t kSpacing = 5;
+        constexpr std::int64_t kSpacing = 4;
         const auto floor_div = [](std::int64_t a) { return a >= 0 ? a / kSpacing : -((-a + kSpacing - 1) / kSpacing); };
         const std::int64_t gx = floor_div(x);
         const std::int64_t gy = floor_div(y);
@@ -749,7 +788,8 @@ std::vector<SeaTile> sea_depth(const sim::World& world, const assets::BuildingTa
             const std::int64_t rim = std::min({x, y, w - 1 - x, h - 1 - y});
             const std::int64_t least = 5 - 2 * rim;
             const int v = wobble(static_cast<std::int64_t>(isl.x) + x, static_cast<std::int64_t>(isl.y) + y);
-            const std::int64_t level = d + (v < 340 ? -1 : v > 683 ? 1 : 0);
+            // Thresholds near the middle: the interpolated noise seldom reaches its ends.
+            const std::int64_t level = d + (v < 450 ? -1 : v > 574 ? 1 : 0);
             int want = band_of(std::max(level, least));
             if (d == 2) {
                 want = std::min(want, kMiddle);  // never dark next to the surf

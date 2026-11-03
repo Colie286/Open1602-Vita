@@ -450,3 +450,42 @@ TEST_CASE("editor terrain: land on a new island lays the sea by its depth, one u
     CHECK(world.islands().size() == 2);
     CHECK(id_at(15, 15) == kMeadow);
 }
+
+TEST_CASE("editor terrain: a drop of water does not eat the land about it") {
+    const auto buildings = make_buildings();
+    sim::World world = make_world(buildings);
+    auto room = editor::add_sea_island(world, 200, 100, 31, 31, 0, buildings);
+    REQUIRE(room.ok());
+    (*room)->apply(world);
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> block;
+    for (std::uint32_t y = 11; y < 20; ++y) {
+        for (std::uint32_t x = 11; x < 20; ++x) {
+            block.emplace_back(x, y);
+        }
+    }
+    editor::TerrainStroke land(world, buildings);
+    CHECK(land.shape(1, block, true, 3));
+    (void)land.finish("terrain");
+    const auto land_tiles = [&] {
+        std::size_t n = 0;
+        const sim::IslandMap& map = world.islands()[1].map;
+        for (std::uint32_t y = 0; y < map.height(); ++y) {
+            for (std::uint32_t x = 0; x < map.width(); ++x) {
+                const auto* b = buildings.by_sprite(map.top(x, y).sprite);
+                n += b != nullptr && editor::terrain_level(*b) > 0 ? 1U : 0U;
+            }
+        }
+        return n;
+    };
+    const std::size_t before = land_tiles();
+    CHECK(before >= 81);
+    for (const auto& at : {std::pair<std::uint32_t, std::uint32_t>{15, 15}, {12, 15}}) {
+        editor::TerrainStroke water(world, buildings);
+        const std::vector<std::pair<std::uint32_t, std::uint32_t>> drop{at};
+        const bool changed = water.shape(1, drop, false, 5);
+        // A lake as small as the coast allows, or nothing and the reason.
+        CHECK((changed || water.first_refusal() == editor::TerrainStroke::Refusal::Shape));
+        CHECK(land_tiles() + 25 >= before);
+        water.cancel();
+    }
+}

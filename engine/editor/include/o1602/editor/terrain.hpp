@@ -101,7 +101,9 @@ public:
     /// Why a tile cannot be painted; Free if it can.
     /// Level: a piece of another level than the tile's (water, shore, land), which would leave a gap
     /// in the map's picture; the coast changes with shape().
-    enum class Refusal : std::uint8_t { Free, NoIsland, NotTerrain, City, Unit, RunningGame, Edge, Level };
+    /// Shape: the coast would take a form the game has no tiles for, and the land about it is too
+    /// narrow to widen it there.
+    enum class Refusal : std::uint8_t { Free, NoIsland, NotTerrain, City, Unit, RunningGame, Edge, Level, Shape };
     /// Whether the island tile (x, y) can be painted.
     [[nodiscard]] Refusal refusal(std::uint16_t island, std::int64_t x, std::int64_t y);
 

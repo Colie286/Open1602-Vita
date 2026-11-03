@@ -1283,6 +1283,8 @@ std::string terrain_refusal(editor::TerrainStroke::Refusal refusal) {
             return ui::tr("editor.terrain.refused.edge");
         case Refusal::Level:
             return ui::tr("editor.terrain.refused.level");
+        case Refusal::Shape:
+            return ui::tr("editor.terrain.refused.shape");
     }
     return {};
 }
@@ -1316,6 +1318,7 @@ void MapViewer::editor_terrain_request(const EditorRequest& request) {
         t.rotation = 0;
     }
     m_editor->terrain = t;
+    m_editor->notice.clear();  // the note of the tool chosen shows again
 }
 
 void MapViewer::editor_pipette(std::uint32_t x, std::uint32_t y) {
@@ -1422,7 +1425,7 @@ void MapViewer::editor_make_room(std::int64_t x0, std::int64_t y0, std::int64_t 
     const auto H = static_cast<std::int64_t>(world.height());
     constexpr std::int64_t kRoom = 2;   // a tile of surf and one of water beyond the land
     constexpr std::int64_t kMore = 12;  // grown further, so that a stroke does not grow it at every tile
-    constexpr std::int64_t kNear = 8;   // land painted this close to an island grows it
+    constexpr std::int64_t kNear = 6;   // land painted this close to an island's land grows it
     const std::int64_t nx0 = std::max<std::int64_t>(0, x0 - kRoom);
     const std::int64_t ny0 = std::max<std::int64_t>(0, y0 - kRoom);
     const std::int64_t nx1 = std::min<std::int64_t>(W - 1, x1 + kRoom);
@@ -1437,17 +1440,25 @@ void MapViewer::editor_make_room(std::int64_t x0, std::int64_t y0, std::int64_t 
         c.island != sim::World::kSea) {
         island = c.island;
     } else {
+        // The island whose land is nearest, within kNear tiles of the brush (not of its rectangle,
+        // whose sea may reach far out).
         std::int64_t best = kNear + 1;
-        for (std::size_t i = 0; i < world.islands().size(); ++i) {
-            const sim::WorldIsland& isl = world.islands()[i];
-            const std::int64_t ix0 = isl.x;
-            const std::int64_t iy0 = isl.y;
-            const std::int64_t ix1 = ix0 + isl.map.width() - 1;
-            const std::int64_t iy1 = iy0 + isl.map.height() - 1;
-            const std::int64_t d = std::max({ix0 - cx, cx - ix1, iy0 - cy, cy - iy1, std::int64_t{0}});
-            if (d < best) {
-                best = d;
-                island = i;
+        for (std::int64_t y = std::max<std::int64_t>(0, cy - kNear); y <= std::min(H - 1, cy + kNear); ++y) {
+            for (std::int64_t x = std::max<std::int64_t>(0, cx - kNear); x <= std::min(W - 1, cx + kNear); ++x) {
+                const sim::World::Cell& at = world.cell(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
+                if (at.island == sim::World::kSea) {
+                    continue;
+                }
+                const sim::MapCell& top = world.islands()[at.island].map.top(at.local_x, at.local_y);
+                const assets::BuildingType* b = top.empty() ? nullptr : m_buildings.by_sprite(top.sprite);
+                if (b == nullptr || editor::terrain_level(*b) == 0) {
+                    continue;  // water
+                }
+                const std::int64_t d = std::max(std::abs(x - cx), std::abs(y - cy));
+                if (d < best) {
+                    best = d;
+                    island = at.island;
+                }
             }
         }
     }
