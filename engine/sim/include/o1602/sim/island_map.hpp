@@ -220,4 +220,44 @@ inline void rotated_size(const assets::BuildingType& b, std::uint8_t rotation, s
     h = swap ? b.size_x : b.size_y;
 }
 
+/// The tiles of a building placed with the top left of its footprint at (x, y), in the order the
+/// original's placement routine lays them: put(tile x, tile y, k) for its k-th sprite from b.gfx.
+template <typename Put>
+void for_each_footprint(const assets::BuildingType& b, std::int32_t x, std::int32_t y, std::uint8_t rotation,
+                        Put&& put) {
+    const auto w = static_cast<std::int32_t>(b.size_x);
+    const auto h = static_cast<std::int32_t>(b.size_y);
+    std::uint32_t k = 0;
+    switch (rotation & 3U) {
+        case 0:
+            for (std::int32_t j = 0; j < h; ++j) {
+                for (std::int32_t i = 0; i < w; ++i) {
+                    put(x + i, y + j, k++);
+                }
+            }
+            break;
+        case 1:
+            for (std::int32_t j = h - 1; j >= 0; --j) {
+                for (std::int32_t i = 0; i < w; ++i) {
+                    put(x + j, y + i, k++);
+                }
+            }
+            break;
+        case 2:
+            for (std::int32_t j = h - 1; j >= 0; --j) {
+                for (std::int32_t i = w - 1; i >= 0; --i) {
+                    put(x + i, y + j, k++);
+                }
+            }
+            break;
+        default:
+            for (std::int32_t j = 0; j < h; ++j) {
+                for (std::int32_t i = w - 1; i >= 0; --i) {
+                    put(x + j, y + i, k++);
+                }
+            }
+            break;
+    }
+}
+
 }  // namespace o1602::sim

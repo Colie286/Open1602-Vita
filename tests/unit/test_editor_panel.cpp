@@ -507,3 +507,68 @@ TEST_CASE("editor panel: placeholders are set with a plan, and a selected one mo
         CHECK(w.rect.y + w.rect.h <= 760);
     }
 }
+
+TEST_CASE("editor panel: the terrain tools go through their tools, kinds, pieces, turns and brushes") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(200, 560);
+    EditorModel m = document();
+    m.terrain_pieces = 3;
+    m.terrain_id = 22722;
+    CHECK(!click(panel, m, "Edit terrain").has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::Terrain);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "22722 (1/3)"));
+    CHECK(says(panel, "The left button paints"));
+
+    auto r = click(panel, m, "Brush");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::Terrain);
+    CHECK(r->terrain.tool == app::EditorTerrain::Tool::Random);
+    r = click(panel, m, "Brush", ui::MouseButton::Right);
+    REQUIRE(r.has_value());
+    CHECK(r->terrain.tool == app::EditorTerrain::Tool::Pipette);
+
+    m.terrain.piece = 2;
+    m.terrain.rotation = 1;
+    r = click(panel, m, "Ground");
+    REQUIRE(r.has_value());
+    CHECK(r->terrain.group == 1);
+    CHECK(r->terrain.piece == 0);  // a new kind starts at its first piece
+    CHECK(r->terrain.rotation == 0);
+
+    m.terrain = app::EditorTerrain{};
+    r = click(panel, m, "22722 (1/3)", ui::MouseButton::Right);
+    REQUIRE(r.has_value());
+    CHECK(r->terrain.piece == 2);
+
+    // The turn only for a piece that turns.
+    panel.layout(m);
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        if (w.text == "0\xB0") {
+            CHECK(!w.enabled);
+        }
+    }
+    m.terrain_turns = true;
+    r = click(panel, m, "0\xB0");
+    REQUIRE(r.has_value());
+    CHECK(r->terrain.rotation == 1);
+
+    r = click(panel, m, "1 \xD7 1");
+    REQUIRE(r.has_value());
+    CHECK(r->terrain.brush == 1);
+
+    // A piece of several tiles: no brush size, a note of its size.
+    m.terrain_width = 4;
+    m.terrain_height = 4;
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "A piece of 4 \xD7 4 tiles"));
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        CHECK(w.rect.y + w.rect.h <= 760);
+        if (w.text == "1 \xD7 1") {
+            CHECK(!w.enabled);
+        }
+    }
+    CHECK(!click(panel, m, "Back to the map").has_value());
+    CHECK(panel.page() == EditorPanel::Page::Document);
+}

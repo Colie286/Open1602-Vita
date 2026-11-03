@@ -90,6 +90,11 @@ public:
         virtual bool editor_place(const render::TilePos& tile) = 0;
         /// A right click on the editor's map: what is being placed goes back; false if nothing was.
         virtual bool editor_cancel_place() = 0;
+        /// The left button pressed on the editor's map at `tile`, the mouse moved there with it held,
+        /// or the button let go (`tile` nothing if off the map): a stroke of a terrain tool. False
+        /// if no terrain tool is out (a press picks).
+        enum class Stroke : std::uint8_t { Begin, Continue, End };
+        virtual bool editor_stroke(std::optional<render::TilePos> tile, Stroke phase) = 0;
         /// Where Home goes without a selection.
         [[nodiscard]] virtual render::TilePos home_tile() const = 0;
         /// The graphics of the zoom level shown; null while they are not there.

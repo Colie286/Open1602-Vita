@@ -375,6 +375,18 @@ EditorModel MapViewer::editor_model() const {
         m.placeholder_climate = e.climate;
         m.placeholder_size = e.size;
     }
+    m.terrain = m_editor->terrain;
+    {
+        const auto pieces =
+            editor::terrain_pieces(m_buildings, static_cast<editor::TerrainGroup>(m_editor->terrain.group));
+        m.terrain_pieces = pieces.size();
+        if (const assets::BuildingType* b = editor_terrain_piece()) {
+            m.terrain_id = b->id;
+            m.terrain_width = b->size_x;
+            m.terrain_height = b->size_y;
+            m.terrain_turns = b->rotate > 0;
+        }
+    }
     if (m_hud && m_hud->editor_panel() && m_hud->editor_panel()->page() == EditorPanel::Page::WorldSize) {
         const auto [w, h] = editor::used_size(world);
         m.used_width = w;
@@ -394,6 +406,9 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         return;
     }
     using Kind = EditorRequest::Kind;
+    if (m_editor->stroke) {
+        editor_end_stroke();  // a key while the button is held (undo, save)
+    }
     const bool loses = request.kind == Kind::New || request.kind == Kind::Open || request.kind == Kind::Close;
     if (loses && !confirmed && m_editor->document.modified() && m_hud) {
         m_editor_pending = request;
@@ -483,6 +498,9 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
             break;
         case Kind::SaveIsland:
             editor_save_island(request.index);
+            break;
+        case Kind::Terrain:
+            editor_terrain_request(request);
             break;
         case Kind::MovePlaceholder:
         case Kind::RemovePlaceholder:
@@ -1160,6 +1178,26 @@ void MapViewer::draw_editor_marks() {
                     ui::rgb_ink(fits ? assets::Rgba{90, 230, 90, 255} : assets::Rgba{235, 70, 60, 255}));
         }
     }
+    // The terrain tool under the mouse: the tiles it lays, or the tile it starts from.
+    const EditorPanel* panel = m_hud->editor_panel();
+    if (panel != nullptr && panel->page() == EditorPanel::Page::Terrain && !m_editor->placing &&
+        !m_hud->covers(static_cast<std::int32_t>(m_input->mouse_x()), static_cast<std::int32_t>(m_input->mouse_y()))) {
+        if (const auto tile = m_input->tile_at_mouse()) {
+            using Tool = EditorTerrain::Tool;
+            const EditorTerrain& t = m_editor->terrain;
+            std::uint32_t w = 1;
+            std::uint32_t h = 1;
+            const assets::BuildingType* b = editor_terrain_piece();
+            if (t.tool == Tool::Random || (t.tool == Tool::Brush && b != nullptr && b->size_x == 1 && b->size_y == 1)) {
+                w = h = editor::kBrushSizes[t.brush % editor::kBrushSizes.size()];
+            } else if (t.tool == Tool::Brush && b != nullptr) {
+                sim::rotated_size(*b, t.rotation, w, h);
+            }
+            const std::int64_t x0 = std::int64_t{tile->x} - (std::int64_t{w} - 1) / 2;
+            const std::int64_t y0 = std::int64_t{tile->y} - (std::int64_t{h} - 1) / 2;
+            outline(x0, y0, w, h, ui::rgb_ink(assets::Rgba{250, 250, 250, 255}));
+        }
+    }
     // The mark of what the panel shows: a cross on the tile, or over the ship, unit or building.
     const EditorPick& pick = m_editor->pick;
     const bool shown = m_hud->editor_panel() != nullptr && shows_pick(m_hud->editor_panel()->page());
@@ -1217,6 +1255,210 @@ void MapViewer::apply_editor() {
         m_editor->placing.reset();
     }
     m_hud->set_editor_model(editor_model());
+}
+
+namespace {
+
+static_assert(kTerrainBrushes == editor::kBrushSizes, "the panel's brushes are the editor's");
+
+/// The note of why a terrain tool changed nothing.
+std::string terrain_refusal(editor::TerrainStroke::Refusal refusal) {
+    using Refusal = editor::TerrainStroke::Refusal;
+    switch (refusal) {
+        case Refusal::Free:
+            return ui::tr("editor.terrain.unchanged");
+        case Refusal::NoIsland:
+            return ui::tr("editor.terrain.refused.no_island");
+        case Refusal::NotTerrain:
+            return ui::tr("editor.terrain.refused.building");
+        case Refusal::City:
+            return ui::tr("editor.terrain.refused.city");
+        case Refusal::Unit:
+            return ui::tr("editor.terrain.refused.unit");
+        case Refusal::RunningGame:
+            return ui::tr("editor.islands.in_use.game");
+    }
+    return {};
+}
+
+/// A number for a tile of a stroke: the random fill's pieces.
+std::uint64_t tile_seed(std::uint64_t stroke, std::int64_t x, std::int64_t y) noexcept {
+    return stroke * 0x9E3779B97F4A7C15ULL ^ static_cast<std::uint64_t>(x) << 32 ^ static_cast<std::uint64_t>(y);
+}
+
+}  // namespace
+
+const assets::BuildingType* MapViewer::editor_terrain_piece() const {
+    if (!m_editor) {
+        return nullptr;
+    }
+    const auto pieces = editor::terrain_pieces(m_buildings, static_cast<editor::TerrainGroup>(m_editor->terrain.group));
+    if (pieces.empty()) {
+        return nullptr;
+    }
+    return pieces[std::min(m_editor->terrain.piece, pieces.size() - 1)];
+}
+
+void MapViewer::editor_terrain_request(const EditorRequest& request) {
+    EditorTerrain t = request.terrain;
+    t.group = static_cast<std::uint8_t>(t.group % editor::kTerrainGroups);
+    t.rotation &= 3U;
+    t.brush = static_cast<std::uint8_t>(t.brush % editor::kBrushSizes.size());
+    const auto pieces = editor::terrain_pieces(m_buildings, static_cast<editor::TerrainGroup>(t.group));
+    t.piece = pieces.empty() ? 0 : std::min(t.piece, pieces.size() - 1);
+    if (!pieces.empty() && pieces[t.piece]->rotate == 0) {
+        t.rotation = 0;
+    }
+    m_editor->terrain = t;
+}
+
+void MapViewer::editor_pipette(std::uint32_t x, std::uint32_t y) {
+    const auto piece = editor::terrain_at(m_state->world, m_buildings, x, y);
+    const assets::BuildingType* b = piece ? m_buildings.by_id(piece->id) : nullptr;
+    const auto group = b != nullptr ? editor::terrain_group(m_buildings, *b) : std::nullopt;
+    if (!group) {
+        editor_notice(ui::tr("editor.terrain.pipette_none"), true, "no terrain there");
+        return;
+    }
+    const auto pieces = editor::terrain_pieces(m_buildings, *group);
+    const auto it = std::find(pieces.begin(), pieces.end(), b);
+    EditorTerrain& t = m_editor->terrain;
+    t.group = static_cast<std::uint8_t>(*group);
+    t.piece = static_cast<std::size_t>(it - pieces.begin());
+    t.rotation = b->rotate > 0 ? piece->rotation : 0;
+    t.tool = EditorTerrain::Tool::Brush;
+    editor_notice(ui::tr("editor.terrain.picked", {number(b->id)}), false, "terrain picked");
+}
+
+void MapViewer::editor_paint(editor::TerrainStroke& stroke, std::int64_t x, std::int64_t y, bool going_on) {
+    const EditorTerrain& t = m_editor->terrain;
+    const std::uint32_t side = editor::kBrushSizes[t.brush % editor::kBrushSizes.size()];
+    const sim::World& world = m_state->world;
+    if (t.tool == EditorTerrain::Tool::Random) {
+        for (const auto& [tx, ty] : editor::brush_tiles(x, y, side, world.width(), world.height())) {
+            const sim::World::Cell& c = world.cell(tx, ty);
+            const std::uint8_t climate = c.island != sim::World::kSea ? world.islands()[c.island].header.climate : 0;
+            const auto piece = editor::random_piece(m_buildings, static_cast<editor::TerrainGroup>(t.group), climate,
+                                                    tile_seed(m_editor->strokes, tx, ty));
+            if (const assets::BuildingType* b = piece ? m_buildings.by_id(piece->id) : nullptr) {
+                (void)stroke.stamp_world(tx, ty, *b, piece->rotation);
+            }
+        }
+        return;
+    }
+    const assets::BuildingType* b = editor_terrain_piece();
+    if (b == nullptr) {
+        return;
+    }
+    if (b->size_x == 1 && b->size_y == 1) {
+        for (const auto& [tx, ty] : editor::brush_tiles(x, y, side, world.width(), world.height())) {
+            (void)stroke.stamp_world(tx, ty, *b, t.rotation);
+        }
+        return;
+    }
+    // A piece of several tiles about the mouse; dragged, the next one where it no longer covers the last.
+    std::uint32_t fw = 0;
+    std::uint32_t fh = 0;
+    sim::rotated_size(*b, t.rotation, fw, fh);
+    const std::int64_t ox = x - (std::int64_t{fw} - 1) / 2;
+    const std::int64_t oy = y - (std::int64_t{fh} - 1) / 2;
+    if (going_on && m_editor->stroke_large && std::abs(ox - m_editor->stroke_large->first) < fw &&
+        std::abs(oy - m_editor->stroke_large->second) < fh) {
+        return;
+    }
+    if (stroke.stamp_world(ox, oy, *b, t.rotation) && &stroke == m_editor->stroke.get()) {
+        m_editor->stroke_large = {ox, oy};
+    }
+}
+
+void MapViewer::editor_end_stroke() {
+    if (!m_editor || !m_editor->stroke) {
+        return;
+    }
+    const editor::TerrainStroke::Refusal refused = m_editor->stroke->first_refusal();
+    std::unique_ptr<editor::Operation> op = m_editor->stroke->finish("terrain");
+    m_editor->stroke.reset();
+    m_editor->stroke_at.reset();
+    m_editor->stroke_large.reset();
+    if (op) {
+        m_editor->document.perform(std::move(op));
+        m_editor->notice.clear();
+    } else if (refused != editor::TerrainStroke::Refusal::Free) {
+        editor_notice(terrain_refusal(refused), true, "terrain refused");
+    }
+}
+
+bool MapViewer::editor_stroke(std::optional<render::TilePos> tile, Stroke phase) {
+    if (!m_editor) {
+        return false;
+    }
+    const EditorPanel* panel = m_hud ? m_hud->editor_panel() : nullptr;
+    if (panel == nullptr || panel->page() != EditorPanel::Page::Terrain || m_editor->placing) {
+        editor_end_stroke();  // the page left while the button was held
+        return false;
+    }
+    using Tool = EditorTerrain::Tool;
+    const Tool tool = m_editor->terrain.tool;
+    switch (phase) {
+        case Stroke::Begin: {
+            editor_end_stroke();
+            if (!tile) {
+                return true;
+            }
+            const auto x = static_cast<std::uint32_t>(tile->x);
+            const auto y = static_cast<std::uint32_t>(tile->y);
+            if (tool == Tool::Pipette) {
+                editor_pipette(x, y);
+                return true;
+            }
+            if (tool == Tool::Fill || tool == Tool::Replace) {
+                const assets::BuildingType* b = editor_terrain_piece();
+                if (b == nullptr) {
+                    return true;
+                }
+                const editor::TerrainPiece piece{b->id, m_editor->terrain.rotation};
+                auto op = tool == Tool::Fill ? editor::fill_terrain(m_state->world, m_buildings, x, y, piece)
+                                             : editor::replace_terrain(m_state->world, m_buildings, x, y, piece);
+                if (op) {
+                    m_editor->document.perform(std::move(op).value());
+                    m_editor->notice.clear();
+                } else {
+                    const char* why =
+                        op.error().code == core::ErrorCode::Unsupported && (b->size_x != 1 || b->size_y != 1)
+                            ? "editor.terrain.refused.large"
+                        : op.error().code == core::ErrorCode::NotFound    ? "editor.terrain.refused.no_island"
+                        : op.error().code == core::ErrorCode::Unsupported ? "editor.terrain.refused.tiles"
+                                                                          : "editor.terrain.unchanged";
+                    editor_notice(ui::tr(why), true, op.error().message);
+                }
+                return true;
+            }
+            ++m_editor->strokes;
+            m_editor->stroke = std::make_unique<editor::TerrainStroke>(m_state->world, m_buildings);
+            m_editor->stroke_at = {tile->x, tile->y};
+            editor_paint(*m_editor->stroke, tile->x, tile->y, false);
+            return true;
+        }
+        case Stroke::Continue: {
+            if (!m_editor->stroke || !tile || !m_editor->stroke_at) {
+                return m_editor->stroke != nullptr;
+            }
+            const auto [lx, ly] = *m_editor->stroke_at;
+            if (lx == tile->x && ly == tile->y) {
+                return true;
+            }
+            const auto line = editor::line_tiles(lx, ly, tile->x, tile->y);
+            for (std::size_t i = 1; i < line.size(); ++i) {
+                editor_paint(*m_editor->stroke, line[i].first, line[i].second, true);
+            }
+            m_editor->stroke_at = {tile->x, tile->y};
+            return true;
+        }
+        case Stroke::End:
+            editor_end_stroke();
+            return true;
+    }
+    return false;
 }
 
 void MapViewer::editor_key(ui::KeyAction action) {

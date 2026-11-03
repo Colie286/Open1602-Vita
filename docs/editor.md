@@ -30,6 +30,7 @@ makes; they are made when a game of it starts, as in the original.
 | Undo, Redo | Takes the last change back, or does it again. |
 | Edit islands | New islands: one of the original's templates or one of its own shape, north or south, in the five sizes of the templates (30 × 30 up to 100 × 90); Another one picks another template or shape. Place puts it in hand: its outline follows the mouse, green where it fits on open sea and red where not; a left click puts it down, a right click or Cancel puts it back. Load island lists the islands saved with Save (below) and the original's island files (`.scp`) put into the folder `islands` in Open1602's user data folder, and puts the one chosen in hand the same way; an `.scp` file, which does not tell its climate, gets the climate chosen on the page. |
 | Placeholders | A scenario of the original that makes its islands when a game starts has a world plan: each of its islands is a placeholder, drawn as a yellow outline of its size class with its name. The shape Placeholder on Edit islands sets a new one (north or south, a size class, its template drawn when the game starts); a click on a placeholder selects it (below). Islands cannot be put on a placeholder. When a game of the scenario starts, the world keeps what the editor left (its islands, cities, players and ships) and only the placeholders become islands; what is beyond the original's limits does not start with it. |
+| Edit terrain | The terrain tools (below). |
 | Change map size | Makes the map larger or smaller in steps of 50 tiles, or fits it to its content with some sea around. It grows or is cut at the right and the bottom, so everything keeps its place, and it cannot be cut below the islands, ships, land units and markers. |
 | Overlays | What the map shows over the world: the players' land in their colours, the numbers of the islands, the coordinates of the tile under the mouse. |
 | Check | The check list: what keeps the scenario from being saved (the world must hold together, its description and markers be right), and what the original cannot have (its map size, more islands, cities, ships, land units, towers or players with a start than it holds, larger islands, more ore deposits, content of a package, a script). The second group is a fault only for a scenario that is to keep to the original's limits. |
@@ -61,6 +62,27 @@ Turn, Copy, Delete and Save need an island without a city, buildings or units of
 to go with it, which is for later), and none of these works in a running game opened as a map
 (a savegame), whose figures stand on the islands. Every change of an island is one step that Undo
 takes back.
+
+## Terrain
+
+**Edit terrain** paints the islands' terrain from a palette of the game's own: ground, forest, rock
+and ore mountains, slopes, rivers, beach, surf and sea. **Kind** picks a group of the palette,
+**Piece** goes through its pieces (a right click goes back), **Turn** turns a piece that can turn and
+**Size** sets the side of the square brush. A white dotted square on the map shows where the tool
+lays, and the brush shows its piece there before the click. The tools:
+
+| Tool | What it does |
+|---|---|
+| Brush | Paints the piece where the left button is pressed and where the mouse goes with it held. A piece of several tiles (a mountain, a river bend) is laid about the mouse. |
+| Random fill | Paints pieces of the kind, each tile its own drawn at random and turned at random: ground as the game's islands mix it, forest of the island's climate. |
+| Fill | Paints every tile that is joined to the one clicked by its sides and looks like it. |
+| Replace | Paints every tile of the island that looks like the one clicked; tiles that turn keep their turn. |
+| Pipette | Takes the piece of the tile clicked, with its turn, and goes back to the brush. |
+
+A tile gets the piece on top and as the ground below. A mountain or river bend that a piece covers in
+part becomes meadow where it is not covered, and its ore deposit or volcano goes with it. The terrain
+tools paint only islands, not open sea, and leave buildings, the land of cities and the tiles under a
+ship or a land unit as they are. Each stroke, fill or replacement is one step of undo.
 
 ## Keys
 

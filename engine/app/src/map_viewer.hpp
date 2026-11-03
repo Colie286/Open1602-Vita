@@ -46,6 +46,7 @@
 #include "o1602/core/file.hpp"
 #include "o1602/core/result.hpp"
 #include "o1602/editor/document.hpp"
+#include "o1602/editor/terrain.hpp"
 #include "o1602/net/enet_transport.hpp"
 #include "o1602/net/lan.hpp"
 #include "o1602/net/session.hpp"
@@ -141,6 +142,7 @@ private:
     void editor_pick(const EditorPick& pick) override;
     bool editor_place(const render::TilePos& tile) override;
     bool editor_cancel_place() override;
+    bool editor_stroke(std::optional<render::TilePos> tile, Stroke phase) override;
 
     /// The window's events; the rest goes to the input.
     void handle_event(const SDL_Event& event);
@@ -326,6 +328,17 @@ private:
     [[nodiscard]] static std::filesystem::path own_island_folder();
     /// `op` done as a step of the document; false (and a note why) if it could not be made.
     bool editor_perform(core::Result<std::unique_ptr<editor::Operation>> op);
+    /// The terrain piece chosen on the page "Terrain" (nothing if its group has none).
+    [[nodiscard]] const assets::BuildingType* editor_terrain_piece() const;
+    /// The terrain tool lays at the world tile (x, y) into `stroke`; `going_on`: the mouse moved
+    /// there with the button held (a piece of several tiles is not laid over the last one).
+    void editor_paint(editor::TerrainStroke& stroke, std::int64_t x, std::int64_t y, bool going_on);
+    /// The stroke being drawn ends: one step of undo, or a note why nothing changed.
+    void editor_end_stroke();
+    /// The terrain tool's settings from the panel.
+    void editor_terrain_request(const EditorRequest& request);
+    /// The pipette at the world tile (x, y).
+    void editor_pipette(std::uint32_t x, std::uint32_t y);
     /// The islands changed: what the viewer keeps of them is made anew (flags, minimap), and what
     /// the panel shows of an island that is gone goes.
     void editor_islands_changed();
@@ -672,6 +685,13 @@ private:
             EditorPanel::Page page = EditorPanel::Page::Islands;  ///< leaving it puts the island back
         };
         std::optional<Placing> placing{};
+        EditorTerrain terrain{};  ///< the terrain tools' settings
+        /// A stroke of the brush being drawn, where it laid last and the last piece of several
+        /// tiles laid (its world tile).
+        std::unique_ptr<editor::TerrainStroke> stroke{};
+        std::optional<std::pair<std::int64_t, std::int64_t>> stroke_at{};
+        std::optional<std::pair<std::int64_t, std::int64_t>> stroke_large{};
+        std::uint64_t strokes = 0;  ///< strokes drawn, for the random fill's pieces
     };
     std::optional<EditorSession> m_editor;
     /// A request of the editor waiting for the answer to "discard the changes?".
