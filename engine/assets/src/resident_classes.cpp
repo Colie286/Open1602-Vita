@@ -44,14 +44,14 @@ struct Change {
     std::optional<std::int64_t> share;
     std::optional<std::int64_t> hiscore;
     std::vector<std::pair<std::uint8_t, std::int64_t>> needs;  ///< ware, kg
-    std::optional<std::vector<std::uint16_t>> public_needs;
+    std::optional<std::vector<ServiceBits>> public_needs;
     LocalizedNames names;
 };
 
 /// The names of public_building in classes.toml.
 struct PublicName {
     std::string_view name;
-    std::uint16_t bit;
+    ServiceBits bit;
 };
 constexpr std::array<PublicName, 11> kPublicNames{{
     {"market", public_building::kMarket},
@@ -149,16 +149,16 @@ std::optional<std::uint8_t> class_of(std::span<const ResidentClass> classes, std
     return static_cast<std::uint8_t>(it - classes.begin());
 }
 
-std::optional<std::vector<std::uint16_t>> public_needs_of(std::string_view text, std::string& error,
-                                                          std::span<const std::string> services) {
-    std::vector<std::uint16_t> needs;
+std::optional<std::vector<ServiceBits>> public_needs_of(std::string_view text, std::string& error,
+                                                        std::span<const std::string> services) {
+    std::vector<ServiceBits> needs;
     if (trimmed(text).empty()) {
         return needs;
     }
     std::size_t start = 0;
     while (start <= text.size()) {
         const std::size_t comma = std::min(text.find(',', start), text.size());
-        std::uint16_t any = 0;
+        ServiceBits any = 0;
         std::size_t from = start;
         while (from <= comma) {
             const std::size_t bar = std::min(text.find('|', from), comma);
@@ -168,8 +168,7 @@ std::optional<std::vector<std::uint16_t>> public_needs_of(std::string_view text,
             const auto own = std::find(services.begin(), services.end(), name);
             if (it == kPublicNames.end() && own != services.end() &&
                 own - services.begin() < static_cast<std::ptrdiff_t>(kMaxOwnServices)) {
-                any = static_cast<std::uint16_t>(
-                    any | public_building::kOwn[static_cast<std::size_t>(own - services.begin())]);
+                any |= public_building::own(static_cast<std::size_t>(own - services.begin()));
                 from = bar + 1;
                 continue;
             }
@@ -178,7 +177,7 @@ std::optional<std::vector<std::uint16_t>> public_needs_of(std::string_view text,
                     name.empty() ? "has an empty choice" : "names no public building: \"" + std::string(name) + "\"";
                 return std::nullopt;
             }
-            any = static_cast<std::uint16_t>(any | it->bit);
+            any |= it->bit;
             from = bar + 1;
         }
         if (needs.size() >= kMaxPublicNeeds) {

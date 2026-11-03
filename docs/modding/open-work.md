@@ -260,11 +260,12 @@ rules, the sites of public buildings, removes producers and public buildings (th
 empty) and lets goods of packages count as food or alcohol (`counts`); a game keeps the table in
 section `SLOT`. The producers of packages' goods stay derived from the building table, after the
 original's slots. Step 4, public buildings of a kind of their own: `service = true` in
-own_buildings.toml gives a building a service of its own (the free bits 13 and 14 of a house's
-services, so two in a game), classes need it by its id, and `kind = "public"` in slots.toml adds a
-slot the computers plan (slots 0xFE and 0xFD, tasks 0x3E and 0x3F, "covered" flags 0x2000 and
-0x4000; section `SLOT` version 2). More than two kinds would need a wider service field of houses
-and of the classes' needs (savegame sections of houses and `CPUB`). Step 5, the rest of the
+own_buildings.toml gives a building a service of its own (bits 13, 14 and 16 to 63 of a house's
+64-bit services, so 50 in a game), classes need it by its id, and `kind = "public"` in slots.toml
+adds a slot the computers plan (slots 0xFE down to 0xCD, tasks 0x3E to 0x6F, "covered" flags from
+bit 13 on; section `SLOT` version 2, version 3 for services beyond 16 bits, `HOUS` and `CPUB`
+version 2, `AIST` version 6, each written only when needed). The producers of packages' goods
+keep 150 slots of the 198 before. Step 5, the rest of the
 stages' numbers as values of `[computer_stages]` in balance.toml (section `BALA` version 4): when a
 city founded becomes a colony or is given up, the colonies' farms and fields, the settlers' early
 workshops and luxury, the main city's gold to grow on, the luxury goods and Kontor levels the

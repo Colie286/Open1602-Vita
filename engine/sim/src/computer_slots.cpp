@@ -71,7 +71,8 @@ ComputerSlot producer(std::uint8_t number, std::string_view name, const Need& n,
 }
 
 ComputerSlot public_building(std::uint8_t number, std::string_view name, std::uint8_t task, std::uint32_t building,
-                             std::uint32_t flag, std::uint16_t service, std::int32_t min_houses, bool roads_on_fail) {
+                             std::uint64_t flag, assets::ServiceBits service, std::int32_t min_houses,
+                             bool roads_on_fail) {
     ComputerSlot s = counter(number, name);
     s.kind = Kind::Public;
     s.task = task;
@@ -265,13 +266,11 @@ const ComputerSlot* computer_slot(std::span<const ComputerSlot> slots, std::uint
     return it == slots.end() ? nullptr : &*it;
 }
 
-ComputerSlot own_public_slot(std::size_t index, std::string name, std::uint32_t building, std::uint16_t service) {
-    constexpr std::array<std::uint8_t, kMaxOwnPublic> kTasks = {ai::kOwnPublic1, ai::kOwnPublic2};
-    constexpr std::array<std::uint32_t, kMaxOwnPublic> kFlags = {ai::city_flag::kOwnPublic1,
-                                                                 ai::city_flag::kOwnPublic2};
+ComputerSlot own_public_slot(std::size_t index, std::string name, std::uint32_t building, assets::ServiceBits service) {
     const std::size_t i = std::min(index, kMaxOwnPublic - 1);
-    ComputerSlot s = public_building(static_cast<std::uint8_t>(kOwnPublicSlot - i), "", kTasks[i], building, kFlags[i],
-                                     service, 8, true);
+    ComputerSlot s = public_building(static_cast<std::uint8_t>(kOwnPublicSlot - i), "",
+                                     static_cast<std::uint8_t>(ai::kOwnPublicFirst + i), building,
+                                     ai::city_flag::own_public(i), service, 8, true);
     s.name = std::move(name);
     return s;
 }

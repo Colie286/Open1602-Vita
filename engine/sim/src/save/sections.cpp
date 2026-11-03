@@ -116,6 +116,9 @@ constexpr std::uint32_t kClasses = tag("CLAS");
 /// The public buildings classes.toml gave classes of their own (ResidentClass::public_needs), only
 /// written when a class has them. Required: they decide which houses rise.
 constexpr std::uint32_t kClassPublic = tag("CPUB");
+/// CPUB version 2: every choice as 64 bits, not 16, for the public buildings of packages' own kinds
+/// from bit 16 on (public_building::own); written only when a choice names one of those.
+constexpr std::uint16_t kWideClassPublic = 2;
 /// The unlock levels as packages changed and added them (World::infra_levels(), unlock_levels.hpp),
 /// only written when they differ from haeuser.cod's. Required: buildings name the levels.
 constexpr std::uint32_t kLevels = tag("LEVL");
@@ -173,6 +176,9 @@ constexpr std::uint32_t kComputerSlots = tag("SLOT");
 /// SLOT version 2: after the original's slots the public buildings of a kind of their own, each
 /// with its name, building and service after its fields; written only when there are any.
 constexpr std::uint16_t kSlotsWithPublic = 2;
+/// SLOT version 3: the service of such a building as 64 bits, not 16 (public_building::own); written
+/// only when one has a service above the low 16 bits.
+constexpr std::uint16_t kSlotsWithWideServices = 3;
 /// SCRP version 2: each script's table `campaign` after its table `state`.
 constexpr std::uint16_t kScriptsWithCampaign = 2;
 
@@ -313,7 +319,13 @@ constexpr std::uint16_t max_version(std::uint32_t id) noexcept {
         return kClimatesWithShares;
     }
     if (id == kComputerSlots) {
-        return kSlotsWithPublic;
+        return kSlotsWithWideServices;
+    }
+    if (id == kHouses) {
+        return kWideServices;
+    }
+    if (id == kClassPublic) {
+        return kWideClassPublic;
     }
     if (id == kBalance) {
         return kBalanceWithMoreStages;
@@ -682,6 +694,9 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
     if (!world.balance().computer_slots.empty()) {
         const auto& slots = world.balance().computer_slots;
         const bool added = slots.size() > original_computer_slots().size();
+        const bool wide = std::any_of(slots.begin(), slots.end(), [](const ComputerSlot& k) {
+            return computer_slot(original_computer_slots(), k.number) == nullptr && k.service > 0xFFFFU;
+        });
         section(
             out, kComputerSlots,
             [&](Writer& o) {
@@ -690,11 +705,15 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
                     if (computer_slot(original_computer_slots(), k.number) == nullptr) {
                         o.string(k.name);
                         o.u32(k.building);
-                        o.u16(k.service);
+                        if (wide) {
+                            o.u64(k.service);
+                        } else {
+                            o.u16(k.service);
+                        }
                     }
                 });
             },
-            Need::Required, added ? kSlotsWithPublic : std::uint16_t{1});
+            Need::Required, wide ? kSlotsWithWideServices : (added ? kSlotsWithPublic : std::uint16_t{1}));
     }
     if (!world.balance().climates.empty()) {
         const auto& climates = world.balance().climates;
@@ -797,12 +816,27 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
         }
     }
     if (!own_public.empty()) {
-        section(out, kClassPublic, [&](Writer& o) {
-            o.list(own_public, 5, [&](std::uint8_t c) {
-                o.u8(c);
-                o.list(*world.resident_classes()[c].public_needs, 2, [&](std::uint16_t any) { o.u16(any); });
-            });
-        });
+        bool wide = false;
+        for (const std::uint8_t c : own_public) {
+            for (const assets::ServiceBits any : *world.resident_classes()[c].public_needs) {
+                wide = wide || any > 0xFFFFU;
+            }
+        }
+        section(
+            out, kClassPublic,
+            [&](Writer& o) {
+                o.list(own_public, 5, [&](std::uint8_t c) {
+                    o.u8(c);
+                    o.list(*world.resident_classes()[c].public_needs, wide ? 8 : 2, [&](assets::ServiceBits any) {
+                        if (wide) {
+                            o.u64(any);
+                        } else {
+                            o.u16(any);
+                        }
+                    });
+                });
+            },
+            Need::Required, wide ? kWideClassPublic : std::uint16_t{1});
     }
     if (!world.infra_levels().empty()) {
         section(out, kLevels, [&](Writer& o) {
@@ -900,7 +934,8 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
     const std::uint16_t scores_at = scores_version(world);
     section(out, kScores, [&](Writer& o) { write_scores(o, world, scores_at); }, Need::Required, scores_at);
     section(out, kProductions, [&](Writer& o) { write_productions(o, world); });
-    section(out, kHouses, [&](Writer& o) { write_houses(o, world); });
+    const std::uint16_t houses_at = houses_version(world);
+    section(out, kHouses, [&](Writer& o) { write_houses(o, world, houses_at); }, Need::Required, houses_at);
     section(out, kGrowth, [&](Writer& o) { write_growth(o, world); });
     section(out, kCosts, [&](Writer& o) { write_costs(o, world); });
     if (tiles == TileMode::Differences) {
@@ -1295,10 +1330,14 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                         k.number > kOwnPublicSlot - kMaxOwnPublic) {
                         std::string name;
                         std::uint32_t building = 0;
-                        std::uint16_t service = 0;
+                        assets::ServiceBits service = 0;
                         in.string(name);
                         in.u32(building);
-                        in.u16(service);
+                        if (version >= kSlotsWithWideServices) {
+                            in.u64(service);
+                        } else {
+                            in.u16(service);
+                        }
                         own = own_public_slot(kOwnPublicSlot - k.number, std::move(name), building, service);
                         o = &own;
                     }
@@ -1451,11 +1490,16 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                 break;
             }
             case kClassPublic: {
-                std::vector<std::pair<std::uint8_t, std::vector<std::uint16_t>>> own;
-                in.list(own, 5, [&](std::pair<std::uint8_t, std::vector<std::uint16_t>>& p) {
+                std::vector<std::pair<std::uint8_t, std::vector<assets::ServiceBits>>> own;
+                const bool wide = version >= kWideClassPublic;
+                in.list(own, 5, [&](std::pair<std::uint8_t, std::vector<assets::ServiceBits>>& p) {
                     in.u8(p.first);
-                    in.list(p.second, 2, [&](std::uint16_t& any) {
-                        in.u16(any);
+                    in.list(p.second, wide ? 8 : 2, [&](assets::ServiceBits& any) {
+                        if (wide) {
+                            in.u64(any);
+                        } else {
+                            in.u16(any);
+                        }
                         // The public buildings of classes.toml (resident_classes.hpp).
                         if (any == 0 || (any & ~assets::public_building::kAll) != 0) {
                             in.fail();
@@ -1696,7 +1740,7 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                 d.productions = read_productions(in);
                 break;
             case kHouses:
-                d.houses = read_houses(in);
+                d.houses = read_houses(in, version);
                 break;
             case kGrowth:
                 d.growth = read_growth(in);

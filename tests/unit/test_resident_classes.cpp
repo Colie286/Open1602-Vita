@@ -246,6 +246,16 @@ TEST_CASE("classes: a game keeps its classes") {
     REQUIRE(read.ok());
     CHECK(read->resident_classes() == classes);
 
+    // Public buildings of a kind of their own beyond the 16 bits (CPUB version 2).
+    namespace pb = assets::public_building;
+    classes[5].public_needs = std::vector<assets::ServiceBits>{pb::kMarket, pb::own(2) | pb::own(pb::kOwnCount - 1)};
+    world.set_resident_classes(classes);
+    const auto wide = sim::write_game(world, buildings);
+    REQUIRE(wide.ok());
+    auto read_wide = sim::read_game(*wide, buildings);
+    REQUIRE(read_wide.ok());
+    CHECK(read_wide->resident_classes() == classes);
+
     // A world without classes of its own writes none.
     const auto plain = sim::write_game(sim::World(60, 40), buildings);
     REQUIRE(plain.ok());
@@ -262,8 +272,8 @@ TEST_CASE("classes: a class names the public buildings it needs") {
     std::string error;
     const auto needs = assets::public_needs_of(" market , chapel|church,tavern ,school | college", error);
     REQUIRE(needs.has_value());
-    const std::vector<std::uint16_t> expected{pb::kMarket, pb::kChapel | pb::kChurch, pb::kTavern,
-                                              pb::kSchool | pb::kCollege};
+    const std::vector<assets::ServiceBits> expected{pb::kMarket, pb::kChapel | pb::kChurch, pb::kTavern,
+                                                    pb::kSchool | pb::kCollege};
     CHECK(*needs == expected);
     CHECK(assets::public_needs_of("", error)->empty());
     CHECK(!assets::public_needs_of("market, castle", error));

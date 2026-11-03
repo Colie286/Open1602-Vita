@@ -178,7 +178,7 @@ void io_productions(A& a, L& list, F& free) {
 }
 
 template <class A, class H>
-void io_house(A& a, H& h) {
+void io_house(A& a, H& h, std::uint16_t version) {
     a.u16(h.island);
     a.u16(h.x);
     a.u16(h.y);
@@ -191,7 +191,11 @@ void io_house(A& a, H& h) {
     a.u8(h.market_distance);
     a.boolean(h.market);
     a.boolean(h.services_complete);
-    a.u16(h.services);
+    if (version >= kWideServices) {
+        a.u64(h.services);
+    } else {
+        a.u16(h.services);
+    }
 }
 
 template <class A, class E>
@@ -352,13 +356,19 @@ Decoded::ProductionPart read_productions(Reader& in) {
     return part;
 }
 
-void write_houses(Writer& out, const World& w) {
-    out.list(w.houses(), 20, [&](const House& h) { io_house(out, h); });
+std::uint16_t houses_version(const World& w) {
+    const bool wide =
+        std::any_of(w.houses().begin(), w.houses().end(), [](const House& h) { return h.services > 0xFFFFU; });
+    return wide ? kWideServices : std::uint16_t{1};
 }
 
-std::vector<House> read_houses(Reader& in) {
+void write_houses(Writer& out, const World& w, std::uint16_t version) {
+    out.list(w.houses(), 20, [&](const House& h) { io_house(out, h, version); });
+}
+
+std::vector<House> read_houses(Reader& in, std::uint16_t version) {
     std::vector<House> list;
-    in.list(list, 20, [&](House& h) { io_house(in, h); });
+    in.list(list, 20, [&](House& h) { io_house(in, h, version); });
     return list;
 }
 

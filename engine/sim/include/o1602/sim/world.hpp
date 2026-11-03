@@ -341,7 +341,7 @@ struct House {
     std::uint8_t market_distance = 6;  ///< distance class to the nearest market, 6 = none
     bool market = false;               ///< a market is in range
     bool services_complete = false;    ///< has the public buildings its class needs
-    std::uint16_t services = 0;        ///< public buildings in range (bits as the original)
+    assets::ServiceBits services = 0;  ///< public buildings in range (bits as the original, packages' above)
 
     [[nodiscard]] std::uint32_t inhabitants() const noexcept { return inhabitants64 >> 6; }
 };

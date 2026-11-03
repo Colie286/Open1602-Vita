@@ -155,6 +155,20 @@ void slot_array(A& a, std::array<T, kAllSlots>& v) {
     }
 }
 
+/// A value of 64 bits that versions before kStateWithWideFlags held in a `Narrow`.
+template <class Narrow, class A>
+void wide_from_6(A& a, std::uint64_t& v) {
+    if (a.version() >= kStateWithWideFlags) {
+        a(v);
+        return;
+    }
+    auto narrow = static_cast<Narrow>(v);
+    a(narrow);
+    if constexpr (A::kLoading) {
+        v = narrow;
+    }
+}
+
 template <class A>
 void io(A& a, GuardPost& g) {
     a(g.x);
@@ -173,7 +187,7 @@ void io(A& a, CityPlan& r) {
     a(r.stage_ms);
     a(r.land);
     a(r.land_percent);
-    a(r.flags);
+    wide_from_6<std::uint32_t>(a, r.flags);
     slot_array(a, r.slots);
     a(r.doctor);
     a(r.posts);
@@ -203,7 +217,7 @@ void io(A& a, Search& s) {
     a(s.ref_y);
     a(s.radius);
     a(s.building);
-    a(s.service);
+    wide_from_6<std::uint32_t>(a, s.service);
     a(s.slot);
     a(s.phase);
     a(s.best_x0);

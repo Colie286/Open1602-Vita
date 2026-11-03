@@ -406,7 +406,7 @@ private:
                                         std::uint8_t dir) const;
     bool farm_room(AiPlayer& p, const assets::BuildingType& b, std::int32_t x0, std::int32_t y0, std::int32_t x1,
                    std::int32_t y1);
-    [[nodiscard]] std::uint16_t house_services(std::uint16_t island, std::int32_t x, std::int32_t y) const;
+    [[nodiscard]] assets::ServiceBits house_services(std::uint16_t island, std::int32_t x, std::int32_t y) const;
 
     // ---- ai_logistics.cpp ----
     void logistics(AiPlayer& p);

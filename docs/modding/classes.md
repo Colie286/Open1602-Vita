@@ -109,7 +109,7 @@ public = "market, church, college, theatre, doctor"
 
 A building of a package counts as the building it copies (`like` in
 [own-buildings.md](own-buildings.md)), unless it is of a kind of its own (`service = true`): then a
-class names it by its id, as `"market, chapel, rome:court"`. At most eight choices. Without `public`, a class needs what
+class names it by its id, as `"market, chapel, rome:court"` (up to 50 such kinds in a game). At most eight choices. Without `public`, a class needs what
 the original's needs: pioneers `market | kontor`; settlers `market, chapel | church`; citizens also
 `tavern, school | college`; merchants `market, tavern, church, school | college, bathhouse`;
 aristocrats `market, tavern, church, college, bathhouse, theatre`. A new class needs what the class

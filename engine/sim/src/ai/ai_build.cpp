@@ -475,7 +475,7 @@ void Engine::task_houses(AiPlayer& p) {
         slot_ok(p, kSlotMarket);
         // What the new house lacks opens the public building again.
         if (CityPlan* r = current_plan(p)) {
-            const std::uint16_t sv = house_services(p.island, s.best_x0, s.best_y0);
+            const assets::ServiceBits sv = house_services(p.island, s.best_x0, s.best_y0);
             if ((sv & (hs::kKapelle | hs::kKirche)) == 0) {
                 r->flags &= ~city_flag::kKapelle;
             }

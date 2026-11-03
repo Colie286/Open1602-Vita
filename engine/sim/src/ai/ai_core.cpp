@@ -124,7 +124,7 @@ bool Engine::accepts(const State& state) const {
         }
         for (std::size_t i = 0; i < p.stack.size(); ++i) {
             const std::uint8_t task = p.stack[i];
-            if (task < kSettleArea || task > kOwnPublic2 ||
+            if (task < kSettleArea || task > kOwnPublicLast ||
                 std::find(p.stack.begin(), p.stack.begin() + static_cast<std::ptrdiff_t>(i), task) !=
                     p.stack.begin() + static_cast<std::ptrdiff_t>(i)) {
                 return false;
@@ -323,7 +323,7 @@ void Engine::run_task(AiPlayer& p) {
             }
             break;
         default:
-            if ((id >= kWoodcutter && id <= kDenkmal) || id == kOwnPublic1 || id == kOwnPublic2) {
+            if ((id >= kWoodcutter && id <= kDenkmal) || (id >= kOwnPublicFirst && id <= kOwnPublicLast)) {
                 task_building(p, id);
             } else {
                 pop(p);  // unknown ids never stay on the stack
@@ -729,12 +729,29 @@ void ComputerPlayers::reset() {
     m_engine->reset();
 }
 
-std::uint16_t ComputerPlayers::state_version() noexcept {
+std::uint16_t ComputerPlayers::max_state_version() noexcept {
     return static_cast<std::uint16_t>(ai::kStateVersion);
 }
 
+std::uint16_t ComputerPlayers::state_version() const noexcept {
+    // Without public buildings of a kind of their own past the 19th bit the state fits version 5, and
+    // a game writes the bytes it wrote before.
+    constexpr std::uint64_t kNarrow = 0xFFFFFFFFU;
+    for (const ai::AiPlayer& p : m_state->players) {
+        if (p.search.service > kNarrow) {
+            return static_cast<std::uint16_t>(ai::kStateWithWideFlags);
+        }
+        for (const ai::CityPlan& r : p.plans) {
+            if (r.flags > kNarrow) {
+                return static_cast<std::uint16_t>(ai::kStateWithWideFlags);
+            }
+        }
+    }
+    return static_cast<std::uint16_t>(ai::kStateWithWideFlags - 1);
+}
+
 void ComputerPlayers::save(core::ByteWriter& out) const {
-    ai::Saver saver(out);
+    ai::Saver saver(out, state_version());
     saver(*m_state);
 }
 

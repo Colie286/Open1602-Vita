@@ -1030,7 +1030,7 @@ bool Engine::farm_room(AiPlayer& p, const assets::BuildingType& b, std::int32_t 
     return n >= (b.ware == ware::kGrain ? 7 : 14);
 }
 
-std::uint16_t Engine::house_services(std::uint16_t island, std::int32_t x, std::int32_t y) const {
+assets::ServiceBits Engine::house_services(std::uint16_t island, std::int32_t x, std::int32_t y) const {
     const House* h = m_world.house(island, static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y));
     return h != nullptr ? h->services : 0;
 }

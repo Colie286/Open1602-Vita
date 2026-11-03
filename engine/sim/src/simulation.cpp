@@ -257,7 +257,7 @@ void Simulation::save_state(core::ByteWriter& out) const {
     write_part(out, kLogisticsPart, Logistics::kStateVersion, true, [&] { m_logistics.save(out); });
     write_part(out, kFleetPart, m_fleet.state_version(), true, [&] { m_fleet.save(out); });
     write_part(out, kMilitaryPart, Military::kStateVersion, true, [&] { m_military.save(out); });
-    write_part(out, kComputersPart, ComputerPlayers::state_version(), false, [&] { m_ai.save(out); });
+    write_part(out, kComputersPart, m_ai.state_version(), false, [&] { m_ai.save(out); });
 }
 
 core::Status Simulation::restore_state(const std::vector<std::uint8_t>& state) {
@@ -309,7 +309,7 @@ core::Status Simulation::restore_state(const std::vector<std::uint8_t>& state) {
                 break;
             case kComputersPart:
                 slot = &computers;
-                max_version = ComputerPlayers::state_version();
+                max_version = ComputerPlayers::max_state_version();
                 break;
             default:
                 break;

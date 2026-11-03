@@ -2,6 +2,8 @@
 // The computers' build orders as data (MD-4, docs/modding/computer-players.md): the original's
 // orders, a package's computers.toml and the section AIOR that keeps them with the game.
 
+#include <algorithm>
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -479,7 +481,7 @@ TEST_CASE("computer slots: a package adds a public building of a kind of its own
     REQUIRE(table.ok());
     assets::BuildingTable buildings = std::move(table).value();
     assets::BuildingType court = *buildings.by_id(20803);
-    court.own_service = assets::public_building::kOwn[1];
+    court.own_service = assets::public_building::own(1);
     const auto number = buildings.add(court);
     REQUIRE(number.ok());
     const std::vector<assets::OwnBuilding> own = {{"rome:court", *number}};
@@ -498,9 +500,9 @@ TEST_CASE("computer slots: a package adds a public building of a kind of its own
     REQUIRE(k != nullptr);
     CHECK(k->number == sim::kOwnPublicSlot);
     CHECK(k->kind == sim::ComputerSlot::Kind::Public);
-    CHECK(k->task == sim::ai::kOwnPublic1);
-    CHECK(k->flag == sim::ai::city_flag::kOwnPublic1);
-    CHECK(k->service == assets::public_building::kOwn[1]);
+    CHECK(k->task == sim::ai::kOwnPublicFirst);
+    CHECK(k->flag == sim::ai::city_flag::own_public(0));
+    CHECK(k->service == assets::public_building::own(1));
     CHECK(k->building == *number);
     CHECK(k->min_houses == 12);
     CHECK(k->roads_on_fail);
@@ -535,4 +537,46 @@ TEST_CASE("computer slots: a package adds a public building of a kind of its own
     wrong = balance.computer_slots;
     wrong.back().name = "chapel";
     CHECK(!sim::valid(wrong));
+}
+
+TEST_CASE("computer slots: a game has up to 50 public buildings of a kind of their own (SLOT version 3)") {
+    const assets::CodPredefinedSymbol types[] = {{"HAUS", 1}};
+    auto table = assets::BuildingTable::from_cod(
+        assets::cod::parse("Objekt: HAUS\n  @Nummer: 0\n  Id: 20803\n  Kind: 14\n  Gfx: 40\n  Size: 2, 1\n"
+                           "EndObj\n",
+                           types));
+    REQUIRE(table.ok());
+    assets::BuildingTable buildings = std::move(table).value();
+    std::vector<assets::OwnBuilding> own;
+    std::string file;
+    for (std::size_t i = 0; i <= assets::kMaxOwnServices; ++i) {
+        assets::BuildingType b = *buildings.by_id(20803);
+        b.own_service = assets::public_building::own(std::min(i, assets::kMaxOwnServices - 1));
+        const auto number = buildings.add(b);
+        REQUIRE(number.ok());
+        const std::string name = "court_" + std::to_string(i);
+        own.push_back({"rome:" + name, *number});
+        file += "[" + name + "]\nkind = \"public\"\nbuilding = \"rome:" + name + "\"\n";
+    }
+    std::vector<std::string> warnings;
+    sim::Balance balance;
+    sim::apply_slots_file(balance.computer_slots, "rome", file, warnings, {}, own, &buildings);
+    REQUIRE(warnings.size() == 1);  // the 51st
+    CHECK(warnings[0].find("at most 50") != std::string::npos);
+    REQUIRE(sim::valid(balance));
+    const sim::ComputerSlot* last = sim::find_computer_slot(balance.computer_slots, "court_49");
+    REQUIRE(last != nullptr);
+    CHECK(last->number == sim::kOwnPublicSlot - 49);
+    CHECK(last->task == sim::ai::kOwnPublicLast);
+    CHECK(last->flag == sim::ai::city_flag::own_public(49));
+    CHECK(last->service == assets::ServiceBits{1} << 63);
+    CHECK(sim::find_computer_slot(balance.computer_slots, "court_50") == nullptr);
+
+    sim::World world(60, 40);
+    world.set_balance(balance);
+    auto bytes = sim::write_game(world, buildings);
+    REQUIRE(bytes.ok());
+    auto loaded = sim::read_game(*bytes, buildings);
+    REQUIRE(loaded.ok());
+    CHECK(loaded->balance() == balance);
 }

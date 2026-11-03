@@ -52,8 +52,9 @@ site that cannot be found is tried again a few times, then the city waits until 
 becomes free or it starts anew.
 
 The computers count the producers of a package's goods in slots after the original's 55 (section
-`AIST` of the savegame, version 5); a game of the original has no such slots, and its computers
-play as before.
+`AIST` of the savegame, version 5), at most 150 producers; a game of the original has no such
+slots, and its computers play as before. Version 6 holds the "covered" flags of the public
+buildings of a kind of their own beyond the 32nd bit; the writer takes it only when a city has one.
 
 ## When a city moves on
 
@@ -242,7 +243,7 @@ the orders can still name it; a later table cannot change it.
 
 A table with a name of its own and `kind = "public"` adds a public building the computers plan: a
 building of a package with a service of its own (`service = true` in
-[own-buildings.md](own-buildings.md)), at most two in a game. The orders name it by the table's name
+[own-buildings.md](own-buildings.md)), at most 50 in a game. The orders name it by the table's name
 (`court 1 covered`) once the slots are read; packages read their `slots.toml` before any
 `computers.toml`.
 

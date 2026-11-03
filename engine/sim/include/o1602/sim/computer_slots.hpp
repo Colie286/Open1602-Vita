@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "o1602/assets/own_buildings.hpp"
+#include "o1602/assets/resident_classes.hpp"
 #include "o1602/sim/computer_orders.hpp"
 
 namespace o1602::sim {
@@ -94,10 +95,10 @@ struct ComputerSlot {
     std::vector<std::uint8_t> counts_goods;
 
     // A public building (Public).
-    std::uint32_t flag = 0;       ///< its "covered" bit of the city record (city_flag)
-    std::uint16_t service = 0;    ///< the services of houses that count as covered (house_service)
-    std::int32_t min_houses = 0;  ///< houses a site must reach without the service
-    bool roads_on_fail = false;   ///< lays roads where it found no site
+    std::uint64_t flag = 0;           ///< its "covered" bit of the city record (city_flag)
+    assets::ServiceBits service = 0;  ///< the services of houses that count as covered (house_service)
+    std::int32_t min_houses = 0;      ///< houses a site must reach without the service
+    bool roads_on_fail = false;       ///< lays roads where it found no site
 
     /// A package removed it: it keeps its name and number and is of Kind::None, without fields.
     bool removed = false;
@@ -107,7 +108,7 @@ struct ComputerSlot {
 
 /// The public buildings of a kind of their own a package adds (slots.toml `kind = "public"`): at
 /// most so many, the slot of the j-th kOwnPublicSlot - j, below the producers of packages' goods.
-inline constexpr std::size_t kMaxOwnPublic = 2;
+inline constexpr std::size_t kMaxOwnPublic = assets::kMaxOwnServices;
 inline constexpr std::uint8_t kOwnPublicSlot = 0xFE;
 
 /// At most so many goods a counter counts besides the original's.
@@ -145,7 +146,7 @@ void apply_slots_file(std::vector<ComputerSlot>& slots, std::string_view package
 /// The slot of a public building of a kind of its own as slots.toml adds it: the `index`-th one
 /// (below kMaxOwnPublic), called `name`, of `building` with service `service`.
 [[nodiscard]] ComputerSlot own_public_slot(std::size_t index, std::string name, std::uint32_t building,
-                                           std::uint16_t service);
+                                           assets::ServiceBits service);
 
 /// The slot called `name` of `slots`, nullptr for none.
 [[nodiscard]] const ComputerSlot* find_computer_slot(std::span<const ComputerSlot> slots,

@@ -100,7 +100,7 @@ struct Decoded {
     /// The classes of inhabitants of the game (CLAS).
     std::optional<std::vector<assets::ResidentClass>> classes;
     /// The public buildings of classes of their own, by class number (CPUB).
-    std::optional<std::vector<std::pair<std::uint8_t, std::vector<std::uint16_t>>>> class_public;
+    std::optional<std::vector<std::pair<std::uint8_t, std::vector<assets::ServiceBits>>>> class_public;
     /// The unlock levels of the game (LEVL).
     std::optional<std::vector<assets::InfraLevel>> levels;
     /// The messages of unlock levels, by level number (LMSG).
@@ -330,6 +330,11 @@ inline constexpr std::uint16_t kPackageUnits = 6;
 /// (CostBuilding::order_figure, 0 for the original's). The writer takes it only when a yard builds one.
 inline constexpr std::uint16_t kPackageShips = 7;
 
+/// HOUS version 2: every house's public buildings in reach (House::services) as 64 bits, not 16, for
+/// the public buildings of packages' own kinds from bit 16 on. The writer takes it only when a
+/// house has one of those, so other games write the bytes of version 1 as before.
+inline constexpr std::uint16_t kWideServices = 2;
+
 /// FACT version 2: every faction also says whether scripts steer it (Faction::scripted). The writer
 /// takes it only when one is; the section is required then.
 inline constexpr std::uint16_t kScriptedFactions = 2;
@@ -417,8 +422,10 @@ void write_ledgers(Writer& out, const World& w, std::uint16_t version);
 [[nodiscard]] std::vector<Decoded::CityLedger> read_ledgers(Reader& in, std::uint16_t version);
 void write_productions(Writer& out, const World& w);
 [[nodiscard]] Decoded::ProductionPart read_productions(Reader& in);
-void write_houses(Writer& out, const World& w);
-[[nodiscard]] std::vector<House> read_houses(Reader& in);
+/// The version of HOUS: kWideServices if a house has a service above the low 16 bits, else 1.
+[[nodiscard]] std::uint16_t houses_version(const World& w);
+void write_houses(Writer& out, const World& w, std::uint16_t version);
+[[nodiscard]] std::vector<House> read_houses(Reader& in, std::uint16_t version);
 void write_growth(Writer& out, const World& w);
 [[nodiscard]] std::vector<GrowthEntry> read_growth(Reader& in);
 void write_costs(Writer& out, const World& w);

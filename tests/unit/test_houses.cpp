@@ -414,7 +414,7 @@ TEST_CASE("houses: a public building of a kind of its own gives its service, whi
     REQUIRE(warnings.empty());
     REQUIRE(own.size() == 2);
     const assets::BuildingType& court = *town.buildings.by_id(own[0].number);
-    CHECK(court.own_service == assets::public_building::kOwn[0]);
+    CHECK(court.own_service == assets::public_building::own(0));
     CHECK(town.buildings.by_id(own[1].number)->own_service == 0);  // a chapel as the original's
 
     // Settlers need a market and the court.
@@ -422,7 +422,7 @@ TEST_CASE("houses: a public building of a kind of its own gives its service, whi
     REQUIRE(assets::apply_classes_file(classes, "rome", "[\"anno1602:settlers\"]\npublic = \"market, rome:court\"\n",
                                        warnings, {}, services));
     REQUIRE(warnings.empty());
-    const std::vector<std::uint16_t> needs = {assets::public_building::kMarket, assets::public_building::kOwn[0]};
+    const std::vector<assets::ServiceBits> needs = {assets::public_building::kMarket, assets::public_building::own(0)};
     CHECK(classes[1].public_needs == needs);
     town.buildings.set_resident_classes(classes);
 
@@ -436,14 +436,21 @@ TEST_CASE("houses: a public building of a kind of its own gives its service, whi
     sim::update_services(town.world, town.buildings);
     const sim::House& near = *town.world.house(0, 14, 13);
     const sim::House& far = *town.world.house(0, 30, 25);
-    CHECK((near.services & assets::public_building::kOwn[0]) != 0);
+    CHECK((near.services & assets::public_building::own(0)) != 0);
     CHECK((near.services & sim::house_service::kKapelle) == 0);  // its own kind, not the chapel's
     CHECK(sim::has_services(near, town.buildings, 1));
     CHECK(!sim::has_services(far, town.buildings, 1));
 
-    // A third building with a service of its own is more than a game may have.
-    std::vector<std::string> more = {"a:one", "b:two"};
+    // Fifty kinds of their own fit a game, one more does not.
+    std::vector<std::string> more;
+    for (std::size_t i = 1; i < assets::kMaxOwnServices; ++i) {
+        more.push_back("p:kind" + std::to_string(i));
+    }
     assets::own_services(more, "rome", file, warnings);
-    CHECK(more.size() == 2);
+    CHECK(more.size() == assets::kMaxOwnServices);
+    CHECK(warnings.empty());
+    more.push_back("p:kind0");
+    assets::own_services(more, "other", "[temple]\nlike = \"anno1602:chapel\"\nservice = true\n", warnings);
+    CHECK(more.size() == assets::kMaxOwnServices + 1);
     CHECK(warnings.size() == 1);
 }

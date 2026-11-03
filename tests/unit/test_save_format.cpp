@@ -24,6 +24,7 @@
 #include "o1602/assets/chunk_file.hpp"
 #include "o1602/assets/chunk_writer.hpp"
 #include "o1602/assets/cod_parser.hpp"
+#include "o1602/assets/resident_classes.hpp"
 #include "o1602/core/compress.hpp"
 #include "o1602/sim/save_game.hpp"
 #include "o1602/sim/savegame_extension.hpp"
@@ -378,7 +379,9 @@ sim::World make_world(const assets::BuildingTable& buildings, bool wide) {
         v(h.market_distance);
         v(h.market);
         v(h.services_complete);
-        v(h.services);
+        std::uint16_t services = 0;  // the original's (HOUS version 1); kWideServices has its own test
+        v(services);
+        h.services = services;
     }
     world.set_houses(houses);
 
@@ -1101,4 +1104,25 @@ TEST_CASE("save format: the goods statistics of the cities come back (GLDG)") {
     CHECK(other->ledger.totals(19, 1).of(sim::GoodsFlow::Withheld) == 40);
     CHECK(other->ledger == city.ledger);
     CHECK(save(*again, buildings) == withheld);
+}
+
+TEST_CASE("save format: public buildings of a kind of their own beyond the 16 bits come back (HOUS 2)") {
+    const auto buildings = make_buildings();
+    sim::World world = make_world(buildings, false);
+    REQUIRE(!world.houses().empty());
+    namespace pb = assets::public_building;
+    world.houses()[0].services = pb::kChapel | pb::own(1);  // still 16 bits: version 1
+    const core::Bytes narrow = save(world, buildings);
+    CHECK(section_version(narrow, "HOUS") == 1);
+
+    const assets::ServiceBits wide = pb::kChapel | pb::own(2) | pb::own(pb::kOwnCount - 1);
+    world.houses()[0].services = wide;
+    const core::Bytes bytes = save(world, buildings);
+    CHECK(section_version(bytes, "HOUS") == 2);
+    std::vector<std::string> warnings;
+    auto loaded = sim::read_game(bytes, buildings, &warnings);
+    REQUIRE(loaded.ok());
+    CHECK(warnings.empty());
+    CHECK(loaded->houses()[0].services == wide);
+    CHECK(save(*loaded, buildings) == bytes);
 }

@@ -15,6 +15,10 @@
 
 namespace o1602::assets {
 
+/// The public buildings in reach of a house as bits (sim::House::services, resident_classes.hpp
+/// public_building): those of the original in the low 16 bits, those of packages' own kinds above.
+using ServiceBits = std::uint64_t;
+
 class GameDirectory;
 
 /// Typed view of one HAUS record from haeuser.cod (buildings and terrain).
@@ -123,8 +127,8 @@ struct BuildingType {
     /// Bausample (record +0x5E): WAV_* number of the sound when it is built, 0 = none.
     std::uint16_t build_sound = 0;
     /// Open1602's own (own_buildings.toml `service`): the service of a public building of a kind of
-    /// its own that houses in its reach get (public_building::kOwn), 0 for that of its kind.
-    std::uint16_t own_service = 0;
+    /// its own that houses in its reach get (public_building::own), 0 for that of its kind.
+    ServiceBits own_service = 0;
     /// HAUS_BAUKOST: what building costs (goods in 1/32 t, record +0x4C..+0x54).
     struct BuildCost {
         std::uint32_t tools = 0;    ///< Werkzeug
@@ -183,7 +187,7 @@ struct ResidentClass {
     /// Open1602's own (resident_classes.hpp, public_building): the public buildings the class
     /// needs, each entry a choice of buildings any one of which will do; none: those of the
     /// original's class `look`.
-    std::optional<std::vector<std::uint16_t>> public_needs;
+    std::optional<std::vector<ServiceBits>> public_needs;
     /// The names a package gave the class by language code, Windows-1252; empty for the original's,
     /// which Text.cod names.
     LocalizedNames names;

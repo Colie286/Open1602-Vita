@@ -545,7 +545,7 @@ TEST_CASE("ai: a saved state with values out of range is refused, not run") {
     {
         core::ByteReader in(bytes);
         sim::StateIn reader(in);
-        sim::ai::Loader loader(reader);
+        sim::ai::Loader loader(reader, s.computers().state_version());
         loader(good);
         REQUIRE(reader.ok());
         REQUIRE(!good.players.empty());
@@ -557,7 +557,7 @@ TEST_CASE("ai: a saved state with values out of range is refused, not run") {
         const std::vector<std::uint8_t> data = out.take();
         core::ByteReader in(data);
         sim::ComputerPlayers computers(s);
-        return computers.load(in, sim::ComputerPlayers::state_version());
+        return computers.load(in, sim::ComputerPlayers::max_state_version());
     };
     CHECK(loads(good));
     sim::ai::State bad = good;
@@ -589,7 +589,7 @@ TEST_CASE("ai: a state of version 1 loads and goes on as the same state") {
     {
         core::ByteReader in(now);
         sim::StateIn reader(in);
-        sim::ai::Loader loader(reader);
+        sim::ai::Loader loader(reader, s.computers().state_version());
         loader(state);
         REQUIRE(reader.ok());
     }
@@ -614,7 +614,7 @@ TEST_CASE("ai: a state of version 2 loads without a yard request") {
         const std::vector<std::uint8_t> now = saved(s.computers());
         core::ByteReader in(now);
         sim::StateIn reader(in);
-        sim::ai::Loader loader(reader);
+        sim::ai::Loader loader(reader, s.computers().state_version());
         loader(state);
         REQUIRE(reader.ok());
     }
@@ -641,7 +641,7 @@ TEST_CASE("ai: a state of version 2 loads without a yard request") {
     core::ByteReader back(again);
     sim::StateIn reader(back);
     sim::ai::State loaded;
-    sim::ai::Loader loader(reader);
+    sim::ai::Loader loader(reader, computers.state_version());
     loader(loaded);
     REQUIRE(reader.ok());
     for (const sim::ai::AiPlayer& p : loaded.players) {
@@ -662,7 +662,7 @@ TEST_CASE("ai: land freed on its island lets a computer's city search its sites 
             const std::vector<std::uint8_t> now = saved(s.computers());
             core::ByteReader in(now);
             sim::StateIn reader(in);
-            sim::ai::Loader loader(reader);
+            sim::ai::Loader loader(reader, s.computers().state_version());
             loader(state);
             REQUIRE(reader.ok());
         }
@@ -684,7 +684,7 @@ TEST_CASE("ai: land freed on its island lets a computer's city search its sites 
         const std::vector<std::uint8_t> bytes = out.take();
         core::ByteReader in(bytes);
         sim::ComputerPlayers computers(s);
-        REQUIRE(computers.load(in, sim::ComputerPlayers::state_version()));
+        REQUIRE(computers.load(in, sim::ComputerPlayers::max_state_version()));
         const auto given_up = [&](bool expected) {
             for (const auto& v : computers.view()) {
                 for (const auto& c : v.plans) {
@@ -749,7 +749,7 @@ TEST_CASE("ai: the state of the computers goes to bytes and back whole") {
     const auto bytes = saved(s.computers());
     sim::ComputerPlayers copy(s);
     core::ByteReader in(bytes);
-    REQUIRE(copy.load(in, sim::ComputerPlayers::state_version()));
+    REQUIRE(copy.load(in, s.computers().state_version()));
     CHECK(in.at_end());
     CHECK(same(copy.view(), s.computers().view()));
     CHECK(saved(copy) == bytes);
@@ -770,7 +770,7 @@ TEST_CASE("ai: damaged state is refused and leaves the computers as they were") 
     {
         const auto earlier = saved(t.computers());
         core::ByteReader in(earlier);
-        REQUIRE(copy.load(in, sim::ComputerPlayers::state_version()));
+        REQUIRE(copy.load(in, t.computers().state_version()));
     }
     const auto before = saved(copy);
     REQUIRE(before != bytes);
@@ -779,7 +779,7 @@ TEST_CASE("ai: damaged state is refused and leaves the computers as they were") 
     std::size_t accepted = 0;
     for (std::size_t n = 0; n < bytes.size(); ++n) {
         core::ByteReader in(std::span(bytes.data(), n));
-        accepted += copy.load(in, sim::ComputerPlayers::state_version()) ? 1U : 0U;
+        accepted += copy.load(in, s.computers().state_version()) ? 1U : 0U;
     }
     CHECK(accepted == 0);
     CHECK(saved(copy) == before);
@@ -793,7 +793,7 @@ TEST_CASE("ai: damaged state is refused and leaves the computers as they were") 
         std::vector<std::uint8_t> garbage(4096, fill);
         std::copy_n(bytes.begin(), 4, garbage.begin());
         core::ByteReader in(garbage);
-        CHECK(!copy.load(in, sim::ComputerPlayers::state_version()));
+        CHECK(!copy.load(in, s.computers().state_version()));
     }
     CHECK(saved(copy) == before);
 }
@@ -1009,7 +1009,7 @@ TEST_CASE("ai: a computer answers a ship that is about to found a city on its is
             const std::vector<std::uint8_t> now = saved(ai);
             core::ByteReader in(now);
             sim::StateIn reader(in);
-            sim::ai::Loader loader(reader);
+            sim::ai::Loader loader(reader, ai.state_version());
             loader(state);
             REQUIRE(reader.ok());
         }
@@ -1019,11 +1019,11 @@ TEST_CASE("ai: a computer answers a ship that is about to found a city on its is
             p.home_island = 1;
         }
         core::ByteWriter out;
-        sim::ai::Saver saver(out, sim::ComputerPlayers::state_version());
+        sim::ai::Saver saver(out, sim::ComputerPlayers::max_state_version());
         saver(state);
         const std::vector<std::uint8_t> bytes = out.take();
         core::ByteReader in(bytes);
-        REQUIRE(ai.load(in, sim::ComputerPlayers::state_version()));
+        REQUIRE(ai.load(in, sim::ComputerPlayers::max_state_version()));
         (void)g.world.diplomacy().take_notices();
         ai.founding_query(k.asker, k.island);
         const auto notices = g.world.diplomacy().take_notices();
@@ -1823,8 +1823,15 @@ TEST_CASE("ai: a package's slots count its good as food and remove a producer (s
 
 TEST_CASE("ai: a package's public building of a kind of its own is planned by the computers (slots.toml)") {
     // A court of its own kind: the founded city's order asks for one. The test world has no houses
-    // for it to serve, so the computer plans it (its "covered" flag) and finds no site.
-    const auto flags = [](bool with_slot) {
+    // for it to serve, so the computer plans it (its "covered" flag) and finds no site. `ahead`
+    // public buildings of a kind of their own come before it, so its flag and service may lie
+    // beyond 32 bits, and the computers' state needs version 6 to keep them.
+    struct Planned {
+        std::uint64_t flags = 0;
+        std::uint16_t version = 0;
+        bool kept = false;
+    };
+    const auto planned = [](bool with_slot, std::size_t ahead) {
         Game g;
         static constexpr std::uint32_t kCourt = 20992;
         g.buildings = make_buildings(
@@ -1832,14 +1839,22 @@ TEST_CASE("ai: a package's public building of a kind of its own is planned by th
             "  Objekt: HAUS_PRODTYP\n    Kind: 18\n    Radius: 12\n  EndObj\n"
             "  Objekt: HAUS_BAUKOST\n    Money: 50\n  EndObj\n");
         g.buildings.by_id(kKontor)->ware = sim::ware::kAll;
-        g.buildings.by_id(kCourt)->own_service = assets::public_building::kOwn[0];
+        g.buildings.by_id(kCourt)->own_service = assets::public_building::own(ahead);
         const std::vector<assets::OwnBuilding> own = {{"rome:court", kCourt}};
         sim::Balance balance;
         std::vector<std::string> warnings;
-        if (with_slot) {
+        if (with_slot && ahead == 0) {
             sim::apply_slots_file(balance.computer_slots, "rome",
                                   "[court]\nkind = \"public\"\nbuilding = \"rome:court\"\n", warnings, {}, own,
                                   &g.buildings);
+        } else if (with_slot) {
+            balance.computer_slots = sim::original_computer_slots();
+            for (std::size_t i = 0; i < ahead; ++i) {
+                balance.computer_slots.push_back(
+                    sim::own_public_slot(i, "other_" + std::to_string(i), kCourt, assets::public_building::own(i)));
+            }
+            balance.computer_slots.push_back(
+                sim::own_public_slot(ahead, "court", kCourt, assets::public_building::own(ahead)));
         }
         sim::apply_computers_file(balance.computer_orders, "rome", "[founded]\norder = \"market 1, court 1\"\n",
                                   warnings, {}, nullptr, own, &balance.computer_slots);
@@ -1851,10 +1866,24 @@ TEST_CASE("ai: a package's public building of a kind of its own is planned by th
         const auto view = s.computers().view();
         REQUIRE(!view.empty());
         REQUIRE(!view[0].plans.empty());
-        return view[0].plans[0].flags;
+        Planned out{view[0].plans[0].flags, s.computers().state_version()};
+        const auto bytes = saved(s.computers());
+        sim::ComputerPlayers copy(s);
+        core::ByteReader in(bytes);
+        out.kept = copy.load(in, out.version) && in.at_end() && same(copy.view(), view);
+        return out;
     };
-    CHECK((flags(false) & sim::ai::city_flag::kOwnPublic1) == 0);
-    CHECK((flags(true) & sim::ai::city_flag::kOwnPublic1) != 0);
+    using sim::ai::city_flag::own_public;
+    CHECK((planned(false, 0).flags & own_public(0)) == 0);
+    const Planned first = planned(true, 0);
+    CHECK((first.flags & own_public(0)) != 0);
+    CHECK(first.version == 5);  // within 32 bits: the bytes of version 5
+    CHECK(first.kept);
+    const Planned far = planned(true, 30);
+    CHECK(own_public(30) > 0xFFFF'FFFFU);
+    CHECK((far.flags & own_public(30)) != 0);
+    CHECK(far.version == sim::ComputerPlayers::max_state_version());
+    CHECK(far.kept);
 }
 
 TEST_CASE("ai: when a city moves on to the next stage comes from the game's balance ([computer_stages])") {

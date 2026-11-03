@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "o1602/assets/building_table.hpp"
+#include "o1602/assets/resident_classes.hpp"
 #include "o1602/sim/world.hpp"
 
 namespace o1602::sim {
@@ -36,7 +37,7 @@ inline constexpr std::uint16_t kKontor = 1U << 10;
 inline constexpr std::uint16_t kGalgen = 1U << 11;
 inline constexpr std::uint16_t kBrunnen = 1U << 12;
 /// Public buildings of a kind of their own (assets::public_building::kOwn, own_buildings.toml).
-inline constexpr std::uint16_t kOwnMask = (1U << 13) | (1U << 14);
+inline constexpr assets::ServiceBits kOwnMask = assets::public_building::kOwnMask;
 }  // namespace house_service
 
 /// Bits of the house panel's public buildings (the icons of

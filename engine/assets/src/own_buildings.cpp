@@ -240,7 +240,7 @@ void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& ow
         b.own_service = 0;
         if (const auto it = std::find(services.begin(), services.end(), id);
             service && it != services.end() && it - services.begin() < static_cast<std::ptrdiff_t>(kMaxOwnServices)) {
-            b.own_service = public_building::kOwn[static_cast<std::size_t>(it - services.begin())];
+            b.own_service = public_building::own(static_cast<std::size_t>(it - services.begin()));
         }
         // The image holds every sprite the building draws: its tiles, turned four ways, in every
         // frame of its animation (render::building_sprite).

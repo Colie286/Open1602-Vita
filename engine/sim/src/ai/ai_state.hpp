@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "o1602/assets/resident_classes.hpp"
 #include "o1602/sim/player.hpp"
 
 namespace o1602::sim::ai {
@@ -19,8 +20,11 @@ namespace o1602::sim::ai {
 /// attack plans and the islands' state byte. 3 added the deferred yard request (GB-2). 4 added the
 /// target of a search (Search::target_x/target_y, task kClaimLand). 5 added the slots of the
 /// packages' producers (kSlots and up, ai_chains.hpp). Every version from kFirstStateVersion on loads.
-inline constexpr std::uint32_t kStateVersion = 5;
+inline constexpr std::uint32_t kStateVersion = 6;
 inline constexpr std::uint32_t kStateWithPackageSlots = 5;
+/// Version 6: a city record's flags and a search's service as 64 bits, for the public buildings of a
+/// kind of their own above the second. The computers write it only when one of those needs it.
+inline constexpr std::uint32_t kStateWithWideFlags = 6;
 inline constexpr std::uint32_t kFirstStateVersion = 1;
 
 /// Task ids of the computer players, numbered as in the original.
@@ -85,9 +89,10 @@ enum Task : std::uint8_t {
     kDenkmal = 0x3C,
     /// Open1602: a market that brings a deposit the city wants into its land (Engine::claim_land).
     kClaimLand = 0x3D,
-    /// Open1602: the public buildings of a kind of their own (slots.toml `kind = "public"`).
-    kOwnPublic1 = 0x3E,
-    kOwnPublic2 = 0x3F,
+    /// Open1602: the public buildings of a kind of their own (slots.toml `kind = "public"`), the
+    /// j-th kOwnPublicFirst + j (computer_slots.hpp, own_public_slot), up to kOwnPublicLast.
+    kOwnPublicFirst = 0x3E,
+    kOwnPublicLast = 0x3E + assets::kMaxOwnServices - 1,
 };
 
 /// Building slots of a city record: what the city has of each kind of building.
@@ -154,22 +159,25 @@ inline constexpr std::size_t kAllSlots = 0x100;
 
 /// Flags of a city record.
 namespace city_flag {
-inline constexpr std::uint32_t kAbandon = 0x0001;   ///< give the city up (task 0x2E)
-inline constexpr std::uint32_t kSurveyed = 0x0002;  ///< task 8 ran this visit: the sweep may work
-inline constexpr std::uint32_t kKlinik = 0x0004;    ///< "covered" bits of the public buildings
-inline constexpr std::uint32_t kKapelle = 0x0008;
-inline constexpr std::uint32_t kMarket = 0x0010;
-inline constexpr std::uint32_t kWirt = 0x0020;
-inline constexpr std::uint32_t kSchule = 0x0040;
-inline constexpr std::uint32_t kKirche = 0x0080;
-inline constexpr std::uint32_t kBadehaus = 0x0100;
-inline constexpr std::uint32_t kHochschule = 0x0200;
-inline constexpr std::uint32_t kTheater = 0x0400;
-inline constexpr std::uint32_t kGalgen = 0x0800;
-inline constexpr std::uint32_t kBrunnen = 0x1000;
-/// Open1602: the public buildings of a kind of their own (slots.toml `kind = "public"`).
-inline constexpr std::uint32_t kOwnPublic1 = 0x2000;
-inline constexpr std::uint32_t kOwnPublic2 = 0x4000;
+inline constexpr std::uint64_t kAbandon = 0x0001;   ///< give the city up (task 0x2E)
+inline constexpr std::uint64_t kSurveyed = 0x0002;  ///< task 8 ran this visit: the sweep may work
+inline constexpr std::uint64_t kKlinik = 0x0004;    ///< "covered" bits of the public buildings
+inline constexpr std::uint64_t kKapelle = 0x0008;
+inline constexpr std::uint64_t kMarket = 0x0010;
+inline constexpr std::uint64_t kWirt = 0x0020;
+inline constexpr std::uint64_t kSchule = 0x0040;
+inline constexpr std::uint64_t kKirche = 0x0080;
+inline constexpr std::uint64_t kBadehaus = 0x0100;
+inline constexpr std::uint64_t kHochschule = 0x0200;
+inline constexpr std::uint64_t kTheater = 0x0400;
+inline constexpr std::uint64_t kGalgen = 0x0800;
+inline constexpr std::uint64_t kBrunnen = 0x1000;
+/// Open1602: the "covered" bit of the j-th public building of a kind of its own (slots.toml
+/// `kind = "public"`), bits 13 to 62.
+[[nodiscard]] constexpr std::uint64_t own_public(std::size_t j) noexcept {
+    return std::uint64_t{1} << (13 + j);
+}
+static_assert(13 + assets::kMaxOwnServices <= 64);
 }  // namespace city_flag
 
 /// Development stages of a city (switch of task 5).
@@ -218,7 +226,7 @@ struct CityPlan {
     std::uint64_t stage_ms = 0;  ///< game time the stage began
     std::uint32_t land = 0;      ///< usable land of the city, tiles
     std::uint32_t land_percent = 0;
-    std::uint32_t flags = 0;  ///< city_flag
+    std::uint64_t flags = 0;  ///< city_flag
     std::array<SlotState, kAllSlots> slots{};
     std::optional<std::pair<std::uint16_t, std::uint16_t>> doctor;  ///< tile of the Klinik
     std::vector<GuardPost> posts;                                   ///< the city's markets
@@ -247,8 +255,8 @@ struct Search {
     std::int32_t ref_x = 0;  ///< reference point for the parity
     std::int32_t ref_y = 0;
     std::uint8_t radius = 0;
-    std::uint32_t building = 0;  ///< Id of the building to place
-    std::uint32_t service = 0;   ///< public buildings, the service bit they bring
+    std::uint32_t building = 0;       ///< Id of the building to place
+    assets::ServiceBits service = 0;  ///< public buildings, the service bit they bring
     std::uint8_t slot = 0;
     std::int32_t phase = 0;
     std::int32_t best_x0 = 0;

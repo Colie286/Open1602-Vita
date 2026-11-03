@@ -118,7 +118,7 @@ std::optional<Disaster> take(World& world, std::uint16_t island, TilePos origin)
     const auto x = static_cast<std::uint16_t>(origin.x);
     const auto y = static_cast<std::uint16_t>(origin.y);
     if (House* h = world.house(island, x, y)) {
-        h->services = static_cast<std::uint16_t>(h->services & ~hs::kDisasterMask);
+        h->services &= ~assets::ServiceBits{hs::kDisasterMask};
     }
     if (Production* p = production_at(world, island, x, y)) {
         p->flags = static_cast<std::uint8_t>(p->flags & ~Production::kBurningFlag);
@@ -406,8 +406,7 @@ bool start_disaster(World& world, const assets::BuildingTable& buildings, std::u
         }
     } else if (p == prod::kHouse) {
         if (House* h = world.house(island, x, y)) {
-            h->services =
-                static_cast<std::uint16_t>((h->services & ~hs::kDisasterMask) | static_cast<std::uint16_t>(kind));
+            h->services = (h->services & ~assets::ServiceBits{hs::kDisasterMask}) | static_cast<std::uint16_t>(kind);
         }
     }
     Disaster d;

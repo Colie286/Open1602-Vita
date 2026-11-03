@@ -57,9 +57,10 @@ public:
     /// one (DiplomacyNotice::Kind::FoundingProtest, FoundingRefused, FoundingTolerated).
     void founding_query(PlayerId asker, std::uint16_t island);
 
-    /// The version save() writes, the section AIST of the running game's state (DS-3); load()
-    /// reads every version from the first.
-    [[nodiscard]] static std::uint16_t state_version() noexcept;
+    /// The version save() writes, the section AIST of the running game's state (DS-3): the oldest
+    /// that holds the state. load() reads every version from the first to max_state_version().
+    [[nodiscard]] std::uint16_t state_version() const noexcept;
+    [[nodiscard]] static std::uint16_t max_state_version() noexcept;
     void save(core::ByteWriter& out) const;
     /// Restores what save() of `version` wrote; an error if the data is damaged or the computers'
     /// engine cannot take it (nothing changed then).
@@ -78,7 +79,7 @@ public:
             std::uint16_t island = 0;
             std::uint8_t city = 0;
             std::uint8_t stage = 0;
-            std::uint32_t flags = 0;
+            std::uint64_t flags = 0;
             /// Per building slot: count, attempts, failure level.
             std::vector<std::array<std::uint16_t, 3>> slots;
         };

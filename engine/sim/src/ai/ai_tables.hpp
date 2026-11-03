@@ -113,8 +113,8 @@ struct PublicTask {
     std::uint8_t task;
     std::uint32_t id;
     std::uint8_t slot;
-    std::uint32_t flag;
-    std::uint16_t service;
+    std::uint64_t flag;
+    assets::ServiceBits service;
     std::int32_t min_houses;
     bool roads_on_fail;
 };
