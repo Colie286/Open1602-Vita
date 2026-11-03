@@ -582,7 +582,11 @@ bool TerrainStroke::shape_tiles(std::uint16_t island, std::span<const ShapeTile>
     }
     for (std::int64_t y = y0; y <= y1; ++y) {
         for (std::int64_t x = x0; x <= x1; ++x) {
-            if (!tidy && fitted[at(x, y)] != 0 && !fits(x, y)) {
+            // A coast that had tiles keeps them; tidying refuses as well rather than leave a
+            // tile turned into a form without tiles (it would be laid as bare ground by the sea).
+            const bool turned = is_land(x, y) == water(*m_buildings, map.top(static_cast<std::uint32_t>(x),
+                                                                             static_cast<std::uint32_t>(y)));
+            if ((fitted[at(x, y)] != 0 || (tidy && turned)) && !fits(x, y)) {
                 note(Refusal::Shape);
                 return false;
             }

@@ -714,6 +714,7 @@ private:
         std::optional<TerrainSelection> selection{};
         std::optional<std::pair<std::int64_t, std::int64_t>> select_from{};
         editor::TerrainClip clip{};
+        bool paste_refused = false;  ///< the preview: a click where the mouse is would be refused
     };
     std::optional<EditorSession> m_editor;
     /// A request of the editor waiting for the answer to "discard the changes?".

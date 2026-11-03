@@ -1798,6 +1798,9 @@ void MapViewer::render() {
                 }
             }
         } terrain_guard{terrain_preview};
+        if (m_editor) {
+            m_editor->paste_refused = false;
+        }
         const bool previews =
             m_editor && (m_editor->terrain.tool == EditorTerrain::Tool::Brush ||
                          (m_editor->terrain.tool == EditorTerrain::Tool::Paste && !m_editor->clip.empty()));
@@ -1810,11 +1813,16 @@ void MapViewer::render() {
                 if (m_editor->terrain.tool == EditorTerrain::Tool::Paste) {
                     // The copy as a click would lay it (editor_paste), its middle under the mouse.
                     const sim::World::Cell& c = m_state->world.cell(tile->x, tile->y);
+                    m_editor->paste_refused = true;
                     if (c.island != sim::World::kSea) {
                         const editor::TerrainClip& clip = m_editor->clip;
-                        (void)terrain_preview->paste(
-                            c.island, std::int64_t{c.local_x} - (std::int64_t{clip.width} - 1) / 2,
-                            std::int64_t{c.local_y} - (std::int64_t{clip.height} - 1) / 2, clip, m_editor->strokes + 1);
+                        // A paste that changes nothing (the same copy laid again) is no refusal.
+                        m_editor->paste_refused =
+                            !terrain_preview->paste(c.island,
+                                                    std::int64_t{c.local_x} - (std::int64_t{clip.width} - 1) / 2,
+                                                    std::int64_t{c.local_y} - (std::int64_t{clip.height} - 1) / 2, clip,
+                                                    m_editor->strokes + 1) &&
+                            terrain_preview->first_refusal() != editor::TerrainStroke::Refusal::Free;
                     }
                 } else {
                     editor_paint(*terrain_preview, tile->x, tile->y, false);

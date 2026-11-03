@@ -82,14 +82,15 @@ lays, and the brush shows its piece there before the click. The tools:
 | Replace | Paints every tile of the island that looks like the one clicked; tiles that turn keep their turn. |
 | Pipette | Takes the piece of the tile clicked, with its turn, and goes back to the brush. |
 | Select | Drags a rectangle over an island (light blue). **Copy** keeps its land and inland pieces as the copy; **Turn copy** turns it a quarter clockwise, **Mirror copy** mirrors it left to right. |
-| Paste | Lays the copy about the mouse, its land and water, the coast about its land laid anew, then its pieces; one step of undo. The map shows it before the click. |
+| Paste | Lays the copy about the mouse, its land and water, the coast about its land laid anew, then its pieces; one step of undo. The map shows it before the click; where it cannot go, its frame turns red. |
 
 Water, beach and land are three levels of the map's picture, and a piece fits only on its own level:
 the brush leaves the coast as it is, and Land and Water change it. Where a coast would take a form the
 game has no tiles for (a strip one tile wide, land touching land only at a corner), Land and Water
 widen it on the tiles next to the brush, or refuse where they cannot. Land keeps a tile of water to its
 island's edge; an island with a city does not grow. Land painted within three tiles of another island's
-land joins both islands into one (if neither has a city), so that the coast between them is one.
+land joins both islands into one, so that the coast between them is one. If one of them has a city or
+buildings, they are not joined: the brush stops four tiles short of the other island, and a notice says why.
 
 A tile gets the piece on top and as the ground below. A mountain or river bend that a piece covers in
 part becomes meadow where it is not covered, and its ore deposit or volcano goes with it. The terrain
