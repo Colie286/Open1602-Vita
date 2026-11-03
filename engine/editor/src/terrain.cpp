@@ -494,7 +494,7 @@ bool TerrainStroke::shape(std::uint16_t island, std::span<const std::pair<std::u
     }
     // Widening stays near the brush (kReach tiles): a form it cannot widen there is refused
     // rather than eating away the land or the water about it.
-    constexpr std::int64_t kReach = 2;  // a lake of one tile: its surf and its beach
+    constexpr std::int64_t kReach = 1;  // a lake of one tile: the surf about it
     std::vector<std::uint8_t> near(grid.size());
     bool any = false;
     for (std::int64_t y = y0; y <= y1; ++y) {
@@ -757,7 +757,7 @@ std::vector<SeaTile> sea_depth(const sim::World& world, const assets::BuildingTa
         const std::int64_t bottom = corner(gx, gy + 1) * (kSpacing - fx) + corner(gx + 1, gy + 1) * fx;
         return static_cast<int>((top * (kSpacing - fy) + bottom * fy) / (kSpacing * kSpacing));
     };
-    const auto band_of = [](std::int64_t level) { return level <= 2 ? kLight : level <= 4 ? kMiddle : kDark; };
+    const auto band_of = [](std::int64_t level) { return level <= 3 ? kLight : level <= 5 ? kMiddle : kDark; };
     // The bands wanted over the window and a tile around it.
     const std::int64_t gx0 = x0 - 1;
     const std::int64_t gy0 = y0 - 1;
@@ -779,14 +779,13 @@ std::vector<SeaTile> sea_depth(const sim::World& world, const assets::BuildingTa
             if (x < x0 || y < y0 || x > x1 || y > y1) {
                 continue;
             }
-            // As the islands of their own shape: light two tiles out, middle to four, then dark,
-            // deepening towards the rectangle's edge. A band may come a tile closer to the land,
-            // as the templates' bands wander, but never lie deeper than that.
+            // Light two or three tiles out, middle to five, then dark, deepening towards the
+            // rectangle's edge. A band may come a tile closer to the land, but never lie deeper.
             // The bands' borders wander by a tile with a coarse noise of the world's tiles, the
             // same for every stroke, so that they do not run along the brush's straight edges.
             const std::int64_t d = distance(x, y);
             const std::int64_t rim = std::min({x, y, w - 1 - x, h - 1 - y});
-            const std::int64_t least = 5 - 2 * rim;
+            const std::int64_t least = 7 - 2 * rim;
             const int v = wobble(static_cast<std::int64_t>(isl.x) + x, static_cast<std::int64_t>(isl.y) + y);
             // Thresholds near the middle: the interpolated noise seldom reaches its ends.
             const std::int64_t level = d + (v < 450 ? -1 : v > 574 ? 1 : 0);

@@ -166,7 +166,7 @@ struct SeaTile {
 };
 
 /// The open sea of the island's tiles x0..x1, y0..y1 by its depth, as the islands of their own
-/// shape have it: light water past the surf, then middle, the dark open sea from about five tiles
+/// shape have it: light water past the surf, then middle, the dark open sea from about six tiles
 /// out, deepening towards the island's edge. Only tiles of a depth too far from that and those
 /// beside them are laid anew (a coast of the game's islands stays as it is); surf, land and other
 /// water are left alone. `seed` turns the middle sea.
