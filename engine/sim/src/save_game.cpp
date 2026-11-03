@@ -46,12 +46,12 @@ std::uint64_t max_size_for(const SaveMeta& meta) noexcept {
 }
 
 /// META at the start of the stored sections, without unpacking more than its prefix.
-std::optional<SaveMeta> meta_of(std::span<const std::uint8_t> stored, bool compressed) {
+std::optional<SaveMeta> meta_of(std::span<const std::uint8_t> stored, bool compressed, std::size_t head_size = kHead) {
     if (compressed) {
-        auto head = core::zlib_inflate_prefix(stored, kHead);
+        auto head = core::zlib_inflate_prefix(stored, head_size);
         return head ? save::read_meta(*head) : std::nullopt;
     }
-    return save::read_meta(stored.subspan(0, std::min(stored.size(), kHead)));
+    return save::read_meta(stored.subspan(0, std::min(stored.size(), head_size)));
 }
 
 struct Header {
@@ -168,6 +168,16 @@ core::Result<SaveInfo> save_info(std::span<const std::uint8_t> head, std::uint64
     // META comes first and is small; a list of savegames needs no more of the file.
     info.meta = meta_of(bytes.subspan(kHeaderSize), info.compressed);
     return info;
+}
+
+std::optional<ScenarioInfo> scenario_info_of(std::span<const std::uint8_t> bytes, std::uint64_t file_size) {
+    auto h = read_header(bytes, file_size);
+    if (!h) {
+        return std::nullopt;
+    }
+    // SCNI follows META and the settings: its longest texts fit in the first megabyte unpacked.
+    auto meta = meta_of(bytes.subspan(kHeaderSize), (h->flags & kCompressed) != 0, kScenarioHead);
+    return meta ? std::move(meta->scenario) : std::nullopt;
 }
 
 core::Result<World> read_game(std::span<const std::uint8_t> bytes, const assets::BuildingTable& buildings,

@@ -17,6 +17,7 @@ add_executable(o1602_tests
     unit/test_diplomacy.cpp
     unit/test_balance.cpp
     unit/test_editor.cpp
+    unit/test_editor_goals.cpp
     unit/test_editor_islands.cpp
     unit/test_editor_players.cpp
     unit/test_editor_random.cpp

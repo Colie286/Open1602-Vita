@@ -5,6 +5,7 @@
 add_library(o1602_editor
     src/cities.cpp
     src/document.cpp
+    src/goals.cpp
     src/history.cpp
     src/islands.cpp
     src/objects.cpp

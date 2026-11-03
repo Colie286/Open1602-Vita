@@ -22,7 +22,7 @@ namespace o1602::app {
 /// keys.cfg has them, empty: none) and what lies under the mouse on the map.
 struct EditorChromeModel {
     std::array<std::string, kEditorTools> tool_keys{};
-    std::array<std::string, 16> command_keys{};  ///< by EditorCommand
+    std::array<std::string, 18> command_keys{};  ///< by EditorCommand
     std::string status;                          ///< the status line's text (Windows-1252), the notice first
     bool status_error = false;
     std::string place;  ///< where the mouse is on the map (Windows-1252), empty: off the map

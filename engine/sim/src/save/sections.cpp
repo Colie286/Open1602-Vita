@@ -1148,6 +1148,20 @@ std::optional<SaveMeta> read_meta(std::span<const std::uint8_t> sections) {
         });
         if (!info_in.ok()) {
             summary.names.clear();
+        } else {
+            // The author, version and briefings where the head holds all of them.
+            ScenarioInfo more;
+            info.string(more.author);
+            info.string(more.version);
+            info.list(more.briefings, 8, [&](ScenarioText& t) {
+                info.string(t.language);
+                info.string(t.text);
+            });
+            if (info_in.ok()) {
+                summary.author = std::move(more.author);
+                summary.version = std::move(more.version);
+                summary.briefings = std::move(more.briefings);
+            }
         }
         summary.original_limits = (flags & 1U) != 0;
         summary.stars = std::min(summary.stars, ScenarioInfo::kMaxStars);

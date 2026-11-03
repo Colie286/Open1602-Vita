@@ -1438,3 +1438,141 @@ TEST_CASE("editor panel: the rules dialog shows its settings in two columns") {
     CHECK(r->kind == EditorRequest::Kind::RuleStep);
     CHECK(r->index == 9);
 }
+
+TEST_CASE("editor panel: the goals dialog shows a mission's holders and goals, and its text is typed") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(184, 564);
+    panel.set_screen(1024, 768, 1024 - EditorPanel::kWidth);
+    EditorModel m = document();
+    m.max_missions = 16;
+    for (int i = 0; i < 4; ++i) {
+        app::EditorPlayer p;
+        p.slot = static_cast<std::uint8_t>(i);
+        p.colour = "Player " + std::to_string(i + 1);
+        m.player_slots.push_back(p);
+    }
+    (void)panel.command(app::EditorCommand::Goals, m);
+    REQUIRE(panel.page() == EditorPanel::Page::Goals);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "no mission yet"));
+    auto r = click(panel, m, "+");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::MissionAdd);
+
+    for (int k = 0; k < 2; ++k) {
+        app::EditorMission mission;
+        mission.text = k == 0 ? "Build three cities." : "";
+        for (int i = 0; i < 32; ++i) {
+            mission.goals.push_back(app::EditorRule{"Goal " + std::to_string(i),
+                                                    "Value " + std::to_string(k) + "." + std::to_string(i), i != 3});
+        }
+        mission.holders = {k == 0, k == 1, k == 1, k == 1};
+        m.missions.push_back(mission);
+    }
+    r = click(panel, m, "Mission 1");
+    CHECK(!r.has_value());
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Build three cities."));
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        if (w.text == "Player 1") {
+            CHECK(w.on);
+        }
+        if (w.text == "Player 2") {
+            CHECK(!w.on);
+        }
+    }
+    r = click(panel, m, "Player 2");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::MissionHolder);
+    CHECK(r->index == 0);
+    CHECK(r->amount == 1);
+
+    // The goals in pages, each a step of its value.
+    r = click(panel, m, "Value 0.5", ui::MouseButton::Right);
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::GoalStep);
+    CHECK(r->index == 0);
+    CHECK(r->goal == 5);
+    CHECK(r->amount == 0);
+    CHECK(!find_enabled(panel, m, "Value 0.3"));
+    CHECK(click(panel, m, ">").has_value() == false);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Value 0.31"));
+
+    // The second mission, then its text typed.
+    (void)click(panel, m, "Mission 2");
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "No mission text yet"));
+    (void)click(panel, m, "Change text");
+    REQUIRE(panel.page() == EditorPanel::Page::GoalText);
+    CHECK(panel.typing());
+    panel.type("Defeat the pirates.");
+    r = panel.key(13);
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::MissionText);
+    CHECK(r->index == 1);
+    CHECK(r->name == "Defeat the pirates.");
+    CHECK(panel.page() == EditorPanel::Page::Goals);
+
+    r = click(panel, m, "-");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::MissionRemove);
+    CHECK(r->index == 1);
+}
+
+TEST_CASE("editor panel: the description dialog steps the stars and types the texts") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(184, 564);
+    panel.set_screen(1024, 768, 1024 - EditorPanel::kWidth);
+    EditorModel m = document();
+    const std::vector<std::string> values = {"Two Coasts",   "Zwei Kuesten", "Found a city.", "(none)",
+                                             "3 of 5 stars", "Merlin",       "1.0",           "No"};
+    for (std::size_t i = 0; i < app::kEditorScenarioRows; ++i) {
+        m.scenario_rows.push_back(app::EditorRule{"Row " + std::to_string(i), values[i], true});
+        m.scenario_texts.push_back(app::scenario_row_is_text(static_cast<app::EditorScenarioRow>(i)) ? values[i] : "");
+    }
+    (void)panel.command(app::EditorCommand::Scenario, m);
+    REQUIRE(panel.page() == EditorPanel::Page::Scenario);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Row 0"));
+
+    // The stars go a step on each click.
+    auto r = click(panel, m, "3 of 5 stars");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::ScenarioStep);
+    CHECK(r->index == static_cast<std::size_t>(app::EditorScenarioRow::Stars));
+    CHECK(r->amount == 1);
+
+    // A text opens the field with the text as it is; Esc leaves it unchanged.
+    r = click(panel, m, "Merlin");
+    CHECK(!r.has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::ScenarioText);
+    CHECK(panel.typing());
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Row 5"));
+    panel.type(" and friends");
+    r = panel.key(13);
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::ScenarioText);
+    CHECK(r->index == static_cast<std::size_t>(app::EditorScenarioRow::Author));
+    CHECK(r->name == "Merlin and friends");
+    CHECK(panel.page() == EditorPanel::Page::Scenario);
+
+    // Shift+Enter breaks a line in an introduction; in a name it stores, as Enter.
+    (void)click(panel, m, "Found a city.");
+    REQUIRE(panel.page() == EditorPanel::Page::ScenarioText);
+    CHECK(!panel.key(10).has_value());
+    panel.type("Keep it fed.");
+    r = panel.key(13);
+    REQUIRE(r.has_value());
+    CHECK(r->index == static_cast<std::size_t>(app::EditorScenarioRow::BriefingDe));
+    CHECK(r->name == "Found a city.\nKeep it fed.");
+    (void)click(panel, m, "Two Coasts");
+    REQUIRE(panel.page() == EditorPanel::Page::ScenarioText);
+    r = panel.key(10);
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::ScenarioText);
+    CHECK(r->name == "Two Coasts");
+}

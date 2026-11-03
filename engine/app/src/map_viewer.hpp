@@ -363,6 +363,14 @@ private:
     /// The page "Rules": the scenario's game settings (editor_rules.cpp).
     void editor_rules_model(EditorModel& m) const;
     void editor_rules_request(const EditorRequest& request);
+    /// The dialog "Goals": the missions, and a request of it.
+    void editor_goals_model(EditorModel& m) const;
+    void editor_goals_request(const EditorRequest& request);
+    /// The dialog "Scenario": the scenario's description, and a request of it.
+    void editor_scenario_model(EditorModel& m) const;
+    void editor_scenario_request(const EditorRequest& request);
+    /// The value of goal `field` (editor::GoalField) of `mission` as the dialog shows it.
+    [[nodiscard]] std::string editor_goal_text(const sim::Mission& mission, std::size_t field) const;
     /// The dice preview: another roll of the plan shown on the map, or the plan back.
     void editor_roll();
     /// What the editor's frame shows besides the panel: the keys, where the mouse is.

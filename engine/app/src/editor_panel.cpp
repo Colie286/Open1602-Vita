@@ -112,19 +112,29 @@ constexpr Id kRulesOwn = 166;       ///< the scenario's own settings, or the pla
 constexpr Id kRulesOriginal = 167;  ///< all as in the original
 constexpr Id kRulesOpen1602 = 168;  ///< all as Open1602 has them
 constexpr Id kRandomPage = 169;
-constexpr Id kRandomBack = 170;        ///< from the random elements to the rules
-constexpr Id kRandomRoll = 171;        ///< the dice preview, or another roll of it
-constexpr Id kPreviewEnd = 172;        ///< from the dice preview back to the plan
-constexpr Id kFirstGoodLess = 120;     ///< + the row on the page "Stock"
-constexpr Id kFirstGoodMore = 140;     ///< + the row on the page "Stock"
-constexpr std::size_t kGoodRows = 20;  ///< rows of the page "Stock" at most
-constexpr Id kFirstRow = 100;          ///< + the row on the page
-constexpr Id kTabPlayers = 180;        ///< the players dialog's tab of the players
-constexpr Id kTabRelations = 181;      ///< the players dialog's tab of the diplomacy
-constexpr Id kColumnsBack = 182;       ///< the diplomacy table's columns before
-constexpr Id kColumnsOn = 183;         ///< the diplomacy table's columns after
-constexpr Id kRecent = 190;            ///< + the object placed lately (the page "Objects")
-constexpr Id kPlayerTable = 300;       ///< + 8 * the row + the column of the players' table
+constexpr Id kRandomBack = 170;                ///< from the random elements to the rules
+constexpr Id kRandomRoll = 171;                ///< the dice preview, or another roll of it
+constexpr Id kPreviewEnd = 172;                ///< from the dice preview back to the plan
+constexpr Id kFirstGoodLess = 120;             ///< + the row on the page "Stock"
+constexpr Id kFirstGoodMore = 140;             ///< + the row on the page "Stock"
+constexpr std::size_t kGoodRows = 20;          ///< rows of the page "Stock" at most
+constexpr Id kFirstRow = 100;                  ///< + the row on the page
+constexpr Id kTabPlayers = 180;                ///< the players dialog's tab of the players
+constexpr Id kTabRelations = 181;              ///< the players dialog's tab of the diplomacy
+constexpr Id kColumnsBack = 182;               ///< the diplomacy table's columns before
+constexpr Id kColumnsOn = 183;                 ///< the diplomacy table's columns after
+constexpr Id kGoalsPage = 200;                 ///< the dialog of the scenario's missions
+constexpr Id kMissionAdd = 201;                ///< a new mission
+constexpr Id kMissionRemove = 202;             ///< the mission shown taken away
+constexpr Id kMissionTextPage = 203;           ///< the mission's text to type
+constexpr Id kGoalsBack = 204;                 ///< from the mission's text back to its goals
+constexpr Id kScenarioPage = 205;              ///< the dialog of the scenario's description
+constexpr Id kMissionTab = 210;                ///< + the mission (the tabs of the dialog "Goals")
+constexpr Id kMissionHolder = 230;             ///< + the player slot holding the mission shown
+constexpr std::size_t kMissionTabs = 16;       ///< the most missions (editor::kMaxMissions)
+constexpr std::size_t kMaxMissionText = 1000;  ///< the longest text of a mission, as the editor's
+constexpr Id kRecent = 190;                    ///< + the object placed lately (the page "Objects")
+constexpr Id kPlayerTable = 300;               ///< + 8 * the row + the column of the players' table
 constexpr std::size_t kTableRows = 16;
 constexpr Id kRelationTable = 500;  ///< + 16 * the row + the column of the diplomacy table
 constexpr std::size_t kTableSide = 16;
@@ -215,7 +225,7 @@ std::uint32_t fitted(std::uint32_t used) {
 /// Whether a page goes back and on by the rows it shows (else by kRows).
 bool paged_by_rows(EditorPanel::Page page) noexcept {
     using P = EditorPanel::Page;
-    return page == P::Check || page == P::CityGoods || page == P::Rules || page == P::Random;
+    return page == P::Check || page == P::CityGoods || page == P::Rules || page == P::Random || page == P::Goals;
 }
 
 std::string count(std::size_t n) {
@@ -283,7 +293,7 @@ void EditorPanel::ask_name(std::string_view name) {
 
 bool EditorPanel::show_selection() noexcept {
     if (m_page == Page::New || m_page == Page::Open || m_page == Page::SaveAs || m_page == Page::CityName ||
-        m_page == Page::PlayerName) {
+        m_page == Page::PlayerName || m_page == Page::GoalText || m_page == Page::ScenarioText) {
         return false;
     }
     m_page = Page::Selection;
@@ -343,6 +353,10 @@ std::optional<EditorRequest> EditorPanel::command(EditorCommand command, const E
             return press(kPlayersPage, model, true);
         case EditorCommand::Rules:
             return press(kRulesPage, model, true);
+        case EditorCommand::Goals:
+            return press(kGoalsPage, model, true);
+        case EditorCommand::Scenario:
+            return press(kScenarioPage, model, true);
         case EditorCommand::Check:
             return press(kCheck, model, true);
         case EditorCommand::Keys:
@@ -450,22 +464,26 @@ bool EditorPanel::dialog() const noexcept {
     using P = Page;
     return m_screen_w > 0 && !m_previewing &&
            (m_page == P::Players || m_page == P::PlayerName || m_page == P::Relations || m_page == P::Rules ||
-            m_page == P::Random || m_page == P::WorldSize || m_page == P::Check);
+            m_page == P::Random || m_page == P::WorldSize || m_page == P::Check || m_page == P::Goals ||
+            m_page == P::GoalText || m_page == P::Scenario || m_page == P::ScenarioText);
 }
 
 ui::Rect EditorPanel::dialog_rect() const noexcept {
     using P = Page;
-    const bool wide = m_page == P::Players || m_page == P::Relations || m_page == P::Rules || m_page == P::Random;
+    const bool wide = m_page == P::Players || m_page == P::Relations || m_page == P::Rules || m_page == P::Random ||
+                      m_page == P::Goals;
     // Right of the tool bar, between the menu bar and the status line; as tall as the page needs.
     constexpr std::int32_t kToolBar = 42;
     constexpr std::int32_t kBars = 26 + 24;
     const std::int32_t room_w = m_screen_w - kToolBar - 16;
     const std::int32_t room_h = m_screen_h - kBars - 16;
-    const std::int32_t want = m_page == P::PlayerName  ? 230
-                              : m_page == P::WorldSize ? 440
-                              : m_page == P::Check     ? m_check_h
-                              : wide                   ? 620
-                                                       : 580;
+    const std::int32_t want = m_page == P::PlayerName                              ? 230
+                              : m_page == P::GoalText || m_page == P::ScenarioText ? 330
+                              : m_page == P::Scenario                              ? 470
+                              : m_page == P::WorldSize                             ? 440
+                              : m_page == P::Check                                 ? m_check_h
+                              : wide                                               ? 620
+                                                                                   : 580;
     const std::int32_t w = std::max(kWidth, std::min(room_w, wide ? kWideDialog : kNarrowDialog));
     const std::int32_t h = std::max(200, std::min(room_h, want));
     return Rect{kToolBar + 8 + (room_w - w) / 2 - m_column_x, 26 + 8 + (room_h - h) / 2, w, h};
@@ -575,6 +593,16 @@ void EditorPanel::layout_page(const EditorModel& model) {
             break;
         case Page::Random:
             wide ? layout_settings_grid(model, false) : layout_random(model);
+            break;
+        case Page::Goals:
+            layout_goals(model);
+            break;
+        case Page::GoalText:
+        case Page::ScenarioText:
+            layout_goal_text(model);
+            break;
+        case Page::Scenario:
+            layout_scenario(model);
             break;
     }
 }
@@ -1541,6 +1569,153 @@ void EditorPanel::layout_settings_grid(const EditorModel& model, bool rules) {
     f.button(kBack, Rect{m_x + m_w - quarter, foot, quarter, kButtonH}, ui::tr("editor.dialog.close"));
 }
 
+void EditorPanel::layout_goals(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.goals.title"), Align::Left, Tone::Heading);
+    y += 30;
+    const std::int32_t quarter = (m_w - 3 * kGap) / 4;
+    const std::int32_t foot = m_top + m_height - kButtonH - 4;
+    const std::size_t n = model.missions.size();
+    m_mission = n == 0 ? 0 : std::min(m_mission, n - 1);
+    // The missions as tabs, then a new one and taking the one shown away.
+    {
+        const std::int32_t tools = 2 * (quarter / 2 + kGap);
+        const std::int32_t tab = 110;
+        const auto fit = static_cast<std::size_t>(std::max(1, (m_w - tools + kGap) / (tab + kGap)));
+        const std::size_t first = m_mission >= fit ? m_mission + 1 - fit : 0;
+        std::int32_t x = m_x;
+        for (std::size_t i = first; i < n && i < first + fit; ++i) {
+            f.button(kMissionTab + static_cast<Id>(i), Rect{x, y, tab, kButtonH},
+                     ui::tr("editor.goals.mission", {count(i + 1)}), true, i == m_mission);
+            x += tab + kGap;
+        }
+        const std::int32_t small = quarter / 2;
+        f.button(kMissionAdd, Rect{m_x + m_w - 2 * small - kGap, y, small, kButtonH}, "+", n < model.max_missions);
+        f.button(kMissionRemove, Rect{m_x + m_w - small, y, small, kButtonH}, "-", n > 0);
+        y += kButtonH + kGap;
+    }
+    if (n == 0) {
+        f.paragraph(Rect{m_x, y, m_w, 4 * 20}, ui::tr("editor.goals.none"), Tone::Dim, 20);
+        f.button(kBack, Rect{m_x + m_w - quarter, foot, quarter, kButtonH}, ui::tr("editor.dialog.close"));
+        return;
+    }
+    const EditorMission& mission = model.missions[m_mission];
+    // Who holds it: a switch for each player.
+    f.label(Rect{m_x, y, m_w, 20}, ui::tr("editor.goals.holders"), Align::Left, Tone::Normal);
+    y += 20;
+    {
+        const std::size_t slots = std::min(model.player_slots.size(), mission.holders.size());
+        const std::size_t per_row = m_w >= 600 ? 6 : 3;
+        const std::int32_t w =
+            (m_w - static_cast<std::int32_t>(per_row - 1) * kGap) / static_cast<std::int32_t>(per_row);
+        for (std::size_t i = 0; i < slots; ++i) {
+            const auto col = static_cast<std::int32_t>(i % per_row);
+            const auto row = static_cast<std::int32_t>(i / per_row);
+            // Its own name, else its colour, as the players' table names it.
+            const EditorPlayer& p = model.player_slots[i];
+            f.button(kMissionHolder + static_cast<Id>(i),
+                     Rect{m_x + col * (w + kGap), y + row * (kButtonH + 2), w, kButtonH},
+                     p.own_name.empty() ? p.colour : p.own_name, true, mission.holders[i]);
+        }
+        const auto rows = static_cast<std::int32_t>((slots + per_row - 1) / per_row);
+        y += rows * (kButtonH + 2) + kGap;
+    }
+    // Its text, shortened, and the way to change it.
+    {
+        const std::int32_t button = quarter;
+        std::string text = mission.text;
+        std::replace(text.begin(), text.end(), '\n', ' ');
+        f.label(Rect{m_x, y, m_w - button - kGap, kButtonH}, text.empty() ? ui::tr("editor.goals.no_text") : text,
+                Align::Left, text.empty() ? Tone::Dim : Tone::Normal);
+        f.button(kMissionTextPage, Rect{m_x + m_w - button, y, button, kButtonH}, ui::tr("editor.goals.text"));
+        y += kButtonH + kGap + 2;
+    }
+    // The goals and loss conditions in two columns (one in the narrow column), on pages.
+    constexpr std::int32_t kRow = kButtonH + 4;
+    const std::int32_t bottom = foot - kGap;
+    const std::int32_t columns = m_w >= 500 ? 2 : 1;
+    const std::int32_t column = (m_w - (columns - 1) * 2 * kGap) / columns;
+    const std::int32_t label = column * 62 / 100;
+    const auto per_column = static_cast<std::size_t>(std::max(1, (bottom - y) / kRow));
+    const std::size_t rows_n = mission.goals.size();
+    m_page_rows = std::min<std::size_t>(static_cast<std::size_t>(columns) * per_column, 20);
+    m_first = rows_n == 0 ? 0 : std::min(m_first, (rows_n - 1) / m_page_rows * m_page_rows);
+    const std::size_t rows = (m_page_rows + static_cast<std::size_t>(columns) - 1) / static_cast<std::size_t>(columns);
+    for (std::size_t k = 0; k < m_page_rows && m_first + k < rows_n; ++k) {
+        const std::int32_t cx = m_x + static_cast<std::int32_t>(k / rows) * (column + 2 * kGap);
+        const std::int32_t cy = y + static_cast<std::int32_t>(k % rows) * kRow;
+        const EditorRule& r = mission.goals[m_first + k];
+        f.label(Rect{cx, cy, label - kGap, kButtonH}, r.label, Align::Left, r.enabled ? Tone::Normal : Tone::Dim);
+        f.cycle_button(kFirstRow + static_cast<Id>(k), Rect{cx + label, cy, column - label, kButtonH}, r.value,
+                       r.enabled);
+    }
+    const std::int32_t eighth = (quarter - kGap) / 2;
+    if (rows_n > m_page_rows) {
+        f.button(kPrevious, Rect{m_x, foot, eighth, kButtonH}, "<", m_first > 0);
+        f.button(kNext, Rect{m_x + eighth + kGap, foot, quarter - eighth - kGap, kButtonH}, ">",
+                 m_first + m_page_rows < rows_n);
+    }
+    f.button(kBack, Rect{m_x + m_w - quarter, foot, quarter, kButtonH}, ui::tr("editor.dialog.close"));
+}
+
+void EditorPanel::layout_scenario(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.scenario.title"), Align::Left, Tone::Heading);
+    y += 32;
+    constexpr std::int32_t kRow = kButtonH + 4;
+    const std::int32_t label = m_w * 45 / 100;
+    for (std::size_t i = 0; i < model.scenario_rows.size() && i < kEditorScenarioRows; ++i) {
+        const EditorRule& r = model.scenario_rows[i];
+        f.label(Rect{m_x, y, label - kGap, kButtonH}, r.label, Align::Left, Tone::Normal);
+        const Id id = kFirstRow + static_cast<Id>(i);
+        if (scenario_row_is_text(static_cast<EditorScenarioRow>(i))) {
+            f.button(id, Rect{m_x + label, y, m_w - label, kButtonH}, r.value);
+        } else {
+            f.cycle_button(id, Rect{m_x + label, y, m_w - label, kButtonH}, r.value);
+        }
+        y += kRow;
+    }
+    const std::int32_t foot = m_top + m_height - kButtonH - 4;
+    const std::int32_t room = foot - kGap - y - 4;
+    if (room >= 2 * 20) {
+        f.paragraph(Rect{m_x, y + 4, m_w, std::min(room, 3 * 20)}, ui::tr("editor.scenario.note"), Tone::Dim, 20);
+    }
+    const std::int32_t quarter = (m_w - 3 * kGap) / 4;
+    f.button(kBack, Rect{m_x + m_w - quarter, foot, quarter, kButtonH}, ui::tr("editor.dialog.close"));
+}
+
+void EditorPanel::layout_goal_text(const EditorModel& model) {
+    const bool scenario = m_page == Page::ScenarioText;
+    if (!scenario && m_mission >= model.missions.size()) {
+        m_page = Page::Goals;
+        layout_goals(model);
+        return;
+    }
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    const std::string title = scenario && m_scenario_row < model.scenario_rows.size()
+                                  ? model.scenario_rows[m_scenario_row].label
+                                  : ui::tr("editor.goals.text_title", {count(m_mission + 1)});
+    f.label(Rect{m_x, y, m_w, 28}, title, Align::Left, Tone::Heading);
+    y += 34;
+    // The field is one line: a line break shows as a space there, the text below shows it.
+    std::string line = m_text;
+    std::replace(line.begin(), line.end(), '\n', ' ');
+    f.field(kField, Rect{m_x, y, m_w, 32}, line);
+    y += 38;
+    // The whole text as it will read, the field showing its end only.
+    const std::int32_t room = std::max(2 * 20, m_top + m_height - 4 - kButtonH - kGap - y);
+    f.paragraph(Rect{m_x, y, m_w, room},
+                m_text.empty() ? ui::tr(scenario ? "editor.scenario.text_note" : "editor.goals.text_note") : m_text,
+                m_text.empty() ? Tone::Dim : Tone::Normal, 20);
+    y += room + kGap;
+    const std::int32_t half = (m_w - kGap) / 2;
+    f.button(kStore, Rect{m_x, y, half, kButtonH}, ui::tr("editor.city.rename_ok"));
+    f.button(kGoalsBack, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
+}
+
 void EditorPanel::layout_world_size(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
@@ -1645,6 +1820,20 @@ std::vector<ui::DrawItem> EditorPanel::draw(const EditorModel& model,
 }
 
 std::optional<EditorRequest> EditorPanel::commit_name() {
+    if (m_page == Page::ScenarioText) {
+        m_page = Page::Scenario;
+        m_form.set_focus(std::nullopt);
+        EditorRequest r{EditorRequest::Kind::ScenarioText, m_scenario_row};
+        r.name = m_text;
+        return r;
+    }
+    if (m_page == Page::GoalText) {
+        m_page = Page::Goals;
+        m_form.set_focus(std::nullopt);
+        EditorRequest r{EditorRequest::Kind::MissionText, m_mission};
+        r.name = m_text;
+        return r;
+    }
     if (m_page == Page::PlayerName) {
         if (!m_text.empty() && !sim::valid_name(m_text, sim::CityOrder::kMaxNameLength)) {
             return std::nullopt;
@@ -1713,6 +1902,36 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
         case kRulesPage:
             m_page = Page::Rules;
             m_first = 0;
+            return std::nullopt;
+        case kGoalsPage:
+            m_page = Page::Goals;
+            m_first = 0;
+            return std::nullopt;
+        case kMissionAdd:
+            if (model.missions.size() >= model.max_missions) {
+                return std::nullopt;
+            }
+            m_mission = model.missions.size();  // the new one shows
+            m_first = 0;
+            return EditorRequest{EditorRequest::Kind::MissionAdd};
+        case kMissionRemove:
+            if (m_mission >= model.missions.size()) {
+                return std::nullopt;
+            }
+            return EditorRequest{EditorRequest::Kind::MissionRemove, m_mission};
+        case kMissionTextPage:
+            if (m_mission < model.missions.size()) {
+                m_page = Page::GoalText;
+                m_text = model.missions[m_mission].text;
+                m_form.set_focus(kField);
+            }
+            return std::nullopt;
+        case kGoalsBack:
+            m_page = m_page == Page::ScenarioText ? Page::Scenario : Page::Goals;
+            m_form.set_focus(std::nullopt);
+            return std::nullopt;
+        case kScenarioPage:
+            m_page = Page::Scenario;
             return std::nullopt;
         case kRandomPage:
             if (model.has_plan) {
@@ -2183,6 +2402,40 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
         }
         return std::nullopt;
     }
+    if (*id >= kMissionTab && *id < kMissionTab + static_cast<Id>(kMissionTabs)) {
+        m_mission = static_cast<std::size_t>(*id - kMissionTab);
+        m_first = 0;
+        return std::nullopt;
+    }
+    if (*id >= kMissionHolder && *id < kMissionHolder + static_cast<Id>(sim::kMaxPlayers) &&
+        m_mission < model.missions.size()) {
+        EditorRequest r{EditorRequest::Kind::MissionHolder, m_mission};
+        r.amount = static_cast<std::uint32_t>(*id - kMissionHolder);
+        return r;
+    }
+    if (*id >= kFirstRow && *id < kFirstRow + static_cast<Id>(kEditorScenarioRows) && m_page == Page::Scenario) {
+        const auto row = static_cast<std::size_t>(*id - kFirstRow);
+        if (scenario_row_is_text(static_cast<EditorScenarioRow>(row))) {
+            m_page = Page::ScenarioText;
+            m_scenario_row = row;
+            m_text = row < model.scenario_texts.size() ? model.scenario_texts[row] : std::string();
+            m_form.set_focus(kField);
+            return std::nullopt;
+        }
+        EditorRequest r{EditorRequest::Kind::ScenarioStep, row};
+        r.amount = forward ? 1U : 0U;
+        return r;
+    }
+    if (*id >= kFirstRow && *id < kFirstRow + 20 && m_page == Page::Goals) {
+        const std::size_t index = m_first + static_cast<std::size_t>(*id - kFirstRow);
+        if (m_mission < model.missions.size() && index < model.missions[m_mission].goals.size()) {
+            EditorRequest r{EditorRequest::Kind::GoalStep, m_mission};
+            r.goal = index;
+            r.amount = forward ? 1U : 0U;
+            return r;
+        }
+        return std::nullopt;
+    }
     if (*id >= kFirstRow && *id < kFirstRow + 20 && m_page == Page::Random) {
         const std::size_t index = m_first + static_cast<std::size_t>(*id - kFirstRow);
         if (index < model.randoms.size()) {
@@ -2221,7 +2474,11 @@ void EditorPanel::type(std::string_view text) {
         m_text.clear();  // typed over the whole name (Ctrl+A, or the name offered)
     }
     for (const char c : text) {
-        if (static_cast<unsigned char>(c) >= 0x20 && c != 0x7F && m_text.size() < kMaxName) {
+        const std::size_t most = m_page == Page::GoalText ? kMaxMissionText
+                                 : m_page == Page::ScenarioText
+                                     ? scenario_row_length(static_cast<EditorScenarioRow>(m_scenario_row))
+                                     : kMaxName;
+        if (static_cast<unsigned char>(c) >= 0x20 && c != 0x7F && m_text.size() < most) {
             m_text.push_back(c);
         }
     }
@@ -2247,6 +2504,23 @@ std::optional<EditorRequest> EditorPanel::key(int key) {
                 m_text.pop_back();
             }
             return std::nullopt;
+        case 10:  // Shift+Enter: a line break where the text may have lines, else Enter
+            if (const bool lines = m_page == Page::GoalText ||
+                                   (m_page == Page::ScenarioText &&
+                                    (m_scenario_row == static_cast<std::size_t>(EditorScenarioRow::BriefingDe) ||
+                                     m_scenario_row == static_cast<std::size_t>(EditorScenarioRow::BriefingEn)));
+                !lines) {
+                return commit_name();
+            }
+            if (all) {
+                m_text.clear();
+            }
+            if (m_text.size() < (m_page == Page::GoalText
+                                     ? kMaxMissionText
+                                     : scenario_row_length(static_cast<EditorScenarioRow>(m_scenario_row)))) {
+                m_text.push_back('\n');
+            }
+            return std::nullopt;
         case 13:
             return commit_name();
         case 27:
@@ -2255,6 +2529,9 @@ std::optional<EditorRequest> EditorPanel::key(int key) {
                 m_form.set_focus(std::nullopt);
             } else if (m_page == Page::PlayerName) {
                 m_page = Page::Players;
+                m_form.set_focus(std::nullopt);
+            } else if (m_page == Page::GoalText || m_page == Page::ScenarioText) {
+                m_page = m_page == Page::GoalText ? Page::Goals : Page::Scenario;
                 m_form.set_focus(std::nullopt);
             } else {
                 show_document();

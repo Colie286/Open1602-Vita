@@ -472,6 +472,11 @@ public:
         }
     }
     void type_key(int key) {
+        // Shift+Enter (10) breaks a line in the editor's longer texts; Enter everywhere else.
+        if (key == 10 && !(m_editing && m_editor && m_editor->typing() && !chat_open() &&
+                           !(templates_open() && m_templates->typing()))) {
+            key = 13;
+        }
         if (chat_open()) {
             if (auto say = m_chat->key(m_chat_model, key)) {
                 m_chat_says.push_back(std::move(*say));

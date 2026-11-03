@@ -16,9 +16,12 @@
 #include "../test_framework.hpp"
 #include "main_menu.hpp"
 
+#include "o1602/assets/building_table.hpp"
 #include "o1602/assets/chunk_writer.hpp"
 #include "o1602/assets/game_directory.hpp"
 #include "o1602/assets/text_table.hpp"
+#include "o1602/sim/save_game.hpp"
+#include "o1602/sim/world.hpp"
 
 using namespace o1602;
 using app::MainMenu;
@@ -544,6 +547,32 @@ TEST_CASE("main menu: the own scenario folder under its heading, in name order, 
     std::filesystem::remove_all(folder);
 }
 
+TEST_CASE("main menu: a scenario of the editor shows the name and stars of its description") {
+    const std::filesystem::path folder = test::temp_path("o1602-test-menu-own-scni");
+    std::filesystem::remove_all(folder);
+    std::filesystem::create_directories(folder);
+    sim::World world(40, 40);
+    sim::ScenarioInfo info;
+    info.names = {{"en", "Two Coasts"}};
+    info.briefings = {{"en", "Found a city."}};
+    info.stars = 4;
+    world.set_scenario_info(info);
+    const assets::BuildingTable buildings;
+    auto bytes = sim::write_game(world, buildings);
+    REQUIRE(bytes.ok());
+    write(folder / "coasts.o1602", std::string(bytes->begin(), bytes->end()));
+    write(folder / "Broken.o1602", "O1602");  // no description: its file's name, no stars
+    const auto list = app::own_scenario_list(folder, "Own", {});
+    REQUIRE(list.size() == 3);
+    CHECK(list[1].name == "Broken");
+    CHECK(list[1].briefing.empty());
+    CHECK(list[2].name == "Two Coasts");
+    CHECK(list[2].header.ranking == 3);
+    CHECK(list[2].briefing == "Found a city.");
+    CHECK(list[2].base.filename() == "coasts");
+    std::filesystem::remove_all(folder);
+}
+
 TEST_CASE("main menu: the packages' scenarios under their own heading, with stars and briefing") {
     CHECK(app::package_scenario_list({}, {}, "en", "----Mods----").empty());
     std::vector<assets::PackageScenario> scenarios(1);
@@ -565,7 +594,7 @@ TEST_CASE("main menu: the packages' scenarios under their own heading, with star
     REQUIRE(list[1].files.size() == 1);
     CHECK(list[1].files[0].first == 0xFF);
     CHECK(list[1].files[0].second == s.file);
-    CHECK(list[1].header.ranking == 4);
+    CHECK(list[1].header.ranking == 3);
     CHECK(list[1].package_scenario == "isles:north");
     CHECK(list[1].briefing == "Siedelt im Norden.");
 }
@@ -590,7 +619,7 @@ TEST_CASE("main menu: a package's campaign is one entry with a part per scenario
     CHECK(c.package_campaign == "isles:frost");
     CHECK(c.package_scenario.empty());
     CHECK(c.briefing == "Two winters.");
-    CHECK(c.header.ranking == 3);
+    CHECK(c.header.ranking == 2);
     CHECK(c.base == std::filesystem::path("isles_frost"));
     REQUIRE(c.files.size() == 2);
     CHECK(c.files[0].first == 0);

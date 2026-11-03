@@ -1041,7 +1041,7 @@ void MapInput::handle_event(const SDL_Event& event) {
                 if (event.key.key == SDLK_BACKSPACE) {
                     m_hud->type_key(8);
                 } else if (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) {
-                    m_hud->type_key(13);
+                    m_hud->type_key((event.key.mod & SDL_KMOD_SHIFT) != 0 ? 10 : 13);  // 10: a line break
                 } else if (event.key.key == SDLK_ESCAPE) {
                     m_hud->type_key(27);
                 } else if (event.key.key == SDLK_TAB) {

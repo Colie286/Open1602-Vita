@@ -19,6 +19,7 @@
 #include "o1602/assets/text_table.hpp"
 #include "o1602/core/file.hpp"
 #include "o1602/core/text.hpp"
+#include "o1602/editor/goals.hpp"
 #include "o1602/editor/islands.hpp"
 #include "o1602/editor/objects.hpp"
 #include "o1602/editor/original_check.hpp"
@@ -446,6 +447,8 @@ EditorModel MapViewer::editor_model() const {
     editor_city_model(m);
     editor_players_model(m);
     editor_rules_model(m);
+    editor_goals_model(m);
+    editor_scenario_model(m);
     m.terrain_selected = m_editor->selection.has_value();
     m.clip_width = m_editor->clip.width;
     m.clip_height = m_editor->clip.height;
@@ -602,6 +605,17 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         case Kind::RandomRoll:
         case Kind::RandomPreviewEnd:
             editor_rules_request(request);
+            break;
+        case Kind::MissionAdd:
+        case Kind::MissionRemove:
+        case Kind::MissionHolder:
+        case Kind::GoalStep:
+        case Kind::MissionText:
+            editor_goals_request(request);
+            break;
+        case Kind::ScenarioStep:
+        case Kind::ScenarioText:
+            editor_scenario_request(request);
             break;
         case Kind::TerrainCopy: {
             const auto& sel = m_editor->selection;
@@ -1185,6 +1199,40 @@ void MapViewer::editor_properties(EditorModel& m) const {
     }
 }
 
+namespace {
+
+/// A line of the check list for a problem of the missions.
+std::string goal_problem_text(const sim::World& world, const editor::GoalProblem& p) {
+    using Kind = editor::GoalProblem::Kind;
+    const std::string mission = std::to_string(p.mission + 1);
+    const sim::Player* player = world.player(p.player);
+    const std::string who =
+        player != nullptr ? player_name(*player) : ui::tr("editor.goals.slot", {std::to_string(p.player + 1)});
+    switch (p.kind) {
+        case Kind::NobodyHolds:
+            return ui::tr("editor.check.goal.nobody_holds", {mission});
+        case Kind::NoGoals:
+            return ui::tr("editor.check.goal.no_goals", {mission});
+        case Kind::HumanWithout:
+            return ui::tr("editor.check.goal.human_without", {who});
+        case Kind::NoIsland:
+            return ui::tr("editor.check.goal.no_island", {mission, std::to_string(p.detail + 1)});
+        case Kind::UnknownGood:
+            return ui::tr("editor.check.goal.unknown_good", {mission, std::to_string(p.detail + 1)});
+        case Kind::NoPlayer:
+            return ui::tr("editor.check.goal.no_player", {mission, who});
+        case Kind::DefeatSelf:
+            return ui::tr("editor.check.goal.defeat_self", {mission, who});
+        case Kind::TooFewOpponents:
+            return ui::tr("editor.check.goal.few_opponents", {mission, std::to_string(p.detail)});
+        case Kind::TargetNoCity:
+            return ui::tr("editor.check.goal.target_no_city", {mission});
+    }
+    return {};
+}
+
+}  // namespace
+
 std::vector<EditorCheckLine> MapViewer::editor_check() const {
     using Line = EditorCheckLine;
     std::vector<Line> lines;
@@ -1202,6 +1250,16 @@ std::vector<EditorCheckLine> MapViewer::editor_check() const {
     }
     if (lines.size() == first) {
         lines.push_back(Line{ui::tr("editor.check.fine"), Line::Kind::Fine});
+    }
+    // What the missions cannot meet, meet at once or leave out: worth knowing, not a fault.
+    lines.push_back(Line{ui::tr("editor.check.goals"), Line::Kind::Heading});
+    const auto goal_problems = editor::goal_problems(world);
+    for (const editor::GoalProblem& p : goal_problems) {
+        lines.push_back(Line{goal_problem_text(world, p), Line::Kind::Warning});
+    }
+    if (goal_problems.empty()) {
+        lines.push_back(Line{ui::tr(world.missions().empty() ? "editor.check.no_missions" : "editor.check.goals_fine"),
+                             Line::Kind::Fine});
     }
     // What the original cannot have: a fault only while the scenario is to keep to its limits.
     const auto& info = world.scenario_info();

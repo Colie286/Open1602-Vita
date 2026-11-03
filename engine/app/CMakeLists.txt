@@ -5,6 +5,7 @@ add_executable(open1602
     src/main.cpp
     src/diagnostics.cpp
     src/editor_mode.cpp
+    src/editor_goals.cpp
     src/editor_objects.cpp
     src/editor_players.cpp
     src/editor_rules.cpp

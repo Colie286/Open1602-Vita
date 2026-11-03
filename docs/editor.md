@@ -19,7 +19,7 @@ The editor has a frame of its own around the map instead of the game's panel:
 
 - **The menu bar** above the map: **File** (new map, open, save, save as, leave the editor), **Edit**
   (undo, redo), **View** (the overlays), **Map** (islands, map size, random elements, dice preview),
-  **Players**, **Rules**, **Check** and **Help** (the keys). The menus name each command's key. At
+  **Players**, **Scenario** (description, rules, goals), **Check** and **Help** (the keys). The menus name each command's key. At
   its right end it shows the map's name, with `*` while it has changes that are not saved.
 - **The tool bar** down the map's left edge: a symbol for each tool, in groups: select; island and
   placeholder; land, water and tidy coast; the terrain pieces' brush, random fill, fill, replace,
@@ -217,9 +217,22 @@ way. A change applies to both sides, and clears what
 the two remember of each other (tribute, trade, damage). A trade treaty needs peace; war ends it.
 Adding a player keeps the relations of the others; the new one starts at peace with everyone.
 
+## Description
+
+**Description** (menu Scenario) sets what the scenario list shows of the scenario: its name and
+introduction in German and English, the difficulty in stars (0 to 5), the author and a version.
+A click on a text opens a field to type it (Shift+Enter breaks a line in an introduction);
+an empty text takes that language away. Without a
+name the list shows the file's name, which still finds the scenario. Texts in other languages,
+written by other tools, are kept. **The original's limits** switches the check of the original's
+size, islands, players and buildings on or off.
+
+The introduction is the page shown before the scenario starts; the missions' own texts are set
+under Goals.
+
 ## Rules
 
-**Rules** sets the game settings the scenario is made for, the same ones the start dialog offers
+**Rules** (menu Scenario) sets the game settings the scenario is made for, the same ones the start dialog offers
 for a scenario: disasters, construction, ships and trade, limits, opponents, and the bugs of the
 original. **The player's rules** leaves them to the player, as for any scenario; a click switches
 to **The map's own rules**, which begin from those the player last started a scenario with. **As
@@ -241,6 +254,39 @@ to the random ones, the right button takes one away; each change is one step of 
 **Dice preview** makes the islands as one start of a game makes them and shows them on the map.
 **Roll again** makes another start, **Back to the plan** brings the plan back. The preview is never
 saved and cannot be edited; undo, save and the other pages wait until the plan is back.
+
+## Goals
+
+**Goals** (menu Scenario) sets the scenario's missions. A mission is a set of goals that must all
+hold at the same time, and up to two loss conditions; each human or computer holds one mission or
+none, and several players can hold the same one. The tabs at the top choose the mission, **+** adds
+one (up to 16), **-** takes the one shown away. Below them, a switch for each player says who holds
+it; **Change text** types the text the player reads about the mission (Shift+Enter breaks a line).
+
+| Goal | What it asks for |
+|---|---|
+| Number of cities | At least so many cities. |
+| Inhabitants in all | At least so many inhabitants in all own cities together. |
+| Balance, Trade balance | At least so much per minute (0 counts: no loss). |
+| Opponents defeated | At least so many opponents out of the game. |
+| Defeat player | That player out of the game; natives when their last village is destroyed by the mission's holder. |
+| Build a castle, Build a cathedral | One built. |
+| Good 1 and 2 in stock, Amount | So many tons of the good in the warehouses of all own cities. |
+| All islands with 1 and 2 | Every island fertile for the crop, or with iron ore or gold, settled, with no human or computer opponent on it. |
+| City 1 to 3, Every city | A city (or every own city) with so many inhabitants, of whom so many from a level up. The three cities are distinct ones. |
+| Target player, City of the target player | A city of that player (or of any opponent) so large. |
+| Lost: city below, Lost: cities below | The mission is lost when no city of the target player stays that large, or the target player keeps fewer cities. |
+| Computers win too | Computers holding the mission can win by it too. |
+| Message on winning | The message and its video for the winner: "Mission accomplished", or the multiplayer win in the winner's colour. |
+
+Each value goes on with the left button and back with the right one, through **Off**; a detail
+that does not matter as the rest is set is greyed out. Each change is one step of undo. A mission
+without any goal never ends the game, as an endless game.
+
+**Check** lists what the missions cannot meet or meet at once before the game starts: a mission
+nobody holds, a human without one while others have one, an island goal no island can meet (it
+counts as met at once), a good or a player that is not in the game, more opponents to defeat than
+there are, a target player who starts without the cities the loss conditions ask for.
 
 ## Keys
 

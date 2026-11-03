@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -290,6 +291,17 @@ TEST_CASE("editor document: a scenario is saved, opened and keeps its own parts"
     CHECK(head->meta->scenario->stars == 3);
     CHECK(head->meta->scenario->names == info.names);
     CHECK(!head->meta->scenario->original_limits);
+    CHECK(head->meta->scenario->briefings == info.briefings);
+    CHECK(head->meta->scenario->author == "Merlin");
+
+    // The scenario list's introduction: the whole description from the start of the file.
+    auto whole = sim::scenario_info_of(*bytes, bytes->size());
+    REQUIRE(whole.has_value());
+    CHECK(whole->names == info.names);
+    CHECK(whole->briefings == info.briefings);
+    CHECK(whole->version == "1.0");
+    CHECK(whole->stars == 3);
+    CHECK(!sim::scenario_info_of(std::span<const std::uint8_t>(*bytes).subspan(0, 8), bytes->size()));
 
     // A file of the original needs the game's directory.
     const std::vector<std::uint8_t> chunks = {'I', 'N', 'S', 'E', 'L', '5'};
@@ -316,6 +328,7 @@ TEST_CASE("editor document: a world that is no scenario gets a description as on
     REQUIRE(head.ok());
     REQUIRE(head->meta.has_value());
     CHECK(!head->meta->scenario.has_value());
+    CHECK(!sim::scenario_info_of(*plain, plain->size()));
 }
 
 TEST_CASE("editor document: wrong scenario parts refuse the save and change nothing") {
