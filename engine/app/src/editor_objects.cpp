@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The editor's buildings (ADR 0013): the page "Buildings" places the build menu's buildings for a
-// player without costs and takes buildings away, each click or drag one step of undo.
+// The editor's objects (ADR 0013): the page "Objects" places the build menu's buildings for a
+// player without costs, ships and land units, and takes them away, each click or drag one step of
+// undo.
 
 #include <algorithm>
 #include <cstdlib>
@@ -9,14 +10,17 @@
 #include <string>
 #include <vector>
 
+#include "map_input.hpp"
 #include "map_viewer.hpp"
 #include "names.hpp"
 
+#include "o1602/assets/own_figures.hpp"
 #include "o1602/assets/text_table.hpp"
 #include "o1602/editor/cities.hpp"
 #include "o1602/editor/objects.hpp"
 #include "o1602/editor/operations.hpp"
 #include "o1602/editor/terrain.hpp"
+#include "o1602/editor/units.hpp"
 #include "o1602/sim/construction.hpp"
 #include "o1602/sim/logistics.hpp"
 #include "o1602/ui/build_menu.hpp"
@@ -114,6 +118,31 @@ void MapViewer::editor_object_model(EditorModel& m) const {
     }
     if (const assets::BuildingType* b = editor_object_piece()) {
         m.object_turns = b->rotate > 0 || b->size_x != b->size_y;
+    }
+    using Tool = EditorObjects::Tool;
+    const Tool tool = m_editor->objects.tool;
+    if (tool == Tool::Ship || tool == Tool::Unit) {
+        const std::vector<std::uint16_t> figures = editor_figures(tool);
+        m.object_pieces = figures.size();
+        m.object_turns = true;
+        m.object_name.clear();
+        if (!figures.empty()) {
+            const std::size_t index =
+                std::min(tool == Tool::Ship ? m.objects.ship : m.objects.unit, figures.size() - 1);
+            const std::uint16_t figure = figures[index];
+            const char* key = tool == Tool::Ship ? "editor.objects.ship." : "editor.objects.unit.";
+            if (const assets::OwnShip* own =
+                    tool == Tool::Ship ? assets::find_own_ship(m_own_ships, figure) : nullptr) {
+                m.object_name = own->name(ui::current_language());
+            } else if (const assets::OwnUnit* unit =
+                           tool == Tool::Unit ? assets::find_own_unit(m_own_units, figure) : nullptr) {
+                m.object_name = unit->name(ui::current_language());
+            } else if (index < 4) {
+                m.object_name = ui::tr(key + std::to_string(index));
+            } else {
+                m.object_name = std::to_string(figure);
+            }
+        }
     }
     const auto owners = object_owners(m_editor->document.world());
     if (!owners.empty()) {
@@ -307,26 +336,11 @@ bool MapViewer::editor_objects_stroke(std::optional<render::TilePos> tile, Strok
                 return true;
             }
             if (m_editor->objects.tool == EditorObjects::Tool::Remove) {
-                const sim::World& world = m_state->world;
-                const sim::World::Cell& c =
-                    world.cell(static_cast<std::uint32_t>(tile->x), static_cast<std::uint32_t>(tile->y));
-                if (c.island == sim::World::kSea) {
-                    editor_notice(ui::tr("editor.objects.refused.nothing"), true, "nothing to take away");
-                    return true;
-                }
-                auto op = editor::remove_building(
-                    world, m_buildings, c.island,
-                    sim::TilePos{static_cast<std::int32_t>(c.local_x), static_cast<std::int32_t>(c.local_y)});
-                if (!op) {
-                    editor_notice(
-                        ui::tr(op.error().code == core::ErrorCode::NotFound ? "editor.objects.refused.nothing"
-                                                                            : "editor.objects.refused.remove"),
-                        true, op.error().message);
-                    return true;
-                }
-                m_editor->document.perform(std::move(op).value());
-                editor_islands_changed();
-                m_editor->notice.clear();
+                editor_remove_object(*tile);
+                return true;
+            }
+            if (m_editor->objects.tool != EditorObjects::Tool::Build) {
+                editor_place_figure(tile->x, tile->y);  // one at a click, not dragged
                 return true;
             }
             m_editor->object_at = {tile->x, tile->y};
@@ -370,6 +384,98 @@ bool MapViewer::editor_objects_stroke(std::optional<render::TilePos> tile, Strok
             return true;
     }
     return false;
+}
+
+std::vector<std::uint16_t> MapViewer::editor_figures(EditorObjects::Tool tool) const {
+    std::vector<std::uint16_t> figures;
+    if (tool == EditorObjects::Tool::Ship) {
+        for (const std::uint16_t f : assets::figure::kShips) {
+            figures.push_back(f);
+        }
+        for (const auto& [number, type] : m_figures.package_ships()) {
+            figures.push_back(static_cast<std::uint16_t>(number));  // below kMaxFigures
+        }
+    } else if (tool == EditorObjects::Tool::Unit) {
+        for (const std::uint32_t family : m_figures.unit_families()) {
+            figures.push_back(static_cast<std::uint16_t>(family));
+        }
+    }
+    return figures;
+}
+
+std::uint16_t MapViewer::editor_figure() const {
+    const EditorObjects& o = m_editor->objects;
+    const std::vector<std::uint16_t> figures = editor_figures(o.tool);
+    if (figures.empty()) {
+        return 0;
+    }
+    return figures[std::min(o.tool == EditorObjects::Tool::Ship ? o.ship : o.unit, figures.size() - 1)];
+}
+
+sim::PlayerId MapViewer::editor_object_owner() const {
+    const auto owners = object_owners(m_editor->document.world());
+    return owners.empty() ? sim::kNoPlayer : owners[m_editor->objects.owner % owners.size()];
+}
+
+void MapViewer::editor_place_figure(std::int64_t x, std::int64_t y) {
+    const sim::World& world = m_editor->document.world();
+    const bool ship = m_editor->objects.tool == EditorObjects::Tool::Ship;
+    const sim::PlayerId owner = editor_object_owner();
+    if (owner == sim::kNoPlayer) {
+        editor_notice(ui::tr("editor.objects.note.no_players"), true, "no owner");
+        return;
+    }
+    const auto direction = static_cast<std::uint8_t>((m_editor->objects.rotation & 3U) * 2U);
+    auto op = ship ? editor::place_ship(world, m_buildings, m_figures, owner, editor_figure(), x, y, direction)
+                   : editor::place_unit(world, m_buildings, m_figures, owner, editor_figure(), x, y, direction);
+    if (!op) {
+        const editor::UnitRefusal refused =
+            ship ? editor::ship_fits(world, m_buildings, x, y) : editor::unit_fits(world, m_buildings, x, y);
+        const char* key = "editor.objects.refused.other";
+        if (refused == editor::UnitRefusal::NoWater) {
+            key = "editor.objects.refused.water";
+        } else if (refused == editor::UnitRefusal::NoGround || refused == editor::UnitRefusal::Outside) {
+            key = ship ? "editor.objects.refused.water" : "editor.objects.refused.ground";
+        } else if (refused == editor::UnitRefusal::Taken) {
+            key = ship ? "editor.objects.refused.ship_near" : "editor.objects.refused.unit_near";
+        }
+        editor_notice(ui::tr(key, {op.error().message}), true, op.error().message);
+        return;
+    }
+    m_editor->document.perform(std::move(op).value());
+    editor_islands_changed();
+    m_editor->notice.clear();
+}
+
+void MapViewer::editor_remove_object(render::TilePos tile) {
+    const sim::World& world = m_editor->document.world();
+    if (const auto unit = m_input->unit_at_mouse()) {
+        auto op = unit->kind == ui::UnitRef::Kind::Ship ? editor::remove_ship(world, unit->id)
+                                                        : editor::remove_unit(world, unit->id);
+        if (op) {
+            m_editor->document.perform(std::move(op).value());
+            editor_islands_changed();
+            m_editor->notice.clear();
+            return;
+        }
+    }
+    const sim::World::Cell& c = world.cell(static_cast<std::uint32_t>(tile.x), static_cast<std::uint32_t>(tile.y));
+    if (c.island == sim::World::kSea) {
+        editor_notice(ui::tr("editor.objects.refused.nothing"), true, "nothing to take away");
+        return;
+    }
+    auto op = editor::remove_building(
+        world, m_buildings, c.island,
+        sim::TilePos{static_cast<std::int32_t>(c.local_x), static_cast<std::int32_t>(c.local_y)});
+    if (!op) {
+        editor_notice(ui::tr(op.error().code == core::ErrorCode::NotFound ? "editor.objects.refused.nothing"
+                                                                          : "editor.objects.refused.remove"),
+                      true, op.error().message);
+        return;
+    }
+    m_editor->document.perform(std::move(op).value());
+    editor_islands_changed();
+    m_editor->notice.clear();
 }
 
 void MapViewer::editor_end_objects() {

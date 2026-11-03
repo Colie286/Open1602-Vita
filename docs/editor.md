@@ -31,7 +31,7 @@ makes; they are made when a game of it starts, as in the original.
 | Edit islands | New islands: one of the original's templates (or a package's, from `islands.toml`) or one of its own shape, north, south or of a package's climate (`climates.toml`; a placeholder only north or south), in the five sizes of the templates (30 × 30 up to 100 × 90); Another one picks the next template, the panel saying which (its number, or a package's island by name), or another shape. Place puts it in hand: its outline follows the mouse, green where it fits on open sea and red where not; a left click puts it down, a right click or Cancel puts it back. Load island lists the islands saved with Save (below) and the original's island files (`.scp`) put into the folder `islands` in Open1602's user data folder, and puts the one chosen in hand the same way; an `.scp` file, which does not tell its climate, gets the climate chosen on the page. |
 | Placeholders | A scenario of the original that makes its islands when a game starts has a world plan: each of its islands is a placeholder, drawn as a yellow outline of its size class with its name. The shape Placeholder on Edit islands sets a new one (north or south, a size class, its template drawn when the game starts); a click on a placeholder selects it (below). Islands cannot be put on a placeholder. When a game of the scenario starts, the world keeps what the editor left (its islands, cities, players and ships) and only the placeholders become islands; what is beyond the original's limits does not start with it. |
 | Edit terrain | The terrain tools (below). |
-| Edit buildings | The buildings' tools (below). |
+| Place objects | The objects' tools (below). |
 | Change map size | Makes the map larger or smaller in steps of 50 tiles, or fits it to its content with some sea around. It grows or is cut at the right and the bottom, so everything keeps its place, and it cannot be cut below the islands, ships, land units and markers. |
 | Overlays | What the map shows over the world: the players' land in their colours, the numbers of the islands, the coordinates of the tile under the mouse. |
 | Check | The check list: what keeps the scenario from being saved (the world must hold together, its description and markers be right), and what the original cannot have (its map size, more islands, cities, ships, land units, towers or players with a start than it holds, larger islands, more ore deposits, content of a package, a script). The second group is a fault only for a scenario that is to keep to the original's limits. |
@@ -98,18 +98,18 @@ part becomes meadow where it is not covered, and its ore deposit or volcano goes
 tools paint only islands, not open sea, and leave buildings, the land of cities and the tiles under a
 ship or a land unit as they are. Each stroke, fill or replacement is one step of undo.
 
-## Buildings
+## Objects
 
-**Edit buildings** places the buildings of the build menu for a player, without costs, and takes
-buildings away again. Each click, or each drag, is one step of undo.
+**Place objects** puts down the buildings of the build menu, ships and land units for a
+player, without costs, and takes them away again. Each click, or each drag, is one step of undo.
 
 | Setting | What it does |
 |---|---|
-| Tool | **Build**: a left click puts the building down about the mouse, for the owner; dragged, the next one goes where it no longer covers the last, so roads, walls and fields are dragged out. **Remove**: a left click takes the building under the mouse away, as its owner demolishes it. |
-| Group | The groups of the build menu (with the buildings packages add to it). |
-| Building | The group's buildings by name. |
-| Rotation | A quarter clockwise, for a building that turns. |
-| Owner | The player the building is for: one of the map's humans and computers. |
+| Tool | **Build**: a left click puts the building down about the mouse, for the owner; dragged, the next one goes where it no longer covers the last, so roads, walls and fields are dragged out. **Ship**: a left click puts a new, empty ship on the water. **Unit**: a left click puts a land unit on an island. **Remove**: a left click takes the ship or unit under the mouse away, else the building there, as its owner demolishes it. |
+| Group | The groups of the build menu (with the buildings packages add to it); not for ships and units. |
+| Building, Ship, Unit | The group's buildings by name; the four ships of the shipyards and the four land units of the castle, each followed by those packages add. |
+| Rotation | A quarter clockwise, for a building that turns; the way a ship or unit faces. |
+| Owner | The player the building, ship or unit is for: one of the map's humans and computers. |
 
 A building is placed as the game builds it, only without gold, goods, unlocked levels or limits
 (castle, cathedral, monuments): it needs its ground, the owner's land (a Kontor at the coast founds a
@@ -119,9 +119,15 @@ stand and red where not; a Kontor, shipyard, mill or mine finds the coast, river
 the mouse and turns to it. A refused click says why. A Kontor goes only once its city has nothing
 else, and its piers go with it.
 
+A ship goes on water ships sail on, with no other ship on the tiles about it; it is new as a
+shipyard launches it, at full strength with empty holds, and gets its name when a game of the map
+starts. A land unit goes on ground soldiers walk on (open ground, roads, squares, ruins), one to a
+tile, at full health. Orders of other ships and units that name a ship or unit taken away are
+forgotten with it.
+
 ## Cities
 
-A building clicked on the map, outside the pages Terrain and Buildings, shows its city's
+A building clicked on the map, outside the pages Terrain and Objects, shows its city's
 buttons on the Selection page, each change one step of undo:
 
 | Button | What it does |

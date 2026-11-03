@@ -11,6 +11,7 @@ add_library(o1602_editor
     src/operations.cpp
     src/original_check.cpp
     src/terrain.cpp
+    src/units.cpp
 )
 add_library(o1602::editor ALIAS o1602_editor)
 

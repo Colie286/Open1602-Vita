@@ -74,16 +74,19 @@ struct EditorTerrain {
     friend bool operator==(const EditorTerrain&, const EditorTerrain&) = default;
 };
 
-/// The settings of the buildings' tools (the page "Buildings").
+/// The settings of the objects' tools (the page "Objects").
 struct EditorObjects {
     /// Build: the building where clicked, for the owner, without costs (dragged, again where it no
-    /// longer covers the last); Remove: takes the building clicked away.
-    enum class Tool : std::uint8_t { Build, Remove };
-    static constexpr std::size_t kTools = 2;
+    /// longer covers the last); Ship, Unit: a ship on the water, a land unit on an island, for the
+    /// owner; Remove: takes the building, ship or unit clicked away.
+    enum class Tool : std::uint8_t { Build, Ship, Unit, Remove };
+    static constexpr std::size_t kTools = 4;
     Tool tool = Tool::Build;
     std::size_t group = 0;      ///< index into the build menu's categories that list buildings
     std::size_t piece = 0;      ///< index into the group's buildings
-    std::uint8_t rotation = 0;  ///< 0..3, a quarter clockwise each
+    std::size_t ship = 0;       ///< index into the ships (EditorModel::object_pieces while Ship)
+    std::size_t unit = 0;       ///< index into the land units (EditorModel::object_pieces while Unit)
+    std::uint8_t rotation = 0;  ///< 0..3, a quarter clockwise each; ships and units face 2 * rotation
     std::size_t owner = 0;      ///< index into the world's players
     friend bool operator==(const EditorObjects&, const EditorObjects&) = default;
 };
@@ -218,8 +221,9 @@ struct EditorModel {
     bool terrain_selected = false;
     std::uint32_t clip_width = 0;
     std::uint32_t clip_height = 0;
-    /// The buildings' tools: their settings, the groups and the buildings of the group, the
-    /// building chosen (its name, Windows-1252, and whether it turns) and the owner's name.
+    /// The objects' tools: their settings, the groups and the buildings of the group (or the ships,
+    /// the land units), the one chosen (its name, Windows-1252, and whether it turns) and the
+    /// owner's name.
     EditorObjects objects;
     std::size_t object_groups = 0;
     std::size_t object_pieces = 0;

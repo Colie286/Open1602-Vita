@@ -10,6 +10,7 @@
 #include "o1602/assets/cod_parser.hpp"
 #include "o1602/editor/cities.hpp"
 #include "o1602/editor/objects.hpp"
+#include "o1602/editor/units.hpp"
 #include "o1602/script/game_scripts.hpp"
 #include "o1602/sim/blueprints.hpp"
 #include "o1602/sim/construction.hpp"
@@ -1483,4 +1484,84 @@ TEST_CASE("construction: the editor renames a city, fills its stock and gives it
     (*taken)->revert(island.world);
     CHECK(island.world.city(0, city)->owner == 0);
     CHECK(island.world.islands()[0].map.top(5, 10).owner == 0);
+}
+
+TEST_CASE("construction: the editor puts ships on the water and units on land, and takes them away") {
+    Island island;
+    const assets::CodPredefinedSymbol types[] = {{"FIGUR", 1}};
+    const auto doc = assets::cod::parse(
+        "Objekt: FIGUR\n"
+        "  Nummer: 1\n  Kind: 1\n  Gfx: 0\n  Blocknr: 1\n  Speed: 260\n  Maxenergy: 20\n"
+        "  Nummer: 21\n  Gfx: 0\n  Blocknr: 2\n  Rotate: 1\n  Maxware: 4\n  Speed: 500\n  Maxenergy: 50\n"
+        "EndObj\n",
+        types);
+    auto figures = assets::FigureTable::from_cod(doc);
+    REQUIRE(figures.ok());
+    const sim::World before = island.world;
+    using editor::UnitRefusal;
+
+    // A ship on the open sea and on the sea inside the island's rectangle; not on land, not next
+    // to the ship that is there, not for nobody.
+    CHECK(editor::ship_fits(island.world, island.buildings, 3, 3) == UnitRefusal::None);
+    CHECK(editor::ship_fits(island.world, island.buildings, 11, 15) == UnitRefusal::None);
+    CHECK(editor::ship_fits(island.world, island.buildings, 20, 20) == UnitRefusal::NoWater);
+    CHECK(editor::ship_fits(island.world, island.buildings, 13, 21) == UnitRefusal::Taken);
+    CHECK(editor::ship_fits(island.world, island.buildings, -1, 3) == UnitRefusal::Outside);
+    CHECK(!editor::place_ship(island.world, island.buildings, *figures, 0, 21, 20, 20, 0).ok());
+    CHECK(!editor::place_ship(island.world, island.buildings, *figures, 5, 21, 3, 3, 0).ok());
+    CHECK(!editor::place_ship(island.world, island.buildings, *figures, 0, 1, 3, 3, 0).ok());  // a unit
+    auto ship = editor::place_ship(island.world, island.buildings, *figures, 1, 21, 3, 3, 6);
+    REQUIRE(ship.ok());
+    (*ship)->apply(island.world);
+    REQUIRE(island.world.ships().size() == 2);
+    const sim::Ship& placed = island.world.ships().back();
+    CHECK(placed.owner == 1);
+    CHECK(placed.x == 3);
+    CHECK(placed.y == 3);
+    CHECK(placed.direction == 6);
+    CHECK(placed.health == figures->get(21)->ship.max_health);
+    CHECK(placed.health > 0);
+    CHECK(placed.cargo.size() == 4);
+    CHECK(placed.name.empty());  // the game names it
+
+    // A unit on the island's ground; not on the sea, not on a tree, not on another.
+    CHECK(editor::unit_fits(island.world, island.buildings, 20, 20) == UnitRefusal::None);
+    CHECK(editor::unit_fits(island.world, island.buildings, 3, 3) == UnitRefusal::NoGround);
+    CHECK(editor::unit_fits(island.world, island.buildings, 31, 16) == UnitRefusal::NoGround);
+    CHECK(!editor::place_unit(island.world, island.buildings, *figures, 0, 21, 20, 20, 0).ok());  // a ship
+    auto unit = editor::place_unit(island.world, island.buildings, *figures, 0, 1, 20, 20, 2);
+    REQUIRE(unit.ok());
+    (*unit)->apply(island.world);
+    REQUIRE(island.world.soldiers().size() == 1);
+    const sim::Soldier soldier = island.world.soldiers().back();
+    CHECK(soldier.owner == 0);
+    CHECK(soldier.island == 0);
+    CHECK(soldier.health == figures->get(1)->combat.max_health);
+    CHECK(soldier.health > 0);
+    CHECK(soldier.direction == 2);
+    CHECK(soldier.pos_x / sim::kPosUnit == 20);
+    CHECK(editor::unit_fits(island.world, island.buildings, 20, 20) == UnitRefusal::Taken);
+
+    // Taken away, with the orders that name them.
+    const std::uint32_t ship_id = island.world.ships().back().id;
+    island.world.ships().front().target = sim::Target{sim::Target::Kind::Ship, 0, 0, 0, 0, ship_id, 0};
+    auto gone = editor::remove_ship(island.world, ship_id);
+    REQUIRE(gone.ok());
+    (*gone)->apply(island.world);
+    CHECK(island.world.ship(ship_id) == nullptr);
+    CHECK(island.world.ships().front().target.kind == sim::Target::Kind::None);
+    CHECK(!editor::remove_ship(island.world, ship_id).ok());
+    auto away = editor::remove_unit(island.world, soldier.id);
+    REQUIRE(away.ok());
+    (*away)->apply(island.world);
+    CHECK(island.world.soldiers().empty());
+    CHECK(!editor::remove_unit(island.world, soldier.id).ok());
+
+    // Undone, all of it.
+    (*away)->revert(island.world);
+    (*gone)->revert(island.world);
+    (*unit)->revert(island.world);
+    (*ship)->revert(island.world);
+    CHECK(island.world.ships().size() == before.ships().size());
+    CHECK(island.world.soldiers().empty());
 }

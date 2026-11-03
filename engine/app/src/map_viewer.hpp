@@ -368,6 +368,17 @@ private:
     bool editor_objects_stroke(std::optional<render::TilePos> tile, Stroke phase);
     /// The drag of the page "Buildings" ends: what it placed is one step of undo.
     void editor_end_objects();
+    /// The ships (Tool::Ship) or land units (Tool::Unit) the page "Objects" offers: their figures,
+    /// the original's first, then the packages'.
+    [[nodiscard]] std::vector<std::uint16_t> editor_figures(EditorObjects::Tool tool) const;
+    /// The figure chosen for the tool Ship or Unit, 0 for none.
+    [[nodiscard]] std::uint16_t editor_figure() const;
+    /// The chosen owner of the page "Objects", kNoPlayer without players.
+    [[nodiscard]] sim::PlayerId editor_object_owner() const;
+    /// A click of the tools Ship and Unit at the world tile (x, y): one step of undo, or a note why not.
+    void editor_place_figure(std::int64_t x, std::int64_t y);
+    /// A click of the tool Remove: the ship or unit under the mouse, else the building on `tile`.
+    void editor_remove_object(render::TilePos tile);
     /// The pipette at the world tile (x, y).
     void editor_pipette(std::uint32_t x, std::uint32_t y);
     /// The islands changed: what the viewer keeps of them is made anew (flags, minimap), and what

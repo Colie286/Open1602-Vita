@@ -21,6 +21,7 @@
 #include "o1602/core/text.hpp"
 #include "o1602/editor/islands.hpp"
 #include "o1602/editor/original_check.hpp"
+#include "o1602/editor/units.hpp"
 #include "o1602/render/world_renderer.hpp"
 #include "o1602/sim/construction.hpp"
 #include "o1602/sim/growth.hpp"
@@ -874,6 +875,9 @@ void MapViewer::editor_islands_changed() {
         return;
     }
     m_building_figures = render::collect_building_figures(m_state->world, m_buildings, m_figures);
+    // The land units as they stand now: the editor's world does not run, so nothing else draws
+    // or finds a unit placed, taken away or brought back by undo.
+    m_soldiers.reset(m_state->world, m_buildings, m_figures);
     m_camera.set_world_size(m_state->world.width(), m_state->world.height());
     if (m_hud) {
         m_hud->rebuild_minimap();
@@ -1290,7 +1294,16 @@ void MapViewer::draw_editor_marks() {
         !m_hud->covers(static_cast<std::int32_t>(m_input->mouse_x()), static_cast<std::int32_t>(m_input->mouse_y()))) {
         if (const auto tile = m_input->tile_at_mouse()) {
             const assets::BuildingType* b = editor_object_piece();
-            if (m_editor->objects.tool == EditorObjects::Tool::Remove || b == nullptr) {
+            const EditorObjects::Tool tool = m_editor->objects.tool;
+            if (tool == EditorObjects::Tool::Ship || tool == EditorObjects::Tool::Unit) {
+                // A ship or unit: its tile, green where it can go.
+                const bool fits =
+                    (tool == EditorObjects::Tool::Ship
+                         ? editor::ship_fits(world, m_buildings, tile->x, tile->y)
+                         : editor::unit_fits(world, m_buildings, tile->x, tile->y)) == editor::UnitRefusal::None;
+                outline(tile->x, tile->y, 1, 1,
+                        ui::rgb_ink(fits ? assets::Rgba{90, 230, 90, 255} : assets::Rgba{230, 60, 60, 255}));
+            } else if (tool == EditorObjects::Tool::Remove || b == nullptr) {
                 outline(tile->x, tile->y, 1, 1, ui::rgb_ink(assets::Rgba{250, 250, 250, 255}));
             } else {
                 std::uint32_t w = 1;
