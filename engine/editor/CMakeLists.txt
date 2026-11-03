@@ -3,6 +3,7 @@
 # checks of a scenario. No platform dependency, so tests and o1602-tool use it headless.
 
 add_library(o1602_editor
+    src/cities.cpp
     src/document.cpp
     src/history.cpp
     src/islands.cpp

@@ -174,36 +174,10 @@ std::optional<BuildingAt> Logistics::building_of(std::uint32_t production) const
 }
 
 void Logistics::update_storage() {
-    struct Storage {
-        std::uint32_t base = 0;
-        std::uint32_t count = 0;
-    };
-    std::unordered_map<const City*, Storage> storage;
-    for (std::uint32_t i = 0; i < m_world->productions().size(); ++i) {
-        const auto b = building_of(i);
-        if (!b || !is_storehouse(b->type->prod_kind)) {
-            continue;
-        }
-        const City* city = m_world->city(m_world->productions()[i].island, b->city);
-        if (city == nullptr) {
-            continue;
-        }
-        Storage& s = storage[city];
-        // Only standing markets and Kontors add room; a destroyed Kontor
-        // still gives its own (small) base.
-        if (!b->type->destroyed) {
-            ++s.count;
-        }
-        if (b->type->prod_kind != static_cast<std::int32_t>(ProductionKind::Markt)) {
-            s.base = std::max(s.base, b->type->max_stock);
-        }
-    }
+    const auto capacities = city_capacities(*m_world, *m_buildings);
     for (const City& c : m_world->cities()) {
-        City* city = m_world->city(c.island, c.index);
-        const auto it = storage.find(city);
-        city->capacity = it == storage.end()
-                             ? 0
-                             : it->second.base + (it->second.count > 0 ? it->second.count - 1 : 0) * kStorehouseRoom;
+        const auto it = capacities.find(std::uint32_t{c.island} << 8 | c.index);
+        m_world->city(c.island, c.index)->capacity = it == capacities.end() ? 0 : it->second;
     }
 }
 
@@ -2205,6 +2179,39 @@ core::Status Logistics::load(core::ByteReader& reader, std::uint16_t version) {
     m_stats = stats;
     m_hunt_calls.clear();
     return core::Ok{};
+}
+
+std::unordered_map<std::uint32_t, std::uint32_t> city_capacities(const World& world,
+                                                                 const assets::BuildingTable& buildings) {
+    struct Storage {
+        std::uint32_t base = 0;
+        std::uint32_t count = 0;
+    };
+    std::unordered_map<std::uint32_t, Storage> storage;
+    for (const Production& p : world.productions()) {
+        if (!p.used) {
+            continue;
+        }
+        const auto b = building_at(world, buildings, p.island, {p.x, p.y});
+        if (!b || b->origin.x != p.x || b->origin.y != p.y || !is_storehouse(b->type->prod_kind) ||
+            world.city(p.island, b->city) == nullptr) {
+            continue;
+        }
+        Storage& s = storage[std::uint32_t{p.island} << 8 | b->city];
+        // Only standing markets and Kontors add room; a destroyed Kontor
+        // still gives its own (small) base.
+        if (!b->type->destroyed) {
+            ++s.count;
+        }
+        if (b->type->prod_kind != static_cast<std::int32_t>(ProductionKind::Markt)) {
+            s.base = std::max(s.base, b->type->max_stock);
+        }
+    }
+    std::unordered_map<std::uint32_t, std::uint32_t> capacities;
+    for (const auto& [key, s] : storage) {
+        capacities[key] = s.base + (s.count > 0 ? s.count - 1 : 0) * kStorehouseRoom;
+    }
+    return capacities;
 }
 
 }  // namespace o1602::sim

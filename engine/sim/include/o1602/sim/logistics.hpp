@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -51,6 +52,11 @@ struct BuildingAt {
 
 /// Door of a building: its centre tile, or with Tuerflg the middle tile of one edge,
 /// which edge depending on the rotation.
+/// The room per ware of every city, in 1/32 t, keyed by (island << 8 | city number): the Maxlager of
+/// its Kontor plus 10 t for every further market or warehouse, as City::capacity holds it; a city
+/// without any has none listed.
+[[nodiscard]] std::unordered_map<std::uint32_t, std::uint32_t> city_capacities(const World& world,
+                                                                               const assets::BuildingTable& buildings);
 [[nodiscard]] TilePos door_tile(const BuildingAt& building) noexcept;
 /// Centre tile: origin + (size - 1) / 2.
 [[nodiscard]] TilePos centre_tile(const BuildingAt& building) noexcept;

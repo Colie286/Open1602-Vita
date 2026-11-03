@@ -427,6 +427,7 @@ EditorModel MapViewer::editor_model() const {
         }
     }
     editor_object_model(m);
+    editor_city_model(m);
     m.terrain_selected = m_editor->selection.has_value();
     m.clip_width = m_editor->clip.width;
     m.clip_height = m_editor->clip.height;
@@ -548,6 +549,11 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         case Kind::Objects:
             editor_objects_request(request);
             break;
+        case Kind::RenameCity:
+        case Kind::CityGoods:
+        case Kind::CityOwner:
+            editor_city_request(request);
+            break;
         case Kind::TerrainCopy: {
             const auto& sel = m_editor->selection;
             if (!sel) {
@@ -617,7 +623,8 @@ namespace {
 
 /// Whether the panel's page is about what is picked: the selection, or a selected island's fertility.
 bool shows_pick(EditorPanel::Page page) {
-    return page == EditorPanel::Page::Selection || page == EditorPanel::Page::Fertility;
+    return page == EditorPanel::Page::Selection || page == EditorPanel::Page::Fertility ||
+           page == EditorPanel::Page::CityName || page == EditorPanel::Page::CityGoods;
 }
 
 /// The note of why an island cannot be turned, copied or taken out; empty if it can.

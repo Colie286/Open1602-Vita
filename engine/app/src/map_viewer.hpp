@@ -350,6 +350,12 @@ private:
     [[nodiscard]] const assets::BuildingType* editor_object_piece() const;
     /// The page "Buildings" of the model: its settings, groups, building and owner.
     void editor_object_model(EditorModel& m) const;
+    /// The city of the building selected on the map, nullptr for none.
+    [[nodiscard]] const sim::City* editor_picked_city() const;
+    /// The selected building's city on the panel: its name, owner and stock.
+    void editor_city_model(EditorModel& m) const;
+    /// A city renamed, its stock or owner changed (EditorRequest RenameCity, CityGoods, CityOwner).
+    void editor_city_request(const EditorRequest& request);
     /// The buildings' tools' settings from the panel.
     void editor_objects_request(const EditorRequest& request);
     /// The order that places the chosen building about the world tile (x, y) for the chosen owner,

@@ -13,10 +13,12 @@
 #include "names.hpp"
 
 #include "o1602/assets/text_table.hpp"
+#include "o1602/editor/cities.hpp"
 #include "o1602/editor/objects.hpp"
 #include "o1602/editor/operations.hpp"
 #include "o1602/editor/terrain.hpp"
 #include "o1602/sim/construction.hpp"
+#include "o1602/sim/logistics.hpp"
 #include "o1602/ui/build_menu.hpp"
 #include "o1602/ui/localization.hpp"
 
@@ -117,6 +119,99 @@ void MapViewer::editor_object_model(EditorModel& m) const {
     if (!owners.empty()) {
         const sim::Player* p = m_editor->document.world().player(owners[m_editor->objects.owner % owners.size()]);
         m.object_owner = p != nullptr ? player_name(*p) : std::string("-");
+    }
+}
+
+const sim::City* MapViewer::editor_picked_city() const {
+    if (!m_editor || m_editor->pick.kind != EditorPick::Kind::Building) {
+        return nullptr;
+    }
+    const sim::World& world = m_editor->document.world();
+    const EditorPick& pick = m_editor->pick;
+    if (pick.island >= world.islands().size()) {
+        return nullptr;
+    }
+    const auto at = sim::building_at(world, m_buildings, pick.island,
+                                     {static_cast<std::int32_t>(pick.x), static_cast<std::int32_t>(pick.y)});
+    return at ? world.city(pick.island, at->city) : nullptr;
+}
+
+void MapViewer::editor_city_model(EditorModel& m) const {
+    const sim::City* c = editor_picked_city();
+    if (c == nullptr) {
+        return;
+    }
+    const sim::World& world = m_editor->document.world();
+    EditorCity city;
+    city.name = c->name;
+    const sim::Player* owner = world.player(c->owner);
+    city.owner = owner != nullptr ? player_name(*owner) : std::string("-");
+    const auto* panel = m_hud ? m_hud->editor_panel() : nullptr;
+    if (panel != nullptr && panel->page() != EditorPanel::Page::CityGoods &&
+        panel->page() != EditorPanel::Page::Selection) {
+        m.city = std::move(city);  // the stock only where it shows: its room takes a look at every building
+        return;
+    }
+    city.room = editor::city_room(world, m_buildings, c->island, c->index);
+    const assets::TextTable* texts = m_hud ? m_hud->texts() : nullptr;
+    const std::vector<std::string> names = texts != nullptr ? texts->section("WARE") : std::vector<std::string>{};
+    for (const std::uint8_t ware : world.goods().trade_wares()) {
+        EditorGood g;
+        g.ware = ware;
+        if (const assets::OwnGood* own = world.goods().own(ware)) {
+            g.name = own->name(ui::current_language());
+        } else {
+            g.name = ware < names.size() ? names[ware] : std::to_string(ware);
+        }
+        g.amount = ware < c->goods.size() ? c->goods[ware] : 0;
+        city.goods.push_back(std::move(g));
+    }
+    m.city = std::move(city);
+}
+
+void MapViewer::editor_city_request(const EditorRequest& request) {
+    const sim::City* c = editor_picked_city();
+    if (c == nullptr) {
+        return;
+    }
+    const sim::World& world = m_editor->document.world();
+    const std::uint16_t island = c->island;
+    const std::uint8_t index = c->index;
+    using Kind = EditorRequest::Kind;
+    if (request.kind == Kind::RenameCity) {
+        auto op = editor::rename_city(world, island, index, request.name);
+        if (!op) {
+            editor_notice(op.error().message, true, op.error().message);
+            return;
+        }
+        m_editor->document.perform(std::move(op).value());
+        editor_notice(ui::tr("editor.city.renamed", {request.name}), false, "city renamed");
+    } else if (request.kind == Kind::CityGoods) {
+        auto op = editor::set_city_goods(world, m_buildings, island, index, static_cast<std::uint8_t>(request.index),
+                                         request.amount);
+        if (op) {
+            m_editor->document.perform(std::move(op).value());
+            m_editor->notice.clear();
+        }
+    } else if (request.kind == Kind::CityOwner) {
+        // The next human or computer that can take the city, forward or back.
+        const auto owners = object_owners(world);
+        const auto now = std::find(owners.begin(), owners.end(), c->owner);
+        const std::size_t start = now == owners.end() ? 0 : static_cast<std::size_t>(now - owners.begin());
+        for (std::size_t step = 1; step < owners.size(); ++step) {
+            const std::size_t i =
+                request.index == 1 ? (start + step) % owners.size() : (start + owners.size() - step) % owners.size();
+            auto op = editor::change_city_owner(world, island, index, owners[i]);
+            if (op) {
+                m_editor->document.perform(std::move(op).value());
+                editor_islands_changed();
+                const sim::Player* p = m_editor->document.world().player(owners[i]);
+                editor_notice(ui::tr("editor.city.owner_changed", {p != nullptr ? player_name(*p) : std::string()}),
+                              false, "city owner changed");
+                return;
+            }
+        }
+        editor_notice(ui::tr("editor.city.no_owner"), true, "no player can take the city");
     }
 }
 

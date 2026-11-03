@@ -131,6 +131,22 @@ struct EditorCheckLine {
 enum class EditorOverlay : std::uint8_t { Owners, IslandNumbers, Coordinates };
 inline constexpr std::size_t kEditorOverlays = 3;
 
+/// A good in a city's warehouses (the page "Stock").
+struct EditorGood {
+    std::uint8_t ware = 0;
+    std::string name;          ///< Windows-1252
+    std::uint32_t amount = 0;  ///< 1/32 t
+};
+
+/// The city of the building selected on the map.
+struct EditorCity {
+    std::string name;   ///< Windows-1252
+    std::string owner;  ///< the owner's name, Windows-1252
+    /// Room per ware in 1/32 t (sim::City::capacity); 0: no Kontor, no stock.
+    std::uint32_t room = 0;
+    std::vector<EditorGood> goods;  ///< the world's trade goods in the order panels list them
+};
+
 /// What the panel shows; the viewer fills it every frame.
 struct EditorModel {
     std::string file;  ///< the document's name (Windows-1252), empty: a new map not saved yet
@@ -211,6 +227,8 @@ struct EditorModel {
     std::string object_name;
     bool object_turns = false;
     std::string object_owner;
+    /// The city of the building selected (the page "Selection"), its stock and owner.
+    std::optional<EditorCity> city;
 };
 
 /// What a click or a key asked for.
@@ -247,6 +265,9 @@ struct EditorRequest {
         TerrainTurn,        ///< the copy turned a quarter clockwise
         TerrainMirror,      ///< the copy mirrored left to right
         Objects,            ///< the buildings' tools set to `objects`
+        RenameCity,         ///< the selected building's city named `name`
+        CityGoods,          ///< the city's stock of ware `index` set to `amount` (1/32 t)
+        CityOwner,          ///< the city to the next owner (`index` 1) or the one before (0)
     };
     Kind kind = Kind::Close;
     std::size_t index = 0;
@@ -258,6 +279,7 @@ struct EditorRequest {
     std::uint32_t fertility = 0;  ///< SetFertility
     EditorTerrain terrain{};      ///< Terrain
     EditorObjects objects{};      ///< Objects
+    std::uint32_t amount = 0;     ///< CityGoods
 };
 
 class EditorPanel {
@@ -282,7 +304,9 @@ public:
         Fertility,
         IslandFiles,
         Terrain,
-        Objects
+        Objects,
+        CityName,
+        CityGoods
     };
 
     explicit EditorPanel(ui::FormStyle style = {}) : m_form(style) {}
@@ -308,7 +332,7 @@ public:
     /// The page "New map" with `map` offered.
     void ask_new(const EditorNewMap& map);
     /// A name is being typed: the keys go here.
-    [[nodiscard]] bool typing() const noexcept { return m_page == Page::SaveAs; }
+    [[nodiscard]] bool typing() const noexcept { return m_page == Page::SaveAs || m_page == Page::CityName; }
     [[nodiscard]] const std::string& text() const noexcept { return m_text; }
     [[nodiscard]] const EditorNewMap& new_map() const noexcept { return m_new; }
     [[nodiscard]] const EditorNewIsland& new_island() const noexcept { return m_island; }
@@ -350,6 +374,8 @@ private:
     void layout_fertility(const EditorModel& model);
     void layout_terrain(const EditorModel& model);
     void layout_objects(const EditorModel& model);
+    void layout_city_name(const EditorModel& model);
+    void layout_city_goods(const EditorModel& model);
     void layout_placeholder_actions(const EditorModel& model, std::int32_t& y);
     /// The buttons of an island selected: move, turn, copy, take out; or a note while placing.
     void layout_island_actions(const EditorModel& model, std::int32_t& y);

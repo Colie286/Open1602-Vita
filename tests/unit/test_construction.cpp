@@ -8,6 +8,7 @@
 #include "build_tool.hpp"
 
 #include "o1602/assets/cod_parser.hpp"
+#include "o1602/editor/cities.hpp"
 #include "o1602/editor/objects.hpp"
 #include "o1602/script/game_scripts.hpp"
 #include "o1602/sim/blueprints.hpp"
@@ -1434,4 +1435,52 @@ TEST_CASE("moving: the game setting, the command and the savegame") {
         REQUIRE(loaded->saved_rules().has_value());
         CHECK(loaded->saved_rules()->moving == moving);
     }
+}
+
+TEST_CASE("construction: the editor renames a city, fills its stock and gives it to another player") {
+    Island island;
+    sim::BuildOrder order;
+    order.player = 0;
+    order.island = 0;
+    order.items = {{kKontor, 5, 10, 0, 0}};
+    editor::PlacedBuildings kontor = editor::place_buildings(island.world, island.buildings, order, island.names);
+    REQUIRE(kontor.step != nullptr);
+    kontor.step->apply(island.world);
+    REQUIRE(island.world.cities().size() == 1);
+    const std::uint8_t city = island.world.cities()[0].index;
+
+    auto renamed = editor::rename_city(island.world, 0, city, "Neustadt");
+    REQUIRE(renamed.ok());
+    (*renamed)->apply(island.world);
+    CHECK(island.world.city(0, city)->name == "Neustadt");
+    (*renamed)->revert(island.world);
+    CHECK(island.world.city(0, city)->name == "Abemsberg");
+    CHECK(!editor::rename_city(island.world, 0, city, "").ok());
+    CHECK(!editor::rename_city(island.world, 0, city, std::string(41, 'a')).ok());
+    CHECK(!editor::rename_city(island.world, 0, 7, "Nirgends").ok());
+
+    // The stock up to the room the Kontor gives, as the game keeps it.
+    const std::uint32_t room = editor::city_room(island.world, island.buildings, 0, city);
+    REQUIRE(room > 0);
+    const std::uint8_t wood = island.buildings.materials().wood;
+    auto filled = editor::set_city_goods(island.world, island.buildings, 0, city, wood, room + 1000);
+    REQUIRE(filled.ok());
+    (*filled)->apply(island.world);
+    CHECK(island.world.city(0, city)->goods[wood] == room);
+    auto emptied = editor::set_city_goods(island.world, island.buildings, 0, city, wood, 0);
+    REQUIRE(emptied.ok());
+    (*emptied)->apply(island.world);
+    CHECK(island.world.city(0, city)->goods[wood] == 0);
+
+    // The city and its land to the computer; not to the same owner again.
+    auto taken = editor::change_city_owner(island.world, 0, city, 1);
+    REQUIRE(taken.ok());
+    (*taken)->apply(island.world);
+    CHECK(island.world.city(0, city)->owner == 1);
+    CHECK(island.world.islands()[0].map.top(5, 10).owner == 1);
+    CHECK(!editor::change_city_owner(island.world, 0, city, 1).ok());
+    CHECK(!editor::change_city_owner(island.world, 0, city, 9).ok());
+    (*taken)->revert(island.world);
+    CHECK(island.world.city(0, city)->owner == 0);
+    CHECK(island.world.islands()[0].map.top(5, 10).owner == 0);
 }

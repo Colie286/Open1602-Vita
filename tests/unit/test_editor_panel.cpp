@@ -742,3 +742,80 @@ TEST_CASE("editor panel: the kind of islands of a new map and the packages' clim
     CHECK(!click(panel, m, "South").has_value());
     CHECK(panel.new_island().climate == 0);
 }
+
+TEST_CASE("editor panel: a building's city is renamed, its stock filled and its owner changed") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(200, 560);
+    EditorModel m = document();
+    m.selection = "Kontor";
+    app::EditorCity city;
+    city.name = "Abemsberg";
+    city.owner = "Blue";
+    city.room = 30 * 32;
+    for (std::uint8_t w = 0; w < 30; ++w) {
+        city.goods.push_back(app::EditorGood{w, "Good " + std::to_string(w), w == 3 ? 25U * 32U : 0U});
+    }
+    m.city = city;
+    CHECK(panel.show_selection());
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Owner: Blue"));
+
+    // The owner: forward with the left button, back with the right.
+    auto r = click(panel, m, "Owner: Blue");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::CityOwner);
+    CHECK(r->index == 1);
+    r = click(panel, m, "Owner: Blue", ui::MouseButton::Right);
+    REQUIRE(r.has_value());
+    CHECK(r->index == 0);
+
+    // The name, typed over the old one; Enter renames, back on the selection.
+    CHECK(!click(panel, m, "Name").has_value());
+    CHECK(panel.page() == EditorPanel::Page::CityName);
+    CHECK(panel.typing());
+    CHECK(!panel.show_selection());  // a click on the map keeps the name being typed
+    panel.type("Neustadt");
+    r = panel.key(13);
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::RenameCity);
+    CHECK(r->name == "Neustadt");
+    CHECK(panel.page() == EditorPanel::Page::Selection);
+
+    // The stock: 10 t a click, 1 t a right click, within the room; the rows page.
+    CHECK(!click(panel, m, "Stock").has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::CityGoods);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Stock of Abemsberg"));
+    CHECK(says(panel, "25"));
+    std::vector<ui::Rect> more;
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        CHECK(w.rect.y + w.rect.h <= 760);
+        if (w.text == "+") {
+            more.push_back(w.rect);
+        }
+    }
+    REQUIRE(more.size() > 3);
+    const auto press = [&](const ui::Rect& at, ui::MouseButton button) {
+        const std::int32_t x = at.x + at.w / 2;
+        const std::int32_t y = at.y + at.h / 2;
+        (void)panel.mouse(x, y, true, m, button);
+        return panel.mouse(x, y, false, m, button);
+    };
+    r = press(more[3], ui::MouseButton::Left);
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::CityGoods);
+    CHECK(r->index == 3);
+    CHECK(r->amount == 30U * 32U);  // 25 t + 10 t, at most the room
+    r = press(more[0], ui::MouseButton::Right);
+    REQUIRE(r.has_value());
+    CHECK(r->index == 0);
+    CHECK(r->amount == 32U);
+    for (int page = 0; page < 5 && !says(panel, "Good 29"); ++page) {
+        CHECK(!click(panel, m, "More").has_value());
+        (void)panel.draw(m, kNoFonts);
+    }
+    CHECK(says(panel, "Good 29"));
+    CHECK(!click(panel, m, "Back to the selection").has_value());
+    CHECK(panel.page() == EditorPanel::Page::Selection);
+}

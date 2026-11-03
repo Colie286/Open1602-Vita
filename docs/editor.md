@@ -119,6 +119,17 @@ stand and red where not; a Kontor, shipyard, mill or mine finds the coast, river
 the mouse and turns to it. A refused click says why. A Kontor goes only once its city has nothing
 else, and its piers go with it.
 
+## Cities
+
+A building clicked on the map, outside the pages Terrain and Buildings, shows its city's
+buttons on the Selection page, each change one step of undo:
+
+| Button | What it does |
+|---|---|
+| Name | Types a new name for the city, up to 40 characters, as a player may give it. |
+| Stock | The city's trade goods with the tons in its warehouses: + and - change them by 10 t, with the right button by 1 t, up to the room its Kontor, markets and warehouses give (the game would lose what is above). |
+| Owner | Gives the city with all its land and buildings to the next human or computer (the right button: the one before), as when a player takes a city over; a player with a city on the island already is passed over. |
+
 ## Keys
 
 | Key | What it does |

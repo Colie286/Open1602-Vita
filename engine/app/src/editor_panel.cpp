@@ -6,6 +6,8 @@
 
 #include "o1602/assets/game_data.hpp"
 #include "o1602/sim/limits.hpp"
+#include "o1602/sim/simulation.hpp"
+#include "o1602/sim/world.hpp"
 #include "o1602/ui/localization.hpp"
 
 namespace o1602::app {
@@ -81,7 +83,14 @@ constexpr Id kObjectsRotation = 83;
 constexpr Id kObjectsOwner = 84;
 constexpr Id kFirstOverlay = 30;  ///< + EditorOverlay
 constexpr Id kLandscape = 85;
-constexpr Id kFirstRow = 100;  ///< + the row on the page
+constexpr Id kCityNamePage = 86;
+constexpr Id kCityGoodsPage = 87;
+constexpr Id kCityOwner = 88;
+constexpr Id kCitySelection = 89;      ///< back from a city's page to the selection
+constexpr Id kFirstGoodLess = 120;     ///< + the row on the page "Stock"
+constexpr Id kFirstGoodMore = 140;     ///< + the row on the page "Stock"
+constexpr std::size_t kGoodRows = 20;  ///< rows of the page "Stock" at most
+constexpr Id kFirstRow = 100;          ///< + the row on the page
 
 constexpr std::int32_t kX = 12;
 constexpr std::int32_t kW = EditorPanel::kWidth - 2 * kX;
@@ -220,7 +229,7 @@ void EditorPanel::ask_name(std::string_view name) {
 }
 
 bool EditorPanel::show_selection() noexcept {
-    if (m_page == Page::New || m_page == Page::Open || m_page == Page::SaveAs) {
+    if (m_page == Page::New || m_page == Page::Open || m_page == Page::SaveAs || m_page == Page::CityName) {
         return false;
     }
     m_page = Page::Selection;
@@ -285,6 +294,12 @@ void EditorPanel::layout(const EditorModel& model) {
             break;
         case Page::IslandFiles:
             layout_open(model);
+            break;
+        case Page::CityName:
+            layout_city_name(model);
+            break;
+        case Page::CityGoods:
+            layout_city_goods(model);
             break;
     }
 }
@@ -459,8 +474,8 @@ void EditorPanel::layout_selection(const EditorModel& model) {
     } else {
         f.paragraph(Rect{kX, y, kW, 2 * kLine}, model.selection, Tone::Normal, kLine);
         y += 2 * kLine + 4;
-        // Room for the buttons below: back, and an island's three rows.
-        const std::int32_t rows = model.island || model.placeholder ? 4 : 1;
+        // Room for the buttons below: back, and an island's three rows or a city's two.
+        const std::int32_t rows = model.island || model.placeholder ? 4 : model.city ? 3 : 1;
         const std::int32_t bottom = m_top + m_height - rows * (kButtonH + kGap) - kGap;
         for (const EditorProperty& p : model.properties) {
             if (y + kLine > bottom) {
@@ -474,9 +489,78 @@ void EditorPanel::layout_selection(const EditorModel& model) {
             layout_island_actions(model, y);
         } else if (model.placeholder) {
             layout_placeholder_actions(model, y);
+        } else if (model.city) {
+            const std::int32_t half = (kW - kGap) / 2;
+            f.button(kCityNamePage, Rect{kX, y, half, kButtonH}, ui::tr("editor.city.rename"));
+            f.button(kCityGoodsPage, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.city.stock"),
+                     model.city->room > 0);
+            y += kButtonH + kGap;
+            f.cycle_button(kCityOwner, Rect{kX, y, kW, kButtonH}, ui::tr("editor.city.owner", {model.city->owner}));
+            y += kButtonH + kGap;
         }
     }
     f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+}
+
+void EditorPanel::layout_city_name(const EditorModel& model) {
+    if (!model.city) {
+        m_page = Page::Selection;  // the city is gone (undone)
+        layout_selection(model);
+        return;
+    }
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.city.rename_title"), Align::Left, Tone::Heading);
+    y += 34;
+    f.label(Rect{kX, y, kW, kLine}, ui::tr("editor.city.name"));
+    y += kLine;
+    f.field(kField, Rect{kX, y, kW, 32}, m_text);
+    y += 38;
+    const bool valid = sim::valid_name(m_text, sim::CityOrder::kMaxNameLength);
+    const std::int32_t half = (kW - kGap) / 2;
+    f.button(kStore, Rect{kX, y, half, kButtonH}, ui::tr("editor.city.rename_ok"), valid);
+    f.button(kCitySelection, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
+}
+
+void EditorPanel::layout_city_goods(const EditorModel& model) {
+    if (!model.city || model.city->room == 0) {
+        m_page = Page::Selection;
+        layout_selection(model);
+        return;
+    }
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.city.stock_title", {model.city->name}), Align::Left, Tone::Heading);
+    y += 28;
+    f.paragraph(Rect{kX, y, kW, 3 * 20}, ui::tr("editor.city.room", {count(model.city->room / 32)}), Tone::Dim, 20);
+    y += 3 * 20 + 4;
+    // As many rows as fit above the buttons below: back, and the pages.
+    constexpr std::int32_t kGoodH = 26;
+    const std::int32_t bottom = m_top + m_height - 2 * (kButtonH + kGap) - kGap;
+    const std::size_t n = model.city->goods.size();
+    const auto fit = static_cast<std::size_t>(std::max<std::int32_t>(1, (bottom - y) / kGoodH));
+    m_page_rows = std::min({fit, kGoodRows, std::max<std::size_t>(n, 1)});
+    m_first = std::min(m_first, n > m_page_rows ? n - m_page_rows : 0);
+    constexpr std::int32_t kStep = 28;
+    for (std::size_t row = 0; row < m_page_rows && m_first + row < n; ++row) {
+        const EditorGood& g = model.city->goods[m_first + row];
+        const auto id = static_cast<Id>(row);
+        constexpr std::int32_t kAmount = 40;  // "999" (tons, as the hint says) in the panel's font
+        f.label(Rect{kX, y, kW - 2 * kStep - kAmount - 4, kGoodH - 2}, g.name);
+        f.label(Rect{kX + kW - 2 * kStep - kAmount - 4, y, kAmount, kGoodH - 2},
+                ui::tr("editor.city.tons", {count(g.amount / 32)}), Align::Right);
+        // Cycle buttons: the right button takes a ton.
+        f.cycle_button(kFirstGoodLess + id, Rect{kX + kW - 2 * kStep - 2, y, kStep, kGoodH - 2}, "-", g.amount > 0);
+        f.cycle_button(kFirstGoodMore + id, Rect{kX + kW - kStep, y, kStep, kGoodH - 2}, "+",
+                       g.amount < model.city->room);
+        y += kGoodH;
+    }
+    y += 4;
+    const std::int32_t half = (kW - kGap) / 2;
+    f.button(kPrevious, Rect{kX, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
+    f.button(kNext, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.next"), m_first + m_page_rows < n);
+    y += kButtonH + kGap;
+    f.button(kCitySelection, Rect{kX, y, kW, kButtonH}, ui::tr("editor.city.back"));
 }
 
 void EditorPanel::layout_island_actions(const EditorModel& model, std::int32_t& y) {
@@ -801,6 +885,16 @@ std::vector<ui::DrawItem> EditorPanel::draw(const EditorModel& model,
 }
 
 std::optional<EditorRequest> EditorPanel::commit_name() {
+    if (m_page == Page::CityName) {
+        if (!sim::valid_name(m_text, sim::CityOrder::kMaxNameLength)) {
+            return std::nullopt;
+        }
+        m_page = Page::Selection;
+        m_form.set_focus(std::nullopt);
+        EditorRequest r{EditorRequest::Kind::RenameCity};
+        r.name = m_text;
+        return r;
+    }
     std::string name = clean_name(m_text);
     if (name.empty()) {
         return std::nullopt;
@@ -1044,14 +1138,35 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
         }
         case kStore:
             return commit_name();
+        case kCityNamePage:
+            if (model.city) {
+                m_page = Page::CityName;
+                m_text = model.city->name;
+                m_form.set_focus(kField);
+                m_form.select_all();
+            }
+            return std::nullopt;
+        case kCityGoodsPage:
+            m_page = Page::CityGoods;
+            m_first = 0;
+            return std::nullopt;
+        case kCitySelection:
+            m_page = Page::Selection;
+            m_form.set_focus(std::nullopt);
+            return std::nullopt;
+        case kCityOwner: {
+            EditorRequest r{EditorRequest::Kind::CityOwner};
+            r.index = forward ? 1 : 0;
+            return r;
+        }
         case kPrevious: {
-            // The check list goes back by the lines its page shows (they differ in height).
-            const std::size_t rows = m_page == Page::Check ? m_page_rows : kRows;
+            // The check list and the stock go back by the lines their page shows.
+            const std::size_t rows = m_page == Page::Check || m_page == Page::CityGoods ? m_page_rows : kRows;
             m_first = m_first > rows ? m_first - rows : 0;
             return std::nullopt;
         }
         case kNext:
-            m_first += m_page == Page::Check ? m_page_rows : kRows;
+            m_first += m_page == Page::Check || m_page == Page::CityGoods ? m_page_rows : kRows;
             return std::nullopt;
         default:
             break;
@@ -1064,6 +1179,22 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
         EditorRequest r{EditorRequest::Kind::SetFertility};
         r.index = *model.island;
         r.fertility = model.island_fertility ^ (1U << (kCropWares[i] - assets::ware::kCornField));
+        return r;
+    }
+    if (*id >= kFirstGoodLess && *id < kFirstGoodMore + static_cast<Id>(kGoodRows) && model.city) {
+        // Left 10 t, right 1 t; within the city's room.
+        const bool more = *id >= kFirstGoodMore;
+        const std::size_t i = m_first + static_cast<std::size_t>(*id - (more ? kFirstGoodMore : kFirstGoodLess));
+        if (i >= model.city->goods.size()) {
+            return std::nullopt;
+        }
+        const EditorGood& g = model.city->goods[i];
+        const std::uint32_t step = forward ? 10 * 32 : 32;
+        EditorRequest r{EditorRequest::Kind::CityGoods};
+        r.index = g.ware;
+        // Down to whole tons, then by steps.
+        r.amount = more ? std::min(model.city->room, (g.amount / step + 1) * step)
+                        : (g.amount % step != 0 ? g.amount / step * step : g.amount - std::min(g.amount, step));
         return r;
     }
     if (*id >= kFirstOverlay && *id < kFirstOverlay + static_cast<Id>(kEditorOverlays)) {
@@ -1129,7 +1260,12 @@ std::optional<EditorRequest> EditorPanel::key(int key) {
         case 13:
             return commit_name();
         case 27:
-            show_document();
+            if (m_page == Page::CityName) {
+                m_page = Page::Selection;
+                m_form.set_focus(std::nullopt);
+            } else {
+                show_document();
+            }
             return std::nullopt;
         default:
             return std::nullopt;
