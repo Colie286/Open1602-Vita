@@ -92,6 +92,10 @@ struct DrawCommand {
         /// The sprite's colours times `tint` (r, g, b / 255), drawn with opacity `tint.a`, so
         /// that the ground shows through: Open1602's blueprints.
         Tinted,
+        /// The sprite as it is, with every second pixel of its shape (hatch_pixel, on the
+        /// world's pixels) in the solid colour `tint`: a building being placed, as the original
+        /// shows it.
+        Checkered,
     };
 
     std::uint32_t sprite = 0;

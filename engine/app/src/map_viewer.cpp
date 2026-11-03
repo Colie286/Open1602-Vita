@@ -1481,6 +1481,14 @@ void MapViewer::render() {
         m_sprite_tints.colour = kBlueprintTint;
         m_sprite_tints.tiles.clear();
         layers.sprite_tints = &m_sprite_tints;
+        m_sprite_checker.colour = render::kDragHatch;
+        m_sprite_checker.tiles.clear();
+        layers.sprite_checker = &m_sprite_checker;
+        // A tile of an island whose building is being placed: checkered yellow, as in the original.
+        const auto checker = [&](std::uint16_t island, std::uint32_t x, std::uint32_t y) {
+            const sim::WorldIsland& isl = m_state->world.islands()[island];
+            m_sprite_checker.tiles.emplace_back(isl.x + x, isl.y + y);
+        };
         // A tile of an island whose building is drawn as a blueprint: translucent, on blue ground.
         const auto tint = [&](std::uint16_t island, std::uint32_t x, std::uint32_t y) {
             const sim::WorldIsland& isl = m_state->world.islands()[island];
@@ -1549,13 +1557,12 @@ void MapViewer::render() {
                         }
                         // Ground that cannot be built on is checkered yellow, as in the original and the
                         // History Edition, and drawn over the buildings so that none hides it. A
-                        // building that can go there is checkered yellow too, over its ground, as
-                        // the History Edition shows it (blueprints have their own colour); one short
-                        // of means only while it shows.
+                        // building that can go there is shown with every second pixel of its picture
+                        // yellow, roof included, as the original shows it (blueprints have their own
+                        // colour); one short of means only while it shows.
                         std::uint32_t w = 1;
                         std::uint32_t h = 1;
                         sim::rotated_size(*item.type, item.rotation, w, h);
-                        const bool shown_ghost = !blueprint && (item.ok() || (short_of_means && !blink_off));
                         bool inside = true;
                         for (std::uint32_t j = 0; j < h; ++j) {
                             for (std::uint32_t i = 0; i < w; ++i) {
@@ -1565,7 +1572,7 @@ void MapViewer::render() {
                                     inside = false;
                                     continue;
                                 }
-                                if ((!item.ok() && !short_of_means) || shown_ghost) {
+                                if (!item.ok() && !short_of_means) {
                                     render::TileMark mark{order->island, static_cast<std::uint16_t>(tx),
                                                           static_cast<std::uint16_t>(ty), render::kDragHatch};
                                     mark.hatched = true;
@@ -1584,6 +1591,8 @@ void MapViewer::render() {
                                 saved.push_back(Saved{order->island, tx, ty, map.top(tx, ty)});
                                 if (blueprint) {
                                     tint(order->island, tx, ty);  // what becomes a blueprint, in its colour
+                                } else {
+                                    checker(order->island, tx, ty);
                                 }
                             }
                         }
@@ -1830,6 +1839,7 @@ void MapViewer::render() {
             }
         }
         std::sort(m_sprite_tints.tiles.begin(), m_sprite_tints.tiles.end());
+        std::sort(m_sprite_checker.tiles.begin(), m_sprite_checker.tiles.end());
         render::build_world_draw_list(m_state->world, m_buildings, m_clock, m_camera.view(), m_camera.viewport(),
                                       layers, m_commands, m_draw_scratch);
         if (terrain_preview) {
@@ -4267,6 +4277,10 @@ void MapViewer::preview_move(const BuildTool::Spot& spot,
         for (std::uint32_t j = 0; j < h; ++j) {
             for (std::uint32_t i = 0; i < w; ++i) {
                 keep(order->island, static_cast<std::uint32_t>(item.x) + i, static_cast<std::uint32_t>(item.y) + j);
+                // Checkered yellow at its new place, as a building being placed.
+                const sim::WorldIsland& isl = world.islands()[order->island];
+                m_sprite_checker.tiles.emplace_back(isl.x + static_cast<std::uint32_t>(item.x) + i,
+                                                    isl.y + static_cast<std::uint32_t>(item.y) + j);
             }
         }
         const sim::MapCell at = map.top(static_cast<std::uint32_t>(item.x), static_cast<std::uint32_t>(item.y));

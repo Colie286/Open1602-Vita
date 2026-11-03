@@ -396,6 +396,9 @@ struct WorldLayers {
     const TileLighting* lighting = nullptr;
     /// Tiles whose buildings are drawn tinted (blueprints).
     const SpriteTints* sprite_tints = nullptr;
+    /// Tiles whose buildings are drawn checkered in `colour` (DrawCommand::Mode::Checkered): a
+    /// building being placed. Only the colour's r, g, b count.
+    const SpriteTints* sprite_checker = nullptr;
     /// Flags, smoke and status icons of buildings (collect_building_figures). Smoke and icons need
     /// the atlas bases of their sheets (`sheet_base`) and follow the buildings' production state.
     const std::vector<BuildingFigure>* building_figures = nullptr;

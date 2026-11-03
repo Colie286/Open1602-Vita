@@ -783,6 +783,7 @@ private:
     std::unique_ptr<MapInput> m_input;
     std::vector<render::TileMark> m_tile_marks;  ///< red ground under what cannot be built, a dragged field
     render::SpriteTints m_sprite_tints;          ///< the blueprints and the blueprint preview, this frame
+    render::SpriteTints m_sprite_checker;        ///< buildings being placed or moved, this frame
     render::TileLighting m_lighting;             ///< tiles drawn darker this frame
     /// The circles of the clicked building (catchment_circles), kept while the selection and the
     /// buildings stay the same: for a type without production entries (towers) they come from a

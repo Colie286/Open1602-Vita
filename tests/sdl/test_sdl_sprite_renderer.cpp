@@ -139,6 +139,33 @@ TEST_CASE("sdl sprite renderer: shadows, translucent and dimmed sprites blend wi
     CHECK(test::near(canvas.at(20, 3), assets::Rgba{25, 0, 0, 255}));    // the sprite at half brightness
 }
 
+TEST_CASE("sdl sprite renderer: a checkered sprite keeps its shape and is partly in the colour") {
+    test::Canvas canvas(32, 32);
+    const auto atlas = test_atlas();
+    render::SdlSpriteRenderer renderer(canvas.renderer());
+    REQUIRE(renderer.upload(atlas).ok());
+    canvas.clear(kBackground);
+    auto ghost = sprite(0, 4, 8);  // 4 x 3 pixels at (4, 5) - (8, 8)
+    ghost.mode = render::DrawCommand::Mode::Checkered;
+    ghost.tint = assets::Rgba{255, 255, 0, 255};
+    CHECK(renderer.draw({ghost}, 0, 0, 1) == 1);
+    canvas.read();
+    // Where the renderer has render targets, every second pixel is yellow; otherwise the whole
+    // sprite is tinted towards it. Either way nothing around it changes.
+    int changed = 0;
+    for (int y = 5; y < 8; ++y) {
+        for (int x = 4; x < 8; ++x) {
+            CHECK(canvas.at(x, y) != kBackground);
+            changed += canvas.at(x, y) != kRed50 ? 1 : 0;
+        }
+    }
+    CHECK(changed > 0);
+    CHECK(canvas.at(3, 6) == kBackground);
+    CHECK(canvas.at(8, 6) == kBackground);
+    CHECK(canvas.at(5, 4) == kBackground);
+    CHECK(canvas.at(5, 8) == kBackground);
+}
+
 TEST_CASE("sdl sprite renderer: an overlay diamond fills the tile in its colour, not its corners") {
     test::Canvas canvas(64, 40);
     const auto atlas = test_atlas();

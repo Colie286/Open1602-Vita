@@ -42,6 +42,10 @@ private:
 
     void release();
     void flush(std::uint16_t page);
+    /// The checker of a DrawCommand::Mode::Checkered sprite, over the sprite already drawn:
+    /// built in m_checker from m_checker_pattern masked by the sprite's shape, then drawn at
+    /// (x0, y0) - (x1, y1). False where the renderer cannot (no render targets or blend mode).
+    bool draw_checker(const DrawCommand& c, std::int32_t height, float x0, float y0, float x1, float y1);
 
     SDL_Renderer* m_renderer;
     const SpriteAtlas* m_atlas = nullptr;
@@ -51,6 +55,11 @@ private:
     static constexpr int kHatchWidth = 65;
     static constexpr int kHatchHeight = 32;
     SDL_Texture* m_hatch = nullptr;
+    /// For Mode::Checkered: a white checkerboard as large as the largest sprite and a column more
+    /// (hatch_pixel), and the render target the checker of one sprite is put together in.
+    SDL_Texture* m_checker_pattern = nullptr;
+    SDL_Texture* m_checker = nullptr;
+    bool m_checker_failed = false;
     std::vector<SDL_Vertex> m_vertices;
     std::vector<int> m_indices;
     std::size_t m_batches = 0;

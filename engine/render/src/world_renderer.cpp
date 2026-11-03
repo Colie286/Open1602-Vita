@@ -1466,6 +1466,15 @@ void build_world_draw_list(const sim::World& world, const assets::BuildingTable&
                 }
                 commands.insert(commands.end(), drawn.parts.begin(), drawn.parts.begin() + drawn.count);
                 dim();
+                if (layers.sprite_checker != nullptr && layers.sprite_checker->contains(wx, wy)) {
+                    for (std::size_t k = first; k < commands.size(); ++k) {
+                        DrawCommand& c = commands[k];
+                        if (c.mode == DrawCommand::Mode::Normal || c.mode == DrawCommand::Mode::Dimmed) {
+                            c.mode = DrawCommand::Mode::Checkered;
+                            c.tint = layers.sprite_checker->colour;
+                        }
+                    }
+                }
                 if (layers.sprite_tints != nullptr && layers.sprite_tints->contains(wx, wy)) {
                     const assets::Rgba t = layers.sprite_tints->colour;
                     for (std::size_t k = first; k < commands.size(); ++k) {

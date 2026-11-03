@@ -264,6 +264,7 @@ void blit_draw_list(const std::vector<DrawCommand>& commands, const SpriteAtlas&
         const bool translucent = c.mode == DrawCommand::Mode::Translucent;
         const bool dimmed = c.mode == DrawCommand::Mode::Dimmed;
         const bool tinted = c.mode == DrawCommand::Mode::Tinted;
+        const bool checkered = c.mode == DrawCommand::Mode::Checkered;
         const std::uint32_t alpha = c.tint.a;
         for (std::int32_t y = y0; y < y1; ++y) {
             const std::uint8_t* src = &page[((std::size_t{r.y} + static_cast<std::size_t>(y)) * ps + r.x) * 4];
@@ -292,6 +293,11 @@ void blit_draw_list(const std::vector<DrawCommand>& commands, const SpriteAtlas&
                     d[0] = static_cast<std::uint8_t>(s[0] * c.tint.r / 255);
                     d[1] = static_cast<std::uint8_t>(s[1] * c.tint.g / 255);
                     d[2] = static_cast<std::uint8_t>(s[2] * c.tint.b / 255);
+                    d[3] = s[3];
+                } else if (checkered && hatch_pixel(c.x + x, c.y - r.height + y)) {
+                    d[0] = c.tint.r;
+                    d[1] = c.tint.g;
+                    d[2] = c.tint.b;
                     d[3] = s[3];
                 } else {
                     std::copy_n(s, 4, d);

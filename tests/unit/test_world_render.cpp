@@ -765,6 +765,43 @@ TEST_CASE("sprite atlas: packs sprites without overlap, splits pages, blits back
         }
         CHECK(lit == 40);
     }
+
+    // A building being placed: its picture with every second pixel of its shape in the colour,
+    // on the world's checkerboard, wherever the target's origin is; nothing around it.
+    for (const std::int32_t origin : {0, 1}) {
+        render::RgbaImage ghost;
+        ghost.width = 8;
+        ghost.height = 8;
+        ghost.pixels.assign(8 * 8 * 4, 0);
+        render::DrawCommand c{2, 1 + origin, 7 + origin, render::kDragHatch};
+        c.mode = render::DrawCommand::Mode::Checkered;
+        render::blit_draw_list({c}, *atlas, ghost, origin, origin);
+        int yellow = 0;
+        int own = 0;
+        for (std::int32_t y = 0; y < 8; ++y) {
+            for (std::int32_t x = 0; x < 8; ++x) {
+                const std::uint8_t* p = &ghost.pixels[static_cast<std::size_t>(y * 8 + x) * 4];
+                const bool in_sprite = x >= 1 && x < 7 && y >= 1 && y < 7;
+                if (!in_sprite) {
+                    CHECK(p[3] == 0);
+                    continue;
+                }
+                const bool lit = render::hatch_pixel(x + origin, y + origin);
+                if (lit) {
+                    CHECK(p[0] == 202);
+                    CHECK(p[1] == 172);
+                    CHECK(p[2] == 52);
+                    ++yellow;
+                } else {
+                    CHECK(p[0] == 32 + (x - 1) + (y - 1));  // sprite 2's own pixel
+                    ++own;
+                }
+                CHECK(p[3] == 255);
+            }
+        }
+        CHECK(yellow == 18);
+        CHECK(own == 18);
+    }
 }
 
 TEST_CASE("camera: world_tile_at inverts world_tile_center for all zooms and rotations") {
