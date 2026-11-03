@@ -7,7 +7,7 @@ ADR 0007 tracks the same items from the code's side.
 
 ## Summary
 
-State on 2026-11-01. The details of each item follow under [Open items](#open-items).
+State on 2026-11-03. The details of each item follow under [Open items](#open-items).
 
 ### Done
 
@@ -17,7 +17,7 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 | 2. Content | change 16 values of the original's buildings and 10 of its figures; add buildings and figures of its own, each copying one of the original, and replace another package's building; soldiers that castles train and ships that shipyards build, which computers train and build too |
 | 3. Goods, classes, levels | add trade goods, change the original's classes and add up to eight in all with their needs and public buildings, change and add unlock levels with messages of their own |
 | 4. Graphics and sound | PNG images for buildings, figures, ships and icons; music and sounds as WAV, Ogg Vorbis or FLAC for messages, buildings and figures; Smacker and Bink 2 videos for messages |
-| 5. Computer players | they build the chains of a package's goods; they train soldiers and build ships of packages; their stage orders, public buildings, producers (building, tries, crop, what they wait for, what counts), cheat amounts, when a city moves on and the crop of their first colony are data |
+| 5. Computer players | they build the chains of a package's goods; they train soldiers and build ships of packages; their stage orders, public buildings, producers (building, tries, crop, what they wait for, what counts), cheat amounts, when a city moves on and the crop of their first colony are data; the 55 slots of a city record are named and changed by `slots.toml`, with up to 50 public buildings of a kind of their own that classes need and the computers build |
 | 6. Lua scripts | a sandboxed Lua 5.4 script per package that hears what happens and reads and changes the game (money, goods, missions, buildings, ships, land units, diplomacy, who wins) |
 | 7. Scenarios and campaigns | scenarios with maps, briefings, goals and scripts; campaigns of up to five parts that carry money and a script table on |
 | 8. Factions | factions of a package's own that take the base game's slots, and settlers or pirates left wholly to a script |
@@ -28,7 +28,6 @@ State on 2026-11-01. The details of each item follow under [Open items](#open-it
 | Item | What is missing | Size |
 |---|---|---|
 | 4 | videos in a modern format (today only Smacker and Bink 2) | medium: a decoder in `third_party` (e.g. a royalty-free format such as AV1 or VP9 in WebM) |
-| 5 | the 55 fixed slots of a city record as data (owner's wish of 2026-11-03, after item 9): total conversions that carry none of the original's slots, public buildings of a package's own kind that the computers plan, goods that count as food or alcohol for the stages, and the rules tied to single slots (weaving, quarries per stonemason, smelters, market, Kontor, towers) | large: slots named, numbered per game, the mapping kept in the savegame |
 
 ### Smaller adjustments
 
@@ -48,7 +47,7 @@ the **first page for modders**, [README.md](README.md); and the **package check*
 `o1602-tool check-mod <mods folder>`, which reads the packages as the game does and lists every
 problem without starting the game.
 
-- Next item to work on: the 55 fixed slots of a city record as data (item 5, the owner's wish).
+- Next item to work on: videos in a modern format (item 4), the last open one.
 
 ## What a mod can do today
 
@@ -91,6 +90,7 @@ the game besides (sections `FACT` and `BALA`), so every computer plays the host'
 | `scenarios.toml` | scenarios of the package's own: map, names, briefing, stars, money, goals, script | [scenarios.md](scenarios.md) |
 | `campaigns.toml` | campaigns of the package's scenarios, with money and a script table carried from part to part | [scenarios.md](scenarios.md#campaigns) |
 | `computers.toml` | the order in which computer players build in each stage, with their public buildings | [computer-players.md](computer-players.md#in-which-order) |
+| `slots.toml` | the slots of the computers' cities: their rules, removed slots, goods that count as food or alcohol, public buildings of a kind of their own | [computer-players.md](computer-players.md#the-slots) |
 | `script.lua` | a Lua script of the package, run in a sandbox every tick | [scripts.md](scripts.md) |
 
 Without a mod file the engine already has banners with tinted flags for any number of players

@@ -1,4 +1,8 @@
-# Build orders of the computer players (computer-players.md): the aristocrats also build a theatre.
+# Build orders of the computer players (computer-players.md): the merchants build the court of
+# slots.toml, the aristocrats also a theatre.
+[merchants]
+append = "court 1 covered"
+
 [aristocrats]
 append = "theatre 1"
 

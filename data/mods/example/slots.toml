@@ -1,0 +1,9 @@
+# Slots of the computers' cities (computer-players.md, "The slots"): the computers build a court
+# where 8 houses lack one, and a church already where 6 houses lack one.
+[court]
+kind = "public"
+building = "example:court"
+min_houses = 8
+
+[church]
+min_houses = 6

@@ -13,3 +13,10 @@ like = "anno1602:watchtower"
 gfx = "example:lighthouse"
 build_sound = "example:horn"
 level = "example:harbour"
+
+# A court: the chapel's values and a public service of its own kind, which the merchants need and
+# the computers build (slots.toml).
+[court]
+like = "anno1602:chapel"
+gfx = "example:court"
+service = true

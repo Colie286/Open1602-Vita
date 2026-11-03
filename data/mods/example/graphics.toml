@@ -8,3 +8,9 @@ height = 128
 image = "gfx/cog.png"         # 48 sprites of 64 x 64 pixels: the ship's 8 directions in each of its frames
 width = 64
 height = 64
+
+[court]
+image = "gfx/court.png"       # 16 sprites of 64 x 64 pixels, as many as the chapel it copies draws
+width = 64
+height = 64
+count = 16

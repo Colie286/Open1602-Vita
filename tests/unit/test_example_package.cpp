@@ -20,9 +20,11 @@
 #include "o1602/assets/game_content.hpp"
 #include "o1602/assets/game_directory.hpp"
 #include "o1602/assets/package_scenarios.hpp"
+#include "o1602/assets/resident_classes.hpp"
 #include "o1602/core/file.hpp"
 #include "o1602/script/game_scripts.hpp"
 #include "o1602/sim/climates.hpp"
+#include "o1602/sim/computer_slots.hpp"
 #include "o1602/sim/package_islands.hpp"
 #include "o1602/sim/world.hpp"
 #include "o1602/ui/build_menu.hpp"
@@ -60,7 +62,7 @@ TEST_CASE("the example package has every file a package can have") {
           "buildings.toml", "figures.toml",    "computers.toml",  "own_buildings.toml", "own_figures.toml",
           "goods.toml",     "classes.toml",    "levels.toml",     "script.lua",         "scenarios.toml",
           "campaigns.toml", "graphics.toml",   "icons.toml",      "figure_images.toml", "music.toml",
-          "sounds.toml",    "landscapes.toml", "climates.toml"}) {
+          "sounds.toml",    "landscapes.toml", "climates.toml",   "slots.toml"}) {
         if (!fs::is_regular_file(kMods / "example" / name)) {
             std::fprintf(stderr, "missing: %s\n", name);
             CHECK(false);
@@ -129,7 +131,14 @@ TEST_CASE("data: the example package loads without a warning") {
     REQUIRE(packages.size() == 1);
     const IconsInUse icons(app::load_package_icons(packages, problems));
     const app::ModRules rules = app::load_mod_rules(packages, *buildings, *figures, problems);
-    CHECK(rules.own.size() == 2);
+    CHECK(rules.own.size() == 3);
+    const sim::ComputerSlot* court = sim::find_computer_slot(rules.balance.computer_slots, "court");
+    REQUIRE(court != nullptr);
+    CHECK(court->kind == sim::ComputerSlot::Kind::Public);
+    CHECK(court->service == assets::public_building::own(0));
+    REQUIRE(rules.classes.size() > 3);
+    REQUIRE(rules.classes[3].public_needs.has_value());
+    CHECK((rules.classes[3].public_needs->back() & assets::public_building::own(0)) != 0);
     CHECK(rules.goods.own_goods().size() == 1);
     CHECK(rules.balance.climates.size() == 1);  // its forest of the original's trees
     REQUIRE(rules.balance.computer_producers.size() == 1);

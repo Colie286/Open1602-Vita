@@ -1,3 +1,4 @@
-# Classes of inhabitants (classes.md): the merchants want pepper too.
+# Classes of inhabitants (classes.md): the merchants want pepper too, and a court in reach.
 ["anno1602:merchants"]
 need."example:pepper" = 400
+public = "market, tavern, church, school | college, bathhouse, example:court"
