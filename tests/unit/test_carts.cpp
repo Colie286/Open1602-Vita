@@ -192,6 +192,21 @@ TEST_CASE("ships: a new ship's name passes over the names ships have already") {
     CHECK((b == "Beteigeuze" || b == "Capella"));
 }
 
+TEST_CASE("ships: a trader's ship a map put there gets a name at the start, as the players' do") {
+    Land land;
+    std::vector<sim::Player> players = land.world.players();
+    players.resize(3);
+    sim::make_neutral(players[2], sim::faction::kTrader);
+    land.world.set_players(players);
+    sim::Fleet fleet(land.world, land.buildings, land.figures, land.rules);
+    fleet.set_ship_names({"Altair"});
+    sim::Ship trader = sim::make_ship("", 6, 5, assets::figure::kTrader, 2);
+    trader.trader = true;
+    land.world.add_ship(std::move(trader));
+    fleet.name_unnamed_ships();
+    CHECK(land.world.ships().back().name == "Altair");
+}
+
 TEST_CASE("carts: asked for in a market's window, the cart comes out of that market") {
     // The market at island (12, 4), world (22, 14): its middle is world (23, 15).
     Land land;

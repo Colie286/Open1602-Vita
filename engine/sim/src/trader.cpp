@@ -509,8 +509,11 @@ void Fleet::name_unnamed_ships() {
     }
     for (Ship& ship : m_world->ships()) {
         const Player* owner = m_world->player(ship.owner);
+        // The players' ships, and the trader's and pirates' a map put there (those the game sends
+        // are named when they come).
         if (ship.name.empty() && !ship.cart() && owner != nullptr &&
-            (owner->role == PlayerRole::Human || owner->role == PlayerRole::Computer)) {
+            (owner->role == PlayerRole::Human || owner->role == PlayerRole::Computer || ship.trader ||
+             m_world->behaviour(*owner) == FactionBehaviour::Pirates)) {
             ship.name = next_ship_name();
         }
     }

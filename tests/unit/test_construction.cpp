@@ -1594,6 +1594,31 @@ TEST_CASE("construction: the editor gives the pirates a ship of theirs") {
     CHECK(!editor::place_ship(island.world, island.buildings, *figures, 3, assets::figure::kPirate, 6, 6, 0).ok());
 }
 
+TEST_CASE("construction: the editor gives the free trader his ship, and him alone") {
+    Island island;
+    std::vector<sim::Player> players = island.world.players();
+    players.resize(3);
+    sim::make_neutral(players[2], sim::faction::kTrader);
+    island.world.set_players(players);
+    const assets::CodPredefinedSymbol types[] = {{"FIGUR", 1}};
+    const auto doc = assets::cod::parse(
+        "Objekt: FIGUR\n"
+        "  Nummer: 29\n  Gfx: 0\n  Blocknr: 2\n  Rotate: 1\n  Maxware: 2\n  Speed: 500\n  Maxenergy: 60\n"
+        "EndObj\n",
+        types);
+    auto figures = assets::FigureTable::from_cod(doc);
+    REQUIRE(figures.ok());
+    auto ship = editor::place_ship(island.world, island.buildings, *figures, 2, assets::figure::kTrader, 3, 3, 0);
+    REQUIRE(ship.ok());
+    (*ship)->apply(island.world);
+    const sim::Ship& placed = island.world.ships().back();
+    CHECK(placed.owner == 2);
+    CHECK(placed.trader);
+    CHECK(placed.trader_goods.size() == island.world.goods().end());
+    // Not his ship for a player, and no other ship for him.
+    CHECK(!editor::place_ship(island.world, island.buildings, *figures, 0, assets::figure::kTrader, 6, 6, 0).ok());
+}
+
 TEST_CASE("construction: the editor names the pirates' nest and gives them one city on an island") {
     Island island;
     std::vector<sim::Player> players = island.world.players();

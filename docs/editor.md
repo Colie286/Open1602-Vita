@@ -107,9 +107,9 @@ player, without costs, and takes them away again. Each click, or each drag, is o
 |---|---|
 | Tool | **Build**: a left click puts the building down about the mouse, for the owner; dragged, the next one goes where it no longer covers the last, so roads, walls and fields are dragged out. **Template**: a left click builds one of the templates saved in games (the copy tool's pieces, kept in the folder "templates" of the user's data folder) about the mouse, for the owner; what does not fit is left out. **Ship**: a left click puts a new, empty ship on the water. **Unit**: a left click puts a land unit on an island. **Resource**: a left click puts a vein into an ore mountain, a treasure under open ground or deer into a forest. **Remove**: a left click takes the ship or unit under the mouse away, else the treasure, deer or vein there, else the building, as its owner demolishes it. |
 | Group | The groups of the build menu (with the buildings packages add to it), then the natives' and pirates' buildings (the chieftain's hut, the pyramid, the pirates' warehouse, houses and tower, ...); not for ships and units. |
-| Building, Template, Ship, Unit, Resource | The group's buildings by name; the templates by name, read again from their folder each time the tool is chosen; the four ships of the shipyards (with those packages add) and the pirates' ship, the four land units of the castle (with those packages add); a big or small iron vein, gold, a treasure or deer. |
+| Building, Template, Ship, Unit, Resource | The group's buildings by name; the templates by name, read again from their folder each time the tool is chosen; the four ships of the shipyards (with those packages add), the pirates' ship and the free trader's ship, the four land units of the castle (with those packages add); a big or small iron vein, gold, a treasure or deer. |
 | Rotation | A quarter clockwise, for a building that turns or a template; the way a ship or unit faces. |
-| Owner | The player the building, template, ship or unit is for: one of the map's humans and computers, or the natives or the pirates where the map has them. |
+| Owner | The player the building, template, ship or unit is for: one of the map's humans and computers, or the natives or the pirates where the map has them; for a ship also the free trader. |
 
 A building is placed as the game builds it, only without gold, goods, unlocked levels or limits
 (castle, cathedral, monuments): it needs its ground, the owner's land (a Kontor at the coast founds a
@@ -129,7 +129,7 @@ middle, and the outline shows each of its buildings green where it can stand and
 A ship goes on water ships sail on, with no other ship on the tiles about it; it is new as a
 shipyard launches it, at full strength with empty holds, and gets its name when a game of the map
 starts. A land unit goes on ground soldiers walk on (open ground, roads, squares, ruins), one to a
-tile, at full health. A computer disbands its units on an island without a city of its own while it is at peace; the editor says so when one is placed there. Orders of other ships and units that name a ship or unit taken away are
+tile, at full health. Only the free trader sails the trader's ship, and he sails no other; one placed sails from Kontor to Kontor when the game starts, its goods empty, and the game sends more as the Kontors grow. A computer disbands its units on an island without a city of its own while it is at peace; the editor says so when one is placed there. Orders of other ships and units that name a ship or unit taken away are
 forgotten with it.
 
 Resources lie where a new game puts them, and nobody knows them at first:

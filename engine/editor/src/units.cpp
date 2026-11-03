@@ -109,10 +109,15 @@ core::Result<std::unique_ptr<Operation>> place_ship(const sim::World& world, con
                                                     std::uint8_t direction) {
     const assets::FigureType* type = figures.get(figure);
     UnitRefusal refused = UnitRefusal::None;
-    // The shipyards' ships and the packages', and the pirates' ship.
-    if (type == nullptr || (!figures.ship_type_of(figure) && figure != assets::figure::kPirate)) {
+    // The shipyards' ships and the packages', the pirates' ship, and the free trader's for him alone.
+    const bool trader = world.acts_as(owner, sim::FactionBehaviour::Trader);
+    if (type != nullptr && trader != (figure == assets::figure::kTrader)) {
+        return make_error(ErrorCode::InvalidFormat, "the trader's ship is the free trader's alone");
+    }
+    if (type == nullptr ||
+        (!figures.ship_type_of(figure) && figure != assets::figure::kPirate && figure != assets::figure::kTrader)) {
         refused = UnitRefusal::NoType;
-    } else if (!owner_ok(world, owner)) {
+    } else if (!trader && !owner_ok(world, owner)) {
         refused = UnitRefusal::NoOwner;
     } else {
         refused = ship_fits(world, buildings, x, y);
@@ -125,6 +130,10 @@ core::Result<std::unique_ptr<Operation>> place_ship(const sim::World& world, con
                                  owner, direction);
     s.health = type->ship.max_health;
     s.cargo.resize(std::max<std::size_t>(1, type->ship.cargo_slots));
+    if (trader) {
+        s.trader = true;  // sails from Kontor to Kontor when the game starts, his goods empty
+        s.trader_goods.resize(world.goods().end());
+    }
     after.add_ship(std::move(s));
     return std::unique_ptr<Operation>(std::make_unique<WorldEdit>(std::move(after), "ship_place"));
 }

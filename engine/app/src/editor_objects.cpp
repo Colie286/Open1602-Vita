@@ -70,8 +70,8 @@ std::vector<const ui::BuildCategory*> object_groups() {
 }
 
 /// The players a building, ship or unit can be placed for: humans and computers, then the natives
-/// and the pirates.
-std::vector<sim::PlayerId> object_owners(const sim::World& world) {
+/// and the pirates; for a ship the free trader last.
+std::vector<sim::PlayerId> object_owners(const sim::World& world, bool ship = false) {
     std::vector<sim::PlayerId> owners;
     for (std::size_t i = 0; i < world.players().size(); ++i) {
         const auto p = static_cast<sim::PlayerId>(i);
@@ -85,6 +85,12 @@ std::vector<sim::PlayerId> object_owners(const sim::World& world) {
         if (world.players()[i].role == sim::PlayerRole::Neutral &&
             (world.acts_as(p, sim::FactionBehaviour::Natives) || world.acts_as(p, sim::FactionBehaviour::Pirates))) {
             owners.push_back(p);
+        }
+    }
+    if (ship) {
+        const sim::PlayerId trader = world.first_of(sim::FactionBehaviour::Trader);
+        if (trader != sim::kNoPlayer) {
+            owners.push_back(trader);
         }
     }
     return owners;
@@ -200,6 +206,8 @@ void MapViewer::editor_object_model(EditorModel& m) const {
                 m.object_name = unit->name(ui::current_language());
             } else if (figure == assets::figure::kPirate) {
                 m.object_name = ui::tr("editor.objects.ship.pirate");
+            } else if (figure == assets::figure::kTrader) {
+                m.object_name = ui::tr("editor.objects.ship.trader");
             } else if (index < 4) {
                 m.object_name = ui::tr(key + std::to_string(index));
             } else {
@@ -207,7 +215,7 @@ void MapViewer::editor_object_model(EditorModel& m) const {
             }
         }
     }
-    const auto owners = object_owners(m_editor->document.world());
+    const auto owners = object_owners(m_editor->document.world(), tool == Tool::Ship);
     m.object_owners = owners.size();
     if (!owners.empty()) {
         const sim::Player* p = m_editor->document.world().player(owners[m_editor->objects.owner % owners.size()]);
@@ -551,6 +559,10 @@ std::vector<std::uint16_t> MapViewer::editor_figures(EditorObjects::Tool tool) c
         if (m_figures.get(assets::figure::kPirate) != nullptr) {
             figures.push_back(assets::figure::kPirate);  // for the pirates
         }
+        if (m_figures.get(assets::figure::kTrader) != nullptr &&
+            m_editor->document.world().first_of(sim::FactionBehaviour::Trader) != sim::kNoPlayer) {
+            figures.push_back(assets::figure::kTrader);  // for the free trader
+        }
     } else if (tool == EditorObjects::Tool::Unit) {
         for (const std::uint32_t family : m_figures.unit_families()) {
             figures.push_back(static_cast<std::uint16_t>(family));
@@ -569,7 +581,7 @@ std::uint16_t MapViewer::editor_figure() const {
 }
 
 sim::PlayerId MapViewer::editor_object_owner() const {
-    const auto owners = object_owners(m_editor->document.world());
+    const auto owners = object_owners(m_editor->document.world(), m_editor->objects.tool == EditorObjects::Tool::Ship);
     return owners.empty() ? sim::kNoPlayer : owners[m_editor->objects.owner % owners.size()];
 }
 
@@ -594,6 +606,9 @@ void MapViewer::editor_place_figure(std::int64_t x, std::int64_t y) {
             key = ship ? "editor.objects.refused.water" : "editor.objects.refused.ground";
         } else if (refused == editor::UnitRefusal::Taken) {
             key = ship ? "editor.objects.refused.ship_near" : "editor.objects.refused.unit_near";
+        } else if (ship && (editor_figure() == assets::figure::kTrader ||
+                            m_editor->document.world().acts_as(owner, sim::FactionBehaviour::Trader))) {
+            key = "editor.objects.refused.trader";  // his ship and no other, for him and no other
         }
         editor_notice(ui::tr(key, {op.error().message}), true, op.error().message);
         return;
