@@ -84,7 +84,7 @@ constexpr std::uint32_t kTilesPerVein = 2000;
 // Islands of their own shape from this shorter side on get lakes, one per so many tiles.
 constexpr std::uint16_t kLakeSide = 48;
 constexpr std::uint32_t kTilesPerLake = 6000;
-constexpr std::uint32_t kMaxCraters = 20;  // in the whole world
+constexpr std::uint32_t kMaxCraters = 20;  // in the whole world: the original's (TIMERS +0xD0)
 
 // Size of the island records in the state chunks, whose first byte is the island number.
 struct StateChunk {
@@ -1849,7 +1849,10 @@ core::Result<GeneratedWorld> Generator::run(const assets::ChunkFile& scenario, b
         if (craters.size() > 2) {
             craters.resize(2);
         }
-        while (!craters.empty() && craters_total + craters.size() > kMaxCraters) {
+        // Beyond twelve players (a higher kMaxPlayers) as many more per player (volcano_limit).
+        const auto max_craters =
+            std::max<std::uint32_t>(kMaxCraters, static_cast<std::uint32_t>(kMaxCraters * m_starts.size() / 12));
+        while (!craters.empty() && craters_total + craters.size() > max_craters) {
             craters.pop_back();
         }
         craters_total += static_cast<std::uint32_t>(craters.size());

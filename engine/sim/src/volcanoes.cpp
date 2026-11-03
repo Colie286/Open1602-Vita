@@ -313,11 +313,16 @@ std::uint32_t crater_count(const World& world) noexcept {
     for (const WorldIsland& island : world.islands()) {
         n += static_cast<std::uint32_t>(island.craters.size());
     }
-    return std::min(n, kMaxCraterCount);
+    return n;
 }
 
 std::uint64_t eruption_interval_ms(std::uint32_t craters) noexcept {
-    return std::uint64_t{kInterval[std::min(craters, kMaxCraterCount)]} * kTenthMs;
+    if (craters > kMaxCraterCount) {
+        // More craters than the original's world holds (more than twelve players): as much more
+        // often as there are more craters, so that each of them erupts as often as with twenty.
+        return std::uint64_t{kInterval[kMaxCraterCount]} * kTenthMs * kMaxCraterCount / craters;
+    }
+    return std::uint64_t{kInterval[craters]} * kTenthMs;
 }
 
 std::uint64_t first_eruption_ms(Random& random) {

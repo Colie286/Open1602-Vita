@@ -62,11 +62,13 @@ struct VolcanoEvent {
 /// right to left within a row; at most two.
 [[nodiscard]] std::vector<Crater> find_craters(const IslandMap& map, const assets::BuildingTable& buildings);
 
-/// Craters in the world, at most 20 (TIMERS +0xD0).
+/// Craters in the world: at most 20 in the original's worlds (TIMERS +0xD0), more in worlds of
+/// more than twelve players.
 [[nodiscard]] std::uint32_t crater_count(const World& world) noexcept;
 
 /// Time from one eruption to the earliest next one before the random part:
-/// 35 minutes for up to one crater in the world, 6 minutes for twenty.
+/// 35 minutes for up to one crater in the world, 6 minutes for twenty, beyond them shorter by as
+/// much as there are more (each crater erupts as often as with twenty).
 [[nodiscard]] std::uint64_t eruption_interval_ms(std::uint32_t craters) noexcept;
 
 /// Game time of the first eruption of a new game: 70 minutes and up to 15.5 more.

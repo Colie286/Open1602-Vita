@@ -169,7 +169,8 @@ constexpr std::int32_t kVolcanoSide = 24;
 constexpr std::int32_t kVillageSide = 40;
 
 /// Islands with a volcano at most: one per player (none/few/many: 0, half, double), at most 10
-/// (20 craters in a world).
+/// (20 craters in a world, the original's limit) up to twelve players and as many more per player
+/// beyond them (a higher kMaxPlayers, world_generator.cpp max_craters).
 std::uint32_t volcano_limit(const WorldSettings& s) {
     std::uint32_t limit = 0;
     const std::uint32_t players = s.players;
@@ -187,7 +188,7 @@ std::uint32_t volcano_limit(const WorldSettings& s) {
             limit = 2 * players;
             break;
     }
-    return std::min<std::uint32_t>(limit, 10);
+    return std::min<std::uint32_t>(limit, std::max<std::uint32_t>(10, 10 * players / 12));
 }
 
 class Planner {

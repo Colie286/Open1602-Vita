@@ -212,6 +212,26 @@ TEST_CASE("world plan: more than four players get as much sea and land each as t
     CHECK(many->plan.islands.size() > few->plan.islands.size() * 3 / 2);
 }
 
+TEST_CASE("world plan: islands and volcanoes per player stay alike from four to sim::kMaxPlayers players") {
+    // What a higher kMaxPlayers relies on (a trial build with 24 players, ADR 0007): the world and its
+    // islands grow with the players, and the volcanoes are not held at the original's ten.
+    for (std::size_t players = 4; players <= sim::kMaxPlayers; players += 4) {
+        sim::WorldSettings s = sim::settings_for_players(static_cast<std::uint8_t>(players));
+        s.volcanoes = sim::WorldSettings::Amount::Many;
+        s.seed = static_cast<std::uint32_t>(players);
+        auto plan = sim::plan_world(s, templates());
+        REQUIRE(plan.ok());
+        const std::size_t islands = plan->plan.islands.size();
+        CHECK(islands * 10 >= players * 35);  // at least 3.5 per player
+        CHECK(islands * 10 <= players * 65);  // at most 6.5
+        std::size_t volcanoes = 0;
+        for (const auto& i : plan->plan.islands) {
+            volcanoes += i.template_number % 5 == 4 ? 1U : 0U;  // the catalogue's volcano islands
+        }
+        CHECK(volcanoes <= std::max<std::size_t>(10, 10 * players / 12));
+    }
+}
+
 TEST_CASE("world plan: settings change the amount of islands, their sizes, villages and volcanoes") {
     const auto plan_with = [](auto&& change) {
         sim::WorldSettings s;

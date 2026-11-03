@@ -132,7 +132,9 @@ TEST_CASE("volcanoes: intervals shrink with the craters, an eruption takes 28.9 
     CHECK(sim::eruption_interval_ms(3) == 1'180'000);
     CHECK(sim::eruption_interval_ms(8) == 480'000);
     CHECK(sim::eruption_interval_ms(20) == 360'000);
-    CHECK(sim::eruption_interval_ms(50) == 360'000);
+    // Beyond twenty (worlds of more than twelve players) each crater erupts as often as with twenty.
+    CHECK(sim::eruption_interval_ms(40) == 180'000);
+    CHECK(sim::eruption_interval_ms(50) == 144'000);
     CHECK(sim::eruption_step_us(1) == 500'000);
     // The last throw after 28.43 s, the end half a second later.
     CHECK(sim::eruption_step_us(140) > 28'400'000);
