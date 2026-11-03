@@ -472,6 +472,8 @@ std::optional<Selection::Kind> InfoPanel::mouse(std::int32_t x, std::int32_t y, 
             m_goods_clicked = true;
         }
     }
+    // The goods balance line lights up yellow under the mouse, like a link.
+    m_panel.set_selected(kInfoGoods, m_panel.hovered() == kInfoGoods);
     return list;
 }
 

@@ -1556,7 +1556,7 @@ void MapViewer::render() {
                             continue;
                         }
                         // Ground that cannot be built on is checkered yellow, as in the original and the
-                        // History Edition, and drawn over the buildings so that none hides it. A
+                        // History Edition, on the ground: a building standing there covers it. A
                         // building that can go there is shown with every second pixel of its picture
                         // yellow, roof included, as the original shows it (blueprints have their own
                         // colour); one short of means only while it shows.
@@ -1576,7 +1576,6 @@ void MapViewer::render() {
                                     render::TileMark mark{order->island, static_cast<std::uint16_t>(tx),
                                                           static_cast<std::uint16_t>(ty), render::kDragHatch};
                                     mark.hatched = true;
-                                    mark.on_top = true;
                                     m_tile_marks.push_back(mark);
                                 }
                             }
@@ -4268,7 +4267,6 @@ void MapViewer::preview_move(const BuildTool::Spot& spot,
                 render::TileMark mark{order->island, static_cast<std::uint16_t>(tx), static_cast<std::uint16_t>(ty),
                                       render::kDragHatch};
                 mark.hatched = true;
-                mark.on_top = true;
                 m_tile_marks.push_back(mark);
             }
         }

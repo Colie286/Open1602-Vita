@@ -450,4 +450,12 @@ TEST_CASE("side panel player status: the list buttons, the rating and the goods 
     const auto [x, y] = centre(i.panel.panel(), 57031);
     (void)i.panel.mouse(x, y, false);
     CHECK(i.panel.help(leiste) == "diplomacy help");
+
+    // The goods balance line lights up under the mouse, like a link, and not elsewhere.
+    CHECK(!i.panel.panel().selected(57040));
+    const auto [gx, gy] = centre(i.panel.panel(), 57040);
+    (void)i.panel.mouse(gx, gy, false);
+    CHECK(i.panel.panel().selected(57040));
+    (void)i.panel.mouse(x, y, false);
+    CHECK(!i.panel.panel().selected(57040));
 }
