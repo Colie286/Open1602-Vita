@@ -222,7 +222,8 @@ private:
     /// window title when the game has no name of its own. Out of memory leaves the old game running.
     /// `rules`: the settings of a new game; else those of the command line (a loaded game brings its own).
     /// The state of a game with `world`: a new game takes the building values of `rules` under the
-    /// mods' (a savegame of Open1602 keeps its own), and m_buildings gets the game's values.
+    /// mods' (a savegame of Open1602 keeps its own; the editor's document, `view_only`, takes none),
+    /// and m_buildings gets the game's values.
     [[nodiscard]] std::unique_ptr<GameState> make_state(sim::World world, const sim::Rules& rules,
                                                         bool view_only = false);
     /// The presentation takes `next` as the game: everything of the old one goes. `source`: the file

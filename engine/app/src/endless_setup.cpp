@@ -1850,4 +1850,27 @@ void set_package_island_presets(std::vector<sim::PackageLandscape> presets) {
     package_presets() = std::move(presets);
 }
 
+std::size_t landscape_choices() {
+    return 1 + island_preset_count();
+}
+
+std::string landscape_choice_name(std::size_t choice) {
+    choice = std::min(choice, island_preset_count());
+    if (choice > kIslandPresets.size()) {
+        return package_presets()[choice - 1 - kIslandPresets.size()].title(ui::current_language());
+    }
+    return ui::tr(choice == 0 ? std::string("setup.island_preset.original")
+                              : "setup.island_preset." + std::string(kIslandPresets[choice - 1].name));
+}
+
+void apply_landscape_choice(sim::WorldSettings& w, std::size_t choice) {
+    choice = std::min(choice, island_preset_count());
+    if (choice == 0) {
+        w.shapes = Shapes::Templates;
+    } else {
+        w.shapes = Shapes::Own;
+        w.landscape = island_preset_landscape(choice - 1);
+    }
+}
+
 }  // namespace o1602::app

@@ -80,7 +80,8 @@ constexpr Id kObjectsPiece = 82;
 constexpr Id kObjectsRotation = 83;
 constexpr Id kObjectsOwner = 84;
 constexpr Id kFirstOverlay = 30;  ///< + EditorOverlay
-constexpr Id kFirstRow = 100;     ///< + the row on the page
+constexpr Id kLandscape = 85;
+constexpr Id kFirstRow = 100;  ///< + the row on the page
 
 constexpr std::int32_t kX = 12;
 constexpr std::int32_t kW = EditorPanel::kWidth - 2 * kX;
@@ -103,10 +104,6 @@ constexpr std::array<std::uint8_t, 6> kCropWares = {assets::ware::kTobaccoField,
 
 constexpr std::array<const char*, 6> kCropTexts = {"editor.crop.tobacco", "editor.crop.spices", "editor.crop.sugar",
                                                    "editor.crop.cotton",  "editor.crop.wine",   "editor.crop.cocoa"};
-
-/// The crops of each climate that grow half without the island's fertility for them.
-constexpr std::array<std::array<bool, 6>, 2> kClimateCrops = {
-    {{true, false, true, false, true, false}, {false, true, false, true, false, true}}};
 
 constexpr std::array<const char*, 3> kPlaceholderClimateTexts = {"editor.prop.north", "editor.prop.south",
                                                                  "editor.placeholder.by_place"};
@@ -161,6 +158,12 @@ std::uint32_t fitted(std::uint32_t used) {
 
 std::string count(std::size_t n) {
     return std::to_string(n);
+}
+
+/// The climates a new island may take: north, south and the packages' (not a placeholder's,
+/// which the world plan makes north or south).
+std::size_t climate_choices(const EditorModel& model, bool placeholder) {
+    return 2 + (placeholder ? 0 : model.climates.size());
 }
 
 /// The next value of a cycle of `n` values, forward or back.
@@ -248,7 +251,7 @@ void EditorPanel::layout(const EditorModel& model) {
             layout_document(model);
             break;
         case Page::New:
-            layout_new();
+            layout_new(model);
             break;
         case Page::Open:
             layout_open(model);
@@ -348,7 +351,7 @@ void EditorPanel::layout_document(const EditorModel& model) {
     }
 }
 
-void EditorPanel::layout_new() {
+void EditorPanel::layout_new(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
     f.label(Rect{kX, y, kW, 28}, ui::tr("editor.new.title"), Align::Left, Tone::Heading);
@@ -366,18 +369,26 @@ void EditorPanel::layout_new() {
     value(kSize, "editor.new.size", std::move(size));
     value(kIslands, "editor.new.islands", ui::tr(kIslandTexts[static_cast<std::size_t>(m_new.islands)]));
     const bool islands = m_new.islands != EditorNewMap::Islands::None;
+    if (!model.landscapes.empty()) {
+        m_new.landscape = std::min(m_new.landscape, model.landscapes.size() - 1);
+        value(kLandscape, "editor.new.landscape", model.landscapes[m_new.landscape], islands);
+    }
     value(kPlayers, "editor.new.players", count(m_new.players), islands);
     f.entry(Rect{kX, y, kW, kLine}, ui::tr("editor.new.seed"), std::to_string(m_new.seed),
             islands ? Tone::Normal : Tone::Dim, Tone::Dim);
     y += kLine + 2;
     f.button(kReroll, Rect{kX, y, kW, kButtonH}, ui::tr("editor.new.reroll"), islands);
-    y += kButtonH + kGap;
-    f.paragraph(Rect{kX, y, kW, kNote}, ui::tr(islands ? "editor.new.note_islands" : "editor.new.note_sea"), Tone::Dim,
-                20);
-    y += kNote + 4;
+    y += kButtonH + kGap + 4;
     const std::int32_t half = (kW - kGap) / 2;
     f.button(kCreate, Rect{kX, y, half, kButtonH}, ui::tr("editor.new.create"));
     f.button(kCancel, Rect{kX + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
+    y += kButtonH + kGap;
+    // The note where it fits: in a small window the settings and the buttons take the room.
+    const std::int32_t room = std::min(kNote, m_top + m_height - 4 - y);
+    if (room >= 2 * 20) {
+        f.paragraph(Rect{kX, y, kW, room}, ui::tr(islands ? "editor.new.note_islands" : "editor.new.note_sea"),
+                    Tone::Dim, 20);
+    }
 }
 
 void EditorPanel::layout_open(const EditorModel& model) {
@@ -524,7 +535,7 @@ void EditorPanel::layout_fertility(const EditorModel& model) {
     for (std::size_t i = 0; i < kCropTexts.size(); ++i) {
         std::string text = ui::tr(kCropTexts[i]);
         const bool own = (model.island_fertility >> (kCropWares[i] - assets::ware::kCornField) & 1U) != 0;
-        if (!own && kClimateCrops[model.island_climate & 1U][i]) {
+        if (!own && (model.island_crops >> (kCropWares[i] - assets::ware::kCornField) & 1U) != 0) {
             text = ui::tr("editor.fertility.half", {text});
         }
         f.check(kFirstCrop + static_cast<Id>(i), Rect{kX, y, kW, kButtonH}, std::move(text), own);
@@ -657,23 +668,36 @@ void EditorPanel::layout_islands(const EditorModel& model) {
           ui::tr(m_island.placeholder ? "editor.islands.shape.placeholder"
                  : m_island.own_shape ? "editor.islands.shape.own"
                                       : "editor.islands.shape.template"));
+    if (m_island.climate >= climate_choices(model, m_island.placeholder)) {
+        m_island.climate = 0;  // a package's climate the world does not know (any more)
+    }
     value(kClimate, "editor.islands.climate",
-          ui::tr(m_island.climate == 0 ? "editor.prop.north" : "editor.prop.south"));
+          m_island.climate >= 2   ? model.climates[m_island.climate - 2U]
+          : m_island.climate == 0 ? ui::tr("editor.prop.north")
+                                  : ui::tr("editor.prop.south"));
     value(kIslandSize, "editor.islands.size", ui::tr(kIslandSizeTexts[m_island.size % kIslandSizeTexts.size()]));
     f.button(kOtherIsland, Rect{kX, y, kW, kButtonH}, ui::tr("editor.islands.other"),
              !model.placing && !m_island.placeholder);
     y += kButtonH + kGap;
+    if (!m_island.own_shape && !m_island.placeholder && !model.island_template.empty()) {
+        f.label(Rect{kX, y, kW, kLine}, model.island_template, Align::Left, Tone::Dim);
+        y += kLine + 2;
+    }
     f.button(kPlace, Rect{kX, y, kW, kButtonH}, ui::tr("editor.islands.place"), !model.placing);
     y += kButtonH + kGap;
     f.button(kLoadIsland, Rect{kX, y, kW, kButtonH}, ui::tr("editor.islands.load"), !model.placing);
     y += kButtonH + kGap;
-    constexpr std::int32_t kIslandNote = 3 * 20;
-    f.paragraph(Rect{kX, y, kW, kIslandNote},
-                ui::tr(!model.placing         ? "editor.islands.note"
-                       : m_island.placeholder ? "editor.placeholder.placing"
-                                              : "editor.islands.placing"),
-                Tone::Dim, 20);
-    y += kIslandNote + 4;
+    // The note where its three lines fit above the buttons below: a sentence cut reads wrong.
+    const std::int32_t below = (model.placing ? 2 : 1) * (kButtonH + kGap) + 4;
+    constexpr std::int32_t note = 3 * 20;
+    if (m_top + m_height - 4 - below - y >= note) {
+        f.paragraph(Rect{kX, y, kW, note},
+                    ui::tr(!model.placing         ? "editor.islands.note"
+                           : m_island.placeholder ? "editor.placeholder.placing"
+                                                  : "editor.islands.placing"),
+                    Tone::Dim, 20);
+        y += note + 4;
+    }
     if (model.placing) {
         f.button(kStopPlacing, Rect{kX, y, kW, kButtonH}, ui::tr("editor.cancel"));
         y += kButtonH + kGap;
@@ -834,6 +858,9 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
             m_new.islands = static_cast<EditorNewMap::Islands>(
                 step(static_cast<std::size_t>(m_new.islands), kIslandTexts.size(), forward));
             return std::nullopt;
+        case kLandscape:
+            m_new.landscape = step(m_new.landscape, std::max<std::size_t>(model.landscapes.size(), 1), forward);
+            return std::nullopt;
         case kPlayers:
             m_new.players = static_cast<std::uint8_t>(step(m_new.players - 1U, sim::kMaxPlayers, forward) + 1U);
             return std::nullopt;
@@ -853,13 +880,15 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
             return std::nullopt;
         }
         case kClimate:
-            m_island.climate = static_cast<std::uint8_t>(m_island.climate == 0 ? 1 : 0);
+            m_island.climate = static_cast<std::uint8_t>(
+                step(m_island.climate, climate_choices(model, m_island.placeholder), forward));
             return std::nullopt;
         case kIslandSize:
             m_island.size = static_cast<std::uint8_t>(step(m_island.size, kIslandSizeTexts.size(), forward));
             return std::nullopt;
         case kOtherIsland:
-            m_island.seed = next_seed(m_island.seed);
+            // The next template in turn (EditorModel::island_template says which), or another shape.
+            m_island.seed = m_island.own_shape ? next_seed(m_island.seed) : m_island.seed + 1;
             return std::nullopt;
         case kPlace: {
             EditorRequest r{EditorRequest::Kind::PlaceIsland};

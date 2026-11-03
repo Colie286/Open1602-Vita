@@ -3688,8 +3688,10 @@ core::Result<sim::World> MapViewer::read_world(const std::filesystem::path& path
 }
 
 std::unique_ptr<GameState> MapViewer::make_state(sim::World world, const sim::Rules& rules, bool view_only) {
-    if (!world.saved_rules()) {
-        // A new game, or one from a file of the original: the rule's values under the mods'.
+    if (!world.saved_rules() && !view_only) {
+        // A new game, or one from a file of the original: the rule's values under the mods'. Not
+        // the editor's document (view only): a map keeps the packages' values alone, and the game
+        // started from it takes the rules chosen then.
         sim::Balance balance = world.balance();
         sim::add_building_values(balance, sim::rule_building_values(rules));
         sim::add_figure_values(balance, sim::rule_figure_values(rules));

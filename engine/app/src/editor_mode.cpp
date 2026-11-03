@@ -12,6 +12,7 @@
 #include <random>
 #include <tuple>
 
+#include "endless_setup.hpp"
 #include "map_viewer.hpp"
 #include "names.hpp"
 
@@ -24,6 +25,7 @@
 #include "o1602/sim/construction.hpp"
 #include "o1602/sim/growth.hpp"
 #include "o1602/sim/island_shapes.hpp"
+#include "o1602/sim/island_templates.hpp"
 #include "o1602/sim/save_game.hpp"
 #include "o1602/sim/validate.hpp"
 #include "o1602/ui/build_menu.hpp"
@@ -33,6 +35,16 @@
 namespace o1602::app {
 
 namespace {
+
+/// The original's climate and the package's (WorldIsland::climate, 0 none) of the choice `choice`
+/// of EditorNewIsland::climate: 0 north, 1 south, from 2 the world's package climates.
+std::pair<std::uint8_t, std::uint8_t> new_island_climate(const sim::World& world, std::uint8_t choice) {
+    const auto& climates = world.balance().climates;
+    if (choice >= 2 && choice - 2U < climates.size()) {
+        return {static_cast<std::uint8_t>(climates[choice - 2U].like & 1U), static_cast<std::uint8_t>(choice - 1U)};
+    }
+    return {static_cast<std::uint8_t>(choice & 1U), std::uint8_t{0}};
+}
 
 constexpr std::string_view kScenarioEnding = ".o1602";
 /// The folder of own islands (the editor's "Save island"), in the data folder.
@@ -255,6 +267,7 @@ core::Status MapViewer::editor_new(const EditorNewMap& map) {
                      : map.islands == EditorNewMap::Islands::Many ? sim::WorldSettings::Amount::Many
                                                                   : sim::WorldSettings::Amount::Normal;
     custom.seed = map.seed;
+    apply_landscape_choice(custom, map.landscape);
     o.custom = sim::fit_landscape(custom);
     std::vector<std::string> warnings;
     auto world = sim::start_new_game(m_game, m_buildings, *texts, o, &warnings);
@@ -367,8 +380,32 @@ EditorModel MapViewer::editor_model() const {
         m.island_free = world.island_use(m_editor->pick.island) == sim::World::IslandUse::None;
         m.island_fertility = world.islands()[m_editor->pick.island].header.fertility;
         m.island_climate = world.islands()[m_editor->pick.island].header.climate;
+        m.island_crops = sim::climate_crops(world.balance().climates, world.islands()[m_editor->pick.island]);
     }
     m.placing = m_editor->placing.has_value();
+    if (m_hud && m_hud->editor_panel() && m_hud->editor_panel()->page() == EditorPanel::Page::New) {
+        for (std::size_t i = 0; i < landscape_choices(); ++i) {
+            m.landscapes.push_back(landscape_choice_name(i));
+        }
+    }
+    for (const sim::Climate& c : world.balance().climates) {
+        m.climates.push_back(c.name(ui::current_language()));
+    }
+    if (m_hud && m_hud->editor_panel() && m_hud->editor_panel()->page() == EditorPanel::Page::Islands) {
+        const EditorNewIsland& wanted = m_hud->editor_panel()->new_island();
+        const std::uint8_t climate = new_island_climate(world, wanted.climate).first;
+        const std::uint8_t size = std::min<std::uint8_t>(wanted.size, sim::templates::kSizeClasses - 1);
+        const auto& packaged = m_options.world.package_islands;
+        std::uint16_t count = sim::templates::kTemplateCount[climate][size];
+        for (const sim::PackageIsland& p : packaged) {
+            count = static_cast<std::uint16_t>(count + (p.climate == climate && p.size == size ? 1 : 0));
+        }
+        const auto chosen = static_cast<std::uint16_t>(wanted.seed % std::max<std::uint16_t>(count, 1));
+        const sim::PackageIsland* p = sim::package_template(packaged, climate, size, chosen);
+        m.island_template = p != nullptr ? ui::tr("editor.islands.template_package",
+                                                  {p->name(ui::current_language()), number(chosen + 1U), number(count)})
+                                         : ui::tr("editor.islands.template", {number(chosen + 1U), number(count)});
+    }
     m.has_plan = world.planned_islands().has_value();
     if (m_editor->pick.kind == EditorPick::Kind::Placeholder &&
         editor::placeholder_open(world, m_editor->pick.island)) {
@@ -545,7 +582,8 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
             break;
         case Kind::LoadIsland:
             if (request.index < m_editor_files.size()) {
-                editor_load_island(m_editor_files[request.index], request.island.climate);
+                editor_load_island(m_editor_files[request.index],
+                                   new_island_climate(m_editor->document.world(), request.island.climate).first);
             }
             break;
         case Kind::SetFertility: {
@@ -613,7 +651,7 @@ void MapViewer::editor_island_request(const EditorRequest& request) {
     if (request.kind == Kind::PlaceIsland && request.island.placeholder) {
         Placing p;
         p.kind = Placing::Kind::NewPlaceholder;
-        p.placeholder.climate = request.island.climate;
+        p.placeholder.climate = static_cast<std::uint8_t>(request.island.climate & 1U);
         p.placeholder.size = request.island.size;
         std::tie(p.width, p.height) = editor::placeholder_size(p.placeholder);
         p.page = EditorPanel::Page::Islands;
@@ -625,9 +663,10 @@ void MapViewer::editor_island_request(const EditorRequest& request) {
         const auto number = world.free_island_number();
         editor::NewIsland wanted;
         wanted.shape = request.island.own_shape ? editor::NewIsland::Shape::Own : editor::NewIsland::Shape::Template;
-        wanted.climate = request.island.climate;
+        std::tie(wanted.climate, wanted.own_climate) = new_island_climate(world, request.island.climate);
         wanted.size = request.island.size;
         wanted.seed = request.island.seed;
+        wanted.package_islands = m_options.world.package_islands;
         std::vector<std::string> warnings;
         auto made = number ? editor::make_island(wanted, *number, m_buildings, &m_game, &warnings)
                            : core::Result<sim::WorldIsland>(
@@ -1006,8 +1045,10 @@ void MapViewer::editor_properties(EditorModel& m) const {
                 add("editor.prop.position", tiles(island.x, island.y));
                 add("editor.prop.size",
                     ui::tr("editor.size", {number(island.map.width()), number(island.map.height())}));
-                add("editor.prop.climate",
-                    ui::tr(island.header.climate % 2 == 0 ? "editor.prop.north" : "editor.prop.south"));
+                const sim::Climate* own = sim::island_climate(world.balance().climates, island);
+                add("editor.prop.climate", own != nullptr                   ? own->name(ui::current_language())
+                                           : island.header.climate % 2 == 0 ? ui::tr("editor.prop.north")
+                                                                            : ui::tr("editor.prop.south"));
                 add("editor.prop.deposits", number(island.header.deposits.size()));
                 std::size_t cities = 0;
                 for (const sim::City& c : world.cities()) {

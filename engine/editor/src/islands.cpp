@@ -254,6 +254,37 @@ std::size_t world_memory(const sim::World& world) noexcept {
     return n;
 }
 
+namespace {
+
+/// `made` as a new island of `request`, numbered `number`, at (0, 0).
+core::Result<sim::WorldIsland> finish_island(assets::Island made, const NewIsland& request, std::uint16_t number,
+                                             const assets::BuildingTable& buildings,
+                                             std::vector<std::string>* warnings) {
+    made.header.number = number;
+    made.header.climate = request.climate & 1U;
+    made.header.pos_x = 0;
+    made.header.pos_y = 0;
+    made.header.deposits.clear();
+    made.header.craters.clear();
+    made.header.fertility = kNewFertility;
+    made.header.explored = 0;
+    made.header.discovered = 0;
+    made.header.drought_strength = 0;
+    made.header.drought_end = 0;
+    made.header.curse_pending = false;
+    made.header.volcano_erupted = false;
+    made.header.stored_complete = true;
+    sim::WorldIsland island{made.header, sim::IslandMap::from_island(made, buildings, warnings, nullptr), 0, 0};
+    island.header.width = static_cast<std::uint16_t>(island.map.width());
+    island.header.height = static_cast<std::uint16_t>(island.map.height());
+    island.deer_phase = made.header.deer_phase;
+    island.last_phase = made.header.last_phase;
+    island.climate = request.own_climate;
+    return island;
+}
+
+}  // namespace
+
 core::Result<sim::WorldIsland> make_island(const NewIsland& request, std::uint16_t number,
                                            const assets::BuildingTable& buildings, const assets::GameDirectory* game,
                                            std::vector<std::string>* warnings) {
@@ -275,11 +306,30 @@ core::Result<sim::WorldIsland> make_island(const NewIsland& request, std::uint16
         r.seed = request.seed;
         made = sim::shapes::make_island(r);
     } else {
+        std::uint16_t count = sim::templates::kTemplateCount[climate][size];
+        for (const sim::PackageIsland& p : request.package_islands) {
+            count = static_cast<std::uint16_t>(count + (p.climate == climate && p.size == size ? 1 : 0));
+        }
+        const auto template_number = static_cast<std::uint16_t>(request.seed % std::max<std::uint16_t>(count, 1));
+        if (const sim::PackageIsland* p =
+                sim::package_template(request.package_islands, climate, size, template_number)) {
+            auto file = assets::ChunkFile::load(p->file);
+            if (!file) {
+                return file.error();
+            }
+            auto first = first_island(*file, p->id);
+            if (!first) {
+                return first.error();
+            }
+            made = std::move(first).value();
+            made.layers.resize(1);  // the ground; what lies on it in other layers stays out
+            made.header.template_number = assets::IslandHeader::kNoTemplate;
+            made.header.template_size = size;
+            return finish_island(std::move(made), request, number, buildings, warnings);
+        }
         if (game == nullptr) {
             return make_error(ErrorCode::NotFound, "the original's island templates are not there");
         }
-        const std::uint16_t count = sim::templates::kTemplateCount[climate][size];
-        const auto template_number = static_cast<std::uint16_t>(request.seed % std::max<std::uint16_t>(count, 1));
         const std::string path = sim::templates::template_path(climate, size, template_number, false);
         const auto resolved = game->resolve(path);
         if (!resolved) {
@@ -297,26 +347,7 @@ core::Result<sim::WorldIsland> make_island(const NewIsland& request, std::uint16
         made.header.template_number = template_number;
         made.header.template_size = size;
     }
-    made.header.number = number;
-    made.header.climate = climate;
-    made.header.pos_x = 0;
-    made.header.pos_y = 0;
-    made.header.deposits.clear();
-    made.header.craters.clear();
-    made.header.fertility = kNewFertility;
-    made.header.explored = 0;
-    made.header.discovered = 0;
-    made.header.drought_strength = 0;
-    made.header.drought_end = 0;
-    made.header.curse_pending = false;
-    made.header.volcano_erupted = false;
-    made.header.stored_complete = true;
-    sim::WorldIsland island{made.header, sim::IslandMap::from_island(made, buildings, warnings, nullptr), 0, 0};
-    island.header.width = static_cast<std::uint16_t>(island.map.width());
-    island.header.height = static_cast<std::uint16_t>(island.map.height());
-    island.deer_phase = made.header.deer_phase;
-    island.last_phase = made.header.last_phase;
-    return island;
+    return finish_island(std::move(made), request, number, buildings, warnings);
 }
 
 namespace {

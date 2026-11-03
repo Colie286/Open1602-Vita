@@ -3,12 +3,15 @@
 // that undo takes back to the same bytes.
 
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
 
 #include "../test_framework.hpp"
+#include "test_support.hpp"
 
 #include "o1602/assets/cod_parser.hpp"
 #include "o1602/editor/document.hpp"
@@ -473,4 +476,65 @@ TEST_CASE("editor islands: placeholders of the world plan are set, changed and t
     CHECK(document.world().planned_islands()->plan.islands[1].x == 200);
     CHECK(document.undo());
     CHECK(document.world().planned_islands()->plan.islands.size() == 1);
+}
+
+TEST_CASE("editor islands: a package's island template and climate for a new island") {
+    const auto buildings = make_buildings();
+    // A package's island file: 20 x 18 tiles of ground, of the south.
+    std::vector<std::uint8_t> header(116, 0);
+    header[1] = 20;
+    header[2] = 18;
+    header[0x60] = 0xFF;
+    header[0x61] = 0xFF;
+    header[0x64] = 1;
+    header[0x65] = 1;
+    std::vector<std::uint8_t> tiles;
+    for (std::uint8_t y = 0; y < 18; ++y) {
+        for (std::uint8_t x = 0; x < 20; ++x) {
+            tiles.insert(tiles.end(), {kGround - 20000, 0, x, y});
+            test::put_u32(tiles, (7U << 14) | (7U << 22));  // terrain of nobody
+        }
+    }
+    std::vector<std::uint8_t> bytes;
+    test::put_chunk(bytes, "INSEL5", header);
+    test::put_chunk(bytes, "INSELHAUS", tiles);
+    const std::filesystem::path file = test::temp_path("o1602_editor_reef.scp");
+    {
+        std::ofstream out(file, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    }
+    sim::PackageIsland reef;
+    reef.id = "atoll:reef";
+    reef.package = "atoll";
+    reef.file = file;
+    reef.climate = 1;
+    reef.size = 0;
+    reef.width = 20;
+    reef.height = 18;
+    const std::vector<sim::PackageIsland> islands{reef};
+
+    editor::NewIsland request;
+    request.climate = 1;
+    request.own_climate = 2;
+    request.size = 0;
+    request.package_islands = islands;
+    // The package's comes after the original's templates of its climate and class; those need the
+    // original's files.
+    request.seed = sim::package_template_number(islands, 0);
+    auto made = editor::make_island(request, 4, buildings, nullptr);
+    REQUIRE(made.ok());
+    CHECK(made->map.width() == 20);
+    CHECK(made->map.height() == 18);
+    CHECK(made->header.number == 4);
+    CHECK(made->header.climate == 1);
+    CHECK(made->header.template_number == assets::IslandHeader::kNoTemplate);
+    CHECK(made->climate == 2);
+    CHECK(made->map.top(5, 5).sprite == buildings.by_id(kGround)->gfx);
+    request.seed = 0;
+    CHECK(!editor::make_island(request, 4, buildings, nullptr).ok());
+    // Of the north there is none of the package: only the original's.
+    request.climate = 0;
+    request.seed = sim::package_template_number(islands, 0);
+    CHECK(!editor::make_island(request, 4, buildings, nullptr).ok());
+    std::filesystem::remove(file);
 }

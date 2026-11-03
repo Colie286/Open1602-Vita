@@ -22,6 +22,7 @@
 #include "o1602/core/file.hpp"
 #include "o1602/core/result.hpp"
 #include "o1602/editor/operation.hpp"
+#include "o1602/sim/package_islands.hpp"
 #include "o1602/sim/world.hpp"
 
 namespace o1602::editor {
@@ -124,14 +125,19 @@ struct NewIsland {
     enum class Shape : std::uint8_t { Template, Own };
     Shape shape = Shape::Template;
     std::uint8_t climate = 0;  ///< 0 north, 1 south
-    std::uint8_t size = 2;     ///< size class 0 little .. 4 large (sim/island_templates.hpp)
-    /// Which template (taken modulo the templates of the climate and size), or the seed of the shape.
+    /// A climate of a package (sim::WorldIsland::climate, from 1; 0 none), like `climate`.
+    std::uint8_t own_climate = 0;
+    std::uint8_t size = 2;  ///< size class 0 little .. 4 large (sim/island_templates.hpp)
+    /// Which template (taken modulo the templates of the climate and size, the original's and then
+    /// those of `package_islands`), or the seed of the shape.
     std::uint64_t seed = 0;
+    /// The packages' island templates (islands.toml), offered after the original's.
+    std::span<const sim::PackageIsland> package_islands;
 };
 
-/// The island of `request` at (0, 0), numbered `number`: a template's tiles (which need the
-/// original's `game`), or one of its own shape as large as the size class's templates. It grows
-/// grain, grass, trees and fish and has no deposits yet.
+/// The island of `request` at (0, 0), numbered `number`: a template's tiles (the original's need
+/// the original's `game`, a package's its file), or one of its own shape as large as the size class's templates. It
+/// grows grain, grass, trees and fish and has no deposits yet.
 [[nodiscard]] core::Result<sim::WorldIsland> make_island(const NewIsland& request, std::uint16_t number,
                                                          const assets::BuildingTable& buildings,
                                                          const assets::GameDirectory* game,

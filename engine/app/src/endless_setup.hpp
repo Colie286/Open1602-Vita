@@ -249,4 +249,12 @@ void read_setup(EndlessSetup& setup, std::string_view text, std::string_view pre
 /// on the page of the islands. Main thread only.
 void set_package_island_presets(std::vector<sim::PackageLandscape> presets);
 
+/// The kinds of island world a new map may have, as the page of the islands offers them: the
+/// original's island templates (0), Open1602's presets, then the packages'. Main thread only.
+[[nodiscard]] std::size_t landscape_choices();
+/// The name of choice `choice` (Windows-1252); a choice past the last is the last.
+[[nodiscard]] std::string landscape_choice_name(std::size_t choice);
+/// `w` with the islands of choice `choice`: the templates, or islands of their own shape.
+void apply_landscape_choice(sim::WorldSettings& w, std::size_t choice);
+
 }  // namespace o1602::app

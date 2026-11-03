@@ -31,6 +31,9 @@ struct EditorNewMap {
     Islands islands = Islands::Normal;
     std::uint8_t players = 4;  ///< with a start (islands only), 1 .. sim::kMaxPlayers
     std::uint64_t seed = 0;    ///< the world the generator makes
+    /// The kind of islands (EditorModel::landscapes): 0 the original's templates, then islands of
+    /// their own shape after Open1602's presets and the packages'.
+    std::size_t landscape = 0;
 
     [[nodiscard]] std::uint32_t width() const noexcept { return kSizes[size % kSizes.size()][0]; }
     [[nodiscard]] std::uint32_t height() const noexcept { return kSizes[size % kSizes.size()][1]; }
@@ -43,9 +46,11 @@ struct EditorNewIsland {
     /// A placeholder of the world plan instead (only a world that has a plan): the island is made
     /// when a game starts.
     bool placeholder = false;
-    std::uint8_t climate = 0;  ///< 0 north, 1 south
-    std::uint8_t size = 2;     ///< size class 0 .. 4
-    std::uint64_t seed = 0;    ///< which template, or the shape
+    /// 0 north, 1 south, from 2 a climate of a package (EditorModel::climates[climate - 2]); a
+    /// placeholder only north or south.
+    std::uint8_t climate = 0;
+    std::uint8_t size = 2;   ///< size class 0 .. 4
+    std::uint64_t seed = 0;  ///< which template, or the shape
     friend bool operator==(const EditorNewIsland&, const EditorNewIsland&) = default;
 };
 
@@ -160,6 +165,18 @@ struct EditorModel {
     /// The selected island's fertility (assets::IslandHeader::fertility) and climate.
     std::uint32_t island_fertility = 0;
     std::uint8_t island_climate = 0;
+    /// The crops the selected island's climate grows half without its fertility for them, as
+    /// fertility bits (sim::climate_crops).
+    std::uint32_t island_crops = 0;
+    /// The kinds of islands a new map may have (EditorNewMap::landscape), Windows-1252: the
+    /// original's templates first.
+    std::vector<std::string> landscapes;
+    /// The names of the packages' climates the world knows (Windows-1252), offered for new islands
+    /// after north and south.
+    std::vector<std::string> climates;
+    /// Which template a new island of a template takes (the page "Islands"), Windows-1252: its
+    /// number among the original's, or a package's island by name.
+    std::string island_template;
     /// An island is being placed (a new one, one moved or copied): the map's next click puts it down.
     bool placing = false;
     /// The smallest map that holds the islands, ships, land units and markers (the page "Map
@@ -322,7 +339,7 @@ public:
 
 private:
     void layout_document(const EditorModel& model);
-    void layout_new();
+    void layout_new(const EditorModel& model);
     void layout_open(const EditorModel& model);
     void layout_save(const EditorModel& model);
     void layout_selection(const EditorModel& model);
