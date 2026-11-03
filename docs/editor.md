@@ -139,6 +139,13 @@ player, without costs, and takes them away again. Each click, or each drag, is o
 | Building, Template, Ship, Unit, Resource | The group's buildings by name; the templates by name, read again from their folder each time the tool is chosen; the four ships of the shipyards (with those packages add), the pirates' ship and the free trader's ship, the four land units of the castle (with those packages add); a big or small iron vein, gold, a treasure or deer. |
 | Rotation | A quarter clockwise, for a building that turns or a template; the way a ship or unit faces. |
 | Owner | The player the building, template, ship or unit is for: one of the map's humans and computers, or the natives or the pirates where the map has them; for a ship also the free trader. |
+| Placed lately | The last six objects placed, the last first: a click takes one in hand again (its tool, building or type and rotation), for the owner chosen now. |
+
+The object stays in hand after it is placed, so the next click places another. A right click
+without dragging, or Escape, puts it away and the tool Select takes over. Where the tool would not
+place, the status line below the map and the column's note say why (no land of the owner there, no water for a ship, no
+mountain for a vein, ...) before the click. With Shift held, a drag of Build places along a straight
+row: across or down from where it began, whichever way the mouse went further.
 
 A building is placed as the game builds it, only without gold, goods, unlocked levels or limits
 (castle, cathedral, monuments): it needs its ground, the owner's land (a Kontor at the coast founds a
@@ -267,6 +274,8 @@ saved and cannot be edited; undo, save and the other pages wait until the plan i
 | R | Turn the piece or object in hand |
 | + and -, Ctrl and the mouse wheel | Larger and smaller brush |
 | Right button dragged | Land, Water, the brush and Random fill draw the other way (water for land) |
+| Right click | Puts back what is in hand (an island being placed, an object) |
+| Shift and Build dragged | Places along a straight row |
 | F1 | The keys |
 | Escape | Closes a menu, or goes back from a page of the column |
 

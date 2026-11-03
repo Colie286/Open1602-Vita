@@ -382,6 +382,11 @@ private:
     bool editor_objects_stroke(std::optional<render::TilePos> tile, Stroke phase);
     /// The drag of the page "Buildings" ends: what it placed is one step of undo.
     void editor_end_objects();
+    /// The object in hand goes first among the ones placed lately.
+    void editor_remember_object();
+    /// Why the tool of the page "Objects" would not place at the world tile (x, y), empty if it
+    /// would (or nothing is to be said).
+    [[nodiscard]] std::string editor_hover_refusal(std::int64_t x, std::int64_t y) const;
     /// The ships (Tool::Ship) or land units (Tool::Unit) the page "Objects" offers: their figures,
     /// the original's first, then the packages'.
     [[nodiscard]] std::vector<std::uint16_t> editor_figures(EditorObjects::Tool tool) const;
@@ -780,6 +785,9 @@ private:
         std::vector<std::unique_ptr<editor::Operation>> object_steps{};
         std::optional<std::pair<std::int64_t, std::int64_t>> object_at{};
         bool object_drag = false;
+        /// Where the drag began: with Shift held the drag places along a straight row from there.
+        std::optional<std::pair<std::int64_t, std::int64_t>> object_from{};
+        std::vector<EditorRecent> recent_objects{};  ///< the objects placed lately, the last first
         /// The dice preview (the page "Random elements"): the document's world with its plan while
         /// the map shows a roll of it, and the rolls made since the preview began.
         std::optional<sim::World> preview_plan{};

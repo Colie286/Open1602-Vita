@@ -4,6 +4,7 @@
 // player without costs, ships and land units, and takes them away, each click or drag one step of
 // undo.
 
+#include <SDL3/SDL.h>
 #include <algorithm>
 #include <cstdlib>
 #include <memory>
@@ -215,6 +216,7 @@ void MapViewer::editor_object_model(EditorModel& m) const {
             }
         }
     }
+    m.recent_objects = m_editor->recent_objects;
     const auto owners = object_owners(m_editor->document.world(), tool == Tool::Ship);
     m.object_owners = owners.size();
     if (!owners.empty()) {
@@ -395,6 +397,7 @@ void MapViewer::editor_place_template(std::int64_t x, std::int64_t y) {
     m_editor->document.perform(std::move(placed.step));
     editor_islands_changed();
     m_editor->notice.clear();
+    editor_remember_object();
     if (placed.plan.placed < items) {
         // Some of it did not fit: say how much stands.
         editor_notice(
@@ -505,6 +508,7 @@ bool MapViewer::editor_objects_stroke(std::optional<render::TilePos> tile, Strok
                 return true;
             }
             m_editor->object_at = {tile->x, tile->y};
+            m_editor->object_from = {tile->x, tile->y};
             m_editor->object_drag = true;
             (void)editor_place_object(tile->x, tile->y, true);
             if (!m_editor->object_steps.empty()) {
@@ -524,9 +528,20 @@ bool MapViewer::editor_objects_stroke(std::optional<render::TilePos> tile, Strok
             std::uint32_t fh = 0;
             sim::rotated_size(*b, m_editor->objects.rotation, fw, fh);
             const auto [lx, ly] = *m_editor->object_at;
+            // Shift held: a straight row, along the way the drag went further from where it began.
+            std::int64_t tx = tile->x;
+            std::int64_t ty = tile->y;
+            if ((SDL_GetModState() & SDL_KMOD_SHIFT) != 0 && m_editor->object_from) {
+                const auto [fx, fy] = *m_editor->object_from;
+                if (std::abs(tx - fx) >= std::abs(ty - fy)) {
+                    ty = fy;
+                } else {
+                    tx = fx;
+                }
+            }
             // Dragged: the next one where it no longer covers the last, along the way.
             bool placed = false;
-            for (const auto& [px, py] : editor::line_tiles(lx, ly, tile->x, tile->y)) {
+            for (const auto& [px, py] : editor::line_tiles(lx, ly, tx, ty)) {
                 const auto [ax, ay] = *m_editor->object_at;
                 if (std::abs(px - ax) < static_cast<std::int64_t>(fw) &&
                     std::abs(py - ay) < static_cast<std::int64_t>(fh)) {
@@ -616,6 +631,7 @@ void MapViewer::editor_place_figure(std::int64_t x, std::int64_t y) {
     m_editor->document.perform(std::move(op).value());
     editor_islands_changed();
     m_editor->notice.clear();
+    editor_remember_object();
     // A computer disbands its soldiers on an island without a city of its own in peacetime: say so.
     const sim::World& placed = m_editor->document.world();
     const sim::Player* p = placed.player(owner);
@@ -649,6 +665,7 @@ void MapViewer::editor_place_resource(render::TilePos tile) {
     m_editor->document.perform(std::move(op).value());
     editor_islands_changed();
     m_editor->notice.clear();
+    editor_remember_object();
 }
 
 void MapViewer::editor_remove_object(render::TilePos tile) {
@@ -696,9 +713,11 @@ void MapViewer::editor_end_objects() {
     }
     m_editor->object_drag = false;
     m_editor->object_at.reset();
+    m_editor->object_from.reset();
     if (m_editor->object_steps.empty()) {
         return;
     }
+    editor_remember_object();
     if (m_editor->object_steps.size() == 1) {
         m_editor->document.record(std::move(m_editor->object_steps.front()));
     } else {
@@ -706,6 +725,91 @@ void MapViewer::editor_end_objects() {
     }
     m_editor->object_steps.clear();
     m_editor->notice.clear();
+}
+
+void MapViewer::editor_remember_object() {
+    // The object in hand first among the last ones placed; the same one again only once.
+    EditorModel m;
+    editor_object_model(m);
+    if (m.object_name.empty()) {
+        return;
+    }
+    // The same object: the same tool and piece, whatever its owner or turn.
+    const auto key = [](const EditorObjects& o) {
+        using Tool = EditorObjects::Tool;
+        switch (o.tool) {
+            case Tool::Template:
+                return std::pair<std::size_t, std::size_t>{o.stamp, 0};
+            case Tool::Ship:
+                return std::pair<std::size_t, std::size_t>{o.ship, 0};
+            case Tool::Unit:
+                return std::pair<std::size_t, std::size_t>{o.unit, 0};
+            case Tool::Resource:
+                return std::pair<std::size_t, std::size_t>{o.resource, 0};
+            default:
+                return std::pair<std::size_t, std::size_t>{o.group, o.piece};
+        }
+    };
+    const auto same = [&](const EditorRecent& r) {
+        return r.objects.tool == m_editor->objects.tool && key(r.objects) == key(m_editor->objects);
+    };
+    auto& recent = m_editor->recent_objects;
+    recent.erase(std::remove_if(recent.begin(), recent.end(), same), recent.end());
+    recent.insert(recent.begin(), EditorRecent{m_editor->objects, m.object_name});
+    if (recent.size() > kEditorRecent) {
+        recent.resize(kEditorRecent);
+    }
+}
+
+std::string MapViewer::editor_hover_refusal(std::int64_t x, std::int64_t y) const {
+    const EditorPanel* panel = m_hud ? m_hud->editor_panel() : nullptr;
+    if (!m_editor || panel == nullptr || panel->page() != EditorPanel::Page::Objects || m_editor->placing ||
+        m_editor->object_drag) {
+        return {};
+    }
+    const sim::World& world = m_state->world;
+    if (x < 0 || y < 0 || x >= world.width() || y >= world.height()) {
+        return {};
+    }
+    using Tool = EditorObjects::Tool;
+    const Tool tool = m_editor->objects.tool;
+    if (tool == Tool::Build) {
+        const auto order = editor_object_order(x, y);
+        if (!order) {
+            return ui::tr(object_owners(world).empty() ? "editor.objects.note.no_players"
+                                                       : "editor.objects.refused.island");
+        }
+        sim::BuildPlan plan = sim::plan_build(world, m_buildings, *order);
+        (void)editor::refuse_second_city(world, *order, plan);
+        return !plan.items.empty() && !plan.items.front().ok() ? build_refusal(plan.items.front().refusal)
+                                                               : std::string();
+    }
+    if (tool == Tool::Ship || tool == Tool::Unit) {
+        const bool ship = tool == Tool::Ship;
+        const editor::UnitRefusal refused =
+            ship ? editor::ship_fits(world, m_buildings, x, y) : editor::unit_fits(world, m_buildings, x, y);
+        if (refused == editor::UnitRefusal::None) {
+            return {};
+        }
+        if (refused == editor::UnitRefusal::Taken) {
+            return ui::tr(ship ? "editor.objects.refused.ship_near" : "editor.objects.refused.unit_near");
+        }
+        return ui::tr(ship ? "editor.objects.refused.water" : "editor.objects.refused.ground");
+    }
+    if (tool == Tool::Resource) {
+        const sim::World::Cell& c = world.cell(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
+        if (c.island == sim::World::kSea) {
+            return ui::tr("editor.objects.refused.resource.0");
+        }
+        const auto resource =
+            static_cast<editor::Resource>(std::min(m_editor->objects.resource, editor::kResources - 1));
+        const sim::TilePos local{static_cast<std::int32_t>(c.local_x), static_cast<std::int32_t>(c.local_y)};
+        const editor::ResourceRefusal refused = editor::resource_fits(world, m_buildings, c.island, local, resource);
+        return refused == editor::ResourceRefusal::None
+                   ? std::string()
+                   : ui::tr("editor.objects.refused.resource." + std::to_string(static_cast<int>(refused) - 1));
+    }
+    return {};
 }
 
 }  // namespace o1602::app

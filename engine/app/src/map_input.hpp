@@ -88,7 +88,8 @@ public:
         /// A left click on the editor's map at `tile` while an island is being placed puts it
         /// there; false if nothing is being placed (the click picks).
         virtual bool editor_place(const render::TilePos& tile) = 0;
-        /// A right click on the editor's map: what is being placed goes back; false if nothing was.
+        /// A right click on the editor's map: what is being placed goes back, or the object in hand
+        /// (the tool "Select" takes over); false if nothing was.
         virtual bool editor_cancel_place() = 0;
         /// The left button pressed on the editor's map at `tile`, the mouse moved there with it held,
         /// or the button let go (`tile` nothing if off the map): a stroke of a terrain tool. False

@@ -123,6 +123,7 @@ constexpr Id kTabPlayers = 180;        ///< the players dialog's tab of the play
 constexpr Id kTabRelations = 181;      ///< the players dialog's tab of the diplomacy
 constexpr Id kColumnsBack = 182;       ///< the diplomacy table's columns before
 constexpr Id kColumnsOn = 183;         ///< the diplomacy table's columns after
+constexpr Id kRecent = 190;            ///< + the object placed lately (the page "Objects")
 constexpr Id kPlayerTable = 300;       ///< + 8 * the row + the column of the players' table
 constexpr std::size_t kTableRows = 16;
 constexpr Id kRelationTable = 500;  ///< + 16 * the row + the column of the diplomacy table
@@ -1238,8 +1239,30 @@ void EditorPanel::layout_objects(const EditorModel& model) {
     } else if (o.tool == Tool::Template && model.object_pieces == 0) {
         note = ui::tr("editor.objects.note.no_templates");
     }
-    constexpr std::int32_t kObjectsNote = 4 * 20;
-    if (!model.notice.empty()) {
+    // The objects placed lately, one to a row (their names are long), as far as room is left
+    // above the note and "Back".
+    const std::int32_t bottom = m_top + m_height - 4;
+    constexpr std::int32_t kRecentH = 26;
+    const std::size_t recent = std::min(model.recent_objects.size(), kEditorRecent);
+    if (recent > 0) {
+        const std::int32_t room = bottom - y - (kButtonH + 4) - 3 * 20 - 18;
+        const std::size_t rows = std::min(recent, static_cast<std::size_t>(std::max(0, room / kRecentH)));
+        if (rows > 0) {
+            f.label(Rect{m_x, y, m_w, 18}, ui::tr("editor.objects.recent"), Align::Left, Tone::Normal);
+            y += 18;
+            for (std::size_t i = 0; i < rows; ++i) {
+                f.button(kRecent + static_cast<Id>(i),
+                         Rect{m_x, y + static_cast<std::int32_t>(i) * kRecentH, m_w, kRecentH - 2},
+                         model.recent_objects[i].name);
+            }
+            y += static_cast<std::int32_t>(rows) * kRecentH + 2;
+        }
+    }
+    const std::int32_t kObjectsNote = std::clamp(bottom - y - (kButtonH + 4), 3 * 20, 4 * 20);
+    if (!model.object_hover.empty()) {
+        // Why a click where the mouse is would not place, in full (the status line is short).
+        f.paragraph(Rect{m_x, y, m_w, kObjectsNote}, model.object_hover, Tone::Warning, 20);
+    } else if (!model.notice.empty()) {
         f.paragraph(Rect{m_x, y, m_w, kObjectsNote}, model.notice, model.notice_is_error ? Tone::Warning : Tone::Dim,
                     20);
     } else {
@@ -2074,6 +2097,18 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
             return std::nullopt;
         default:
             break;
+    }
+    if (*id >= kRecent && *id < kRecent + static_cast<Id>(kEditorRecent)) {
+        // The object placed lately back in hand, for the owner chosen now.
+        const auto i = static_cast<std::size_t>(*id - kRecent);
+        if (i >= model.recent_objects.size()) {
+            return std::nullopt;
+        }
+        EditorRequest r{EditorRequest::Kind::Objects};
+        r.objects = model.recent_objects[i].objects;
+        r.objects.owner = model.objects.owner;
+        m_page = Page::Objects;
+        return r;
     }
     if (*id >= kPlayerTable && *id < kPlayerTable + static_cast<Id>(8 * kTableRows)) {
         // A cell of the players' table: its row's slot, then what its button on the column's

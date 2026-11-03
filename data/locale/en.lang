@@ -1400,6 +1400,7 @@ editor.objects.unit.2 = Musketeer
 editor.objects.unit.3 = Cannon
 editor.objects.building = Building ({1}/{2})
 editor.objects.rotation = Rotation
+editor.objects.recent = Placed lately
 editor.objects.owner = Owner
 editor.objects.no_owner = nobody
 editor.objects.refused.island = Buildings stand only on islands.

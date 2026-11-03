@@ -288,10 +288,12 @@ void EditorChrome::layout(const EditorModel& model, const EditorChromeModel& chr
     // The status line: what the mouse points at or what happened, and where on the map it is.
     f.panel(Rect{0, bottom, map_w, kStatusH});
     const std::string hint_text = hint(chrome);
-    const std::string& text = hint_text.empty() ? chrome.status : hint_text;
+    // Over the map, why the tool in hand would not place there comes before the last notice.
+    const bool hover = hint_text.empty() && !chrome.hover.empty();
+    const std::string& text = !hint_text.empty() ? hint_text : hover ? chrome.hover : chrome.status;
     const std::int32_t place_w = chrome.place.empty() ? 0 : std::min(map_w / 2, 260);
     f.label(Rect{6, bottom, std::max(0, map_w - place_w - 12), kStatusH}, text, Align::Left,
-            hint_text.empty() && chrome.status_error ? Tone::Warning : Tone::Normal);
+            hover || (hint_text.empty() && chrome.status_error) ? Tone::Warning : Tone::Normal);
     if (place_w > 0) {
         f.label(Rect{map_w - place_w - 6, bottom, place_w, kStatusH}, chrome.place, Align::Right, Tone::Dim);
     }

@@ -26,6 +26,8 @@ struct EditorChromeModel {
     std::string status;                          ///< the status line's text (Windows-1252), the notice first
     bool status_error = false;
     std::string place;  ///< where the mouse is on the map (Windows-1252), empty: off the map
+    /// Why the tool in hand would not place where the mouse is (Windows-1252), empty: it would.
+    std::string hover;
 };
 
 class EditorChrome {

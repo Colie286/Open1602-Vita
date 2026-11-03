@@ -96,6 +96,15 @@ struct EditorObjects {
     friend bool operator==(const EditorObjects&, const EditorObjects&) = default;
 };
 
+/// An object placed lately (the page "Objects" offers it again): the settings it was placed with
+/// and its name (Windows-1252).
+struct EditorRecent {
+    EditorObjects objects;
+    std::string name;
+};
+/// How many objects placed lately the page "Objects" offers.
+inline constexpr std::size_t kEditorRecent = 6;
+
 /// The tools of the editor's tool bar (EditorChrome), each with a key of its own: what a click on
 /// the map does.
 enum class EditorTool : std::uint8_t {
@@ -316,6 +325,11 @@ struct EditorModel {
     std::string object_name;
     bool object_turns = false;
     std::string object_owner;
+    /// The objects placed lately, the last first (at most kEditorRecent).
+    std::vector<EditorRecent> recent_objects;
+    /// Why the tool in hand would not place where the mouse is on the map (Windows-1252), empty:
+    /// it would, or the mouse is off the map.
+    std::string object_hover;
     /// The city of the building selected (the page "Selection"), its stock and owner.
     std::optional<EditorCity> city;
     /// The humans' and computers' slots (the page "Players"), in the order of the slots; whether

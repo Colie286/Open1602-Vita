@@ -1331,6 +1331,7 @@ editor.objects.unit.2 = Musketier
 editor.objects.unit.3 = Kanone
 editor.objects.building = Gebäude ({1}/{2})
 editor.objects.rotation = Drehung
+editor.objects.recent = Zuletzt gesetzt
 editor.objects.owner = Besitzer
 editor.objects.no_owner = keiner
 editor.objects.refused.island = Gebäude gibt es nur auf Inseln.

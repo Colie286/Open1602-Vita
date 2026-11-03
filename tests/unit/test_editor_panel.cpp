@@ -735,6 +735,46 @@ TEST_CASE("editor panel: the buildings' tools go through their tools, groups, bu
     CHECK(panel.page() == EditorPanel::Page::Document);
 }
 
+TEST_CASE("editor panel: the objects placed lately are offered again, for the owner chosen now") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(200, 560);
+    EditorModel m = document();
+    m.object_groups = 7;
+    m.object_pieces = 4;
+    m.object_group = "Farms";
+    m.object_name = "Cattle farm";
+    m.object_owner = "Merchant";
+    m.object_owners = 4;
+    m.objects.owner = 2;
+    (void)panel.choose_tool(app::EditorTool::Build, m);
+    panel.layout(m);
+    CHECK(!says(panel, "Placed lately"));  // nothing placed yet
+
+    app::EditorObjects ship;
+    ship.tool = app::EditorObjects::Tool::Ship;
+    ship.ship = 3;
+    ship.owner = 0;
+    m.recent_objects.push_back({ship, "Large warship"});
+    app::EditorObjects farm;
+    farm.group = 1;
+    farm.piece = 2;
+    m.recent_objects.push_back({farm, "Sheep farm"});
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Placed lately"));
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        CHECK(w.rect.y + w.rect.h <= 760);
+    }
+    CHECK(find(panel, "Back to the map").has_value());
+    const auto r = click(panel, m, "Large warship");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::Objects);
+    CHECK(r->objects.tool == app::EditorObjects::Tool::Ship);
+    CHECK(r->objects.ship == 3);
+    CHECK(r->objects.owner == 2);  // the owner chosen now, not the one it was placed for
+    CHECK(panel.page() == EditorPanel::Page::Objects);
+}
+
 TEST_CASE("editor panel: the tools Ship and Unit choose their type, the way they face and the owner") {
     ui::set_language("en");
     EditorPanel panel;
