@@ -504,3 +504,46 @@ TEST_CASE("simulation: the switches of the production window") {
     sw.on = false;
     CHECK(!simulation.execute(sw).accepted);
 }
+
+TEST_CASE("production: a known deposit shows on an island the player has not discovered, others do not") {
+    // With the island resources known from the start the deposits of every island are known
+    // before a ship has come near; their symbols show, the island's buildings still do not.
+    const auto buildings = make_buildings();
+    const auto figures = make_figures();
+    sim::World world;
+    world.set_players({sim::Player{}, sim::Player{sim::PlayerRole::Computer, 1, 0, ""}});
+    sim::WorldIsland island{assets::IslandHeader{}, sim::IslandMap(8, 8), 5, 5};
+    assets::IslandHeader::Deposit ore;
+    ore.ware = assets::ware::kOre;
+    ore.x = 2;
+    ore.y = 3;
+    island.header.deposits.push_back(ore);
+    REQUIRE(world.add_island(std::move(island)).ok());
+
+    const auto effekte = test::make_sheet(std::vector<std::pair<std::uint32_t, std::uint32_t>>(40, {6, 8}));
+    const auto palette = test::make_palette();
+    const assets::SpriteSheet* sheets[] = {&effekte};
+    auto atlas = render::SpriteAtlas::build(sheets, palette, 256);
+    REQUIRE(atlas.ok());
+    render::WorldLayers layers;
+    layers.figures = &figures;
+    layers.atlas = &*atlas;
+    layers.sheet_base[static_cast<std::size_t>(assets::FigureSheet::Effekte)] = atlas->sheet_base(0);
+    layers.local_player = 0;
+    const render::WorldView view{render::Zoom::Large, 0};
+    render::FigureSprites s;
+
+    render::BuildingFigure symbol;
+    symbol.role = render::BuildingFigureRole::Deposit;
+    symbol.figure = 46;  // any figure of the table: the symbol's own is not what is tested
+    symbol.island = 0;
+    symbol.origin_x = 2;
+    symbol.origin_y = 3;
+    render::BuildingFigure icon = symbol;  // a building's icon on the same island
+    icon.role = render::BuildingFigureRole::Status;
+    REQUIRE(!world.islands()[0].discovered_by(0));
+    CHECK(!render::building_figure_sprites(symbol, world, buildings, view, layers, 0, s));  // not known
+    world.explore_islands();
+    CHECK(render::building_figure_sprites(symbol, world, buildings, view, layers, 0, s));
+    CHECK(!render::building_figure_sprites(icon, world, buildings, view, layers, 0, s));  // still hidden
+}

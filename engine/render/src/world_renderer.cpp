@@ -719,8 +719,11 @@ bool building_figure_sprites(const BuildingFigure& figure, const sim::World& wor
         return false;
     }
     const assets::FigureType* fig = layers.figures->get(figure.figure);
-    // The original makes no display figures on an island the local player has not discovered.
-    if (fig == nullptr || undiscovered(world, layers.local_player, figure.island)) {
+    // The original makes no display figures on an island the local player has not discovered. A
+    // deposit the player knows is the exception: by ship that needs the island discovered anyway,
+    // with the island resources known from the start (Rules::reveal_resources) it does not.
+    if (fig == nullptr ||
+        (figure.role != BuildingFigureRole::Deposit && undiscovered(world, layers.local_player, figure.island))) {
         return false;
     }
     const WorldView view = fit_view(view_in, world);
@@ -743,8 +746,8 @@ bool building_figure_sprites(const BuildingFigure& figure, const sim::World& wor
             break;
         }
         case BuildingFigureRole::Deposit: {
-            // Drawn only for the local player who discovered the island (checked above) and
-            // explored this deposit (byte 3).
+            // Drawn only for the local player who knows this deposit (byte 3), also on an island
+            // they have not discovered (see above).
             if (figure.island >= world.islands().size() || layers.local_player == sim::kNoPlayer) {
                 return false;
             }
