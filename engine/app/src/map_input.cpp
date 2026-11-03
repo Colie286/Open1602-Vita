@@ -985,8 +985,8 @@ void MapInput::handle_event(const SDL_Event& event) {
                 // A stroke of the editor's terrain tools goes on where the mouse is over the map.
                 if (m_editor && !(m_hud && m_hud->covers(static_cast<std::int32_t>(event.motion.x),
                                                          static_cast<std::int32_t>(event.motion.y)))) {
-                    if (const auto tile = tile_at_mouse()) {
-                        (void)m_host.editor_stroke(*tile, Host::Stroke::Continue);
+                    if (const auto tile = tile_at_mouse(); tile.has_value()) {
+                        (void)m_host.editor_stroke(tile, Host::Stroke::Continue);
                     }
                 }
             }
