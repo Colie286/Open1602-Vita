@@ -12,6 +12,7 @@
 #include "o1602/assets/goods.hpp"
 #include "o1602/sim/balance.hpp"
 #include "o1602/sim/computer_orders.hpp"
+#include "o1602/sim/computer_slots.hpp"
 #include "o1602/sim/save_game.hpp"
 #include "o1602/sim/world.hpp"
 
@@ -361,6 +362,107 @@ TEST_CASE("computer producers: a game keeps them in the savegame (AIPR), a wrong
     CHECK(small_loaded->balance() == one);
 
     balance.computer_producers[1].attempts = 0;
+    world.set_balance(balance);
+    auto damaged = sim::write_game(world, buildings);
+    REQUIRE(damaged.ok());
+    CHECK(!sim::read_game(*damaged, buildings).ok());
+}
+
+TEST_CASE("computer slots: slots.toml changes rules of a slot and removes slots") {
+    namespace ai = sim::ai;
+    const assets::Goods goods = pepper_goods();
+    std::vector<std::string> warnings;
+    std::vector<sim::ComputerSlot> slots;
+    sim::apply_slots_file(slots, "mod", "", warnings, goods);
+    CHECK(slots.empty());  // nothing changed: the original's
+
+    sim::apply_slots_file(slots, "mod",
+                          "[stonemason]\nprocess_max = 3\n"
+                          "[smelter]\nsingle_below_stock = 0\n"
+                          "[alcohol]\ncounts = \"spice:pepper, anno1602:tobacco_goods\"\n"
+                          "[church]\nmin_houses = 20\nroads_on_fail = false\n"
+                          "[spices]\nsubsidy_ware = \"spice:pepper\"\nsubsidy_tons = 2\n"
+                          "subsidy_class = \"anno1602:merchants\"\nsubsidy_people = 40\n"
+                          "[weaving_mill]\nremove = true\n",
+                          warnings, goods);
+    REQUIRE(warnings.empty());
+    REQUIRE(sim::valid(slots));
+    const auto at = [&](std::uint8_t n) { return *sim::computer_slot(slots, n); };
+    CHECK(at(ai::kSlotStonemason).process_max == 3);
+    CHECK(at(ai::kSlotSmelter).single_below_stock == 0);
+    const std::vector<std::uint8_t> alcohol = {assets::ware::kFirstOwn, assets::ware::kTobaccoGoods};
+    CHECK(at(ai::kSlotAlcohol).counts_goods == alcohol);
+    CHECK(at(ai::kSlotKirche).min_houses == 20);
+    CHECK(!at(ai::kSlotKirche).roads_on_fail);
+    CHECK(at(ai::kSlotSpices).subsidy_ware == assets::ware::kFirstOwn);
+    CHECK(at(ai::kSlotSpices).subsidy_tons == 2);
+    CHECK(at(ai::kSlotSpices).subsidy_class == 3);
+    CHECK(at(ai::kSlotSpices).subsidy_people == 40);
+    // The weaving mill keeps its name and number; the swaps to it and the order of its
+    // processing are gone, and so is the producer that waited for it.
+    CHECK(at(ai::kSlotWeberei).removed);
+    CHECK(at(ai::kSlotWeberei).kind == sim::ComputerSlot::Kind::None);
+    CHECK(at(ai::kSlotWeberei).name == "weaving_mill");
+    CHECK(at(ai::kSlotSheep).instead == sim::kNoProducer);
+    CHECK(at(ai::kSlotWebstube).instead == sim::kNoProducer);
+    CHECK(slots.size() == sim::original_computer_slots().size());
+
+    // A later table cannot change a removed slot; what cannot be read is passed over with the line.
+    sim::apply_slots_file(slots, "late",
+                          "[weaving_mill]\nraw_stock = 2\n"
+                          "[kontor]\nremove = true\n"
+                          "[bakery]\nmin_houses = 3\nprocess_from = \"bakery\"\nwhat = 1\n"
+                          "[castle_of_dreams]\n",
+                          warnings, goods);
+    CHECK(warnings.size() == 6);
+    CHECK(warnings[0].starts_with("late/slots.toml:1: "));
+    CHECK(sim::valid(slots));
+    CHECK(at(ai::kSlotBakery).process_from == ai::kSlotMill);
+
+    // Not valid: another name, a fixed field changed, a rule naming a removed slot.
+    std::vector<sim::ComputerSlot> wrong = slots;
+    wrong[0].name = "office";
+    CHECK(!sim::valid(wrong));
+    wrong = slots;
+    wrong[1].building = 1234;
+    CHECK(!sim::valid(wrong));
+    wrong = slots;
+    for (sim::ComputerSlot& k : wrong) {
+        if (k.number == ai::kSlotSheep) {
+            k.process_from = ai::kSlotWeberei;
+            k.process_per = 1;
+            k.process_rank = 9;
+        }
+    }
+    CHECK(!sim::valid(wrong));
+    wrong = slots;
+    wrong.pop_back();
+    CHECK(!sim::valid(wrong));
+}
+
+TEST_CASE("computer slots: a game keeps its slots in the savegame (SLOT), a wrong one loads nothing") {
+    const assets::BuildingTable buildings;
+    sim::World world(60, 40);
+    std::vector<std::string> warnings;
+    sim::Balance balance;
+    sim::apply_slots_file(balance.computer_slots, "mod",
+                          "[food]\ncounts = \"spice:pepper\"\n[gold_mine]\nremove = true\n"
+                          "[mill]\nprocess_per = 3\nprocess_round_up = true\n",
+                          warnings, pepper_goods());
+    REQUIRE(warnings.empty());
+    REQUIRE(sim::valid(balance));
+    world.set_balance(balance);
+    auto bytes = sim::write_game(world, buildings);
+    REQUIRE(bytes.ok());
+    auto loaded = sim::read_game(*bytes, buildings);
+    REQUIRE(loaded.ok());
+    CHECK(loaded->balance() == balance);
+
+    for (sim::ComputerSlot& k : balance.computer_slots) {
+        if (k.number == sim::ai::kSlotMill) {
+            k.process_per = 0;  // processed by rank without a count
+        }
+    }
     world.set_balance(balance);
     auto damaged = sim::write_game(world, buildings);
     REQUIRE(damaged.ok());

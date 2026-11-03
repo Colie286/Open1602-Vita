@@ -191,10 +191,55 @@ The survey counts a production building as the producer whose `building` or `cou
 before it looks at its good and raw material. A field that cannot be read or an unknown producer is
 passed over with a warning that names the file and the line.
 
-What stays in the code: a weaving hut becomes a weaving mill and sheep cotton where cotton grows
-fully; a stonemason waits for two quarries, a goldsmith for gold in stock, a second smelter for ore
-and three iron workshops; the mines look for their deposits. A game keeps the changed producers
-(section `AIPR` of the savegame).
+The rules of single producers are fields of their slots (below). A game keeps the changed
+producers (section `AIPR` of the savegame).
+
+## The slots
+
+A computer's city keeps what it has in slots: one for each producer an order names, for each public
+building, for its Kontor, market, houses, towers and castle, and the counters `food` and `alcohol`
+that its stages look at. A package's `slots.toml` changes the rules of a slot or removes it; a table
+names the slot by its name in the orders, a field it leaves out stays as it was:
+
+```toml
+# mods/rome/slots.toml: no weaving mill, olive oil counts as food, a church needs 20 houses
+[weaving_mill]
+remove = true
+
+[food]
+counts = "rome:oil"
+
+[church]
+min_houses = 20
+
+# two stonemasons for each quarry at most, three with the original's rule
+[stonemason]
+process_max = 3
+```
+
+`remove = true` removes a producer, a tower or a public building: the computers neither build nor
+count it, the orders that name it go on to their next entry, and the rules of other slots that name
+it are dropped (a producer that waited for it waits for none). A removed slot keeps its number, so
+the orders can still name it; a later table cannot change it.
+
+| Field | Slots | Meaning |
+|---|---|---|
+| `counts` | `food`, `alcohol` | a list of up to 16 goods (`<package>:<name>` or `anno1602:<name>`) whose producers count as the city's food or alcohol producers besides the original's |
+| `min_houses` | public buildings | how many houses a site must reach that lack its service (the original: chapel 3, fire brigade 6, tavern, school, doctor and bath house 8, college, theatre and gallows 10, church 16) |
+| `roads_on_fail` | public buildings | `true`: the computer lays roads where it found no site |
+| `instead`, `instead_crop`, `instead_unlocked` | producers | build producer `instead` where the crop `instead_crop` (grain, tobacco, spices, sugar, cotton, wine, cocoa) grows fully, once the building of `instead_unlocked` is unlocked (without it: at once); the original: `cotton` for `sheep`, `weaving_mill` for `weaving_hut`; `instead = ""` none |
+| `single_below_stock`, `single_below_users` | producers | at most one unless the city has as many tons of its raw material and as many producers that wait for it (`after`); the original's smelter: 30 and 3; 0 no limit |
+| `raw_stock` | producers | built only while the city has more tons of its raw material (the original's goldsmith: 1); 0 no test |
+| `process_from`, `process_per`, `process_round_up`, `process_rank` | producers | the order `processing` builds one for every `process_per` producers of `process_from`, rounded down or up, in the order of their ranks (1 first; 0 not in it); the original: mill, bakery, weaving hut, weaving mill, butcher, tobacco goods, rum, stonemason |
+| `process_max` | producers | at most so many for each producer of `process_from` (the original's stonemason: 2); 0 no limit |
+| `subsidy_ware`, `subsidy_tons`, `subsidy_above` | producers | a city of 50 citizens and above gets `subsidy_tons` of the good while it has less than 3 t and more than `subsidy_above` of these producers (the original: a ton of spices, tobacco, alcohol, sugar, wool and cocoa above 3 farms, 4 t of ore above none); `subsidy_ware = ""` none |
+| `subsidy_class`, `subsidy_people` | producers | the subsidy only with as many inhabitants of this class and above (`anno1602:pioneers` to `anno1602:aristocrats`; the original's cocoa: 100 merchants); 0 no test |
+
+What stays in the code: the mines look for their deposits, and the Kontor, market, houses, shipyard,
+towers and castle are counted by their kind of building. The producers of packages' goods
+([goods.md](goods.md)) are derived from the building table and count in slots after the original's.
+A field that cannot be read or an unknown slot is passed over with a warning that names the file and
+the line. A game keeps the changed slots (section `SLOT` of the savegame).
 
 ## What they get from nowhere
 
@@ -227,7 +272,11 @@ A game keeps them with its other balance values (section `BALA` version 2 of the
 `default_order`, `apply_computers_file`), kept in `Balance::computer_orders`; `Engine::run_stage`
 and `Engine::first_need` in `ai_planner.cpp` go through them. The producers' changes
 (`ComputerProducer`) are kept in `Balance::computer_producers`; `need_def` and `counted_slot`
-(`ai_tables.hpp`) lay them over the original's Needs (`kNeeds`) and survey (`kProducerCounts`).
+(`ai_tables.hpp`) lay them over the Needs and the survey of the slots.
+
+`engine/sim/include/o1602/sim/computer_slots.hpp`: the slots (`ComputerSlot`,
+`original_computer_slots`, `apply_slots_file`), kept in `Balance::computer_slots` (empty: the
+original's) and read by the computers through `Engine::slots()`.
 
 `engine/sim/src/ai/ai_chains.hpp`: `package_needs` (the producers from the building table),
 `package_wanted` (how many a city wants); `Engine::package_chains` in `ai_planner.cpp` plans them,

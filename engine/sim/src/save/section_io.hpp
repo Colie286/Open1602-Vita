@@ -123,6 +123,8 @@ struct Decoded {
     std::optional<std::vector<ComputerOrder>> computer_orders;
     /// The computers' producers a package changed (AIPR).
     std::optional<std::vector<ComputerProducer>> computer_producers;
+    /// The slots of the computers' city records a package changed (SLOT).
+    std::optional<std::vector<ComputerSlot>> computer_slots;
     /// The packages' climates and the islands that have one (CLIM).
     struct ClimatePart {
         std::vector<Climate> climates;

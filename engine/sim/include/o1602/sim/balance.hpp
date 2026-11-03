@@ -19,6 +19,7 @@
 
 #include "o1602/sim/climates.hpp"
 #include "o1602/sim/computer_orders.hpp"
+#include "o1602/sim/computer_slots.hpp"
 
 namespace o1602::assets {
 class BuildingTable;
@@ -148,6 +149,9 @@ struct Balance {
     /// The computers' producers a package changed ([producer.<name>] of computers.toml), sorted by
     /// slot, each once.
     std::vector<ComputerProducer> computer_producers;
+    /// The slots of the computers' city records as the packages changed them (slots.toml): every
+    /// slot of the original's by number, empty for the original's (computer_slots_of).
+    std::vector<ComputerSlot> computer_slots;
     /// The packages' climates (climates.toml), in load order; WorldIsland::climate numbers them from 1.
     std::vector<Climate> climates;
 

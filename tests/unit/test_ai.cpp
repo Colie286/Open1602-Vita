@@ -18,11 +18,13 @@
 #include "o1602/assets/cod.hpp"
 #include "o1602/assets/figure_table.hpp"
 #include "o1602/assets/game_data.hpp"
+#include "o1602/assets/goods.hpp"
 #include "o1602/core/byte_reader.hpp"
 #include "o1602/core/byte_writer.hpp"
 #include "o1602/sim/ai.hpp"
 #include "o1602/sim/balance.hpp"
 #include "o1602/sim/computer_orders.hpp"
+#include "o1602/sim/computer_slots.hpp"
 #include "o1602/sim/construction.hpp"
 #include "o1602/sim/pathfinding.hpp"
 #include "o1602/sim/save_game.hpp"
@@ -1744,6 +1746,77 @@ TEST_CASE("ai: a package's building replaces a producer of the original's ([prod
     };
     CHECK(workshops_built(false) == 0);
     CHECK(workshops_built(true) == 1);
+}
+
+TEST_CASE("ai: a package's slots count its good as food and remove a producer (slots.toml)") {
+    // As above, the package's workshop is the bakery. Counted as food, the survey finds it on the
+    // city's food counter; with the bakery removed the order asks for nothing.
+    struct Built {
+        std::size_t workshops = 0;
+        std::uint32_t food = 0;
+    };
+    const auto built = [](std::string_view slots_toml) {
+        Game g;
+        static constexpr std::uint32_t kSmokehouse = 20992;
+        g.buildings = make_buildings(
+            "  @Nummer: 13\n  Id: 20992\n  Kind: 14\n  Gfx: 100\n  Size: 2, 2\n"
+            "  Objekt: HAUS_PRODTYP\n    Kind: 1\n    Maxlager: 4\n    Ware: 59\n"
+            "    Prodmenge: 1\n    Interval: 20\n  EndObj\n"
+            "  Objekt: HAUS_BAUKOST\n    Money: 50\n  EndObj\n");
+        g.buildings.by_id(kKontor)->ware = sim::ware::kAll;
+        sim::Balance balance;
+        balance.computer_orders.push_back(
+            {sim::ComputerList::Founded,
+             {sim::ComputerNeed{sim::ComputerNeed::Kind::Market, 0, 1},
+              sim::ComputerNeed{sim::ComputerNeed::Kind::Building, sim::ai::kSlotBakery, 1},
+              sim::ComputerNeed{sim::ComputerNeed::Kind::Houses, 0, 8}}});
+        sim::ComputerProducer bakery;
+        bakery.slot = sim::ai::kSlotBakery;
+        bakery.building = kSmokehouse;
+        bakery.after = sim::kNoProducer;
+        balance.computer_producers.push_back(bakery);
+        assets::Goods goods;
+        assets::OwnGood fish;
+        fish.id = "smoke:fish";
+        fish.price = 10;
+        fish.icon = assets::ware::kFirstTrade;
+        REQUIRE(goods.add(fish).ok());
+        REQUIRE(goods.own("smoke:fish")->number == 59);
+        std::vector<std::string> warnings;
+        sim::apply_slots_file(balance.computer_slots, "smoke", slots_toml, warnings, goods);
+        REQUIRE(warnings.empty());
+        REQUIRE(sim::valid(balance));
+        g.world.set_balance(balance);
+        sim::Simulation s(g.world, g.buildings, g.figures);
+        found_city(g, s, 120'000);
+        Built out;
+        for (const sim::City& c : g.world.cities()) {
+            if (c.owner != kComputer) {
+                continue;
+            }
+            const sim::IslandMap& map = g.world.island(c.island).map;
+            for (std::uint32_t y = 0; y < map.height(); ++y) {
+                for (std::uint32_t x = 0; x < map.width(); ++x) {
+                    const sim::MapCell& cell = map.top(x, y);
+                    const assets::BuildingType* b = g.buildings.by_sprite(cell.sprite);
+                    out.workshops += b != nullptr && b->id == kSmokehouse && cell.owner == kComputer ? 1U : 0U;
+                }
+            }
+        }
+        out.workshops /= 4;  // four tiles each
+        const auto view = s.computers().view();
+        REQUIRE(!view.empty());
+        REQUIRE(!view[0].plans.empty());
+        out.food = view[0].plans[0].slots[sim::ai::kSlotFood][0];
+        return out;
+    };
+    const Built plain = built("");
+    CHECK(plain.workshops == 1);
+    CHECK(plain.food == 0);
+    const Built food = built("[food]\ncounts = \"smoke:fish\"\n");
+    CHECK(food.workshops == 1);
+    CHECK(food.food == 1);
+    CHECK(built("[bakery]\nremove = true\n").workshops == 0);
 }
 
 TEST_CASE("ai: when a city moves on to the next stage comes from the game's balance ([computer_stages])") {

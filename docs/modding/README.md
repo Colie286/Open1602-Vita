@@ -61,7 +61,7 @@ Each file does one thing; a package has only the files it needs.
 | images of buildings, figures and ships; icons | `graphics.toml`, `figure_images.toml`, `icons.toml` | [graphics.md](graphics.md) |
 | music and sounds | `music.toml`, `sounds.toml` | [sounds.md](sounds.md) |
 | numbers of the game: trader, disasters, computers' gifts | `balance.toml` | [balance.md](balance.md) |
-| what the computer players build | `computers.toml` | [computer-players.md](computer-players.md) |
+| what the computer players build | `computers.toml`, `slots.toml` | [computer-players.md](computer-players.md) |
 | the neutral factions: pirates, trader, natives | `factions.toml` | [factions.md](factions.md) |
 | kinds of island world for new games | `landscapes.toml` | [landscapes.md](landscapes.md) |
 | climates: their crops, forest and share of the islands | `climates.toml` | [climates.md](climates.md) |

@@ -23,6 +23,7 @@
 #include "o1602/assets/building_table.hpp"
 #include "o1602/assets/figure_table.hpp"
 #include "o1602/sim/computer_orders.hpp"
+#include "o1602/sim/computer_slots.hpp"
 #include "o1602/sim/construction.hpp"
 #include "o1602/sim/game_data.hpp"
 #include "o1602/sim/ship.hpp"
@@ -330,6 +331,10 @@ private:
     bool package_order(AiPlayer& p, const City& c, const CityPlan& r, std::uint8_t w, std::uint32_t wanted);
     /// The money and goods the computers get from nowhere, from the game's balance.
     [[nodiscard]] Cheats cheats() const;
+    /// The slots of the game's city records (Balance::computer_slots, else the original's).
+    [[nodiscard]] const std::vector<ComputerSlot>& slots() const {
+        return computer_slots_of(m_world.balance().computer_slots);
+    }
     /// The slot of the package's Need that makes `w`, if any.
     [[nodiscard]] std::optional<std::uint8_t> package_slot(std::uint8_t w) const;
     bool need_houses(AiPlayer& p, std::uint32_t n);

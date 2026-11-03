@@ -172,7 +172,7 @@ bool valid(const Balance& balance) noexcept {
                                                         return !before_figure(a, b);
                                                     }) == balance.figures.end();
     return numbers && buildings && ordered && figures && figures_ordered && valid(balance.computer_orders) &&
-           valid(balance.computer_producers);
+           valid(balance.computer_producers) && valid(balance.computer_slots);
 }
 
 std::uint16_t balance_version(const Balance& balance) noexcept {

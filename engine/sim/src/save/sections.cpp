@@ -167,6 +167,9 @@ constexpr std::uint16_t kClimatesWithShares = 3;
 /// The computers' producers a package changed (Balance::computer_producers), only written when
 /// there are any. Required: the computers would build otherwise.
 constexpr std::uint32_t kComputerProducers = tag("AIPR");
+/// The slots of the computers' city records a package changed (Balance::computer_slots), only
+/// written when there are any. Required: the computers would build otherwise.
+constexpr std::uint32_t kComputerSlots = tag("SLOT");
 /// SCRP version 2: each script's table `campaign` after its table `state`.
 constexpr std::uint16_t kScriptsWithCampaign = 2;
 
@@ -174,23 +177,102 @@ constexpr std::uint16_t kScriptsWithCampaign = 2;
 constexpr std::size_t kMaxScenarioIdLength = 2 * assets::kMaxPackageIdLength + 1;
 
 /// Every section this version reads; others are of a later version.
-constexpr std::array kKnownSections = {
-    kRules,          kWorld,          kIslands,          kTiles,      kPlayers,        kCities,
-    kProductions,    kHouses,         kGrowth,           kCosts,      kShips,          kSoldiers,
-    kAnimals,        kDisasters,      kVolcanoes,        kSimulation, kFleet,          kEpochs,
-    kArmy,           kDiplomacy,      kExplored,         kMap,        kWorld2,         kMeta,
-    kMissions,       kPlayerState,    kCityState,        kOrigin,     kQueues,         kStances,
-    kScores,         kMaterialClocks, kPopulationMarks,  kTutorial,   kGiveUps,        kFactions,
-    kLedgers,        kBalance,        kBuildingValues,   kPackages,   kFigureValues,   kOwnBuildings,
-    kGoods,          kClasses,        kLevels,           kUnlocked,   kGoodPictures,   kScripts,
-    kClassPublic,    kUnitGroups,     kScenario,         kCampaign,   kComputerOrders, kOwnFigures,
-    kLevelMessages,  kBlueprints,     kScenarioInfo,     kMarkers,    kScenarioScript, kEditorState,
-    kPlannedIslands, kClimates,       kComputerProducers};
+constexpr std::array kKnownSections = {kRules,
+                                       kWorld,
+                                       kIslands,
+                                       kTiles,
+                                       kPlayers,
+                                       kCities,
+                                       kProductions,
+                                       kHouses,
+                                       kGrowth,
+                                       kCosts,
+                                       kShips,
+                                       kSoldiers,
+                                       kAnimals,
+                                       kDisasters,
+                                       kVolcanoes,
+                                       kSimulation,
+                                       kFleet,
+                                       kEpochs,
+                                       kArmy,
+                                       kDiplomacy,
+                                       kExplored,
+                                       kMap,
+                                       kWorld2,
+                                       kMeta,
+                                       kMissions,
+                                       kPlayerState,
+                                       kCityState,
+                                       kOrigin,
+                                       kQueues,
+                                       kStances,
+                                       kScores,
+                                       kMaterialClocks,
+                                       kPopulationMarks,
+                                       kTutorial,
+                                       kGiveUps,
+                                       kFactions,
+                                       kLedgers,
+                                       kBalance,
+                                       kBuildingValues,
+                                       kPackages,
+                                       kFigureValues,
+                                       kOwnBuildings,
+                                       kGoods,
+                                       kClasses,
+                                       kLevels,
+                                       kUnlocked,
+                                       kGoodPictures,
+                                       kScripts,
+                                       kClassPublic,
+                                       kUnitGroups,
+                                       kScenario,
+                                       kCampaign,
+                                       kComputerOrders,
+                                       kOwnFigures,
+                                       kLevelMessages,
+                                       kBlueprints,
+                                       kScenarioInfo,
+                                       kMarkers,
+                                       kScenarioScript,
+                                       kEditorState,
+                                       kPlannedIslands,
+                                       kClimates,
+                                       kComputerProducers,
+                                       kComputerSlots};
 
 /// Section flag (the u16 after the version): the section holds state the game cannot do without, so
 /// a reader that cannot read it (unknown identifier or later version) must not load the file. Other
 /// sections it skips with a warning. Files of earlier versions have no flags: all sections optional.
 constexpr std::uint16_t kRequired = 1;
+
+/// A slot of SLOT: its number and the fields slots.toml changes; the others are the original's.
+template <class A, class S>
+void slot_fields(A& a, S& s) {
+    a.u8(s.number);
+    a.boolean(s.removed);
+    a.u8(s.instead);
+    a.u8(s.instead_crop);
+    a.u8(s.instead_unlocked);
+    a.u8(s.single_below_stock);
+    a.u8(s.single_below_users);
+    a.u8(s.raw_stock);
+    a.u8(s.process_from);
+    a.u8(s.process_per);
+    a.boolean(s.process_round_up);
+    a.u8(s.process_rank);
+    a.u8(s.process_max);
+    a.u8(s.subsidy_ware);
+    a.u8(s.subsidy_tons);
+    a.u8(s.subsidy_above);
+    a.u8(s.subsidy_class);
+    a.u16(s.subsidy_people);
+    a.u8(s.after);
+    a.u8s(s.counts_goods);
+    a.i32(s.min_houses);
+    a.boolean(s.roads_on_fail);
+}
 
 /// Whether a section is required (kRequired) when written.
 enum class Need : std::uint8_t { Required, Optional };
@@ -589,6 +671,11 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
                 o.u8(static_cast<std::uint8_t>(p.wait.value_or(ProducerWait::None)));
                 o.u32s(p.counts);
             });
+        });
+    }
+    if (!world.balance().computer_slots.empty()) {
+        section(out, kComputerSlots, [&](Writer& o) {
+            o.list(world.balance().computer_slots, 28, [&](const ComputerSlot& k) { slot_fields(o, k); });
         });
     }
     if (!world.balance().climates.empty()) {
@@ -1178,6 +1265,52 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                     in.fail();
                 }
                 d.computer_producers = std::move(producers);
+                break;
+            }
+            case kComputerSlots: {
+                std::vector<ComputerSlot> slots;
+                in.list(slots, 28, [&](ComputerSlot& k) {
+                    slot_fields(in, k);
+                    const ComputerSlot* o = computer_slot(original_computer_slots(), k.number);
+                    if (o == nullptr) {
+                        in.fail();  // a slot of a later version
+                        return;
+                    }
+                    // What slots.toml does not change is the original's.
+                    ComputerSlot read = k;
+                    k = *o;
+                    if (read.removed) {
+                        k = ComputerSlot{};
+                        k.name = o->name;
+                        k.number = o->number;
+                        k.removed = true;
+                    } else {
+                        k.instead = read.instead;
+                        k.instead_crop = read.instead_crop;
+                        k.instead_unlocked = read.instead_unlocked;
+                        k.single_below_stock = read.single_below_stock;
+                        k.single_below_users = read.single_below_users;
+                        k.raw_stock = read.raw_stock;
+                        k.process_from = read.process_from;
+                        k.process_per = read.process_per;
+                        k.process_round_up = read.process_round_up;
+                        k.process_rank = read.process_rank;
+                        k.process_max = read.process_max;
+                        k.subsidy_ware = read.subsidy_ware;
+                        k.subsidy_tons = read.subsidy_tons;
+                        k.subsidy_above = read.subsidy_above;
+                        k.subsidy_class = read.subsidy_class;
+                        k.subsidy_people = read.subsidy_people;
+                        k.after = read.after;
+                        k.counts_goods = std::move(read.counts_goods);
+                        k.min_houses = read.min_houses;
+                        k.roads_on_fail = read.roads_on_fail;
+                    }
+                });
+                if (!valid(slots)) {
+                    in.fail();
+                }
+                d.computer_slots = std::move(slots);
                 break;
             }
             case kClimates: {

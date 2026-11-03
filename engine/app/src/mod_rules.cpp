@@ -141,6 +141,10 @@ ModRules load_mod_rules(std::span<const assets::ModPackage> packages, assets::Bu
             sim::apply_computers_file(rules.balance.computer_orders, package.id, text, problems, rules.goods,
                                       &rules.balance.computer_producers, rules.own);
         }
+        if (const auto bytes = core::read_file(package.folder / sim::kSlotsFile)) {
+            const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
+            sim::apply_slots_file(rules.balance.computer_slots, package.id, text, problems, rules.goods);
+        }
     }
     // Climates after the buildings, whose trees their forest may name.
     for (const assets::ModPackage& package : packages) {

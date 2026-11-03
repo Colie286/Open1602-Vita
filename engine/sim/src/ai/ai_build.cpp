@@ -333,7 +333,7 @@ void Engine::task_building(AiPlayer& p, std::uint8_t task) {
         task_workshop(p);
         return;
     }
-    if (public_task(task)) {
+    if (public_task(slots(), task)) {
         task_public(p, task);
         return;
     }
@@ -497,7 +497,7 @@ void Engine::task_houses(AiPlayer& p) {
 }
 
 void Engine::task_public(AiPlayer& p, std::uint8_t task) {
-    const std::optional<PublicTask> def = public_task(task);
+    const std::optional<PublicTask> def = public_task(slots(), task);
     CityPlan* r = current_plan(p);
     if (!def || r == nullptr) {
         pop(p);
@@ -1186,16 +1186,18 @@ bool Engine::survey_tile(AiPlayer& p, const City& c, CityPlan& r, std::uint32_t 
         return true;
     }
     // Producers by ware and raw material.
-    if (w == m_buildings.food_ware()) {
-        count(kSlotFood);
-    }
-    if (w == ware::kAlcohol) {
-        count(kSlotAlcohol);
+    // Food and alcohol, with the goods of packages that count as such (ComputerSlot::counts_goods).
+    for (const std::uint8_t counter : {std::uint8_t{kSlotFood}, std::uint8_t{kSlotAlcohol}}) {
+        const ComputerSlot* k = computer_slot(slots(), counter);
+        if ((counter == kSlotFood ? w == m_buildings.food_ware() : w == ware::kAlcohol) ||
+            (k != nullptr && std::ranges::find(k->counts_goods, w) != k->counts_goods.end())) {
+            count(counter);
+        }
     }
     // A package's producer first: its building and those it counts (ComputerProducer).
     std::optional<std::uint8_t> slot = counted_slot(t.type->id, m_world.balance().computer_producers);
     if (!slot) {
-        slot = producer_slot(w, raw, t.type->id);
+        slot = producer_slot(slots(), w, raw, t.type->id);
     }
     if (!slot) {
         slot = package_slot(w);

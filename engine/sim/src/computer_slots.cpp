@@ -2,9 +2,13 @@
 #include "o1602/sim/computer_slots.hpp"
 
 #include <algorithm>
+#include <charconv>
+#include <optional>
 
 #include "ai/ai_state.hpp"
 
+#include "o1602/assets/original_names.hpp"
+#include "o1602/core/data_file.hpp"
 #include "o1602/sim/game_data.hpp"
 #include "o1602/sim/houses.hpp"
 
@@ -257,6 +261,355 @@ const ComputerSlot* find_computer_slot(std::span<const ComputerSlot> slots, std:
 const ComputerSlot* computer_slot(std::span<const ComputerSlot> slots, std::uint8_t number) noexcept {
     const auto it = std::ranges::find(slots, number, &ComputerSlot::number);
     return it == slots.end() ? nullptr : &*it;
+}
+
+namespace {
+
+/// Whether slot `n` of `slots` may be named by a rule of another: kNoProducer, or a producer or a
+/// tower that is not `self`.
+bool producer_ref(const std::vector<ComputerSlot>& slots, std::uint8_t n, std::uint8_t self) noexcept {
+    if (n == kNoProducer) {
+        return true;
+    }
+    const ComputerSlot* s = computer_slot(slots, n);
+    return n != self && s != nullptr && (s->kind == Kind::Producer || s->kind == Kind::Tower);
+}
+
+/// The slot `original` as removed.
+ComputerSlot removed_slot(const ComputerSlot& original) {
+    ComputerSlot s = counter(original.number, original.name);
+    s.removed = true;
+    return s;
+}
+
+/// Whether `s` keeps every field of `o` a package cannot change in slots.toml.
+bool same_fixed(const ComputerSlot& s, const ComputerSlot& o) noexcept {
+    return s.kind == o.kind && s.task == o.task && s.building == o.building && s.ware == o.ware && s.raw == o.raw &&
+           s.field == o.field && s.wait == o.wait && s.attempts == o.attempts && s.fertile == o.fertile &&
+           s.from_start == o.from_start && (s.after == o.after || s.after == kNoProducer) && s.deposit == o.deposit &&
+           s.count_ware == o.count_ware && s.count_raw == o.count_raw && s.count_building == o.count_building &&
+           s.flag == o.flag && s.service == o.service;
+}
+
+/// Whether the counter of food or alcohol may count goods.
+bool counts_goods(std::uint8_t number) noexcept {
+    return number == ai::kSlotFood || number == ai::kSlotAlcohol;
+}
+
+}  // namespace
+
+bool valid(const std::vector<ComputerSlot>& slots) noexcept {
+    if (slots.empty()) {
+        return true;
+    }
+    const std::vector<ComputerSlot>& original = original_computer_slots();
+    if (slots.size() != original.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < slots.size(); ++i) {
+        const ComputerSlot& s = slots[i];
+        const ComputerSlot& o = original[i];
+        if (s.number != o.number || s.name != o.name) {
+            return false;
+        }
+        if (s.removed) {
+            if (s != removed_slot(o) || (o.kind != Kind::Producer && o.kind != Kind::Tower && o.kind != Kind::Public)) {
+                return false;
+            }
+            continue;
+        }
+        const bool instead_ok = s.instead == kNoProducer
+                                    ? s.instead_crop == 0 && s.instead_unlocked == kNoProducer
+                                    : s.instead_crop != 0 && producer_ref(slots, s.instead, s.number) &&
+                                          producer_ref(slots, s.instead_unlocked, kNoProducer);
+        const bool process_ok = s.process_rank == 0 || (s.process_from != kNoProducer && s.process_per != 0);
+        const bool subsidy_ok = s.subsidy_tons == 0 || assets::is_good_number(s.subsidy_ware);
+        const bool goods_ok =
+            s.counts_goods.size() <= kMaxSlotGoods && (s.counts_goods.empty() || counts_goods(s.number)) &&
+            std::ranges::all_of(s.counts_goods, [](std::uint8_t w) { return assets::is_good_number(w); });
+        if (!same_fixed(s, o) || !instead_ok || !producer_ref(slots, s.process_from, s.number) || !process_ok ||
+            !producer_ref(slots, s.after, s.number) || !subsidy_ok || s.subsidy_class >= 16 || !goods_ok ||
+            s.min_houses < 0 || s.min_houses > kMaxSlotHouses ||
+            (s.kind != Kind::Public && s.min_houses != o.min_houses) ||
+            (s.kind != Kind::Public && s.roads_on_fail != o.roads_on_fail)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+namespace {
+
+std::string line_of(const std::string& where, std::size_t line) {
+    return where + ":" + std::to_string(line) + ": ";
+}
+
+std::string_view trim(std::string_view s) {
+    while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) {
+        s.remove_prefix(1);
+    }
+    while (!s.empty() && (s.back() == ' ' || s.back() == '\t')) {
+        s.remove_suffix(1);
+    }
+    return s;
+}
+
+/// The crops a swap may name: the field that must grow fully.
+constexpr std::array<std::pair<std::string_view, std::uint8_t>, 7> kCrops = {{
+    {"grain", ware::kCornField},
+    {"tobacco", ware::kTobaccoField},
+    {"spices", ware::kSpiceField},
+    {"sugar", ware::kSugarField},
+    {"cotton", ware::kCottonField},
+    {"wine", ware::kWineField},
+    {"cocoa", ware::kCocoaField},
+}};
+
+/// Removes slot `at` of `slots` and the rules of others that name it.
+void remove_slot(std::vector<ComputerSlot>& slots, std::size_t at) {
+    const std::uint8_t n = slots[at].number;
+    slots[at] = removed_slot(slots[at]);
+    for (ComputerSlot& s : slots) {
+        if (s.instead == n || s.instead_unlocked == n) {
+            s.instead = kNoProducer;
+            s.instead_crop = 0;
+            s.instead_unlocked = kNoProducer;
+        }
+        if (s.process_from == n) {
+            s.process_from = kNoProducer;
+            s.process_per = 0;
+            s.process_round_up = false;
+            s.process_rank = 0;
+            s.process_max = 0;
+        }
+        if (s.after == n) {
+            s.after = kNoProducer;
+        }
+    }
+}
+
+/// Reads table `table` of slots.toml into slot `at` of `slots`.
+void read_slot(const core::DataTable& table, std::vector<ComputerSlot>& slots, std::size_t at, const std::string& where,
+               const assets::Goods& goods, std::vector<std::string>& warnings) {
+    ComputerSlot s = slots[at];
+    const auto producer = [&](const std::string* text) -> std::optional<std::uint8_t> {
+        if (text == nullptr) {
+            return std::nullopt;
+        }
+        if (text->empty()) {
+            return kNoProducer;
+        }
+        const ComputerSlot* k = find_computer_slot(slots, *text);
+        if (k == nullptr || k->number == s.number || (k->kind != Kind::Producer && k->kind != Kind::Tower)) {
+            return std::nullopt;
+        }
+        return k->number;
+    };
+    for (const core::DataEntry& e : table.entries) {
+        const std::string field = line_of(where, e.value.line) + "[" + table.name + "] '" + e.key + "' ";
+        const std::string* text = e.value.string();
+        const std::int64_t* n = e.value.integer();
+        const bool* flag = e.value.boolean();
+        const auto small = [&](std::uint8_t& into, std::int64_t min) {
+            if (n != nullptr && *n >= min && *n <= 255) {
+                into = static_cast<std::uint8_t>(*n);
+            } else {
+                warnings.push_back(field + "is a number from " + std::to_string(min) + " to 255");
+            }
+        };
+        const auto yes_no = [&](bool& into) {
+            if (flag != nullptr) {
+                into = *flag;
+            } else {
+                warnings.push_back(field + "is true or false");
+            }
+        };
+        const auto slot_field = [&](std::uint8_t& into) {
+            if (const auto k = producer(text)) {
+                into = *k;
+            } else {
+                warnings.push_back(field + "is another producer (woodcutter, bakery, ...) or \"\"");
+            }
+        };
+        const bool producer_rule = s.kind == Kind::Producer || s.kind == Kind::Tower;
+        if (e.key == "remove") {
+            if (flag == nullptr) {
+                warnings.push_back(field + "is true or false");
+            } else if (*flag) {
+                if (s.kind == Kind::None) {
+                    warnings.push_back(field + "removes producers and public buildings only");
+                    continue;
+                }
+                slots[at] = s;
+                remove_slot(slots, at);
+                return;  // the fields of a removed slot do not count
+            }
+        } else if ((e.key == "min_houses" || e.key == "roads_on_fail") && s.kind != Kind::Public) {
+            warnings.push_back(field + "is a field of a public building and is passed over");
+        } else if (e.key == "min_houses") {
+            if (n != nullptr && *n >= 0 && *n <= kMaxSlotHouses) {
+                s.min_houses = static_cast<std::int32_t>(*n);
+            } else {
+                warnings.push_back(field + "is a number from 0 to " + std::to_string(kMaxSlotHouses));
+            }
+        } else if (e.key == "roads_on_fail") {
+            yes_no(s.roads_on_fail);
+        } else if (e.key == "counts") {
+            if (!counts_goods(s.number)) {
+                warnings.push_back(field + "is a field of food and alcohol and is passed over");
+                continue;
+            }
+            if (text == nullptr) {
+                warnings.push_back(field + "is a list of goods");
+                continue;
+            }
+            std::vector<std::uint8_t> list;
+            std::string_view rest = *text;
+            while (!rest.empty()) {
+                const std::size_t comma = rest.find(',');
+                const std::string_view id = trim(rest.substr(0, comma));
+                rest = comma == std::string_view::npos ? std::string_view{} : rest.substr(comma + 1);
+                if (id.empty()) {
+                    continue;
+                }
+                const auto w = assets::ware_of(goods, id);
+                if (!w) {
+                    warnings.push_back(field + "'" + std::string(id) + "' is no good; it is passed over");
+                } else if (list.size() >= kMaxSlotGoods) {
+                    warnings.push_back(field + "names more than " + std::to_string(kMaxSlotGoods) +
+                                       " goods; the rest are passed over");
+                    break;
+                } else if (std::ranges::find(list, *w) == list.end()) {
+                    list.push_back(*w);
+                }
+            }
+            s.counts_goods = std::move(list);
+        } else if (!producer_rule) {
+            warnings.push_back(field + "is no field of slot '" + table.name + "' and is passed over");
+        } else if (e.key == "instead") {
+            slot_field(s.instead);
+        } else if (e.key == "instead_unlocked") {
+            slot_field(s.instead_unlocked);
+        } else if (e.key == "instead_crop") {
+            const auto it = text != nullptr ? std::ranges::find(kCrops, std::string_view(*text),
+                                                                &std::pair<std::string_view, std::uint8_t>::first)
+                                            : kCrops.end();
+            if (it != kCrops.end()) {
+                s.instead_crop = it->second;
+            } else {
+                warnings.push_back(field + "is a crop (grain, tobacco, spices, sugar, cotton, wine, cocoa)");
+            }
+        } else if (e.key == "single_below_stock") {
+            small(s.single_below_stock, 0);
+        } else if (e.key == "single_below_users") {
+            small(s.single_below_users, 0);
+        } else if (e.key == "raw_stock") {
+            small(s.raw_stock, 0);
+        } else if (e.key == "process_from") {
+            slot_field(s.process_from);
+        } else if (e.key == "process_per") {
+            small(s.process_per, 1);
+        } else if (e.key == "process_round_up") {
+            yes_no(s.process_round_up);
+        } else if (e.key == "process_rank") {
+            small(s.process_rank, 0);
+        } else if (e.key == "process_max") {
+            small(s.process_max, 0);
+        } else if (e.key == "subsidy_ware") {
+            if (text != nullptr && text->empty()) {
+                s.subsidy_ware = 0;
+                s.subsidy_tons = 0;
+            } else if (const auto w = text != nullptr ? assets::ware_of(goods, *text) : std::nullopt) {
+                s.subsidy_ware = *w;
+            } else {
+                warnings.push_back(field + "is a good (anno1602:<name> or <package>:<name>) or \"\"");
+            }
+        } else if (e.key == "subsidy_tons") {
+            small(s.subsidy_tons, 0);
+        } else if (e.key == "subsidy_above") {
+            small(s.subsidy_above, 0);
+        } else if (e.key == "subsidy_people") {
+            if (n != nullptr && *n >= 0 && *n <= 65535) {
+                s.subsidy_people = static_cast<std::uint16_t>(*n);
+            } else {
+                warnings.push_back(field + "is a number from 0 to 65535");
+            }
+        } else if (e.key == "subsidy_class") {
+            const std::string_view id = text != nullptr ? std::string_view(*text) : std::string_view{};
+            const assets::OriginalName* c =
+                id.starts_with("anno1602:") ? assets::find_original_name(assets::original_class_names(), id.substr(9))
+                                            : nullptr;
+            if (c != nullptr) {
+                s.subsidy_class = static_cast<std::uint8_t>(c->first);
+            } else {
+                warnings.push_back(field + "is a class of inhabitants (anno1602:pioneers to anno1602:aristocrats)");
+            }
+        } else {
+            warnings.push_back(field + "is no field of a slot and is passed over");
+        }
+    }
+    // Rules that do not hold together are the slot's before the table.
+    if (s.instead != kNoProducer && s.instead_crop == 0) {
+        warnings.push_back(line_of(where, table.line) + "[" + table.name +
+                           "] 'instead' needs 'instead_crop'; its swap stays as it was");
+        s.instead = slots[at].instead;
+        s.instead_crop = slots[at].instead_crop;
+        s.instead_unlocked = slots[at].instead_unlocked;
+    }
+    if (s.instead == kNoProducer) {
+        s.instead_crop = 0;
+        s.instead_unlocked = kNoProducer;
+    }
+    if (s.process_rank != 0 && (s.process_from == kNoProducer || s.process_per == 0)) {
+        warnings.push_back(line_of(where, table.line) + "[" + table.name +
+                           "] 'process_rank' needs 'process_from' and 'process_per'; it is not processed");
+        s.process_rank = 0;
+    }
+    if (s.subsidy_tons != 0 && s.subsidy_ware == 0) {
+        warnings.push_back(line_of(where, table.line) + "[" + table.name +
+                           "] 'subsidy_tons' needs 'subsidy_ware'; there is no subsidy");
+        s.subsidy_tons = 0;
+    }
+    slots[at] = std::move(s);
+}
+
+}  // namespace
+
+void apply_slots_file(std::vector<ComputerSlot>& slots, std::string_view package, std::string_view utf8,
+                      std::vector<std::string>& warnings, const assets::Goods& goods) {
+    const std::string where = std::string(package) + "/" + std::string(kSlotsFile);
+    auto tables = core::parse_data_file(utf8);
+    if (!tables) {
+        warnings.push_back(where + " " + tables.error().message);
+        return;
+    }
+    for (const core::DataTable& table : *tables) {
+        if (table.name.empty()) {
+            warnings.push_back(line_of(where, table.entries.front().value.line) +
+                               "fields before the first [table] belong to none and are passed over");
+            continue;
+        }
+        const std::vector<ComputerSlot>& now = computer_slots_of(slots);
+        const auto it = std::ranges::find(now, std::string_view(table.name), &ComputerSlot::name);
+        if (it == now.end()) {
+            warnings.push_back(line_of(where, table.line) + "there is no slot '" + table.name +
+                               "' (the original's: woodcutter, chapel, food, ...)");
+            continue;
+        }
+        if (it->removed) {
+            warnings.push_back(line_of(where, table.line) + "slot '" + table.name +
+                               "' was removed by an earlier table or package and is passed over");
+            continue;
+        }
+        const auto at = static_cast<std::size_t>(it - now.begin());
+        if (slots.empty()) {
+            slots = original_computer_slots();
+        }
+        read_slot(table, slots, at, where, goods, warnings);
+    }
+    if (slots == original_computer_slots()) {
+        slots.clear();  // the original's: nothing to keep
+    }
 }
 
 }  // namespace o1602::sim

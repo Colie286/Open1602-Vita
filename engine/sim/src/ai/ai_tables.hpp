@@ -12,6 +12,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
 #include "ai_engine.hpp"
@@ -24,10 +25,10 @@
 namespace o1602::sim::ai {
 
 /// The slot a producer of ware `w` from `raw` (record `building_id`) counts for in the survey: the
-/// first slot of the original's (computer_slots.hpp) that counts it, those that name a raw material
-/// or a record before those that name only the ware.
-inline std::optional<std::uint8_t> producer_slot(std::uint8_t w, std::uint8_t raw, std::uint32_t building_id) noexcept {
-    const std::vector<ComputerSlot>& slots = original_computer_slots();
+/// first slot of `slots` (a game's, computer_slots.hpp) that counts it, those that name a raw
+/// material or a record before those that name only the ware.
+inline std::optional<std::uint8_t> producer_slot(std::span<const ComputerSlot> slots, std::uint8_t w, std::uint8_t raw,
+                                                 std::uint32_t building_id) noexcept {
     for (const bool specific : {true, false}) {
         for (const ComputerSlot& c : slots) {
             if (c.count_ware != 0 && c.count_ware == w && (c.count_raw != 0 || c.count_building != 0) == specific &&
@@ -56,10 +57,10 @@ struct NeedDef {
     std::uint8_t after = kNoProducer;
 };
 
-/// The Need of the original's slot `slot` (computer_slots.hpp: a producer or a tower); nothing
-/// for a slot without one.
-inline std::optional<NeedDef> need_def(std::uint8_t slot) {
-    const ComputerSlot* c = computer_slot(original_computer_slots(), slot);
+/// The Need of slot `slot` of `slots` (computer_slots.hpp: a producer or a tower); nothing for a
+/// slot without one.
+inline std::optional<NeedDef> need_def(std::span<const ComputerSlot> slots, std::uint8_t slot) {
+    const ComputerSlot* c = computer_slot(slots, slot);
     if (c == nullptr || (c->kind != ComputerSlot::Kind::Producer && c->kind != ComputerSlot::Kind::Tower)) {
         return std::nullopt;
     }
@@ -74,8 +75,9 @@ static_assert(static_cast<std::uint8_t>(NeedType::D) == static_cast<std::uint8_t
 
 /// The Need of `slot` with the changes of the packages (Balance::computer_producers): their
 /// building, attempts, crop, producer first and wait over the original's. Nothing for no Need.
-inline std::optional<NeedDef> need_def(std::uint8_t slot, const std::vector<ComputerProducer>& changes) {
-    const std::optional<NeedDef> d = need_def(slot);
+inline std::optional<NeedDef> need_def(std::span<const ComputerSlot> slots, std::uint8_t slot,
+                                       const std::vector<ComputerProducer>& changes) {
+    const std::optional<NeedDef> d = need_def(slots, slot);
     if (!d) {
         return std::nullopt;
     }
@@ -117,10 +119,10 @@ struct PublicTask {
     bool roads_on_fail;
 };
 
-/// The public building task `task` of the original's slots (computer_slots.hpp), nothing for
-/// another task.
-inline std::optional<PublicTask> public_task(std::uint8_t task) {
-    for (const ComputerSlot& c : original_computer_slots()) {
+/// The public building task `task` of `slots` (computer_slots.hpp), nothing for another task or
+/// a removed slot.
+inline std::optional<PublicTask> public_task(std::span<const ComputerSlot> slots, std::uint8_t task) {
+    for (const ComputerSlot& c : slots) {
         if (c.kind == ComputerSlot::Kind::Public && c.task == task) {
             return PublicTask{c.task, c.building, c.number, c.flag, c.service, c.min_houses, c.roads_on_fail};
         }
@@ -197,11 +199,6 @@ inline Cheats cheats_of(const Balance& b) {
     c.bricks_below = b.ai_colony_bricks_below;
     c.bricks = b.ai_colony_bricks;
     return c;
-}
-
-/// The original's slot of number `slot` (computer_slots.hpp), nullptr for none.
-inline const ComputerSlot* slot_info(std::uint8_t slot) {
-    return computer_slot(original_computer_slots(), slot);
 }
 
 }  // namespace o1602::sim::ai

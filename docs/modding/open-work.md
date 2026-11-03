@@ -254,9 +254,12 @@ the public building it stands for, in place of the tables `kNeeds`, `kProducerCo
 its number. Step 2, the rules of single slots as fields of a slot: cotton and the weaving mill
 instead of sheep and the weaving hut (`instead`), the smelter's cap (`single_below_*`), the mines'
 deposits (`deposit`), the goldsmith's gold (`raw_stock`), the order `processing` with the
-stonemason's quarries (`process_*`) and the subsidy of raw materials (`subsidy_*`). Next:
-`slots.toml` for packages (with section `SLOT`), public buildings of a package and the stages'
-thresholds as data.
+stonemason's quarries (`process_*`) and the subsidy of raw materials (`subsidy_*`). Step 3,
+`slots.toml` of a package ([computer-players.md](computer-players.md#the-slots)): it changes these
+rules, the sites of public buildings, removes producers and public buildings (their numbers stay,
+empty) and lets goods of packages count as food or alcohol (`counts`); a game keeps the table in
+section `SLOT`. The producers of packages' goods stay derived from the building table, after the
+original's slots. Next: public buildings of a package and the stages' thresholds as data.
 
 ### 6. Lua scripts (section 6)
 

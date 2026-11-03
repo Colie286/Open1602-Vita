@@ -96,7 +96,8 @@ TEST_CASE("ai tables: the producer table counts every ware, raw material and rec
             for (std::uint32_t raw = 0; raw < 256; ++raw) {
                 const auto ww = static_cast<std::uint8_t>(w);
                 const auto rr = static_cast<std::uint8_t>(raw);
-                REQUIRE(producer_slot(ww, rr, building) == reference_slot(ww, rr, building));
+                REQUIRE(producer_slot(o1602::sim::original_computer_slots(), ww, rr, building) ==
+                        reference_slot(ww, rr, building));
             }
         }
     }
@@ -112,13 +113,13 @@ TEST_CASE("ai tables: Needs and public tasks name each slot once") {
         REQUIRE(names.insert(c.name).second);
         REQUIRE(o1602::sim::computer_slot(o1602::sim::original_computer_slots(), c.number) == &c);
         REQUIRE(o1602::sim::find_computer_slot(o1602::sim::original_computer_slots(), c.name) == &c);
-        if (const auto d = need_def(c.number)) {
+        if (const auto d = need_def(o1602::sim::original_computer_slots(), c.number)) {
             ++needs;
             REQUIRE(d->slot == c.number);
         }
         if (c.kind == o1602::sim::ComputerSlot::Kind::Public) {
             ++publics;
-            const auto t = public_task(c.task);
+            const auto t = public_task(o1602::sim::original_computer_slots(), c.task);
             REQUIRE(t.has_value());
             REQUIRE(t->slot == c.number);
         }
@@ -129,24 +130,24 @@ TEST_CASE("ai tables: Needs and public tasks name each slot once") {
     CHECK(needs == 32);
     CHECK(publics == 10);
     // A few Needs as the original's table had them.
-    const auto bakery = need_def(kSlotBakery);
+    const auto bakery = need_def(o1602::sim::original_computer_slots(), kSlotBakery);
     REQUIRE(bakery.has_value());
     CHECK(bakery->task == kBakery);
     CHECK(bakery->ware == o1602::sim::ware::kFood);
     CHECK(bakery->raw == o1602::sim::ware::kFlour);
     CHECK(bakery->type == NeedType::B);
     CHECK(bakery->after == kSlotMill);
-    const auto gold = need_def(kSlotGoldMine);
+    const auto gold = need_def(o1602::sim::original_computer_slots(), kSlotGoldMine);
     REQUIRE(gold.has_value());
     CHECK(gold->fixed == id::kGoldMine);
     CHECK(gold->attempts == 1);
     CHECK(gold->from_start);
-    CHECK(need_def(kSlotStoneTower)->type == NeedType::D);
-    CHECK(!need_def(kSlotKontor).has_value());
-    const auto church = public_task(kKirche);
+    CHECK(need_def(o1602::sim::original_computer_slots(), kSlotStoneTower)->type == NeedType::D);
+    CHECK(!need_def(o1602::sim::original_computer_slots(), kSlotKontor).has_value());
+    const auto church = public_task(o1602::sim::original_computer_slots(), kKirche);
     REQUIRE(church.has_value());
     CHECK(church->min_houses == 16);
-    CHECK(!public_task(kGalgen)->roads_on_fail);
+    CHECK(!public_task(o1602::sim::original_computer_slots(), kGalgen)->roads_on_fail);
 }
 
 TEST_CASE("ai tables: the rules of the original's slots are fields of the slots") {

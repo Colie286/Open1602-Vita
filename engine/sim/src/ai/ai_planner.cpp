@@ -127,7 +127,7 @@ void Engine::subsidy(AiPlayer& p, std::int32_t m) {
     }
     // The bricks of the original need a score of 20, which never comes.
     if (population(*c, 2) >= 50) {
-        for (const ComputerSlot& k : original_computer_slots()) {
+        for (const ComputerSlot& k : slots()) {
             if (k.subsidy_tons != 0 && r->slots[k.number].count > k.subsidy_above &&
                 c->stock(k.subsidy_ware) < 3 * kTon &&
                 (k.subsidy_people == 0 || population(*c, k.subsidy_class) >= k.subsidy_people)) {
@@ -1028,22 +1028,27 @@ bool Engine::need(AiPlayer& p, std::uint8_t which, std::uint32_t n, bool cov) {
     // Some Needs choose another building first (ComputerSlot::instead): wool and cloth from cotton
     // where it grows fully.
     const std::vector<ComputerProducer>& changes = m_world.balance().computer_producers;
-    if (const ComputerSlot* k = slot_info(which);
+    if (const ComputerSlot* k = computer_slot(slots(), which);
         k != nullptr && k->instead != kNoProducer && fertility(c->island, k->instead_crop) == 128) {
-        const auto first = need_def(k->instead_unlocked, changes);
-        const assets::BuildingType* b = first ? by_id(first->fixed) : nullptr;
-        if (b != nullptr && unlocked(p, *b)) {
+        // With `instead_unlocked`, only once its building is unlocked.
+        bool open = k->instead_unlocked == kNoProducer;
+        if (!open) {
+            const auto first = need_def(slots(), k->instead_unlocked, changes);
+            const assets::BuildingType* b = first ? by_id(first->fixed) : nullptr;
+            open = b != nullptr && unlocked(p, *b);
+        }
+        if (open) {
             which = k->instead;
         }
     }
-    const ComputerSlot* slot = slot_info(which);
+    const ComputerSlot* slot = computer_slot(slots(), which);
     if (slot != nullptr && slot->deposit == ware::kOre) {
         return need_iron_mine(p, n);
     }
     if (slot != nullptr && slot->deposit == ware::kGold) {
         return need_gold_mine(p);
     }
-    const auto d = need_def(which, changes);
+    const auto d = need_def(slots(), which, changes);
     if (!d || slot == nullptr) {
         return false;
     }
@@ -1052,7 +1057,7 @@ bool Engine::need(AiPlayer& p, std::uint8_t which, std::uint32_t n, bool cov) {
     if (slot->single_below_stock != 0) {
         // More than one only with the raw material in stock and as many producers that need it.
         std::uint32_t users = 0;
-        for (const ComputerSlot& k : original_computer_slots()) {
+        for (const ComputerSlot& k : slots()) {
             users += k.after == which && r->slots[k.number].count != 0 ? 1U : 0U;
         }
         if (!(c->stock(slot->raw) >= slot->single_below_stock * kStockUnitsPerTon &&
@@ -1188,7 +1193,11 @@ bool Engine::need_iron_mine(AiPlayer& p, std::uint32_t n) {
     if (c == nullptr || r == nullptr) {
         return false;
     }
-    const NeedDef def = need_def(kSlotIronMine, m_world.balance().computer_producers).value();
+    const std::optional<NeedDef> found = need_def(slots(), kSlotIronMine, m_world.balance().computer_producers);
+    if (!found) {
+        return false;  // a package removed the iron mine
+    }
+    const NeedDef& def = *found;
     SlotState& s = r->slots[kSlotIronMine];
     const std::uint32_t wanted = civ_level(p) >= 2 ? n : 1;
     const std::uint8_t blocked = std::max<std::uint8_t>(2, def.attempts);
@@ -1234,7 +1243,11 @@ bool Engine::need_gold_mine(AiPlayer& p) {
     if (c == nullptr || r == nullptr) {
         return false;
     }
-    const NeedDef def = need_def(kSlotGoldMine, m_world.balance().computer_producers).value();
+    const std::optional<NeedDef> found = need_def(slots(), kSlotGoldMine, m_world.balance().computer_producers);
+    if (!found) {
+        return false;  // a package removed the gold mine
+    }
+    const NeedDef& def = *found;
     SlotState& s = r->slots[kSlotGoldMine];
     if (s.count != 0 || s.attempts >= def.attempts) {
         return false;
@@ -1559,31 +1572,9 @@ bool Engine::need_public(AiPlayer& p, std::uint8_t which, std::uint32_t n, bool 
     if (c == nullptr || r == nullptr) {
         return false;
     }
-    struct Public {
-        std::uint8_t slot;
-        std::uint32_t id;
-        std::uint32_t flag;
-        std::uint8_t task;
-    };
-    constexpr std::array<Public, 10> kPublic{{
-        {kSlotKapelle, id::kKapelle, city_flag::kKapelle, kKapelle},
-        {kSlotWirt, id::kWirt, city_flag::kWirt, kWirt},
-        {kSlotSchule, id::kSchule, city_flag::kSchule, kSchule},
-        {kSlotKlinik, id::kKlinik, city_flag::kKlinik, kKlinik},
-        {kSlotGalgen, id::kGalgen, city_flag::kGalgen, kGalgen},
-        {kSlotBrunnen, id::kBrunnen, city_flag::kBrunnen, kBrunnen},
-        {kSlotKirche, id::kKirche, city_flag::kKirche, kKirche},
-        {kSlotBadehaus, id::kBadehaus, city_flag::kBadehaus, kBadehaus},
-        {kSlotHochschule, id::kHochschule, city_flag::kHochschule, kHochschule},
-        {kSlotTheater, id::kTheater, city_flag::kTheater, kTheater},
-    }};
-    const Public* def = nullptr;
-    for (const Public& d : kPublic) {
-        if (d.slot == which) {
-            def = &d;
-        }
-    }
-    if (def == nullptr) {
+    // The public building of the slot (computer_slots.hpp); none for a removed one.
+    const ComputerSlot* def = computer_slot(slots(), which);
+    if (def == nullptr || def->kind != ComputerSlot::Kind::Public) {
         return false;
     }
     // The Kapelle always checks its flag; gallows and fountains ignore `cov`.
@@ -1597,7 +1588,7 @@ bool Engine::need_public(AiPlayer& p, std::uint8_t which, std::uint32_t n, bool 
     if (!(s.count < n || (r->flags & def->flag) == 0) || s.attempts >= 2) {
         return false;
     }
-    const assets::BuildingType* b = by_id(def->id);
+    const assets::BuildingType* b = by_id(def->building);
     if (b == nullptr || !unlocked(p, *b) || !affordable(p, *c, *b)) {
         return false;
     }
@@ -1613,17 +1604,16 @@ bool Engine::processing(AiPlayer& p) {
     if (r == nullptr) {
         return false;
     }
-    // In the order of their ranks: one for every so many producers of their raw material.
-    std::array<const ComputerSlot*, 256> by_rank{};
-    for (const ComputerSlot& k : original_computer_slots()) {
+    // In the order of their ranks (of equal ranks by number): one for every so many producers of
+    // their raw material.
+    std::vector<const ComputerSlot*> by_rank;
+    for (const ComputerSlot& k : slots()) {
         if (k.process_rank != 0 && k.process_from != kNoProducer && k.process_per != 0) {
-            by_rank[k.process_rank] = &k;
+            by_rank.push_back(&k);
         }
     }
+    std::ranges::stable_sort(by_rank, {}, &ComputerSlot::process_rank);
     for (const ComputerSlot* k : by_rank) {
-        if (k == nullptr) {
-            continue;
-        }
         const std::uint32_t from = r->slots[k->process_from].count;
         const std::uint32_t want =
             k->process_round_up ? (from + k->process_per - 1) / k->process_per : from / k->process_per;
@@ -1684,8 +1674,8 @@ bool Engine::luxury(AiPlayer& p, std::uint32_t n, bool exclusive) {
     }
     // 2. Gold
     if (p.score >= 4 && fertility(c->island, ware::kGold) >= 64) {
-        const assets::BuildingType* mine =
-            by_id(need_def(kSlotGoldMine, m_world.balance().computer_producers).value().fixed);
+        const auto gold = need_def(slots(), kSlotGoldMine, m_world.balance().computer_producers);
+        const assets::BuildingType* mine = gold ? by_id(gold->fixed) : nullptr;
         if (mine != nullptr && mine->running_cost < budget && need_gold_mine(p)) {
             return true;
         }

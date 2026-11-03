@@ -5,7 +5,9 @@
 // producer it builds (a Need), how the survey counts it and the public building it stands for. The
 // original's 55 slots keep their numbers (the savegame's city records list them by number); their
 // names are those of computers.toml (`bakery`, `chapel`). The rules of the stages that name a slot
-// of the original (the weaving, the smelters, the towers) name it by its number (ai_state.hpp).
+// of the original (the weaving, the smelters, the towers) name it by its number (ai_state.hpp). A
+// package changes the rules of a slot or removes it with its slots.toml (docs/modding/
+// computer-players.md); a game keeps its changed table (Balance::computer_slots, section SLOT).
 #pragma once
 
 #include <cstddef>
@@ -86,17 +88,49 @@ struct ComputerSlot {
     std::uint8_t count_raw = 0;
     std::uint32_t count_building = 0;
 
+    /// The counters of food and alcohol: the goods of packages that count as theirs besides the
+    /// original's (at most kMaxSlotGoods).
+    std::vector<std::uint8_t> counts_goods;
+
     // A public building (Public).
     std::uint32_t flag = 0;       ///< its "covered" bit of the city record (city_flag)
     std::uint16_t service = 0;    ///< the services of houses that count as covered (house_service)
     std::int32_t min_houses = 0;  ///< houses a site must reach without the service
     bool roads_on_fail = false;   ///< lays roads where it found no site
 
+    /// A package removed it: it keeps its name and number and is of Kind::None, without fields.
+    bool removed = false;
+
     friend bool operator==(const ComputerSlot&, const ComputerSlot&) = default;
 };
 
+/// At most so many goods a counter counts besides the original's.
+inline constexpr std::size_t kMaxSlotGoods = 16;
+/// At most so many houses a public building's site must reach.
+inline constexpr std::int32_t kMaxSlotHouses = 1000;
+
 /// The original's slots by number: 54 named slots of 0x00 to 0x36 (0x2A is unused).
 [[nodiscard]] const std::vector<ComputerSlot>& original_computer_slots();
+
+/// The slots of a game: `changed` (Balance::computer_slots), the original's when it is empty.
+[[nodiscard]] inline const std::vector<ComputerSlot>& computer_slots_of(const std::vector<ComputerSlot>& changed) {
+    return changed.empty() ? original_computer_slots() : changed;
+}
+
+/// Whether `slots` can be run: empty, or the original's slots by number with their names and kinds
+/// (a removed one of Kind::None), slots named by a rule among them and values in their ranges (a
+/// savegame's are checked with it).
+[[nodiscard]] bool valid(const std::vector<ComputerSlot>& slots) noexcept;
+
+/// The file of a package that changes the slots.
+inline constexpr std::string_view kSlotsFile = "slots.toml";
+
+/// Reads slots.toml of `package` into `slots` (empty: the original's, copied before the first
+/// change): a table names a slot (`[weaving_hut]`) and changes its rules, `remove = true` removes
+/// it. A field that cannot be read is passed over with a warning that names the file and the line.
+/// `goods`: the goods a field may name.
+void apply_slots_file(std::vector<ComputerSlot>& slots, std::string_view package, std::string_view utf8,
+                      std::vector<std::string>& warnings, const assets::Goods& goods);
 
 /// The slot called `name` of `slots`, nullptr for none.
 [[nodiscard]] const ComputerSlot* find_computer_slot(std::span<const ComputerSlot> slots,
