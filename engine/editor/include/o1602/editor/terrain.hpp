@@ -87,6 +87,23 @@ private:
     std::string m_kind;
 };
 
+/// Terrain copied from an island (the editor's clipboard): which tiles are land, and the pieces
+/// of the land inland (ground, forest, rocks, slopes, rivers) at their places. The coast is not
+/// kept: paste() lays it anew about the land, so that it fits wherever the copy goes.
+struct TerrainClip {
+    struct Piece {
+        std::uint32_t id = 0;  ///< haeuser.cod id
+        std::uint8_t rotation = 0;
+        std::uint32_t x = 0;  ///< the top left of its footprint in the copy
+        std::uint32_t y = 0;
+    };
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::vector<std::uint8_t> land;  ///< width x height, 1 land (beach too), 0 water
+    std::vector<Piece> pieces;
+    [[nodiscard]] bool empty() const noexcept { return width == 0 || height == 0; }
+};
+
 /// One stroke of a terrain tool. It changes the world as it goes, so that the map shows the stroke
 /// while it is drawn; finish() gives what it did as one step (to perform, which does it again
 /// without harm), cancel() takes it back. Tiles of a city, a building, a ship or a land unit, of a
@@ -126,6 +143,16 @@ public:
     /// nothing changed.
     bool shape(std::uint16_t island, std::span<const std::pair<std::uint32_t, std::uint32_t>> tiles, bool land,
                std::uint64_t seed);
+    /// The coast clean-up: the island's tiles `tiles` keep whether they are land or water, and the
+    /// coast on and about them is laid anew as shape() lays it: stray beach inland becomes meadow,
+    /// a coast piece turned wrongly or of the wrong kind is laid right, and a form the game has no
+    /// tiles for is widened on these tiles (land first). False if nothing changed.
+    bool tidy_coast(std::uint16_t island, std::span<const std::pair<std::uint32_t, std::uint32_t>> tiles,
+                    std::uint64_t seed);
+    /// Lays `clip` with its top left at the island tile (x, y): its land and water, the coast about
+    /// its land as shape() lays it, then its pieces. Tiles beyond the island or refused are left
+    /// out. False, and nothing changed, if a coast would take a form without tiles (Refusal::Shape).
+    bool paste(std::uint16_t island, std::int64_t x, std::int64_t y, const TerrainClip& clip, std::uint64_t seed);
     /// Keeps `refusal` as the first one met, unless one was met before (a tool that found nothing to paint).
     void note(Refusal refusal) noexcept;
     /// The first refusal met, for the tools' note (Free if none).
@@ -140,6 +167,14 @@ public:
     void cancel();
 
 private:
+    struct ShapeTile {
+        std::uint32_t x = 0;
+        std::uint32_t y = 0;
+        bool land = false;
+    };
+    /// shape() for tiles each of their own kind; `land` is the kind that wins where a form must be
+    /// widened. `tidy`: tidy_coast().
+    bool shape_tiles(std::uint16_t island, std::span<const ShapeTile> tiles, bool land, std::uint64_t seed, bool tidy);
     void put(std::uint16_t island, std::uint32_t x, std::uint32_t y, const sim::MapCell& cell);
     void remove_object(std::uint16_t island, const sim::SubTile& object);
     void keep_features(std::uint16_t island);
@@ -192,6 +227,18 @@ struct SeaTile {
                                                                        const assets::BuildingTable& buildings,
                                                                        std::uint32_t x, std::uint32_t y,
                                                                        TerrainPiece piece);
+
+/// The island's tiles x0..x1, y0..y1 copied; a piece only if all of its footprint is within them.
+/// Empty if the rectangle is not on the island.
+[[nodiscard]] TerrainClip copy_terrain(const sim::World& world, const assets::BuildingTable& buildings,
+                                       std::uint16_t island, std::uint32_t x0, std::uint32_t y0, std::uint32_t x1,
+                                       std::uint32_t y1);
+/// The copy turned a quarter clockwise, as World::rotate_island turns an island.
+[[nodiscard]] TerrainClip turned(const TerrainClip& clip, const assets::BuildingTable& buildings);
+/// The copy mirrored left to right. A piece that turns is mirrored by its turn; one that cannot
+/// turn keeps its picture. Rivers, slopes and pieces of several tiles have no mirrored pictures and
+/// are left out (meadow where they were).
+[[nodiscard]] TerrainClip mirrored(const TerrainClip& clip, const assets::BuildingTable& buildings);
 
 /// The sides of the square brushes, in tiles.
 inline constexpr std::array<std::uint8_t, 5> kBrushSizes = {1, 2, 3, 5, 9};

@@ -76,15 +76,20 @@ lays, and the brush shows its piece there before the click. The tools:
 | Brush | Paints the piece where the left button is pressed and where the mouse goes with it held. A piece of several tiles (a mountain, a river bend) is laid about the mouse. |
 | Land | Paints land into the water and lays the coast about it as the game's islands have it: beach and its corners on the land's edge, surf before it, then light, middle and dark sea outwards. Land painted at an island's edge makes the island grow by open sea, and land painted on the open sea far from islands makes a new island there; either is one step of undo with the stroke. |
 | Water | Paints water into the land, with the surf and the beach about it. |
+| Tidy coast | Lays the coast under the brush anew as Land and Water lay it: beach, surf and their corners fitting the land, beach left inland becomes meadow. |
 | Random fill | Paints pieces of the kind, each tile its own drawn at random and turned at random: ground as the game's islands mix it, forest of the island's climate. |
 | Fill | Paints every tile that is joined to the one clicked by its sides and looks like it. |
 | Replace | Paints every tile of the island that looks like the one clicked; tiles that turn keep their turn. |
 | Pipette | Takes the piece of the tile clicked, with its turn, and goes back to the brush. |
+| Select | Drags a rectangle over an island (light blue). **Copy** keeps its land and inland pieces as the copy; **Turn copy** turns it a quarter clockwise, **Mirror copy** mirrors it left to right. |
+| Paste | Lays the copy about the mouse, its land and water, the coast about its land laid anew, then its pieces; one step of undo. The map shows it before the click. |
 
 Water, beach and land are three levels of the map's picture, and a piece fits only on its own level:
 the brush leaves the coast as it is, and Land and Water change it. Where a coast would take a form the
 game has no tiles for (a strip one tile wide, land touching land only at a corner), Land and Water
-widen it. Land keeps a tile of water to its island's edge; an island with a city does not grow.
+widen it on the tiles next to the brush, or refuse where they cannot. Land keeps a tile of water to its
+island's edge; an island with a city does not grow. Land painted within three tiles of another island's
+land joins both islands into one (if neither has a city), so that the coast between them is one.
 
 A tile gets the piece on top and as the ground below. A mountain or river bend that a piece covers in
 part becomes meadow where it is not covered, and its ore deposit or volcano goes with it. The terrain

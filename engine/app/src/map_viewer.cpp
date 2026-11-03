@@ -1798,14 +1798,27 @@ void MapViewer::render() {
                 }
             }
         } terrain_guard{terrain_preview};
-        if (m_editor && !m_editor->stroke && !m_editor->placing &&
-            m_editor->terrain.tool == EditorTerrain::Tool::Brush && m_hud != nullptr &&
+        const bool previews =
+            m_editor && (m_editor->terrain.tool == EditorTerrain::Tool::Brush ||
+                         (m_editor->terrain.tool == EditorTerrain::Tool::Paste && !m_editor->clip.empty()));
+        if (m_editor && previews && !m_editor->stroke && !m_editor->placing && m_hud != nullptr &&
             m_hud->editor_panel() != nullptr && m_hud->editor_panel()->page() == EditorPanel::Page::Terrain &&
             !m_hud->covers(static_cast<std::int32_t>(m_input->mouse_x()),
                            static_cast<std::int32_t>(m_input->mouse_y()))) {
             if (const auto tile = m_input->tile_at_mouse()) {
                 terrain_preview.emplace(m_state->world, m_buildings);
-                editor_paint(*terrain_preview, tile->x, tile->y, false);
+                if (m_editor->terrain.tool == EditorTerrain::Tool::Paste) {
+                    // The copy as a click would lay it (editor_paste), its middle under the mouse.
+                    const sim::World::Cell& c = m_state->world.cell(tile->x, tile->y);
+                    if (c.island != sim::World::kSea) {
+                        const editor::TerrainClip& clip = m_editor->clip;
+                        (void)terrain_preview->paste(
+                            c.island, std::int64_t{c.local_x} - (std::int64_t{clip.width} - 1) / 2,
+                            std::int64_t{c.local_y} - (std::int64_t{clip.height} - 1) / 2, clip, m_editor->strokes + 1);
+                    }
+                } else {
+                    editor_paint(*terrain_preview, tile->x, tile->y, false);
+                }
             }
         }
         std::sort(m_sprite_tints.tiles.begin(), m_sprite_tints.tiles.end());

@@ -427,6 +427,19 @@ core::Result<std::unique_ptr<Operation>> grow_island(const sim::World& world, st
     return edit(std::move(after), "island_grow");
 }
 
+core::Result<std::unique_ptr<Operation>> merge_islands(const sim::World& world, std::size_t keep, std::size_t other,
+                                                       const assets::BuildingTable& buildings) {
+    const assets::BuildingType* sea = buildings.by_id(assets::id::island_shape::kDarkSea);
+    if (sea == nullptr) {
+        return make_error(ErrorCode::NotFound, "no open sea in the buildings");
+    }
+    sim::World after = world;
+    if (auto status = after.merge_islands(keep, other, *sea, &buildings); !status) {
+        return status.error();
+    }
+    return edit(std::move(after), "island_merge");
+}
+
 core::Result<std::unique_ptr<Operation>> add_sea_island(const sim::World& world, std::uint32_t x, std::uint32_t y,
                                                         std::uint32_t width, std::uint32_t height, std::uint8_t climate,
                                                         const assets::BuildingTable& buildings) {

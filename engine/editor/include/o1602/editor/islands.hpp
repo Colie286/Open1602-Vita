@@ -160,6 +160,11 @@ struct NewIsland {
                                                                    std::uint32_t left, std::uint32_t top,
                                                                    std::uint32_t right, std::uint32_t bottom,
                                                                    const assets::BuildingTable& buildings);
+/// Island `other` joined into island `keep` (sim::World::merge_islands): land painted from one
+/// island to another makes one island of them.
+[[nodiscard]] core::Result<std::unique_ptr<Operation>> merge_islands(const sim::World& world, std::size_t keep,
+                                                                     std::size_t other,
+                                                                     const assets::BuildingTable& buildings);
 /// A new island of only open sea, `width` x `height` tiles at (x, y), of `climate` (0 north, 1
 /// south): where land painted on the open sea goes.
 [[nodiscard]] core::Result<std::unique_ptr<Operation>> add_sea_island(const sim::World& world, std::uint32_t x,

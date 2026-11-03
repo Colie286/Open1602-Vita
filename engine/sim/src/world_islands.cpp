@@ -414,6 +414,115 @@ core::Status World::grow_island(std::size_t index, std::uint32_t left, std::uint
     return core::Ok{};
 }
 
+core::Status World::merge_islands(std::size_t keep, std::size_t other, const assets::BuildingType& sea,
+                                  const assets::BuildingTable* buildings) {
+    if (keep >= m_islands.size() || other >= m_islands.size() || keep == other) {
+        return make_error(ErrorCode::OutOfRange, "no two islands to join");
+    }
+    for (const std::size_t i : {keep, other}) {
+        if (const IslandUse use = island_use(i); use != IslandUse::None) {
+            return make_error(ErrorCode::Unsupported, std::string("the islands cannot be joined: ") + use_text(use));
+        }
+    }
+    World after = *this;  // on failure nothing changes
+    const WorldIsland& k0 = after.m_islands[keep];
+    const WorldIsland& o0 = after.m_islands[other];
+    const std::uint32_t ux0 = std::min(k0.x, o0.x);
+    const std::uint32_t uy0 = std::min(k0.y, o0.y);
+    const std::uint32_t ux1 = std::max(k0.x + k0.map.width(), o0.x + o0.map.width());
+    const std::uint32_t uy1 = std::max(k0.y + k0.map.height(), o0.y + o0.map.height());
+    if (auto status = after.grow_island(keep, k0.x - ux0, k0.y - uy0, ux1 - (k0.x + k0.map.width()),
+                                        uy1 - (k0.y + k0.map.height()), sea, buildings);
+        !status) {
+        return status;
+    }
+    WorldIsland& k = after.m_islands[keep];
+    const WorldIsland& o = after.m_islands[other];
+    const std::uint32_t dx = o.x - k.x;
+    const std::uint32_t dy = o.y - k.y;
+    const auto open_sea = [buildings](const MapCell& c) {
+        if (c.empty()) {
+            return true;
+        }
+        const assets::BuildingType* b = buildings != nullptr ? buildings->by_sprite(c.sprite) : nullptr;
+        return b != nullptr && b->kind == assets::kind::kSea;
+    };
+    for (std::uint32_t y = 0; y < o.map.height(); ++y) {
+        for (std::uint32_t x = 0; x < o.map.width(); ++x) {
+            const MapCell& from = o.map.top(x, y);
+            if (open_sea(from) || !open_sea(k.map.top(dx + x, dy + y))) {
+                continue;
+            }
+            k.map.set_top_cell(dx + x, dy + y, from);
+            k.map.set_ground_cell(dx + x, dy + y, o.map.ground(x, y));
+        }
+    }
+    for (assets::IslandHeader::Deposit d : o.header.deposits) {
+        d.x = static_cast<std::uint16_t>(d.x + dx);
+        d.y = static_cast<std::uint16_t>(d.y + dy);
+        k.header.deposits.push_back(d);
+    }
+    for (Crater c : o.craters) {
+        c.x = static_cast<std::uint16_t>(c.x + dx);
+        c.y = static_cast<std::uint16_t>(c.y + dy);
+        k.craters.push_back(c);
+    }
+    for (assets::IslandHeader::Crater c : o.header.craters) {
+        c.x = static_cast<std::uint8_t>(std::min<std::uint32_t>(c.x + dx, 0xFF));
+        c.y = static_cast<std::uint8_t>(std::min<std::uint32_t>(c.y + dy, 0xFF));
+        k.header.craters.push_back(c);
+    }
+    // The other's deer where the island has room for them (eight places).
+    for (const DeerSpot& spot : o.deer_spots) {
+        if (!spot.used) {
+            continue;
+        }
+        const auto free =
+            std::find_if(k.deer_spots.begin(), k.deer_spots.end(), [](const DeerSpot& s) { return !s.used; });
+        if (free == k.deer_spots.end()) {
+            break;
+        }
+        *free = spot;
+        free->x = static_cast<std::uint16_t>(spot.x + dx);
+        free->y = static_cast<std::uint16_t>(spot.y + dy);
+    }
+    const auto o_index = static_cast<std::uint16_t>(other);
+    const auto k_index = static_cast<std::uint16_t>(keep);
+    for (Animal& a : after.m_animals) {
+        if (a.island == o_index) {
+            a.island = k_index;
+            a.x = static_cast<std::uint16_t>(a.x + dx);
+            a.y = static_cast<std::uint16_t>(a.y + dy);
+        }
+    }
+    for (GrowthEntry& e : after.m_growth.entries) {
+        if (e.island == o_index) {
+            e.island = k_index;
+            e.x = static_cast<std::uint16_t>(e.x + dx);
+            e.y = static_cast<std::uint16_t>(e.y + dy);
+        }
+    }
+    const auto move = [&](CraterRef& c) {
+        if (c.island == o_index) {
+            c.island = k_index;
+            c.x = static_cast<std::uint16_t>(c.x + dx);
+            c.y = static_cast<std::uint16_t>(c.y + dy);
+        }
+    };
+    for (Eruption& e : after.m_volcanoes.eruptions) {
+        move(e.crater);
+    }
+    if (after.m_volcanoes.last) {
+        move(*after.m_volcanoes.last);
+    }
+    std::erase_if(after.m_volcanoes.lava, [o_index](const LavaLump& l) { return l.island == o_index; });
+    if (auto status = after.remove_island(other, buildings); !status) {
+        return status;
+    }
+    *this = std::move(after);
+    return core::Ok{};
+}
+
 core::Status World::copy_island(std::size_t index, std::uint32_t x, std::uint32_t y, std::uint16_t number,
                                 const assets::BuildingTable* buildings) {
     if (index >= m_islands.size()) {

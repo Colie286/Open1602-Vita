@@ -339,6 +339,10 @@ private:
     void editor_make_room(std::int64_t x0, std::int64_t y0, std::int64_t x1, std::int64_t y1);
     /// The stroke being drawn ends: one step of undo, or a note why nothing changed.
     void editor_end_stroke();
+    /// The selection dragged from select_from to the world tile (x, y); false if they are not on one island.
+    bool editor_select(std::int64_t x, std::int64_t y);
+    /// The copy laid about the world tile (x, y) as one step.
+    void editor_paste(std::int64_t x, std::int64_t y);
     /// The terrain tool's settings from the panel.
     void editor_terrain_request(const EditorRequest& request);
     /// The pipette at the world tile (x, y).
@@ -698,6 +702,18 @@ private:
         std::optional<std::pair<std::int64_t, std::int64_t>> stroke_at{};
         std::optional<std::pair<std::int64_t, std::int64_t>> stroke_large{};
         std::uint64_t strokes = 0;  ///< strokes drawn, for the random fill's pieces
+        /// The terrain selected (tool Select): the island and its tiles x0..x1, y0..y1; the world
+        /// tile the drag began at; the copy (the clipboard).
+        struct TerrainSelection {
+            std::uint16_t island = 0;
+            std::uint32_t x0 = 0;
+            std::uint32_t y0 = 0;
+            std::uint32_t x1 = 0;
+            std::uint32_t y1 = 0;
+        };
+        std::optional<TerrainSelection> selection{};
+        std::optional<std::pair<std::int64_t, std::int64_t>> select_from{};
+        editor::TerrainClip clip{};
     };
     std::optional<EditorSession> m_editor;
     /// A request of the editor waiting for the answer to "discard the changes?".

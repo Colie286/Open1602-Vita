@@ -401,6 +401,32 @@ bool TerrainStroke::stamp(std::uint16_t island, std::int64_t x, std::int64_t y, 
 
 bool TerrainStroke::shape(std::uint16_t island, std::span<const std::pair<std::uint32_t, std::uint32_t>> tiles,
                           bool land, std::uint64_t seed) {
+    std::vector<ShapeTile> to;
+    to.reserve(tiles.size());
+    for (const auto& [x, y] : tiles) {
+        to.push_back(ShapeTile{x, y, land});
+    }
+    return shape_tiles(island, to, land, seed, false);
+}
+
+bool TerrainStroke::tidy_coast(std::uint16_t island, std::span<const std::pair<std::uint32_t, std::uint32_t>> tiles,
+                               std::uint64_t seed) {
+    if (island >= m_world->islands().size()) {
+        return false;
+    }
+    const sim::IslandMap& map = m_world->islands()[island].map;
+    std::vector<ShapeTile> to;
+    to.reserve(tiles.size());
+    for (const auto& [x, y] : tiles) {
+        if (x < map.width() && y < map.height()) {
+            to.push_back(ShapeTile{x, y, !water(*m_buildings, map.top(x, y))});
+        }
+    }
+    return shape_tiles(island, to, true, seed, true);
+}
+
+bool TerrainStroke::shape_tiles(std::uint16_t island, std::span<const ShapeTile> tiles, bool land, std::uint64_t seed,
+                                bool tidy) {
     namespace ids = assets::id::island_shape;
     using sim::shapes::Coast;
     if (island >= m_world->islands().size() || tiles.empty()) {
@@ -416,7 +442,7 @@ bool TerrainStroke::shape(std::uint16_t island, std::span<const std::pair<std::u
     std::int64_t y0 = h;
     std::int64_t x1 = -1;
     std::int64_t y1 = -1;
-    for (const auto& [tx, ty] : tiles) {
+    for (const auto& [tx, ty, tl] : tiles) {
         x0 = std::min<std::int64_t>(x0, tx);
         y0 = std::min<std::int64_t>(y0, ty);
         x1 = std::max<std::int64_t>(x1, tx);
@@ -481,20 +507,23 @@ bool TerrainStroke::shape(std::uint16_t island, std::span<const std::pair<std::u
             fitted[at(x, y)] = fits(x, y) ? 1 : 0;
         }
     }
-    for (const auto& [tx, ty] : tiles) {
+    for (const auto& [tx, ty, tl] : tiles) {
         if (tx < x0 || ty < y0 || tx > x1 || ty > y1) {
             continue;
         }
-        if (!may_be(tx, ty, land)) {
-            note(refusal(island, tx, ty) != Refusal::Free ? refusal(island, tx, ty) : Refusal::Edge);
+        if (!may_be(tx, ty, tl)) {
+            if (!tidy) {
+                note(refusal(island, tx, ty) != Refusal::Free ? refusal(island, tx, ty) : Refusal::Edge);
+            }
             continue;
         }
-        grid[at(tx, ty)] = land ? 1 : 0;
+        grid[at(tx, ty)] = tl ? 1 : 0;
         brushed[at(tx, ty)] = 1;
     }
     // Widening stays near the brush (kReach tiles): a form it cannot widen there is refused
-    // rather than eating away the land or the water about it.
-    constexpr std::int64_t kReach = 1;  // a lake of one tile: the surf about it
+    // rather than eating away the land or the water about it. Tidying the coast widens any form
+    // under the brush and keeps no tile as it was.
+    const std::int64_t kReach = tidy ? 0 : 1;  // a lake of one tile: the surf about it
     std::vector<std::uint8_t> near(grid.size());
     bool any = false;
     for (std::int64_t y = y0; y <= y1; ++y) {
@@ -553,7 +582,7 @@ bool TerrainStroke::shape(std::uint16_t island, std::span<const std::pair<std::u
     }
     for (std::int64_t y = y0; y <= y1; ++y) {
         for (std::int64_t x = x0; x <= x1; ++x) {
-            if (fitted[at(x, y)] != 0 && !fits(x, y)) {
+            if (!tidy && fitted[at(x, y)] != 0 && !fits(x, y)) {
                 note(Refusal::Shape);
                 return false;
             }
@@ -870,6 +899,171 @@ std::vector<SeaTile> sea_depth(const sim::World& world, const assets::BuildingTa
             out.push_back(SeaTile{static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y), id, rotation,
                                   static_cast<std::uint8_t>(phase % phases & 0xFU)});
         }
+    }
+    return out;
+}
+
+bool TerrainStroke::paste(std::uint16_t island, std::int64_t x, std::int64_t y, const TerrainClip& clip,
+                          std::uint64_t seed) {
+    if (island >= m_world->islands().size() || clip.empty()) {
+        return false;
+    }
+    const sim::IslandMap& map = m_world->islands()[island].map;
+    const auto w = static_cast<std::int64_t>(map.width());
+    const auto h = static_cast<std::int64_t>(map.height());
+    std::vector<ShapeTile> tiles;
+    for (std::uint32_t cy = 0; cy < clip.height; ++cy) {
+        for (std::uint32_t cx = 0; cx < clip.width; ++cx) {
+            const std::int64_t tx = x + cx;
+            const std::int64_t ty = y + cy;
+            if (tx >= 0 && ty >= 0 && tx < w && ty < h) {
+                tiles.push_back(ShapeTile{static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(ty),
+                                          clip.land[std::size_t{cy} * clip.width + cx] != 0});
+            }
+        }
+    }
+    if (tiles.empty()) {
+        note(Refusal::NoIsland);
+        return false;
+    }
+    // The copy's land is laid as one: a form without coast tiles refuses it before anything
+    // changes.
+    const bool shaped = shape_tiles(island, tiles, true, seed, false);
+    if (!shaped && first_refusal() == Refusal::Shape) {
+        return false;
+    }
+    bool changed = shaped;
+    m_shaping = true;  // a piece of land goes where the copy has land, whatever was there
+    for (const TerrainClip::Piece& p : clip.pieces) {
+        const assets::BuildingType* b = m_buildings->by_id(p.id);
+        const std::int64_t px = x + p.x;
+        const std::int64_t py = y + p.y;
+        if (b == nullptr || px < 0 || py < 0 || px >= w || py >= h) {
+            continue;
+        }
+        const sim::MapCell& now = map.top(static_cast<std::uint32_t>(px), static_cast<std::uint32_t>(py));
+        if (!water(*m_buildings, now) && record_of(*m_buildings, now) == b && (now.rotation & 3U) == p.rotation) {
+            continue;
+        }
+        // Only on the land inland as the coast was laid here: not on beach, surf or water (a tile
+        // beyond the island or refused, where the copy's land did not go).
+        std::uint32_t fw = 1;
+        std::uint32_t fh = 1;
+        sim::rotated_size(*b, p.rotation, fw, fh);
+        bool inland = px + fw <= w && py + fh <= h;
+        for (std::uint32_t dy = 0; inland && dy < fh; ++dy) {
+            for (std::uint32_t dx = 0; inland && dx < fw; ++dx) {
+                const assets::BuildingType* there = record_of(
+                    *m_buildings, map.top(static_cast<std::uint32_t>(px) + dx, static_cast<std::uint32_t>(py) + dy));
+                inland = there != nullptr && terrain_level(*there) == 2;
+            }
+        }
+        if (!inland) {
+            continue;
+        }
+        changed = stamp(island, px, py, *b, p.rotation) || changed;
+    }
+    m_shaping = false;
+    return changed;
+}
+
+TerrainClip copy_terrain(const sim::World& world, const assets::BuildingTable& buildings, std::uint16_t island,
+                         std::uint32_t x0, std::uint32_t y0, std::uint32_t x1, std::uint32_t y1) {
+    TerrainClip clip;
+    if (island >= world.islands().size()) {
+        return clip;
+    }
+    const sim::IslandMap& map = world.islands()[island].map;
+    x1 = std::min(x1, map.width() - 1);
+    y1 = std::min(y1, map.height() - 1);
+    if (x0 > x1 || y0 > y1) {
+        return clip;
+    }
+    clip.width = x1 - x0 + 1;
+    clip.height = y1 - y0 + 1;
+    clip.land.assign(std::size_t{clip.width} * clip.height, 0);
+    for (std::uint32_t y = y0; y <= y1; ++y) {
+        for (std::uint32_t x = x0; x <= x1; ++x) {
+            const sim::MapCell& cell = map.top(x, y);
+            clip.land[std::size_t{y - y0} * clip.width + (x - x0)] = water(buildings, cell) ? 0 : 1;
+            const assets::BuildingType* b = record_of(buildings, cell);
+            if (b == nullptr || terrain_level(*b) != 2) {
+                continue;
+            }
+            const auto group = terrain_group(buildings, *b);
+            if (!group) {
+                continue;  // a building, a field, a road: its tile is land without a piece
+            }
+            const sim::SubTile sub = map.sub_tile(buildings, x, y);
+            if (sub.origin_x != static_cast<std::int32_t>(x) || sub.origin_y != static_cast<std::int32_t>(y)) {
+                continue;
+            }
+            std::uint32_t fw = 1;
+            std::uint32_t fh = 1;
+            sim::rotated_size(*b, cell.rotation, fw, fh);
+            if (x + fw - 1 > x1 || y + fh - 1 > y1) {
+                continue;
+            }
+            clip.pieces.push_back(
+                TerrainClip::Piece{b->id, static_cast<std::uint8_t>(cell.rotation & 3U), x - x0, y - y0});
+        }
+    }
+    return clip;
+}
+
+TerrainClip turned(const TerrainClip& clip, const assets::BuildingTable& buildings) {
+    TerrainClip out;
+    out.width = clip.height;
+    out.height = clip.width;
+    out.land.assign(clip.land.size(), 0);
+    // A quarter clockwise: (x, y) goes to (h - 1 - y, x), and every piece turns one step.
+    for (std::uint32_t y = 0; y < clip.height; ++y) {
+        for (std::uint32_t x = 0; x < clip.width; ++x) {
+            out.land[std::size_t{x} * out.width + (clip.height - 1 - y)] = clip.land[std::size_t{y} * clip.width + x];
+        }
+    }
+    for (const TerrainClip::Piece& p : clip.pieces) {
+        const assets::BuildingType* b = buildings.by_id(p.id);
+        if (b == nullptr) {
+            continue;
+        }
+        std::uint32_t fw = 1;
+        std::uint32_t fh = 1;
+        sim::rotated_size(*b, p.rotation, fw, fh);
+        out.pieces.push_back(
+            TerrainClip::Piece{p.id, static_cast<std::uint8_t>((p.rotation + 1U) & 3U), clip.height - p.y - fh, p.x});
+    }
+    return out;
+}
+
+TerrainClip mirrored(const TerrainClip& clip, const assets::BuildingTable& buildings) {
+    TerrainClip out;
+    out.width = clip.width;
+    out.height = clip.height;
+    out.land.assign(clip.land.size(), 0);
+    for (std::uint32_t y = 0; y < clip.height; ++y) {
+        for (std::uint32_t x = 0; x < clip.width; ++x) {
+            out.land[std::size_t{y} * clip.width + (clip.width - 1 - x)] = clip.land[std::size_t{y} * clip.width + x];
+        }
+    }
+    for (const TerrainClip::Piece& p : clip.pieces) {
+        const assets::BuildingType* b = buildings.by_id(p.id);
+        if (b == nullptr) {
+            continue;
+        }
+        std::uint32_t fw = 1;
+        std::uint32_t fh = 1;
+        sim::rotated_size(*b, p.rotation, fw, fh);
+        // Rivers, slopes and pieces of several tiles (mountains) have no mirrored pictures: their
+        // tiles stay land without a piece, which paste() lays as meadow.
+        const auto group = terrain_group(buildings, *b);
+        if (fw != 1 || fh != 1 || group == TerrainGroup::River || group == TerrainGroup::Slope) {
+            continue;
+        }
+        // Mirrored left to right a picture facing east faces west: the turns 1 and 3 change places.
+        const auto rotation =
+            b->rotate > 0 ? static_cast<std::uint8_t>((4U - p.rotation) & 3U) : static_cast<std::uint8_t>(p.rotation);
+        out.pieces.push_back(TerrainClip::Piece{p.id, rotation, clip.width - p.x - fw, p.y});
     }
     return out;
 }

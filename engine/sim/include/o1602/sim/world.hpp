@@ -524,6 +524,13 @@ public:
     core::Status grow_island(std::size_t index, std::uint32_t left, std::uint32_t top, std::uint32_t right,
                              std::uint32_t bottom, const assets::BuildingType& sea,
                              const assets::BuildingTable* buildings = nullptr);
+    /// Island `other` joined into island `keep`: `keep` grows by open sea (`sea`) to the rectangle
+    /// of both, takes the tiles of `other` where it has open sea itself, and its deposits, craters,
+    /// deer, animals and growing tiles; then `other` is taken out (remove_island(), so `keep`
+    /// moves one place forward if it came after it). `keep` keeps its number, climate and header.
+    /// Only islands without use; on failure the world is as it was.
+    core::Status merge_islands(std::size_t keep, std::size_t other, const assets::BuildingType& sea,
+                               const assets::BuildingTable* buildings = nullptr);
     /// The smallest island number no island has, nothing if all are taken.
     [[nodiscard]] std::optional<std::uint16_t> free_island_number() const;
     /// The map made `width` x `height` tiles large (at least 1, at most kMaxSide), growing or cut

@@ -489,3 +489,134 @@ TEST_CASE("editor terrain: a drop of water does not eat the land about it") {
         water.cancel();
     }
 }
+
+TEST_CASE("editor terrain: two islands joined into one, every tile keeping its place, one step") {
+    const auto buildings = make_buildings();
+    sim::World world = make_world(buildings);  // island 0: 20 x 16 at (40, 30)
+    REQUIRE(world.add_island(make_island(buildings, 10, 10, 7, 58, 40), &buildings).ok());  // overlaps its sea
+    world.island(1).header.deposits.push_back({2, 3, 4, 0, 0, 50});
+    REQUIRE(world.island(1).map.place(*buildings.by_id(kGrass), 4, 5, 0, 0).ok());
+    auto document = editor::Document::edit(world);
+    const auto before = document.save(buildings);
+    REQUIRE(before.ok());
+    auto op = editor::merge_islands(world, 0, 1, buildings);
+    REQUIRE(op.ok());
+    CHECK((*op)->kind() == "island_merge");
+    document.perform(std::move(*op));
+    REQUIRE(world.islands().size() == 1);
+    const sim::WorldIsland& isl = world.islands()[0];
+    CHECK(isl.header.number == 0);
+    CHECK(isl.x == 40);
+    CHECK(isl.y == 30);
+    CHECK(isl.map.width() == 28);                          // 40 .. 67
+    CHECK(isl.map.height() == 20);                         // 30 .. 49
+    CHECK(record_at(world, buildings, 22, 15) == kGrass);  // (4, 5) of the other
+    CHECK(record_at(world, buildings, 5, 5) == kMeadow);   // its own
+    CHECK(record_at(world, buildings, 27, 0) == kSea);     // grown
+    REQUIRE(isl.header.deposits.size() == 1);
+    CHECK(isl.header.deposits.front().x == 21);
+    CHECK(isl.header.deposits.front().y == 14);
+    CHECK(world.cell(62, 45).island == 0);
+    CHECK(sim::validate(world).ok());
+    REQUIRE(document.undo());
+    CHECK(world.islands().size() == 2);
+    const auto undone = document.save(buildings);
+    REQUIRE(undone.ok());
+    CHECK(*undone == *before);
+    // Not with itself, not an island with a city.
+    CHECK(!editor::merge_islands(world, 0, 0, buildings).ok());
+    world.island(1).map.set_city(5, 5, 0, 0);
+    CHECK(!editor::merge_islands(world, 0, 1, buildings).ok());
+}
+
+TEST_CASE("editor terrain: copy, turn, mirror and paste terrain; the coast clean-up") {
+    const auto buildings = make_buildings();
+    sim::World world = make_world(buildings);
+    for (int i = 0; i < 2; ++i) {
+        auto room = editor::add_sea_island(world, 200 + 40 * static_cast<std::uint32_t>(i), 100, 31, 31, 0, buildings);
+        REQUIRE(room.ok());
+        (*room)->apply(world);
+    }
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> block;
+    for (std::uint32_t y = 11; y < 20; ++y) {
+        for (std::uint32_t x = 11; x < 18; ++x) {
+            block.emplace_back(x, y);
+        }
+    }
+    editor::TerrainStroke land(world, buildings);
+    REQUIRE(land.shape(1, block, true, 3));
+    CHECK(land.stamp(1, 14, 13, *buildings.by_id(kGrass), 1));
+    (void)land.finish("terrain");
+    const auto id_at = [&](std::uint16_t island, std::uint32_t x, std::uint32_t y) {
+        const auto* b = buildings.by_sprite(world.islands()[island].map.top(x, y).sprite);
+        return b != nullptr ? b->id : 0U;
+    };
+
+    const editor::TerrainClip clip = editor::copy_terrain(world, buildings, 1, 8, 8, 20, 22);
+    REQUIRE(clip.width == 13);
+    REQUIRE(clip.height == 15);
+    CHECK(clip.land[0] == 0);
+    CHECK(clip.land[std::size_t{7} * 13 + 6] == 1);
+    const auto grass = std::find_if(clip.pieces.begin(), clip.pieces.end(),
+                                    [](const editor::TerrainClip::Piece& p) { return p.id == kGrass; });
+    REQUIRE(grass != clip.pieces.end());
+    CHECK(grass->x == 6);
+    CHECK(grass->y == 5);
+    CHECK(grass->rotation == 1);
+
+    const editor::TerrainClip turn = editor::turned(clip, buildings);
+    CHECK(turn.width == 15);
+    CHECK(turn.height == 13);
+    const auto turned_grass = std::find_if(turn.pieces.begin(), turn.pieces.end(),
+                                           [](const editor::TerrainClip::Piece& p) { return p.id == kGrass; });
+    REQUIRE(turned_grass != turn.pieces.end());
+    CHECK(turned_grass->x == 15 - 1 - 5);
+    CHECK(turned_grass->y == 6);
+    CHECK(turned_grass->rotation == 2);
+    const editor::TerrainClip mirror = editor::mirrored(clip, buildings);
+    const auto mirrored_grass = std::find_if(mirror.pieces.begin(), mirror.pieces.end(),
+                                             [](const editor::TerrainClip::Piece& p) { return p.id == kGrass; });
+    REQUIRE(mirrored_grass != mirror.pieces.end());
+    CHECK(mirrored_grass->x == 13 - 1 - 6);
+    CHECK(mirrored_grass->rotation == 3);
+
+    // Pasted on the other island: the land, its coast laid anew, the grass where it was.
+    editor::TerrainStroke paste(world, buildings);
+    CHECK(paste.paste(2, 8, 8, clip, 9));
+    auto op = paste.finish("terrain_paste");
+    REQUIRE(op != nullptr);
+    CHECK(id_at(2, 14, 13) == kGrass);
+    CHECK(world.islands()[2].map.top(14, 13).rotation == 1);
+    CHECK(id_at(2, 14, 16) == kMeadow);
+    CHECK(id_at(2, 2, 2) == kSea);
+    for (std::uint32_t y = 8; y <= 22; ++y) {
+        for (std::uint32_t x = 8; x <= 20; ++x) {
+            // The same coast as the copy's (its variants drawn anew).
+            const auto* a = buildings.by_id(id_at(1, x, y));
+            const auto* b = buildings.by_id(id_at(2, x, y));
+            REQUIRE((a != nullptr && b != nullptr));
+            CHECK(a->kind == b->kind);
+        }
+    }
+
+    // A piece on the copy's shore is not laid: the coast keeps its own pieces there. A mountain
+    // has no mirrored picture and is left out of a mirrored copy.
+    op->revert(world);
+    editor::TerrainClip hill = clip;
+    hill.pieces.push_back({kMountain, 0, 4, 4});
+    CHECK(editor::mirrored(hill, buildings).pieces.size() == clip.pieces.size());
+    editor::TerrainClip shore = clip;
+    shore.pieces.push_back({kGrass, 0, 3, 3});
+    editor::TerrainStroke edge(world, buildings);
+    CHECK(edge.paste(2, 8, 8, shore, 9));
+    (void)edge.finish("terrain_paste");
+    CHECK(id_at(2, 11, 11) != kGrass);
+    CHECK(id_at(2, 14, 13) == kGrass);
+
+    // A stray beach tile inland: the clean-up lays meadow there.
+    REQUIRE(world.island(1).map.place(*buildings.by_id(kBeach), 14, 16, 0, 0).ok());
+    editor::TerrainStroke tidy(world, buildings);
+    const std::vector<std::pair<std::uint32_t, std::uint32_t>> spot{{14, 16}};
+    CHECK(tidy.tidy_coast(1, spot, 4));
+    CHECK(id_at(1, 14, 16) == kMeadow);
+}

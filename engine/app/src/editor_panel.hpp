@@ -57,9 +57,10 @@ struct EditorTerrain {
     /// Brush: the piece where the mouse goes; Land, Water: land or sea with the coast laid
     /// about it; Random: pieces of the group drawn tile by tile; Fill: the tiles joined to the one
     /// clicked that show the same; Replace: every tile of the island that shows the same; Pipette:
-    /// takes the piece of the tile clicked.
-    enum class Tool : std::uint8_t { Brush, Land, Water, Random, Fill, Replace, Pipette };
-    static constexpr std::size_t kTools = 7;
+    /// takes the piece of the tile clicked; Coast: the coast under the brush laid anew; Select: a
+    /// rectangle of an island dragged out, to copy; Paste: the copy laid where clicked.
+    enum class Tool : std::uint8_t { Brush, Land, Water, Coast, Random, Fill, Replace, Pipette, Select, Paste };
+    static constexpr std::size_t kTools = 10;
     Tool tool = Tool::Brush;
     std::uint8_t group = 0;     ///< editor::TerrainGroup
     std::size_t piece = 0;      ///< index into the group's pieces
@@ -166,6 +167,10 @@ struct EditorModel {
     std::uint32_t terrain_width = 1;
     std::uint32_t terrain_height = 1;
     bool terrain_turns = false;
+    /// The terrain selected (Select) and the size of the copy (0 x 0: nothing copied).
+    bool terrain_selected = false;
+    std::uint32_t clip_width = 0;
+    std::uint32_t clip_height = 0;
 };
 
 /// What a click or a key asked for.
@@ -198,6 +203,9 @@ struct EditorRequest {
         RemovePlaceholder,  ///< the placeholder `index` taken out
         ChangePlaceholder,  ///< the placeholder `index` of climate `island.climate`, size `island.size`
         Terrain,            ///< the terrain tools set to `terrain`
+        TerrainCopy,        ///< the terrain selected copied
+        TerrainTurn,        ///< the copy turned a quarter clockwise
+        TerrainMirror,      ///< the copy mirrored left to right
     };
     Kind kind = Kind::Close;
     std::size_t index = 0;

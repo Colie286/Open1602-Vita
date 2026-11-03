@@ -527,7 +527,33 @@ TEST_CASE("editor panel: the terrain tools go through their tools, kinds, pieces
     CHECK(r->terrain.tool == app::EditorTerrain::Tool::Land);
     r = click(panel, m, "Brush", ui::MouseButton::Right);
     REQUIRE(r.has_value());
-    CHECK(r->terrain.tool == app::EditorTerrain::Tool::Pipette);
+    CHECK(r->terrain.tool == app::EditorTerrain::Tool::Paste);
+
+    // Selecting and pasting: the copy's buttons in the place of the settings.
+    m.terrain.tool = app::EditorTerrain::Tool::Select;
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Nothing copied yet"));
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        CHECK(w.rect.y + w.rect.h <= 760);
+        if (w.text == "Copy" || w.text == "Turn copy" || w.text == "Mirror copy") {
+            CHECK(!w.enabled);
+        }
+    }
+    m.terrain_selected = true;
+    m.clip_width = 12;
+    m.clip_height = 9;
+    r = click(panel, m, "Copy");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::TerrainCopy);
+    r = click(panel, m, "Turn copy");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::TerrainTurn);
+    r = click(panel, m, "Mirror copy");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::TerrainMirror);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Copy: 12 \xD7 9 tiles"));
+    m.terrain.tool = app::EditorTerrain::Tool::Brush;
 
     m.terrain.piece = 2;
     m.terrain.rotation = 1;

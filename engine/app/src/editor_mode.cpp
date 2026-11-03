@@ -388,6 +388,9 @@ EditorModel MapViewer::editor_model() const {
             m.terrain_turns = b->rotate > 0;
         }
     }
+    m.terrain_selected = m_editor->selection.has_value();
+    m.clip_width = m_editor->clip.width;
+    m.clip_height = m_editor->clip.height;
     if (m_hud && m_hud->editor_panel() && m_hud->editor_panel()->page() == EditorPanel::Page::WorldSize) {
         const auto [w, h] = editor::used_size(world);
         m.used_width = w;
@@ -502,6 +505,25 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
             break;
         case Kind::Terrain:
             editor_terrain_request(request);
+            break;
+        case Kind::TerrainCopy: {
+            const auto& sel = m_editor->selection;
+            if (!sel) {
+                editor_notice(ui::tr("editor.terrain.refused.no_copy"), true, "nothing selected");
+                break;
+            }
+            m_editor->clip =
+                editor::copy_terrain(m_state->world, m_buildings, sel->island, sel->x0, sel->y0, sel->x1, sel->y1);
+            editor_notice(
+                ui::tr("editor.terrain.copied", {number(m_editor->clip.width), number(m_editor->clip.height)}), false,
+                "terrain copied");
+            break;
+        }
+        case Kind::TerrainTurn:
+            m_editor->clip = editor::turned(m_editor->clip, m_buildings);
+            break;
+        case Kind::TerrainMirror:
+            m_editor->clip = editor::mirrored(m_editor->clip, m_buildings);
             break;
         case Kind::MovePlaceholder:
         case Kind::RemovePlaceholder:
@@ -1189,16 +1211,30 @@ void MapViewer::draw_editor_marks() {
             std::uint32_t w = 1;
             std::uint32_t h = 1;
             const assets::BuildingType* b = editor_terrain_piece();
-            if (t.tool == Tool::Random || t.tool == Tool::Land || t.tool == Tool::Water ||
-                (t.tool == Tool::Brush && b != nullptr && b->size_x == 1 && b->size_y == 1)) {
+            if (t.tool == Tool::Paste && !m_editor->clip.empty()) {
+                w = m_editor->clip.width;
+                h = m_editor->clip.height;
+            } else if (t.tool == Tool::Random || t.tool == Tool::Land || t.tool == Tool::Water ||
+                       t.tool == Tool::Coast ||
+                       (t.tool == Tool::Brush && b != nullptr && b->size_x == 1 && b->size_y == 1)) {
                 w = h = editor::kBrushSizes[t.brush % editor::kBrushSizes.size()];
             } else if (t.tool == Tool::Brush && b != nullptr) {
                 sim::rotated_size(*b, t.rotation, w, h);
             }
             const std::int64_t x0 = std::int64_t{tile->x} - (std::int64_t{w} - 1) / 2;
             const std::int64_t y0 = std::int64_t{tile->y} - (std::int64_t{h} - 1) / 2;
-            outline(x0, y0, w, h, ui::rgb_ink(assets::Rgba{250, 250, 250, 255}));
+            if (t.tool != Tool::Select) {
+                outline(x0, y0, w, h, ui::rgb_ink(assets::Rgba{250, 250, 250, 255}));
+            }
         }
+    }
+    // The terrain selected, in light blue, while the terrain page is open.
+    if (panel != nullptr && panel->page() == EditorPanel::Page::Terrain && m_editor->selection &&
+        m_editor->selection->island < world.islands().size()) {
+        const auto& sel = *m_editor->selection;
+        const sim::WorldIsland& isl = world.islands()[sel.island];
+        outline(std::int64_t{isl.x} + sel.x0, std::int64_t{isl.y} + sel.y0, sel.x1 - sel.x0 + 1.0,
+                sel.y1 - sel.y0 + 1.0, ui::rgb_ink(assets::Rgba{120, 200, 255, 255}));
     }
     // The mark of what the panel shows: a cross on the tile, or over the ship, unit or building.
     const EditorPick& pick = m_editor->pick;
@@ -1343,6 +1379,30 @@ void MapViewer::editor_paint(editor::TerrainStroke& stroke, std::int64_t x, std:
     const EditorTerrain& t = m_editor->terrain;
     const std::uint32_t side = editor::kBrushSizes[t.brush % editor::kBrushSizes.size()];
     const sim::World& world = m_state->world;
+    if (t.tool == EditorTerrain::Tool::Coast) {
+        // The coast under the brush laid anew, island by island.
+        std::vector<std::pair<std::uint16_t, std::vector<std::pair<std::uint32_t, std::uint32_t>>>> by_island;
+        for (const auto& [tx, ty] : editor::brush_tiles(x, y, side, world.width(), world.height())) {
+            const sim::World::Cell& c = world.cell(tx, ty);
+            if (c.island == sim::World::kSea) {
+                continue;
+            }
+            auto it =
+                std::find_if(by_island.begin(), by_island.end(), [&](const auto& e) { return e.first == c.island; });
+            if (it == by_island.end()) {
+                by_island.emplace_back(c.island, std::vector<std::pair<std::uint32_t, std::uint32_t>>{});
+                it = by_island.end() - 1;
+            }
+            it->second.emplace_back(c.local_x, c.local_y);
+        }
+        if (by_island.empty()) {
+            stroke.note(editor::TerrainStroke::Refusal::NoIsland);
+        }
+        for (const auto& [island, tiles] : by_island) {
+            (void)stroke.tidy_coast(island, tiles, tile_seed(m_editor->strokes, x, y));
+        }
+        return;
+    }
     if (t.tool == EditorTerrain::Tool::Land || t.tool == EditorTerrain::Tool::Water) {
         const auto brush = editor::brush_tiles(x, y, side, world.width(), world.height());
         if (brush.empty()) {
@@ -1472,16 +1532,72 @@ void MapViewer::editor_make_room(std::int64_t x0, std::int64_t y0, std::int64_t 
         editor_islands_changed();
         m_editor->stroke = std::make_unique<editor::TerrainStroke>(m_state->world, m_buildings);
     };
+    // Set when land of another island lies close to the brush but one of the two has cities or
+    // buildings: such islands keep their shape, so they are not joined, and the notice says so.
+    std::optional<std::size_t> unjoined;
+    if (island) {
+        // Land of another island close to the brush: both become one island first, so that the
+        // coast between them is laid as one.
+        constexpr std::int64_t kJoin = 3;
+        const bool free = world.island_use(*island) == sim::World::IslandUse::None;
+        std::optional<std::size_t> other;
+        for (std::int64_t y = std::max<std::int64_t>(0, y0 - kJoin); y <= std::min(H - 1, y1 + kJoin) && !other; ++y) {
+            for (std::int64_t x = std::max<std::int64_t>(0, x0 - kJoin); x <= std::min(W - 1, x1 + kJoin); ++x) {
+                const sim::World::Cell& at = world.cell(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
+                if (at.island == sim::World::kSea || at.island == *island) {
+                    continue;
+                }
+                const sim::MapCell& top = world.islands()[at.island].map.top(at.local_x, at.local_y);
+                const assets::BuildingType* b = top.empty() ? nullptr : m_buildings.by_sprite(top.sprite);
+                if (b == nullptr || editor::terrain_level(*b) == 0) {
+                    continue;
+                }
+                if (free && world.island_use(at.island) == sim::World::IslandUse::None) {
+                    other = at.island;
+                    break;
+                }
+                if (!unjoined) {
+                    unjoined = at.island;
+                }
+            }
+        }
+        if (other) {
+            auto op = editor::merge_islands(m_editor->document.world(), *island, *other, m_buildings);
+            if (op) {
+                const std::size_t kept = *island > *other ? *island - 1 : *island;
+                restart(std::move(op).value());
+                editor_make_room(x0, y0, x1, y1);  // the joined island may still need room
+                if (!m_editor->stroke) {
+                    return;
+                }
+                editor_notice(ui::tr("editor.terrain.joined", {number(kept + 1)}), false, "islands joined");
+                return;
+            }
+            std::fprintf(stderr, "editor: islands not joined: %s\n", op.error().message.c_str());
+        }
+    }
     if (island) {
         const sim::WorldIsland& isl = world.islands()[*island];
         const std::int64_t ix0 = isl.x;
         const std::int64_t iy0 = isl.y;
         const std::int64_t ix1 = ix0 + isl.map.width() - 1;
         const std::int64_t iy1 = iy0 + isl.map.height() - 1;
+        const auto refuse_join = [&] {
+            if (unjoined) {
+                const std::size_t built =
+                    world.island_use(*island) != sim::World::IslandUse::None ? *island : *unjoined;
+                std::string text = ui::tr("editor.terrain.refused.join", {number(built + 1)});
+                if (m_editor->notice != text) {  // a stroke asks again at every step
+                    editor_notice(std::move(text), true, "islands not joined");
+                }
+            }
+        };
         if (nx0 >= ix0 && ny0 >= iy0 && nx1 <= ix1 && ny1 <= iy1) {
+            refuse_join();
             return;  // room enough
         }
         if (world.island_use(*island) != sim::World::IslandUse::None) {
+            refuse_join();
             return;  // an island with cities keeps its size; the brush stops at its edge
         }
         const auto grow = [&](std::int64_t more) {
@@ -1503,7 +1619,11 @@ void MapViewer::editor_make_room(std::int64_t x0, std::int64_t y0, std::int64_t 
             return;
         }
         restart(std::move(op).value());
-        editor_notice(ui::tr("editor.terrain.grown", {number(*island + 1)}), false, "island grown");
+        if (unjoined) {
+            refuse_join();
+        } else {
+            editor_notice(ui::tr("editor.terrain.grown", {number(*island + 1)}), false, "island grown");
+        }
         return;
     }
     // Open sea: a new island about the brush, as large as the smallest the editor makes.
@@ -1533,7 +1653,8 @@ void MapViewer::editor_end_stroke() {
         return;
     }
     const editor::TerrainStroke::Refusal refused = m_editor->stroke->first_refusal();
-    std::unique_ptr<editor::Operation> op = m_editor->stroke->finish("terrain");
+    std::unique_ptr<editor::Operation> op =
+        m_editor->stroke->finish(m_editor->terrain.tool == EditorTerrain::Tool::Coast ? "terrain_coast" : "terrain");
     m_editor->stroke.reset();
     m_editor->stroke_at.reset();
     m_editor->stroke_large.reset();
@@ -1548,6 +1669,64 @@ void MapViewer::editor_end_stroke() {
         m_editor->notice.clear();
     } else if (refused != editor::TerrainStroke::Refusal::Free) {
         editor_notice(terrain_refusal(refused), true, "terrain refused");
+    }
+}
+
+bool MapViewer::editor_select(std::int64_t x, std::int64_t y) {
+    const sim::World& world = m_state->world;
+    if (!m_editor->select_from) {
+        return false;
+    }
+    const auto [fx, fy] = *m_editor->select_from;
+    const auto inside = [&](std::int64_t tx, std::int64_t ty) {
+        return tx >= 0 && ty >= 0 && tx < world.width() && ty < world.height();
+    };
+    if (!inside(fx, fy) || !inside(x, y)) {
+        m_editor->selection.reset();
+        return false;
+    }
+    const sim::World::Cell& a = world.cell(static_cast<std::uint32_t>(fx), static_cast<std::uint32_t>(fy));
+    const sim::World::Cell& b = world.cell(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
+    if (a.island == sim::World::kSea || a.island != b.island) {
+        m_editor->selection.reset();
+        return false;
+    }
+    m_editor->selection = EditorSession::TerrainSelection{
+        a.island, std::min<std::uint32_t>(a.local_x, b.local_x), std::min<std::uint32_t>(a.local_y, b.local_y),
+        std::max<std::uint32_t>(a.local_x, b.local_x), std::max<std::uint32_t>(a.local_y, b.local_y)};
+    return true;
+}
+
+void MapViewer::editor_paste(std::int64_t x, std::int64_t y) {
+    const editor::TerrainClip& clip = m_editor->clip;
+    if (clip.empty()) {
+        editor_notice(ui::tr("editor.terrain.refused.no_copy"), true, "nothing copied");
+        return;
+    }
+    const sim::World& world = m_state->world;
+    if (x < 0 || y < 0 || x >= world.width() || y >= world.height()) {
+        return;
+    }
+    const sim::World::Cell& c = world.cell(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
+    if (c.island == sim::World::kSea) {
+        editor_notice(ui::tr("editor.terrain.refused.no_island"), true, "paste on the open sea");
+        return;
+    }
+    // The copy's middle under the mouse, on the island there.
+    const std::int64_t lx = std::int64_t{c.local_x} - (std::int64_t{clip.width} - 1) / 2;
+    const std::int64_t ly = std::int64_t{c.local_y} - (std::int64_t{clip.height} - 1) / 2;
+    ++m_editor->strokes;
+    editor::TerrainStroke stroke(m_state->world, m_buildings);
+    const bool laid = stroke.paste(c.island, lx, ly, clip, tile_seed(m_editor->strokes, x, y));
+    const editor::TerrainStroke::Refusal refused = stroke.first_refusal();
+    if (!laid) {
+        stroke.cancel();
+        editor_notice(terrain_refusal(refused), true, "paste refused");
+        return;
+    }
+    if (std::unique_ptr<editor::Operation> op = stroke.finish("terrain_paste")) {
+        m_editor->document.perform(std::move(op));
+        m_editor->notice.clear();
     }
 }
 
@@ -1572,6 +1751,16 @@ bool MapViewer::editor_stroke(std::optional<render::TilePos> tile, Stroke phase)
             const auto y = static_cast<std::uint32_t>(tile->y);
             if (tool == Tool::Pipette) {
                 editor_pipette(x, y);
+                return true;
+            }
+            if (tool == Tool::Select) {
+                m_editor->select_from = {tile->x, tile->y};
+                m_editor->selection.reset();
+                (void)editor_select(tile->x, tile->y);
+                return true;
+            }
+            if (tool == Tool::Paste) {
+                editor_paste(tile->x, tile->y);
                 return true;
             }
             if (tool == Tool::Fill || tool == Tool::Replace) {
@@ -1610,6 +1799,12 @@ bool MapViewer::editor_stroke(std::optional<render::TilePos> tile, Stroke phase)
             return true;
         }
         case Stroke::Continue: {
+            if (tool == Tool::Select && m_editor->select_from) {
+                if (tile) {
+                    (void)editor_select(tile->x, tile->y);
+                }
+                return true;
+            }
             if (!m_editor->stroke || !tile || !m_editor->stroke_at) {
                 return m_editor->stroke != nullptr;
             }
@@ -1625,6 +1820,17 @@ bool MapViewer::editor_stroke(std::optional<render::TilePos> tile, Stroke phase)
             return true;
         }
         case Stroke::End:
+            if (tool == Tool::Select && m_editor->select_from) {
+                m_editor->select_from.reset();
+                if (const auto& sel = m_editor->selection) {
+                    editor_notice(ui::tr("editor.terrain.selected",
+                                         {number(sel->x1 - sel->x0 + 1), number(sel->y1 - sel->y0 + 1)}),
+                                  false, "terrain selected");
+                } else {
+                    editor_notice(ui::tr("editor.terrain.refused.select"), true, "selection not on one island");
+                }
+                return true;
+            }
             editor_end_stroke();
             return true;
     }
