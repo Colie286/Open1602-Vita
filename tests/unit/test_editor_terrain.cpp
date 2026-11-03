@@ -44,6 +44,9 @@ assets::BuildingTable make_buildings() {
         "  @Nummer: 9\n  Id: 21206\n  Kind: 21\n  Gfx: 49\n  Size: 1, 1\n  Rotate: 1\n"
         "  @Nummer: 10\n  Id: 21051\n  Kind: 25\n  Gfx: 53\n  Size: 1, 1\n  Rotate: 1\n"
         "  @Nummer: 11\n  Id: 21031\n  Kind: 26\n  Gfx: 57\n  Size: 1, 1\n  Rotate: 1\n"
+        "  @Nummer: 12\n  Id: 21202\n  Kind: 19\n  Gfx: 61\n  Size: 1, 1\n  Rotate: 1\n"
+        "  @Nummer: 13\n  Id: 21204\n  Kind: 19\n  Gfx: 65\n  Size: 1, 1\n  Rotate: 1\n"
+        "  @Nummer: 14\n  Id: 21209\n  Kind: 19\n  Gfx: 69\n  Size: 1, 1\n  Rotate: 1\n"
         "EndObj\n",
         types);
     auto table = assets::BuildingTable::from_cod(doc);
@@ -402,4 +405,48 @@ TEST_CASE("editor terrain: a new island of open sea, where land is painted on th
     (*over)->apply(world);
     CHECK(world.cell(55, 38).island == 0);
     CHECK(world.cell(62, 38).island == 2);
+}
+
+TEST_CASE("editor terrain: land on a new island lays the sea by its depth, one undo step with the island") {
+    const auto buildings = make_buildings();
+    sim::World world = make_world(buildings);
+    auto document = editor::Document::edit(world);
+    const auto before = document.save(buildings);
+    REQUIRE(before.ok());
+    // As the land brush on open sea: the island is made, then the stroke goes on; one step.
+    auto room = editor::add_sea_island(world, 200, 100, 31, 31, 0, buildings);
+    REQUIRE(room.ok());
+    std::vector<std::unique_ptr<editor::Operation>> steps;
+    (*room)->apply(world);
+    steps.push_back(std::move(room).value());
+    editor::TerrainStroke stroke(world, buildings);
+    const std::vector<std::pair<std::uint32_t, std::uint32_t>> tiles{{14, 15}, {15, 15}, {16, 15}};
+    CHECK(stroke.shape(1, tiles, true, 7));
+    steps.push_back(stroke.finish("terrain"));
+    document.record(std::make_unique<editor::Steps>(std::move(steps), "terrain"));
+    const sim::IslandMap& map = world.islands()[1].map;
+    const auto id_at = [&](std::uint32_t x, std::uint32_t y) {
+        const auto* b = buildings.by_sprite(map.top(x, y).sprite);
+        return b != nullptr ? b->id : 0U;
+    };
+    // The land with its beach runs from row 14 to 16, the surf a tile out, the light sea past it,
+    // then the middle sea, the dark open sea far out and at the island's edge.
+    CHECK(id_at(15, 15) == kMeadow);
+    CHECK(id_at(15, 12) == 21203);
+    CHECK(id_at(15, 4) == kSea);
+    CHECK(id_at(0, 0) == kSea);
+    bool middle = false;
+    for (std::uint32_t y = 0; y < map.height(); ++y) {
+        middle = middle || id_at(15, y) == 21204 || id_at(15, y) == 21202;
+    }
+    CHECK(middle);
+    REQUIRE(document.history().undo_steps() == 2);  // the save before described the scenario
+    CHECK(document.undo());
+    CHECK(world.islands().size() == 1);
+    const auto undone = document.save(buildings);
+    REQUIRE(undone.ok());
+    CHECK(*undone == *before);
+    CHECK(document.redo());
+    CHECK(world.islands().size() == 2);
+    CHECK(id_at(15, 15) == kMeadow);
 }

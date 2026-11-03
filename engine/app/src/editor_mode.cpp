@@ -1452,10 +1452,12 @@ void MapViewer::editor_make_room(std::int64_t x0, std::int64_t y0, std::int64_t 
         }
     }
     const auto restart = [&](std::unique_ptr<editor::Operation> room) {
+        // The stroke so far and the room are done already; the stroke's end keeps them as one step.
         if (std::unique_ptr<editor::Operation> drawn = m_editor->stroke->finish("terrain")) {
-            m_editor->document.perform(std::move(drawn));
+            m_editor->stroke_steps.push_back(std::move(drawn));
         }
-        m_editor->document.perform(std::move(room));
+        room->apply(m_state->world);
+        m_editor->stroke_steps.push_back(std::move(room));
         editor_islands_changed();
         m_editor->stroke = std::make_unique<editor::TerrainStroke>(m_state->world, m_buildings);
     };
@@ -1524,7 +1526,13 @@ void MapViewer::editor_end_stroke() {
     m_editor->stroke.reset();
     m_editor->stroke_at.reset();
     m_editor->stroke_large.reset();
-    if (op) {
+    if (!m_editor->stroke_steps.empty()) {
+        if (op) {
+            m_editor->stroke_steps.push_back(std::move(op));
+        }
+        m_editor->document.record(std::make_unique<editor::Steps>(std::move(m_editor->stroke_steps), "terrain"));
+        m_editor->stroke_steps.clear();
+    } else if (op) {
         m_editor->document.perform(std::move(op));
         m_editor->notice.clear();
     } else if (refused != editor::TerrainStroke::Refusal::Free) {

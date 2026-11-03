@@ -8,6 +8,13 @@ void History::perform(sim::World& world, std::unique_ptr<Operation> op) {
         return;
     }
     op->apply(world);
+    record(std::move(op));
+}
+
+void History::record(std::unique_ptr<Operation> op) {
+    if (!op) {
+        return;
+    }
     for (const Step& s : m_undone) {
         m_memory -= s.op->memory();
     }

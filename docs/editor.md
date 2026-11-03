@@ -74,7 +74,7 @@ lays, and the brush shows its piece there before the click. The tools:
 | Tool | What it does |
 |---|---|
 | Brush | Paints the piece where the left button is pressed and where the mouse goes with it held. A piece of several tiles (a mountain, a river bend) is laid about the mouse. |
-| Land | Paints land into the water and lays the coast about it as the game's islands have it: beach and its corners on the land's edge, surf before it. Land painted at an island's edge makes the island grow (by open sea, a step of its own), and land painted on the open sea far from islands makes a new island there. |
+| Land | Paints land into the water and lays the coast about it as the game's islands have it: beach and its corners on the land's edge, surf before it, then light, middle and dark sea outwards. Land painted at an island's edge makes the island grow by open sea, and land painted on the open sea far from islands makes a new island there; either is one step of undo with the stroke. |
 | Water | Paints water into the land, with the surf and the beach about it. |
 | Random fill | Paints pieces of the kind, each tile its own drawn at random and turned at random: ground as the game's islands mix it, forest of the island's climate. |
 | Fill | Paints every tile that is joined to the one clicked by its sides and looks like it. |

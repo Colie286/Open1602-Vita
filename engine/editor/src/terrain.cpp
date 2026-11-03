@@ -616,10 +616,223 @@ bool TerrainStroke::shape(std::uint16_t island, std::span<const std::pair<std::u
             }
         }
     }
+    // The open sea about the new coast by its depth.
+    constexpr std::int64_t kDepth = 6;
+    for (const SeaTile& t :
+         sea_depth(*m_world, *m_buildings, island, x0 - kDepth, y0 - kDepth, x1 + kDepth, y1 + kDepth, seed)) {
+        if (const assets::BuildingType* b = m_buildings->by_id(t.id)) {
+            (void)stamp(island, t.x, t.y, *b, t.rotation, t.phase);
+        }
+    }
     m_shaping = false;
     const bool now_changed = m_changed;
     m_changed = before || now_changed;
     return now_changed;
+}
+
+std::vector<SeaTile> sea_depth(const sim::World& world, const assets::BuildingTable& buildings, std::uint16_t island,
+                               std::int64_t x0, std::int64_t y0, std::int64_t x1, std::int64_t y1, std::uint64_t seed) {
+    namespace ids = assets::id::island_shape;
+    std::vector<SeaTile> out;
+    if (island >= world.islands().size()) {
+        return out;
+    }
+    const sim::WorldIsland& isl = world.islands()[island];
+    const sim::IslandMap& map = isl.map;
+    const auto w = static_cast<std::int64_t>(map.width());
+    const auto h = static_cast<std::int64_t>(map.height());
+    x0 = std::max<std::int64_t>(0, x0);
+    y0 = std::max<std::int64_t>(0, y0);
+    x1 = std::min<std::int64_t>(w - 1, x1);
+    y1 = std::min<std::int64_t>(h - 1, y1);
+    if (x0 > x1 || y0 > y1) {
+        return out;
+    }
+    constexpr int kShore = 0;  // land, surf and any other tile that is not open sea
+    constexpr int kLight = 1;
+    constexpr int kMiddle = 2;
+    constexpr int kDark = 3;
+    constexpr std::int64_t kFar = 7;
+    const auto inside = [&](std::int64_t x, std::int64_t y) { return x >= 0 && y >= 0 && x < w && y < h; };
+    const auto cell = [&](std::int64_t x, std::int64_t y) -> const sim::MapCell& {
+        return map.top(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
+    };
+    const auto land = [&](std::int64_t x, std::int64_t y) { return inside(x, y) && !water(buildings, cell(x, y)); };
+    // The band a tile has now: by its record, the dark sea beyond the island.
+    const auto band_now = [&](std::int64_t x, std::int64_t y) -> int {
+        if (!inside(x, y)) {
+            return kDark;
+        }
+        const assets::BuildingType* b = record_of(buildings, cell(x, y));
+        if (b == nullptr) {
+            return kDark;
+        }
+        switch (b->id) {
+            case ids::kLightSea:
+                return kLight;
+            case ids::kLightEdge:
+            case ids::kMiddleSea:
+                return kMiddle;
+            case ids::kDarkEdge:
+            case ids::kDarkSea:
+                return kDark;
+            default:
+                return kShore;
+        }
+    };
+    const auto open = [&](std::int64_t x, std::int64_t y) {
+        if (!inside(x, y) || band_now(x, y) == kShore) {
+            return false;
+        }
+        for (std::size_t d = 0; d < 8; ++d) {
+            if (land(x + kDirX[d], y + kDirY[d])) {
+                return false;
+            }
+        }
+        return true;
+    };
+    // The distance to the nearest land (Chebyshev, as the bands of the templates run).
+    const auto distance = [&](std::int64_t x, std::int64_t y) {
+        for (std::int64_t r = 1; r < kFar; ++r) {
+            for (std::int64_t k = -r; k <= r; ++k) {
+                if (land(x + k, y - r) || land(x + k, y + r) || land(x - r, y + k) || land(x + r, y + k)) {
+                    return r;
+                }
+            }
+        }
+        return kFar;
+    };
+    // Value noise on a lattice of 5 tiles, 0..1023.
+    const auto wobble = [](std::int64_t x, std::int64_t y) {
+        constexpr std::int64_t kSpacing = 5;
+        const auto floor_div = [](std::int64_t a) { return a >= 0 ? a / kSpacing : -((-a + kSpacing - 1) / kSpacing); };
+        const std::int64_t gx = floor_div(x);
+        const std::int64_t gy = floor_div(y);
+        const std::int64_t fx = x - gx * kSpacing;
+        const std::int64_t fy = y - gy * kSpacing;
+        const auto corner = [](std::int64_t cx, std::int64_t cy) {
+            return static_cast<std::int64_t>(
+                mix(0x1602'5EA0ULL ^ tile_key(static_cast<std::uint32_t>(cx), static_cast<std::uint32_t>(cy))) % 1024U);
+        };
+        const std::int64_t top = corner(gx, gy) * (kSpacing - fx) + corner(gx + 1, gy) * fx;
+        const std::int64_t bottom = corner(gx, gy + 1) * (kSpacing - fx) + corner(gx + 1, gy + 1) * fx;
+        return static_cast<int>((top * (kSpacing - fy) + bottom * fy) / (kSpacing * kSpacing));
+    };
+    const auto band_of = [](std::int64_t level) { return level <= 2 ? kLight : level <= 4 ? kMiddle : kDark; };
+    // The bands wanted over the window and a tile around it.
+    const std::int64_t gx0 = x0 - 1;
+    const std::int64_t gy0 = y0 - 1;
+    const std::int64_t gw = x1 - x0 + 3;
+    const std::int64_t gh = y1 - y0 + 3;
+    const auto at = [&](std::int64_t x, std::int64_t y) {
+        return static_cast<std::size_t>((y - gy0) * gw + (x - gx0));
+    };
+    std::vector<std::uint8_t> band(static_cast<std::size_t>(gw * gh), kShore);
+    std::vector<std::uint8_t> moved(band.size(), 0);
+    for (std::int64_t y = gy0; y < gy0 + gh; ++y) {
+        for (std::int64_t x = gx0; x < gx0 + gw; ++x) {
+            if (!open(x, y)) {
+                band[at(x, y)] = inside(x, y) ? kShore : kDark;
+                continue;
+            }
+            const int now = band_now(x, y);
+            band[at(x, y)] = static_cast<std::uint8_t>(now);
+            if (x < x0 || y < y0 || x > x1 || y > y1) {
+                continue;
+            }
+            // As the islands of their own shape: light two tiles out, middle to four, then dark,
+            // deepening towards the rectangle's edge. A band may come a tile closer to the land,
+            // as the templates' bands wander, but never lie deeper than that.
+            // The bands' borders wander by a tile with a coarse noise of the world's tiles, the
+            // same for every stroke, so that they do not run along the brush's straight edges.
+            const std::int64_t d = distance(x, y);
+            const std::int64_t rim = std::min({x, y, w - 1 - x, h - 1 - y});
+            const std::int64_t least = 5 - 2 * rim;
+            const int v = wobble(static_cast<std::int64_t>(isl.x) + x, static_cast<std::int64_t>(isl.y) + y);
+            const std::int64_t level = d + (v < 340 ? -1 : v > 683 ? 1 : 0);
+            int want = band_of(std::max(level, least));
+            if (d == 2) {
+                want = std::min(want, kMiddle);  // never dark next to the surf
+            }
+            const int lo = std::min(want, band_of(std::max(d - 1, least)));
+            const int hi = want;
+            if (now < lo || now > hi) {
+                band[at(x, y)] = static_cast<std::uint8_t>(want);
+                moved[at(x, y)] = 1;
+            }
+        }
+    }
+    const auto depth_at = [&](std::int64_t x, std::int64_t y) -> int { return band[at(x, y)]; };
+    // The edge of a band: the lighter water on two sides next to each other, turned towards them.
+    const auto edge = [&](std::int64_t x, std::int64_t y, int b) -> std::optional<std::uint8_t> {
+        const bool n = depth_at(x, y - 1) < b;
+        const bool e = depth_at(x + 1, y) < b;
+        const bool s = depth_at(x, y + 1) < b;
+        const bool wv = depth_at(x - 1, y) < b;
+        if (s && wv && !n && !e) {
+            return std::uint8_t{0};
+        }
+        if (n && wv && !s && !e) {
+            return std::uint8_t{1};
+        }
+        if (n && e && !s && !wv) {
+            return std::uint8_t{2};
+        }
+        if (e && s && !n && !wv) {
+            return std::uint8_t{3};
+        }
+        return std::nullopt;
+    };
+    for (std::int64_t y = y0; y <= y1; ++y) {
+        for (std::int64_t x = x0; x <= x1; ++x) {
+            const int b = band[at(x, y)];
+            if (b == kShore) {
+                continue;
+            }
+            if (moved[at(x, y)] == 0 && moved[at(x, y - 1)] == 0 && moved[at(x + 1, y)] == 0 &&
+                moved[at(x, y + 1)] == 0 && moved[at(x - 1, y)] == 0) {
+                continue;
+            }
+            const sim::MapCell& now = cell(x, y);
+            const assets::BuildingType* was = record_of(buildings, now);
+            const std::uint64_t r = mix(seed ^ tile_key(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y)));
+            std::uint32_t id = ids::kLightSea;
+            std::uint8_t rotation = 0;
+            if (b == kMiddle) {
+                if (const auto turn = edge(x, y, b)) {
+                    id = ids::kLightEdge;
+                    rotation = *turn;
+                } else {
+                    id = ids::kMiddleSea;
+                    // The middle sea is turned at random: one turned already stays.
+                    rotation = was != nullptr && was->id == id ? static_cast<std::uint8_t>(now.rotation & 3U)
+                                                               : static_cast<std::uint8_t>(r % 4);
+                }
+            } else if (b == kDark) {
+                if (const auto turn = edge(x, y, b)) {
+                    id = ids::kDarkEdge;
+                    rotation = *turn;
+                } else {
+                    id = ids::kDarkSea;
+                }
+            }
+            if (was != nullptr && was->id == id && (now.rotation & 3U) == rotation) {
+                continue;
+            }
+            const assets::BuildingType* piece = buildings.by_id(id);
+            if (piece == nullptr) {
+                continue;
+            }
+            const std::uint32_t phases = std::max<std::uint32_t>(piece->anim_count, 1);
+            // The dark sea in the phase of the world's open sea, so that no seam shows.
+            const std::uint64_t phase = id == ids::kDarkSea ? 3U * (isl.x + static_cast<std::uint64_t>(x)) + isl.y +
+                                                                  static_cast<std::uint64_t>(y)
+                                                            : (r >> 8);
+            out.push_back(SeaTile{static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y), id, rotation,
+                                  static_cast<std::uint8_t>(phase % phases & 0xFU)});
+        }
+    }
+    return out;
 }
 
 bool TerrainStroke::stamp_world(std::int64_t x, std::int64_t y, const assets::BuildingType& piece,

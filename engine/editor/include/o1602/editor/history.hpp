@@ -25,6 +25,9 @@ public:
 
     /// Applies `op` to `world` and keeps it as the newest step; the steps taken back are gone.
     void perform(sim::World& world, std::unique_ptr<Operation> op);
+    /// Keeps `op`, which the world has already been through, as the newest step without applying
+    /// it again; the steps taken back are gone.
+    void record(std::unique_ptr<Operation> op);
     /// Takes the newest step back; false if there is none.
     bool undo(sim::World& world);
     /// Does the step taken back last again; false if there is none.

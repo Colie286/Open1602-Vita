@@ -7,6 +7,7 @@
 #include "o1602/assets/chunk_file.hpp"
 #include "o1602/assets/island.hpp"
 #include "o1602/editor/document.hpp"
+#include "o1602/editor/terrain.hpp"
 #include "o1602/sim/island_shapes.hpp"
 #include "o1602/sim/island_templates.hpp"
 #include "o1602/sim/save_game.hpp"
@@ -391,6 +392,38 @@ core::Result<std::unique_ptr<Operation>> grow_island(const sim::World& world, st
     if (auto status = after.grow_island(index, left, top, right, bottom, *sea, &buildings); !status) {
         return status.error();
     }
+    // The sea where the island's rectangle ended by its depth, so that no band of light water
+    // ends in a straight line against the dark sea added.
+    const sim::IslandMap& map = after.islands()[index].map;
+    const auto w = static_cast<std::int64_t>(map.width());
+    const auto h = static_cast<std::int64_t>(map.height());
+    const std::int64_t x0 = left;
+    const std::int64_t y0 = top;
+    const std::int64_t x1 = w - 1 - right;
+    const std::int64_t y1 = h - 1 - bottom;
+    constexpr std::int64_t kReach = 6;
+    const auto island = static_cast<std::uint16_t>(index);
+    TerrainStroke stroke(after, buildings);
+    const auto settle = [&](std::int64_t ax, std::int64_t ay, std::int64_t bx, std::int64_t by) {
+        for (const SeaTile& t : sea_depth(after, buildings, island, ax, ay, bx, by, 0x1602'5EAULL ^ index)) {
+            if (const assets::BuildingType* b = buildings.by_id(t.id)) {
+                (void)stroke.stamp(island, t.x, t.y, *b, t.rotation, t.phase);
+            }
+        }
+    };
+    if (top > 0) {
+        settle(0, y0 - kReach, w - 1, y0 + kReach);
+    }
+    if (bottom > 0) {
+        settle(0, y1 - kReach, w - 1, y1 + kReach);
+    }
+    if (left > 0) {
+        settle(x0 - kReach, 0, x0 + kReach, h - 1);
+    }
+    if (right > 0) {
+        settle(x1 - kReach, 0, x1 + kReach, h - 1);
+    }
+    (void)stroke.finish("island_grow");  // the whole world is the step
     return edit(std::move(after), "island_grow");
 }
 

@@ -518,10 +518,10 @@ void EditorPanel::layout_terrain(const EditorModel& model) {
     using Tool = EditorTerrain::Tool;
     // Each setting's name above its value, which takes the panel's width.
     const auto value = [&](Id id, const char* label, std::string text, bool enabled) {
-        f.label(Rect{kX, y, kW, 20}, ui::tr(label), Align::Left, enabled ? Tone::Normal : Tone::Dim);
-        y += 20;
+        f.label(Rect{kX, y, kW, 18}, ui::tr(label), Align::Left, enabled ? Tone::Normal : Tone::Dim);
+        y += 18;
         f.cycle_button(id, Rect{kX, y, kW, kButtonH}, std::move(text), enabled);
-        y += kButtonH + 4;
+        y += kButtonH + 2;
     };
     value(kTerrainTool, "editor.terrain.tool", ui::tr(kTerrainToolTexts[static_cast<std::size_t>(t.tool)]), true);
     const bool shaping = t.tool == Tool::Land || t.tool == Tool::Water;
@@ -544,16 +544,16 @@ void EditorPanel::layout_terrain(const EditorModel& model) {
     if (pieces && !single) {
         note = ui::tr("editor.terrain.note.large", {count(model.terrain_width), count(model.terrain_height)});
     }
-    constexpr std::int32_t kTerrainNote = 5 * 20;
-    f.paragraph(Rect{kX, y, kW, kTerrainNote}, note, Tone::Dim, 20);
+    // The tool's note, or in its place the notice of the last stroke (as tall as the panel is at
+    // 1024 x 768: the back button stays below it).
+    constexpr std::int32_t kTerrainNote = 4 * 20;
+    if (!model.notice.empty()) {
+        f.paragraph(Rect{kX, y, kW, kTerrainNote}, model.notice, model.notice_is_error ? Tone::Warning : Tone::Dim, 20);
+    } else {
+        f.paragraph(Rect{kX, y, kW, kTerrainNote}, note, Tone::Dim, 20);
+    }
     y += kTerrainNote + 4;
     f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
-    y += kButtonH + kGap;
-    const std::int32_t bottom = m_top + m_height - 4;
-    if (!model.notice.empty() && bottom - y - 2 >= 2 * 20) {
-        f.paragraph(Rect{kX, y + 2, kW, std::max(0, bottom - y - 2)}, model.notice,
-                    model.notice_is_error ? Tone::Warning : Tone::Dim, 20);
-    }
 }
 
 void EditorPanel::layout_islands(const EditorModel& model) {

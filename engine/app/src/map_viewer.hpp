@@ -693,6 +693,8 @@ private:
         /// A stroke of the brush being drawn, where it laid last and the last piece of several
         /// tiles laid (its world tile).
         std::unique_ptr<editor::TerrainStroke> stroke{};
+        /// What the stroke did before it made room for its land, and the room made: one step with it.
+        std::vector<std::unique_ptr<editor::Operation>> stroke_steps{};
         std::optional<std::pair<std::int64_t, std::int64_t>> stroke_at{};
         std::optional<std::pair<std::int64_t, std::int64_t>> stroke_large{};
         std::uint64_t strokes = 0;  ///< strokes drawn, for the random fill's pieces

@@ -154,6 +154,24 @@ private:
     Refusal m_first_refusal = Refusal::Free;
 };
 
+/// A tile of open sea to lay anew (sea_depth()).
+struct SeaTile {
+    std::uint32_t x = 0;  ///< island tile
+    std::uint32_t y = 0;
+    std::uint32_t id = 0;  ///< haeuser.cod id
+    std::uint8_t rotation = 0;
+    std::uint8_t phase = 0;
+};
+
+/// The open sea of the island's tiles x0..x1, y0..y1 by its depth, as the islands of their own
+/// shape have it: light water past the surf, then middle, the dark open sea from about five tiles
+/// out, deepening towards the island's edge. Only tiles of a depth too far from that and those
+/// beside them are laid anew (a coast of the game's islands stays as it is); surf, land and other
+/// water are left alone. `seed` turns the middle sea.
+[[nodiscard]] std::vector<SeaTile> sea_depth(const sim::World& world, const assets::BuildingTable& buildings,
+                                             std::uint16_t island, std::int64_t x0, std::int64_t y0, std::int64_t x1,
+                                             std::int64_t y1, std::uint64_t seed);
+
 /// The piece a terrain tile shows (the pipette): its record and rotation; nothing for a tile that
 /// is not terrain or no island's.
 [[nodiscard]] std::optional<TerrainPiece> terrain_at(const sim::World& world, const assets::BuildingTable& buildings,
