@@ -77,14 +77,16 @@ struct EditorTerrain {
 /// The settings of the objects' tools (the page "Objects").
 struct EditorObjects {
     /// Build: the building where clicked, for the owner, without costs (dragged, again where it no
-    /// longer covers the last); Ship, Unit: a ship on the water, a land unit on an island, for the
+    /// longer covers the last); Template: one of the player's saved templates (templates.hpp) about
+    /// the mouse, for the owner, without costs; Ship, Unit: a ship on the water, a land unit on an island, for the
     /// owner; Resource: an ore or gold vein in a mountain, a treasure, deer in a forest; Remove:
     /// takes the ship, unit, resource or building clicked away.
-    enum class Tool : std::uint8_t { Build, Ship, Unit, Resource, Remove };
-    static constexpr std::size_t kTools = 5;
+    enum class Tool : std::uint8_t { Build, Template, Ship, Unit, Resource, Remove };
+    static constexpr std::size_t kTools = 6;
     Tool tool = Tool::Build;
     std::size_t group = 0;      ///< index into the build menu's categories that list buildings
     std::size_t piece = 0;      ///< index into the group's buildings
+    std::size_t stamp = 0;      ///< index into the templates (EditorModel::object_pieces while Template)
     std::size_t ship = 0;       ///< index into the ships (EditorModel::object_pieces while Ship)
     std::size_t unit = 0;       ///< index into the land units (EditorModel::object_pieces while Unit)
     std::size_t resource = 0;   ///< editor::Resource: veins, treasure, deer
@@ -228,6 +230,7 @@ struct EditorModel {
     /// owner's name.
     EditorObjects objects;
     std::size_t object_groups = 0;
+    std::size_t object_owners = 0;  ///< the players objects are placed for: humans, computers, natives, pirates
     std::size_t object_pieces = 0;
     std::string object_group;
     std::string object_name;

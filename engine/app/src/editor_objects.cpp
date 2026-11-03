@@ -13,6 +13,7 @@
 #include "map_input.hpp"
 #include "map_viewer.hpp"
 #include "names.hpp"
+#include "templates.hpp"
 
 #include "o1602/assets/own_figures.hpp"
 #include "o1602/assets/text_table.hpp"
@@ -31,7 +32,32 @@ namespace o1602::app {
 
 namespace {
 
-/// The build menu's categories that list buildings (not the demolish tool), in the menu's order.
+/// The button number of the natives' and pirates' group (no button of the build menu has it).
+constexpr std::int32_t kLandscapeGroup = 31099;
+
+/// The group of the natives' and pirates' buildings, which no build menu lists: the original's
+/// list after the menu's (Text.cod [LANDSCHAFT]) without its two forests, which the terrain has.
+const ui::BuildCategory& landscape_group() {
+    static const ui::BuildCategory group = [] {
+        ui::BuildCategory c;
+        c.button = kLandscapeGroup;
+        c.names = "LANDSCHAFT";
+        std::vector<ui::BuildButton> row;
+        for (std::size_t i = 0; i < assets::id::kLandscape.size(); ++i) {
+            const std::uint32_t id = assets::id::kLandscape[i];
+            if (id != assets::id::island_shape::kForestNorth.front() &&
+                id != assets::id::island_shape::kForestSouth.front()) {
+                row.push_back(ui::BuildButton{id, 0, static_cast<std::int32_t>(i), {}, {}});
+            }
+        }
+        c.rows.push_back(std::move(row));
+        return c;
+    }();
+    return group;
+}
+
+/// The build menu's categories that list buildings (not the demolish tool), in the menu's order,
+/// then the natives' and pirates' buildings.
 std::vector<const ui::BuildCategory*> object_groups() {
     std::vector<const ui::BuildCategory*> groups;
     for (const ui::BuildCategory& c : ui::build_menu().categories) {
@@ -39,19 +65,41 @@ std::vector<const ui::BuildCategory*> object_groups() {
             groups.push_back(&c);
         }
     }
+    groups.push_back(&landscape_group());
     return groups;
 }
 
-/// The players a building can be placed for: humans and computers, as the panel counts them.
+/// The players a building, ship or unit can be placed for: humans and computers, then the natives
+/// and the pirates.
 std::vector<sim::PlayerId> object_owners(const sim::World& world) {
     std::vector<sim::PlayerId> owners;
     for (std::size_t i = 0; i < world.players().size(); ++i) {
+        const auto p = static_cast<sim::PlayerId>(i);
         const sim::PlayerRole role = world.players()[i].role;
         if (role == sim::PlayerRole::Human || role == sim::PlayerRole::Computer) {
-            owners.push_back(static_cast<sim::PlayerId>(i));
+            owners.push_back(p);
+        }
+    }
+    for (std::size_t i = 0; i < world.players().size(); ++i) {
+        const auto p = static_cast<sim::PlayerId>(i);
+        if (world.players()[i].role == sim::PlayerRole::Neutral &&
+            (world.acts_as(p, sim::FactionBehaviour::Natives) || world.acts_as(p, sim::FactionBehaviour::Pirates))) {
+            owners.push_back(p);
         }
     }
     return owners;
+}
+
+/// The name of a city the natives or pirates found in the editor; empty for the others, whose
+/// cities take the next of the list of cities.
+std::string own_city_name(const sim::World& world, sim::PlayerId owner) {
+    if (world.acts_as(owner, sim::FactionBehaviour::Natives)) {
+        return ui::tr("editor.city.natives");
+    }
+    if (world.acts_as(owner, sim::FactionBehaviour::Pirates)) {
+        return ui::tr("editor.city.pirates");
+    }
+    return {};
 }
 
 /// Why a building is not placed, in the player's language.
@@ -122,6 +170,12 @@ void MapViewer::editor_object_model(EditorModel& m) const {
     }
     using Tool = EditorObjects::Tool;
     const Tool tool = m_editor->objects.tool;
+    if (tool == Tool::Template) {
+        m.object_pieces = m_templates ? m_templates->all().size() : 0;
+        m.object_turns = true;
+        const BuildTemplate* t = editor_template();
+        m.object_name = t != nullptr ? t->name : std::string();
+    }
     if (tool == Tool::Resource) {
         m.object_pieces = editor::kResources;
         m.object_turns = false;
@@ -144,6 +198,8 @@ void MapViewer::editor_object_model(EditorModel& m) const {
             } else if (const assets::OwnUnit* unit =
                            tool == Tool::Unit ? assets::find_own_unit(m_own_units, figure) : nullptr) {
                 m.object_name = unit->name(ui::current_language());
+            } else if (figure == assets::figure::kPirate) {
+                m.object_name = ui::tr("editor.objects.ship.pirate");
             } else if (index < 4) {
                 m.object_name = ui::tr(key + std::to_string(index));
             } else {
@@ -152,6 +208,7 @@ void MapViewer::editor_object_model(EditorModel& m) const {
         }
     }
     const auto owners = object_owners(m_editor->document.world());
+    m.object_owners = owners.size();
     if (!owners.empty()) {
         const sim::Player* p = m_editor->document.world().player(owners[m_editor->objects.owner % owners.size()]);
         m.object_owner = p != nullptr ? player_name(*p) : std::string("-");
@@ -254,8 +311,88 @@ void MapViewer::editor_city_request(const EditorRequest& request) {
 void MapViewer::editor_objects_request(const EditorRequest& request) {
     EditorObjects o = request.objects;
     o.rotation &= 3U;
+    if (o.tool == EditorObjects::Tool::Template && m_editor->objects.tool != EditorObjects::Tool::Template) {
+        template_store().load();  // saved in a game meanwhile
+    }
     m_editor->objects = o;
     m_editor->notice.clear();
+}
+
+const BuildTemplate* MapViewer::editor_template() const {
+    if (!m_editor || !m_templates || m_templates->all().empty()) {
+        return nullptr;
+    }
+    const std::vector<BuildTemplate>& all = m_templates->all();
+    return &all[std::min(m_editor->objects.stamp, all.size() - 1)];
+}
+
+std::optional<sim::BuildOrder> MapViewer::editor_template_order(std::int64_t x, std::int64_t y) const {
+    const sim::World& world = m_editor->document.world();
+    const BuildTemplate* t = editor_template();
+    const sim::PlayerId owner = editor_object_owner();
+    if (t == nullptr || owner == sim::kNoPlayer || x < 0 || y < 0 || x >= world.width() || y >= world.height()) {
+        return std::nullopt;
+    }
+    const sim::World::Cell& c = world.cell(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
+    if (c.island == sim::World::kSea) {
+        return std::nullopt;
+    }
+    BuildTool::Layout layout = t->layout;
+    layout.rotate(m_editor->objects.rotation & 3);
+    // The template hangs at the mouse by its middle, as in the copy tool's hand, and keeps its
+    // buildings' rotations.
+    sim::BuildOrder order;
+    order.player = owner;
+    order.island = c.island;
+    order.free = true;
+    order.orient_to_road = false;
+    const std::int32_t ox = static_cast<std::int32_t>(c.local_x) - (layout.width - 1) / 2;
+    const std::int32_t oy = static_cast<std::int32_t>(c.local_y) - (layout.height - 1) / 2;
+    for (const BuildTool::Layout::Item& item : layout.items) {
+        if (m_buildings.by_id(item.building) != nullptr) {
+            order.items.push_back(sim::BuildItem{item.building, ox + item.x, oy + item.y, item.rotation, 0});
+        }
+    }
+    if (order.items.empty()) {
+        return std::nullopt;
+    }
+    return order;
+}
+
+void MapViewer::editor_place_template(std::int64_t x, std::int64_t y) {
+    (void)template_store();  // read on first use
+    if (editor_object_owner() == sim::kNoPlayer) {
+        editor_notice(ui::tr("editor.objects.note.no_players"), true, "no owner");
+        return;
+    }
+    if (editor_template() == nullptr) {
+        editor_notice(ui::tr("editor.objects.note.no_templates"), true, "no template");
+        return;
+    }
+    const auto order = editor_template_order(x, y);
+    if (!order) {
+        editor_notice(ui::tr("editor.objects.refused.island"), true, "template not on an island");
+        return;
+    }
+    const std::size_t items = order->items.size();
+    editor::PlacedBuildings placed =
+        editor::place_buildings(m_editor->document.world(), m_buildings, *order, m_city_names,
+                                own_city_name(m_editor->document.world(), order->player));
+    if (!placed.step) {
+        if (!placed.plan.items.empty()) {
+            editor_notice(build_refusal(placed.plan.items.front().refusal), true, "template refused");
+        }
+        return;
+    }
+    m_editor->document.perform(std::move(placed.step));
+    editor_islands_changed();
+    m_editor->notice.clear();
+    if (placed.plan.placed < items) {
+        // Some of it did not fit: say how much stands.
+        editor_notice(
+            ui::tr("editor.objects.template_part", {std::to_string(placed.plan.placed), std::to_string(items)}), false,
+            "template placed in part");
+    }
 }
 
 std::optional<sim::BuildOrder> MapViewer::editor_object_order(std::int64_t x, std::int64_t y) const {
@@ -323,7 +460,8 @@ bool MapViewer::editor_place_object(std::int64_t x, std::int64_t y, bool tell) {
         }
         return false;
     }
-    editor::PlacedBuildings placed = editor::place_buildings(m_state->world, m_buildings, *order, m_city_names);
+    editor::PlacedBuildings placed = editor::place_buildings(m_state->world, m_buildings, *order, m_city_names,
+                                                             own_city_name(m_state->world, order->player));
     if (!placed.step) {
         if (tell && !placed.plan.items.empty()) {
             editor_notice(build_refusal(placed.plan.items.front().refusal), true, "building refused");
@@ -348,6 +486,10 @@ bool MapViewer::editor_objects_stroke(std::optional<render::TilePos> tile, Strok
             }
             if (m_editor->objects.tool == EditorObjects::Tool::Resource) {
                 editor_place_resource(*tile);
+                return true;
+            }
+            if (m_editor->objects.tool == EditorObjects::Tool::Template) {
+                editor_place_template(tile->x, tile->y);  // one at a click
                 return true;
             }
             if (m_editor->objects.tool != EditorObjects::Tool::Build) {
@@ -406,6 +548,9 @@ std::vector<std::uint16_t> MapViewer::editor_figures(EditorObjects::Tool tool) c
         for (const auto& [number, type] : m_figures.package_ships()) {
             figures.push_back(static_cast<std::uint16_t>(number));  // below kMaxFigures
         }
+        if (m_figures.get(assets::figure::kPirate) != nullptr) {
+            figures.push_back(assets::figure::kPirate);  // for the pirates
+        }
     } else if (tool == EditorObjects::Tool::Unit) {
         for (const std::uint32_t family : m_figures.unit_families()) {
             figures.push_back(static_cast<std::uint16_t>(family));
@@ -456,6 +601,18 @@ void MapViewer::editor_place_figure(std::int64_t x, std::int64_t y) {
     m_editor->document.perform(std::move(op).value());
     editor_islands_changed();
     m_editor->notice.clear();
+    // A computer disbands its soldiers on an island without a city of its own in peacetime: say so.
+    const sim::World& placed = m_editor->document.world();
+    const sim::Player* p = placed.player(owner);
+    if (!ship && p != nullptr && p->role == sim::PlayerRole::Computer &&
+        placed.contains(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y))) {
+        const std::uint16_t island = placed.cell(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y)).island;
+        const bool city = std::any_of(placed.cities().begin(), placed.cities().end(),
+                                      [&](const sim::City& c) { return c.owner == owner && c.island == island; });
+        if (!city) {
+            editor_notice(ui::tr("editor.objects.unit_disbanded"), false, "computer unit without a city");
+        }
+    }
 }
 
 void MapViewer::editor_place_resource(render::TilePos tile) {

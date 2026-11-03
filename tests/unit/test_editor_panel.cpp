@@ -619,10 +619,12 @@ TEST_CASE("editor panel: the buildings' tools go through their tools, groups, bu
     m.object_group = "Farms";
     m.object_name = "Cattle farm";
     m.object_owner = "Merchant";
+    m.object_owners = 6;  // four players, the natives and the pirates
     CHECK(!click(panel, m, "Place objects").has_value());
     REQUIRE(panel.page() == EditorPanel::Page::Objects);
     (void)panel.draw(m, kNoFonts);
-    CHECK(says(panel, "Cattle farm (1/4)"));
+    CHECK(says(panel, "Cattle farm"));
+    CHECK(says(panel, "Building (1/4)"));  // the number above, the name alone on its button
     CHECK(says(panel, "builds for the owner without costs"));
     for (const ui::Form::Widget& w : panel.form().widgets()) {
         CHECK(w.rect.y + w.rect.h <= 760);
@@ -631,7 +633,7 @@ TEST_CASE("editor panel: the buildings' tools go through their tools, groups, bu
     auto r = click(panel, m, "Build");
     REQUIRE(r.has_value());
     CHECK(r->kind == EditorRequest::Kind::Objects);
-    CHECK(r->objects.tool == app::EditorObjects::Tool::Ship);
+    CHECK(r->objects.tool == app::EditorObjects::Tool::Template);
     r = click(panel, m, "Build", ui::MouseButton::Right);
     REQUIRE(r.has_value());
     CHECK(r->objects.tool == app::EditorObjects::Tool::Remove);
@@ -643,7 +645,7 @@ TEST_CASE("editor panel: the buildings' tools go through their tools, groups, bu
     CHECK(r->objects.group == 1);
     CHECK(r->objects.piece == 0);  // a new group starts at its first building
     CHECK(r->objects.rotation == 0);
-    r = click(panel, m, "Cattle farm (3/4)", ui::MouseButton::Right);
+    r = click(panel, m, "Cattle farm", ui::MouseButton::Right);
     REQUIRE(r.has_value());
     CHECK(r->objects.piece == 1);
     m.objects = app::EditorObjects{};
@@ -662,7 +664,7 @@ TEST_CASE("editor panel: the buildings' tools go through their tools, groups, bu
 
     r = click(panel, m, "Merchant", ui::MouseButton::Right);
     REQUIRE(r.has_value());
-    CHECK(r->objects.owner == 3);  // back from the first of four players
+    CHECK(r->objects.owner == 5);  // back from the first of six owners, the pirates and natives last
 
     // Removing needs none of the building's settings.
     m.objects.tool = app::EditorObjects::Tool::Remove;
@@ -675,6 +677,7 @@ TEST_CASE("editor panel: the buildings' tools go through their tools, groups, bu
     // A map without players has nobody to build for.
     m.objects.tool = app::EditorObjects::Tool::Build;
     m.players = 0;
+    m.object_owners = 0;
     (void)panel.draw(m, kNoFonts);
     CHECK(says(panel, "no players to build for"));
     CHECK(!click(panel, m, "Back to the map").has_value());
@@ -695,6 +698,7 @@ TEST_CASE("editor panel: the tools Ship and Unit choose their type, the way they
     m.object_pieces = 5;
     m.object_name = "Large trading ship";
     m.object_turns = true;
+    m.object_owners = 4;
     CHECK(!click(panel, m, "Place objects").has_value());
     REQUIRE(panel.page() == EditorPanel::Page::Objects);
     (void)panel.draw(m, kNoFonts);
@@ -751,6 +755,32 @@ TEST_CASE("editor panel: the tools Ship and Unit choose their type, the way they
     REQUIRE(r.has_value());
     CHECK(r->objects.resource == 4);
     CHECK(r->objects.unit == 0);
+
+    // Templates: the user's saved pieces, turned and for an owner.
+    m.objects.tool = app::EditorObjects::Tool::Template;
+    m.objects.stamp = 0;
+    m.object_pieces = 2;
+    m.object_name = "Weavers' quarter";
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Template (1/2)"));
+    CHECK(says(panel, "builds the template"));
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        if (w.text == "Merchant" || w.text == "0\xB0") {
+            CHECK(w.enabled);
+        }
+        if (w.text == "Farms") {
+            CHECK(!w.enabled);
+        }
+        CHECK(w.rect.y + w.rect.h <= 760);
+    }
+    r = click(panel, m, "Weavers' quarter");
+    REQUIRE(r.has_value());
+    CHECK(r->objects.stamp == 1);
+    CHECK(r->objects.resource == 3);
+    // None saved: where they come from.
+    m.object_pieces = 0;
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "No templates. In a game"));
 }
 
 TEST_CASE("editor panel: the kind of islands of a new map and the packages' climates") {

@@ -146,14 +146,14 @@ constexpr std::array<const char*, 4> kTerrainRotationTexts = {"editor.terrain.ro
                                                               "editor.terrain.rotation.2", "editor.terrain.rotation.3"};
 
 constexpr std::array<const char*, EditorObjects::kTools> kObjectToolTexts = {
-    "editor.objects.tool.build", "editor.objects.tool.ship", "editor.objects.tool.unit", "editor.objects.tool.resource",
-    "editor.objects.tool.remove"};
+    "editor.objects.tool.build", "editor.objects.tool.template", "editor.objects.tool.ship",
+    "editor.objects.tool.unit",  "editor.objects.tool.resource", "editor.objects.tool.remove"};
 constexpr std::array<const char*, EditorObjects::kTools> kObjectToolNotes = {
-    "editor.objects.note.build", "editor.objects.note.ship", "editor.objects.note.unit", "editor.objects.note.resource",
-    "editor.objects.note.remove"};
+    "editor.objects.note.build", "editor.objects.note.template", "editor.objects.note.ship",
+    "editor.objects.note.unit",  "editor.objects.note.resource", "editor.objects.note.remove"};
 constexpr std::array<const char*, EditorObjects::kTools> kObjectPieceLabels = {
-    "editor.objects.piece", "editor.objects.ship", "editor.objects.unit", "editor.objects.resource",
-    "editor.objects.piece"};
+    "editor.objects.building", "editor.objects.template", "editor.objects.ship",
+    "editor.objects.unit",     "editor.objects.resource", "editor.objects.piece"};
 
 constexpr std::uint32_t kSizeStep = 50;
 constexpr std::uint32_t kFitMargin = 8;
@@ -710,8 +710,12 @@ void EditorPanel::layout_objects(const EditorModel& model) {
     using Tool = EditorObjects::Tool;
     const bool build = o.tool == Tool::Build;
     // Ships and land units: the piece is their type, the rotation the way they face.
-    const bool figure = o.tool == Tool::Ship || o.tool == Tool::Unit || o.tool == Tool::Resource;
-    const std::size_t chosen = o.tool == Tool::Ship       ? o.ship
+    const bool figure =
+        o.tool == Tool::Template || o.tool == Tool::Ship || o.tool == Tool::Unit || o.tool == Tool::Resource;
+    // What is placed for an owner, turned.
+    const bool owned = build || o.tool == Tool::Template || o.tool == Tool::Ship || o.tool == Tool::Unit;
+    const std::size_t chosen = o.tool == Tool::Template   ? o.stamp
+                               : o.tool == Tool::Ship     ? o.ship
                                : o.tool == Tool::Unit     ? o.unit
                                : o.tool == Tool::Resource ? o.resource
                                                           : o.piece;
@@ -724,27 +728,26 @@ void EditorPanel::layout_objects(const EditorModel& model) {
     value(kObjectsTool, ui::tr("editor.objects.tool"), ui::tr(kObjectToolTexts[static_cast<std::size_t>(o.tool)]),
           true);
     value(kObjectsGroup, ui::tr("editor.objects.group"), model.object_group, build && model.object_groups > 0);
-    // A ship's or unit's name is long: its number goes on the label above it.
-    const char* piece_label = kObjectPieceLabels[static_cast<std::size_t>(o.tool)];
+    // A name is long: its number goes on the label above it.
+    const bool pieces = (build || figure) && model.object_pieces > 0;
     std::string piece = ui::tr("editor.terrain.no_piece");
-    std::string label = ui::tr(piece_label);
-    if (model.object_pieces > 0) {
-        const std::string n = count(std::min(chosen, model.object_pieces - 1) + 1);
-        piece = figure ? model.object_name
-                       : ui::tr("editor.objects.piece_value", {model.object_name, n, count(model.object_pieces)});
-        if (figure) {
-            label = ui::tr(piece_label, {n, count(model.object_pieces)});
-        }
+    const char* piece_label = kObjectPieceLabels[static_cast<std::size_t>(o.tool)];
+    std::string label = ui::tr(piece_label, {"-", "-"});
+    if (pieces) {
+        piece = model.object_name;
+        label = ui::tr(piece_label, {count(std::min(chosen, model.object_pieces - 1) + 1), count(model.object_pieces)});
     }
-    value(kObjectsPiece, label, std::move(piece), (build || figure) && model.object_pieces > 0);
+    value(kObjectsPiece, label, std::move(piece), pieces);
     value(kObjectsRotation, ui::tr("editor.objects.rotation"), ui::tr(kTerrainRotationTexts[o.rotation & 3U]),
-          (build && model.object_turns) || o.tool == Tool::Ship || o.tool == Tool::Unit);
+          (build && model.object_turns) || (owned && !build));
     value(kObjectsOwner, ui::tr("editor.objects.owner"),
-          model.players > 0 ? model.object_owner : ui::tr("editor.objects.no_owner"),
-          (build || o.tool == Tool::Ship || o.tool == Tool::Unit) && model.players > 0);
+          model.object_owners > 0 ? model.object_owner : ui::tr("editor.objects.no_owner"),
+          owned && model.object_owners > 0);
     std::string note = ui::tr(kObjectToolNotes[static_cast<std::size_t>(o.tool)]);
-    if ((build || o.tool == Tool::Ship || o.tool == Tool::Unit) && model.players == 0) {
+    if (owned && model.object_owners == 0) {
         note = ui::tr("editor.objects.note.no_players");
+    } else if (o.tool == Tool::Template && model.object_pieces == 0) {
+        note = ui::tr("editor.objects.note.no_templates");
     }
     constexpr std::int32_t kObjectsNote = 4 * 20;
     if (!model.notice.empty()) {
@@ -1090,7 +1093,8 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
                 o.rotation = 0;
             } else if (*id == kObjectsPiece) {
                 using Tool = EditorObjects::Tool;
-                std::size_t& chosen = o.tool == Tool::Ship       ? o.ship
+                std::size_t& chosen = o.tool == Tool::Template   ? o.stamp
+                                      : o.tool == Tool::Ship     ? o.ship
                                       : o.tool == Tool::Unit     ? o.unit
                                       : o.tool == Tool::Resource ? o.resource
                                                                  : o.piece;
@@ -1101,7 +1105,7 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
             } else if (*id == kObjectsRotation) {
                 o.rotation = static_cast<std::uint8_t>(step(o.rotation, 4, forward));
             } else {
-                o.owner = model.players > 0 ? step(o.owner, model.players, forward) : 0;
+                o.owner = model.object_owners > 0 ? step(o.owner, model.object_owners, forward) : 0;
             }
             return r;
         }

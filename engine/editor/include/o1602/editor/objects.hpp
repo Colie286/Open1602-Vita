@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "o1602/assets/building_table.hpp"
@@ -29,9 +30,20 @@ struct PlacedBuildings {
 /// Builds `order` for its player as the game builds it, but free (BuildOrder::free): no costs, no
 /// locks, no limits, and a treasure under it stays. Checked like a player's order otherwise: the
 /// terrain, the player's land (a Kontor founds a city on an island without one of the player's),
-/// coasts, rivers and rock faces. New cities take the next name of `city_names`.
+/// coasts, rivers and rock faces. New cities take the next name of `city_names`, or `own_name` if
+/// one is given (the natives' and pirates': "Eingeborenendorf", "Eingeborenendorf 2", ...), which
+/// leaves the list's turn as it was. An owner founds one city on an island, the natives and the
+/// pirates as well (CityLimit).
 [[nodiscard]] PlacedBuildings place_buildings(const sim::World& world, const assets::BuildingTable& buildings,
-                                              sim::BuildOrder order, const std::vector<std::string>& city_names);
+                                              sim::BuildOrder order, const std::vector<std::string>& city_names,
+                                              std::string_view own_name = {});
+
+/// A plan that founds a city for an owner who has one on the island already (the natives and
+/// pirates, whom the game does not hold to one): its items refused (CityLimit). True if so.
+bool refuse_second_city(const sim::World& world, const sim::BuildOrder& order, sim::BuildPlan& plan);
+
+/// `name`, or with the first number from 2 on that no city of the world has yet: "Piratennest 2".
+[[nodiscard]] std::string numbered_name(const sim::World& world, std::string_view name);
 
 /// Takes the building covering `tile` of island `island` away, as its owner demolishes it: the
 /// ground comes back, land it held is checked again. A Kontor goes only once its city has no other

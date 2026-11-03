@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "o1602/editor/objects.hpp"
 
+#include <algorithm>
+#include <string>
+#include <string_view>
 #include <utility>
 
 #include "o1602/editor/islands.hpp"
@@ -36,20 +39,67 @@ bool clear_to_ground(sim::IslandMap& map, const sim::BuildingAt& at) {
 
 }  // namespace
 
+bool refuse_second_city(const sim::World& world, const sim::BuildOrder& order, sim::BuildPlan& plan) {
+    if (plan.placed == 0 || plan.city != sim::MapCell::kNoCity) {
+        return false;
+    }
+    const bool second = std::any_of(world.cities().begin(), world.cities().end(), [&](const sim::City& c) {
+        return c.island == order.island && c.owner == order.player;
+    });
+    if (!second) {
+        return false;
+    }
+    for (sim::PlannedBuild& p : plan.items) {
+        if (p.ok()) {
+            p.refusal = sim::BuildRefusal::CityLimit;
+        }
+    }
+    plan.placed = 0;
+    return true;
+}
+
 PlacedBuildings place_buildings(const sim::World& world, const assets::BuildingTable& buildings, sim::BuildOrder order,
-                                const std::vector<std::string>& city_names) {
+                                const std::vector<std::string>& city_names, std::string_view own_name) {
     order.free = true;
     PlacedBuildings result;
     result.plan = sim::plan_build(world, buildings, order);
     if (result.plan.placed == 0) {
         return result;
     }
+    const auto has_city = [&](const sim::World& w, std::uint16_t island, std::uint8_t index) {
+        return w.city(island, index) != nullptr;
+    };
+    if (refuse_second_city(world, order, result.plan)) {
+        return result;
+    }
     sim::World after = world;
     result.plan = sim::execute_build(after, buildings, order, city_names, nullptr);
+    if (!own_name.empty()) {
+        // A city founded: its own name, and the list's turn stays where it was.
+        for (std::uint8_t index = 0; index < sim::kMaxCitiesPerIsland; ++index) {
+            sim::City* c = after.city(order.island, index);
+            if (c != nullptr && !has_city(world, order.island, index)) {
+                c->name = numbered_name(after, own_name);
+                after.set_city_name_index(world.city_name_index());
+            }
+        }
+    }
     if (result.plan.placed > 0) {
         result.step = std::make_unique<WorldEdit>(std::move(after), "building_place");
     }
     return result;
+}
+
+std::string numbered_name(const sim::World& world, std::string_view name) {
+    const auto taken = [&](const std::string& n) {
+        return std::any_of(world.cities().begin(), world.cities().end(),
+                           [&](const sim::City& c) { return c.name == n; });
+    };
+    std::string candidate(name);
+    for (int n = 2; taken(candidate); ++n) {
+        candidate = std::string(name) + " " + std::to_string(n);
+    }
+    return candidate;
 }
 
 core::Result<std::unique_ptr<Operation>> remove_building(const sim::World& world,

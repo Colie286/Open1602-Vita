@@ -23,7 +23,7 @@ enum class UnitRefusal : std::uint8_t {
     NoWater,   ///< a ship on land or on water it cannot sail
     NoGround,  ///< a land unit on the sea, or on ground soldiers do not walk on
     Taken,     ///< another ship next to it, another unit on the same tile
-    NoOwner,   ///< not a human or computer player
+    NoOwner,   ///< not a human or computer player, nor the natives or pirates
     NoType,    ///< no ship or land unit of the figure tables
 };
 
@@ -35,9 +35,9 @@ enum class UnitRefusal : std::uint8_t {
 [[nodiscard]] UnitRefusal unit_fits(const sim::World& world, const assets::BuildingTable& buildings, std::int64_t x,
                                     std::int64_t y);
 
-/// A ship of `figure` (one of the shipyards' or a package's ship) for `owner` on world tile (x, y),
-/// facing `direction` (0..7), new and empty as a shipyard launches it; unnamed, so the game names
-/// it when it starts. Fails (InvalidFormat) with the refusal's name where it cannot go.
+/// A ship of `figure` (one of the shipyards' or a package's ship, or the pirates' ship) for `owner` on world tile (x,
+/// y), facing `direction` (0..7), new and empty as a shipyard launches it; unnamed, so the game names it when it
+/// starts. Fails (InvalidFormat) with the refusal's name where it cannot go.
 [[nodiscard]] core::Result<std::unique_ptr<Operation>> place_ship(
     const sim::World& world, const assets::BuildingTable& buildings, const assets::FigureTable& figures,
     sim::PlayerId owner, std::uint16_t figure, std::int64_t x, std::int64_t y, std::uint8_t direction);

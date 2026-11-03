@@ -377,6 +377,14 @@ private:
     [[nodiscard]] sim::PlayerId editor_object_owner() const;
     /// A click of the tools Ship and Unit at the world tile (x, y): one step of undo, or a note why not.
     void editor_place_figure(std::int64_t x, std::int64_t y);
+    /// The template chosen for the tool Template, none if the user has none.
+    [[nodiscard]] const BuildTemplate* editor_template() const;
+    /// The order that places the chosen template about the world tile (x, y) for the chosen owner,
+    /// turned and free; nothing on the open sea, without players or without a template.
+    [[nodiscard]] std::optional<sim::BuildOrder> editor_template_order(std::int64_t x, std::int64_t y) const;
+    /// A click of the tool Template at the world tile (x, y): what fits of it, one step of undo, or a
+    /// note why nothing.
+    void editor_place_template(std::int64_t x, std::int64_t y);
     /// A click of the tool Resource at the world tile `tile`: one step of undo, or a note why not.
     void editor_place_resource(render::TilePos tile);
     /// A click of the tool Remove: the ship or unit under the mouse, else the treasure, deer or vein

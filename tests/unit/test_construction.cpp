@@ -1567,3 +1567,60 @@ TEST_CASE("construction: the editor puts ships on the water and units on land, a
     CHECK(island.world.ships().size() == before.ships().size());
     CHECK(island.world.soldiers().empty());
 }
+
+TEST_CASE("construction: the editor gives the pirates a ship of theirs") {
+    Island island;
+    std::vector<sim::Player> players = island.world.players();
+    players.resize(3);
+    sim::make_neutral(players[2], sim::faction::kPirates);
+    island.world.set_players(players);
+    const assets::CodPredefinedSymbol types[] = {{"FIGUR", 1}};
+    const auto doc = assets::cod::parse(
+        "Objekt: FIGUR\n"
+        "  Nummer: 31\n  Gfx: 0\n  Blocknr: 2\n  Rotate: 1\n  Maxware: 2\n  Speed: 500\n  Maxenergy: 60\n"
+        "EndObj\n",
+        types);
+    auto figures = assets::FigureTable::from_cod(doc);
+    REQUIRE(figures.ok());
+    auto ship = editor::place_ship(island.world, island.buildings, *figures, 2, assets::figure::kPirate, 3, 3, 0);
+    REQUIRE(ship.ok());
+    (*ship)->apply(island.world);
+    CHECK(island.world.ships().back().owner == 2);
+    CHECK(island.world.ships().back().figure == assets::figure::kPirate);
+    // Not for the free trader.
+    players.resize(4);
+    sim::make_neutral(players[3], sim::faction::kTrader);
+    island.world.set_players(players);
+    CHECK(!editor::place_ship(island.world, island.buildings, *figures, 3, assets::figure::kPirate, 6, 6, 0).ok());
+}
+
+TEST_CASE("construction: the editor names the pirates' nest and gives them one city on an island") {
+    Island island;
+    std::vector<sim::Player> players = island.world.players();
+    players.resize(3);
+    sim::make_neutral(players[2], sim::faction::kPirates);
+    island.world.set_players(players);
+    island.world.set_city_name_index(1);
+    sim::BuildOrder order;
+    order.player = 2;
+    order.island = 0;
+    order.items = {{kKontor, 5, 10, 0, 0}};
+    editor::PlacedBuildings nest =
+        editor::place_buildings(island.world, island.buildings, order, island.names, "Piratennest");
+    REQUIRE(nest.step != nullptr);
+    nest.step->apply(island.world);
+    REQUIRE(island.world.cities().size() == 1);
+    CHECK(island.world.cities()[0].owner == 2);
+    CHECK(island.world.cities()[0].name == "Piratennest");
+    CHECK(island.world.city_name_index() == 1);  // the settlers' list keeps its turn
+    // A second city of theirs on the island is refused, as a player's.
+    order.items = {{kKontor, 5, 20, 0, 0}};
+    editor::PlacedBuildings second =
+        editor::place_buildings(island.world, island.buildings, order, island.names, "Piratennest");
+    CHECK(second.step == nullptr);
+    REQUIRE(!second.plan.items.empty());
+    CHECK(second.plan.items[0].refusal == sim::BuildRefusal::CityLimit);
+    // Another nest elsewhere takes the next number.
+    CHECK(editor::numbered_name(island.world, "Piratennest") == "Piratennest 2");
+    CHECK(editor::numbered_name(island.world, "Eingeborenendorf") == "Eingeborenendorf");
+}

@@ -23,9 +23,12 @@ bool on_map(const sim::World& world, std::int64_t x, std::int64_t y) {
     return x >= 0 && y >= 0 && x < std::int64_t{world.width()} && y < std::int64_t{world.height()};
 }
 
+/// Humans and computers, and the natives and pirates, who keep ships and units too.
 bool owner_ok(const sim::World& world, sim::PlayerId owner) {
     const sim::Player* p = world.player(owner);
-    return p != nullptr && (p->role == sim::PlayerRole::Human || p->role == sim::PlayerRole::Computer);
+    return p != nullptr && (p->role == sim::PlayerRole::Human || p->role == sim::PlayerRole::Computer ||
+                            world.acts_as(owner, sim::FactionBehaviour::Natives) ||
+                            world.acts_as(owner, sim::FactionBehaviour::Pirates));
 }
 
 /// Every order that names `gone` cleared.
@@ -106,7 +109,8 @@ core::Result<std::unique_ptr<Operation>> place_ship(const sim::World& world, con
                                                     std::uint8_t direction) {
     const assets::FigureType* type = figures.get(figure);
     UnitRefusal refused = UnitRefusal::None;
-    if (type == nullptr || !figures.ship_type_of(figure)) {
+    // The shipyards' ships and the packages', and the pirates' ship.
+    if (type == nullptr || (!figures.ship_type_of(figure) && figure != assets::figure::kPirate)) {
         refused = UnitRefusal::NoType;
     } else if (!owner_ok(world, owner)) {
         refused = UnitRefusal::NoOwner;
