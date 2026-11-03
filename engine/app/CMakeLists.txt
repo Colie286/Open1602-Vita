@@ -5,6 +5,7 @@ add_executable(open1602
     src/main.cpp
     src/diagnostics.cpp
     src/editor_mode.cpp
+    src/editor_objects.cpp
     src/game_folder_dialog.cpp
     src/game_sound.cpp
     src/hud.cpp

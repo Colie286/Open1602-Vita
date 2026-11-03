@@ -864,7 +864,7 @@ struct PlanOptions {
 /// plan_build(), plan_blueprint() and plan_move().
 void plan_order(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order, BuildPlan& plan,
                 PlanOptions options) {
-    const bool pay = options.pay;
+    const bool pay = options.pay && !order.free;
     std::vector<PlannedBuild> items = std::move(plan.items);
     items.assign(order.items.size(), PlannedBuild{});
     plan = BuildPlan{};
@@ -969,7 +969,7 @@ void plan_order(const World& world, const assets::BuildingTable& buildings, cons
         if (!counted(infra)) {
             return order.items.size();
         }
-        if (options.move) {
+        if (options.move || order.free) {
             return order.items.size();
         }
         const auto left = [](std::uint32_t allowed, std::uint32_t built) -> std::size_t {
@@ -1006,7 +1006,7 @@ void plan_order(const World& world, const assets::BuildingTable& buildings, cons
             out.refusal = BuildRefusal::ForeignCity;  // S-006: no building in other players' cities
             continue;
         }
-        if (limited_player && !options.move && !player->unlocked(type->infra)) {
+        if (limited_player && !options.move && !order.free && !player->unlocked(type->infra)) {
             out.refusal = BuildRefusal::Locked;  // S-014: checked here, not only in the menu
             continue;
         }
@@ -2195,7 +2195,7 @@ BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, co
         // A treasure in the ground (deposit SCHATZ) goes to the builder, on every computer (M-008).
         std::optional<assets::IslandHeader::Deposit> treasure;
         auto& deposits = world.island(order.island).header.deposits;
-        for (auto it = deposits.begin(); it != deposits.end(); ++it) {
+        for (auto it = deposits.begin(); it != deposits.end() && !order.free; ++it) {
             if (it->ware == ware::kTreasure && f.contains(it->x, it->y)) {
                 if (Player* p = world.player(order.player)) {
                     p->money = money_plus(p->money, std::int64_t{it->amount});
@@ -2251,7 +2251,9 @@ BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, co
     }
     // Pay what was built: goods from the city (or the ship), gold from the player.
     const assets::BuildingTable::Materials& m = buildings.materials();
-    if (Ship* found = order.ship ? world.ship(*order.ship) : nullptr) {
+    if (order.free) {
+        // The editor's order: nothing to pay.
+    } else if (Ship* found = order.ship ? world.ship(*order.ship) : nullptr) {
         Ship& ship = *found;
         const auto take = [&](std::uint8_t ware, std::uint32_t amount) {
             for (CargoSlot& c : ship.cargo) {
@@ -2275,7 +2277,9 @@ BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, co
         take_from_city(*c, buildings, plan.bill);
     }
     if (Player* p = world.player(order.player)) {
-        p->money = money_plus(p->money, -std::int64_t{plan.bill.money});
+        if (!order.free) {
+            p->money = money_plus(p->money, -std::int64_t{plan.bill.money});
+        }
         // Counted limits; castle and cathedral raise the satisfaction of their city.
         const auto pride = [&] {
             if (City* c = world.city(order.island, city)) {

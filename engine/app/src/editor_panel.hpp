@@ -69,6 +69,20 @@ struct EditorTerrain {
     friend bool operator==(const EditorTerrain&, const EditorTerrain&) = default;
 };
 
+/// The settings of the buildings' tools (the page "Buildings").
+struct EditorObjects {
+    /// Build: the building where clicked, for the owner, without costs (dragged, again where it no
+    /// longer covers the last); Remove: takes the building clicked away.
+    enum class Tool : std::uint8_t { Build, Remove };
+    static constexpr std::size_t kTools = 2;
+    Tool tool = Tool::Build;
+    std::size_t group = 0;      ///< index into the build menu's categories that list buildings
+    std::size_t piece = 0;      ///< index into the group's buildings
+    std::uint8_t rotation = 0;  ///< 0..3, a quarter clockwise each
+    std::size_t owner = 0;      ///< index into the world's players
+    friend bool operator==(const EditorObjects&, const EditorObjects&) = default;
+};
+
 /// What a click on the editor's map picked.
 struct EditorPick {
     enum class Kind : std::uint8_t { None, Sea, Island, Building, Ship, Soldier, Placeholder };
@@ -171,6 +185,15 @@ struct EditorModel {
     bool terrain_selected = false;
     std::uint32_t clip_width = 0;
     std::uint32_t clip_height = 0;
+    /// The buildings' tools: their settings, the groups and the buildings of the group, the
+    /// building chosen (its name, Windows-1252, and whether it turns) and the owner's name.
+    EditorObjects objects;
+    std::size_t object_groups = 0;
+    std::size_t object_pieces = 0;
+    std::string object_group;
+    std::string object_name;
+    bool object_turns = false;
+    std::string object_owner;
 };
 
 /// What a click or a key asked for.
@@ -206,6 +229,7 @@ struct EditorRequest {
         TerrainCopy,        ///< the terrain selected copied
         TerrainTurn,        ///< the copy turned a quarter clockwise
         TerrainMirror,      ///< the copy mirrored left to right
+        Objects,            ///< the buildings' tools set to `objects`
     };
     Kind kind = Kind::Close;
     std::size_t index = 0;
@@ -216,6 +240,7 @@ struct EditorRequest {
     std::uint32_t height = 0;     ///< ResizeWorld
     std::uint32_t fertility = 0;  ///< SetFertility
     EditorTerrain terrain{};      ///< Terrain
+    EditorObjects objects{};      ///< Objects
 };
 
 class EditorPanel {
@@ -239,7 +264,8 @@ public:
         WorldSize,
         Fertility,
         IslandFiles,
-        Terrain
+        Terrain,
+        Objects
     };
 
     explicit EditorPanel(ui::FormStyle style = {}) : m_form(style) {}
@@ -306,6 +332,7 @@ private:
     void layout_world_size(const EditorModel& model);
     void layout_fertility(const EditorModel& model);
     void layout_terrain(const EditorModel& model);
+    void layout_objects(const EditorModel& model);
     void layout_placeholder_actions(const EditorModel& model, std::int32_t& y);
     /// The buttons of an island selected: move, turn, copy, take out; or a note while placing.
     void layout_island_actions(const EditorModel& model, std::int32_t& y);

@@ -345,6 +345,22 @@ private:
     void editor_paste(std::int64_t x, std::int64_t y);
     /// The terrain tool's settings from the panel.
     void editor_terrain_request(const EditorRequest& request);
+    /// The building chosen on the page "Buildings" (nothing if its group has none).
+    [[nodiscard]] const assets::BuildingType* editor_object_piece() const;
+    /// The page "Buildings" of the model: its settings, groups, building and owner.
+    void editor_object_model(EditorModel& m) const;
+    /// The buildings' tools' settings from the panel.
+    void editor_objects_request(const EditorRequest& request);
+    /// The order that places the chosen building about the world tile (x, y) for the chosen owner,
+    /// free; nothing on the open sea or without players.
+    [[nodiscard]] std::optional<sim::BuildOrder> editor_object_order(std::int64_t x, std::int64_t y) const;
+    /// Places the chosen building about the world tile (x, y) into object_steps; `tell`: a note why
+    /// not.
+    bool editor_place_object(std::int64_t x, std::int64_t y, bool tell);
+    /// A click or drag of the page "Buildings" on the map.
+    bool editor_objects_stroke(std::optional<render::TilePos> tile, Stroke phase);
+    /// The drag of the page "Buildings" ends: what it placed is one step of undo.
+    void editor_end_objects();
     /// The pipette at the world tile (x, y).
     void editor_pipette(std::uint32_t x, std::uint32_t y);
     /// The islands changed: what the viewer keeps of them is made anew (flags, minimap), and what
@@ -715,6 +731,11 @@ private:
         std::optional<std::pair<std::int64_t, std::int64_t>> select_from{};
         editor::TerrainClip clip{};
         bool paste_refused = false;  ///< the preview: a click where the mouse is would be refused
+        EditorObjects objects{};     ///< the buildings' tools' settings
+        /// What a drag of the page "Buildings" placed so far (done already), and where it placed last.
+        std::vector<std::unique_ptr<editor::Operation>> object_steps{};
+        std::optional<std::pair<std::int64_t, std::int64_t>> object_at{};
+        bool object_drag = false;
     };
     std::optional<EditorSession> m_editor;
     /// A request of the editor waiting for the answer to "discard the changes?".

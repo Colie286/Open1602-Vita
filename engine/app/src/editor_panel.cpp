@@ -73,6 +73,12 @@ constexpr Id kTerrainBrush = 74;
 constexpr Id kTerrainCopy = 75;
 constexpr Id kTerrainTurn = 76;
 constexpr Id kTerrainMirror = 77;
+constexpr Id kObjectsPage = 59;
+constexpr Id kObjectsTool = 80;
+constexpr Id kObjectsGroup = 81;
+constexpr Id kObjectsPiece = 82;
+constexpr Id kObjectsRotation = 83;
+constexpr Id kObjectsOwner = 84;
 constexpr Id kFirstOverlay = 30;  ///< + EditorOverlay
 constexpr Id kFirstRow = 100;     ///< + the row on the page
 
@@ -132,6 +138,11 @@ constexpr std::array<const char*, 8> kTerrainGroupTexts = {"editor.terrain.group
                                                            "editor.terrain.group.coast",  "editor.terrain.group.sea"};
 constexpr std::array<const char*, 4> kTerrainRotationTexts = {"editor.terrain.rotation.0", "editor.terrain.rotation.1",
                                                               "editor.terrain.rotation.2", "editor.terrain.rotation.3"};
+
+constexpr std::array<const char*, EditorObjects::kTools> kObjectToolTexts = {"editor.objects.tool.build",
+                                                                             "editor.objects.tool.remove"};
+constexpr std::array<const char*, EditorObjects::kTools> kObjectToolNotes = {"editor.objects.note.build",
+                                                                             "editor.objects.note.remove"};
 
 constexpr std::uint32_t kSizeStep = 50;
 constexpr std::uint32_t kFitMargin = 8;
@@ -266,6 +277,9 @@ void EditorPanel::layout(const EditorModel& model) {
         case Page::Terrain:
             layout_terrain(model);
             break;
+        case Page::Objects:
+            layout_objects(model);
+            break;
         case Page::IslandFiles:
             layout_open(model);
             break;
@@ -297,7 +311,7 @@ void EditorPanel::layout_document(const EditorModel& model) {
     y += kLine + 4;
     // The buttons share what is left above two lines of the notice: as high as the game's in a
     // large window, lower in a small one, so that the last stays in the panel.
-    constexpr std::int32_t kButtons = 12;
+    constexpr std::int32_t kButtons = 12;                        // rows
     constexpr std::int32_t kNoticeRoom = 2 * 20 + 6 + kButtons;  // and what rounding the pitch down loses
     const std::int32_t bottom = m_top + m_height - 4;
     const std::int32_t pitch = std::clamp((bottom - kNoticeRoom - y) / kButtons, 22, kButtonH + kGap);
@@ -306,17 +320,25 @@ void EditorPanel::layout_document(const EditorModel& model) {
         f.button(id, Rect{kX, y, kW, pitch - gap}, ui::tr(text), enabled);
         y += pitch;
     };
+    // Two buttons of short names side by side in one row: open and check.
+    const auto pair = [&](Id left, const char* left_text, bool left_on, Id right, const char* right_text,
+                          bool right_on) {
+        const std::int32_t half = (kW - kGap) / 2;
+        f.button(left, Rect{kX, y, half, pitch - gap}, ui::tr(left_text), left_on);
+        f.button(right, Rect{kX + half + kGap, y, kW - half - kGap, pitch - gap}, ui::tr(right_text), right_on);
+        y += pitch;
+    };
     full(kNew, "editor.new");
-    full(kOpen, "editor.open");
+    pair(kOpen, "editor.open", true, kCheck, "editor.check", true);
     full(kSave, "editor.save");
     full(kSaveAs, "editor.save_as");
     full(kUndo, "editor.undo", model.can_undo);
     full(kRedo, "editor.redo", model.can_redo);
     full(kIslandPage, "editor.islands.edit");
     full(kTerrainPage, "editor.terrain.edit");
+    full(kObjectsPage, "editor.objects.edit");
     full(kWorldSizePage, "editor.world_size.edit");
     full(kView, "editor.view");
-    full(kCheck, "editor.check");
     full(kClose, "editor.close");
     // The notice where two lines fit: in a small window the buttons take the room, and the status
     // bar shows it.
@@ -576,6 +598,44 @@ void EditorPanel::layout_terrain(const EditorModel& model) {
         f.paragraph(Rect{kX, y, kW, kTerrainNote}, note, Tone::Dim, 20);
     }
     y += kTerrainNote + 4;
+    f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
+}
+
+void EditorPanel::layout_objects(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{kX, y, kW, 28}, ui::tr("editor.objects.title"), Align::Left, Tone::Heading);
+    y += 28;
+    const EditorObjects& o = model.objects;
+    const bool build = o.tool == EditorObjects::Tool::Build;
+    const auto value = [&](Id id, const char* label, std::string text, bool enabled) {
+        f.label(Rect{kX, y, kW, 18}, ui::tr(label), Align::Left, enabled ? Tone::Normal : Tone::Dim);
+        y += 18;
+        f.cycle_button(id, Rect{kX, y, kW, kButtonH}, std::move(text), enabled);
+        y += kButtonH + 2;
+    };
+    value(kObjectsTool, "editor.objects.tool", ui::tr(kObjectToolTexts[static_cast<std::size_t>(o.tool)]), true);
+    value(kObjectsGroup, "editor.objects.group", model.object_group, build && model.object_groups > 0);
+    value(kObjectsPiece, "editor.objects.piece",
+          model.object_pieces > 0 ? ui::tr("editor.objects.piece_value",
+                                           {model.object_name, count(o.piece + 1), count(model.object_pieces)})
+                                  : ui::tr("editor.terrain.no_piece"),
+          build && model.object_pieces > 0);
+    value(kObjectsRotation, "editor.objects.rotation", ui::tr(kTerrainRotationTexts[o.rotation & 3U]),
+          build && model.object_turns);
+    value(kObjectsOwner, "editor.objects.owner",
+          model.players > 0 ? model.object_owner : ui::tr("editor.objects.no_owner"), build && model.players > 0);
+    std::string note = ui::tr(kObjectToolNotes[static_cast<std::size_t>(o.tool)]);
+    if (build && model.players == 0) {
+        note = ui::tr("editor.objects.note.no_players");
+    }
+    constexpr std::int32_t kObjectsNote = 4 * 20;
+    if (!model.notice.empty()) {
+        f.paragraph(Rect{kX, y, kW, kObjectsNote}, model.notice, model.notice_is_error ? Tone::Warning : Tone::Dim, 20);
+    } else {
+        f.paragraph(Rect{kX, y, kW, kObjectsNote}, note, Tone::Dim, 20);
+    }
+    y += kObjectsNote + 4;
     f.button(kBack, Rect{kX, y, kW, kButtonH}, ui::tr("editor.back"));
 }
 
@@ -865,6 +925,34 @@ std::optional<EditorRequest> EditorPanel::mouse(std::int32_t x, std::int32_t y, 
         case kTerrainPage:
             m_page = Page::Terrain;
             return std::nullopt;
+        case kObjectsPage:
+            m_page = Page::Objects;
+            return std::nullopt;
+        case kObjectsTool:
+        case kObjectsGroup:
+        case kObjectsPiece:
+        case kObjectsRotation:
+        case kObjectsOwner: {
+            EditorRequest r{EditorRequest::Kind::Objects};
+            EditorObjects& o = r.objects;
+            o = model.objects;
+            if (*id == kObjectsTool) {
+                o.tool = static_cast<EditorObjects::Tool>(
+                    step(static_cast<std::size_t>(o.tool), EditorObjects::kTools, forward));
+            } else if (*id == kObjectsGroup) {
+                o.group = model.object_groups > 0 ? step(o.group, model.object_groups, forward) : 0;
+                o.piece = 0;
+                o.rotation = 0;
+            } else if (*id == kObjectsPiece) {
+                o.piece = model.object_pieces > 0 ? step(o.piece, model.object_pieces, forward) : 0;
+                o.rotation = 0;
+            } else if (*id == kObjectsRotation) {
+                o.rotation = static_cast<std::uint8_t>(step(o.rotation, 4, forward));
+            } else {
+                o.owner = model.players > 0 ? step(o.owner, model.players, forward) : 0;
+            }
+            return r;
+        }
         case kTerrainCopy:
             return EditorRequest{EditorRequest::Kind::TerrainCopy};
         case kTerrainTurn:

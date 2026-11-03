@@ -31,6 +31,7 @@ makes; they are made when a game of it starts, as in the original.
 | Edit islands | New islands: one of the original's templates or one of its own shape, north or south, in the five sizes of the templates (30 × 30 up to 100 × 90); Another one picks another template or shape. Place puts it in hand: its outline follows the mouse, green where it fits on open sea and red where not; a left click puts it down, a right click or Cancel puts it back. Load island lists the islands saved with Save (below) and the original's island files (`.scp`) put into the folder `islands` in Open1602's user data folder, and puts the one chosen in hand the same way; an `.scp` file, which does not tell its climate, gets the climate chosen on the page. |
 | Placeholders | A scenario of the original that makes its islands when a game starts has a world plan: each of its islands is a placeholder, drawn as a yellow outline of its size class with its name. The shape Placeholder on Edit islands sets a new one (north or south, a size class, its template drawn when the game starts); a click on a placeholder selects it (below). Islands cannot be put on a placeholder. When a game of the scenario starts, the world keeps what the editor left (its islands, cities, players and ships) and only the placeholders become islands; what is beyond the original's limits does not start with it. |
 | Edit terrain | The terrain tools (below). |
+| Edit buildings | The buildings' tools (below). |
 | Change map size | Makes the map larger or smaller in steps of 50 tiles, or fits it to its content with some sea around. It grows or is cut at the right and the bottom, so everything keeps its place, and it cannot be cut below the islands, ships, land units and markers. |
 | Overlays | What the map shows over the world: the players' land in their colours, the numbers of the islands, the coordinates of the tile under the mouse. |
 | Check | The check list: what keeps the scenario from being saved (the world must hold together, its description and markers be right), and what the original cannot have (its map size, more islands, cities, ships, land units, towers or players with a start than it holds, larger islands, more ore deposits, content of a package, a script). The second group is a fault only for a scenario that is to keep to the original's limits. |
@@ -96,6 +97,27 @@ A tile gets the piece on top and as the ground below. A mountain or river bend t
 part becomes meadow where it is not covered, and its ore deposit or volcano goes with it. The terrain
 tools paint only islands, not open sea, and leave buildings, the land of cities and the tiles under a
 ship or a land unit as they are. Each stroke, fill or replacement is one step of undo.
+
+## Buildings
+
+**Edit buildings** places the buildings of the build menu for a player, without costs, and takes
+buildings away again. Each click, or each drag, is one step of undo.
+
+| Setting | What it does |
+|---|---|
+| Tool | **Build**: a left click puts the building down about the mouse, for the owner; dragged, the next one goes where it no longer covers the last, so roads, walls and fields are dragged out. **Remove**: a left click takes the building under the mouse away, as its owner demolishes it. |
+| Group | The groups of the build menu (with the buildings packages add to it). |
+| Building | The group's buildings by name. |
+| Rotation | A quarter clockwise, for a building that turns. |
+| Owner | The player the building is for: one of the map's humans and computers. |
+
+A building is placed as the game builds it, only without gold, goods, unlocked levels or limits
+(castle, cathedral, monuments): it needs its ground, the owner's land (a Kontor at the coast founds a
+city and claims its land), a coast, river or rock face where the game asks for one. A building on a
+buried treasure leaves it in the ground. The outline under the mouse is green where the building can
+stand and red where not; a Kontor, shipyard, mill or mine finds the coast, river or rock face near
+the mouse and turns to it. A refused click says why. A Kontor goes only once its city has nothing
+else, and its piers go with it.
 
 ## Keys
 

@@ -8,6 +8,7 @@
 #include "build_tool.hpp"
 
 #include "o1602/assets/cod_parser.hpp"
+#include "o1602/editor/objects.hpp"
 #include "o1602/script/game_scripts.hpp"
 #include "o1602/sim/blueprints.hpp"
 #include "o1602/sim/construction.hpp"
@@ -399,6 +400,85 @@ TEST_CASE("construction: buildings stay inside their city, do not overlap and ne
     CHECK(!island.world.production(0, 5, 10)->enabled);
     // A second Kontor in the city is refused.
     CHECK(island.build({{kKontor, 5, 16, 0, 0}}).items[0].refusal == sim::BuildRefusal::SecondKontor);
+}
+
+TEST_CASE("construction: the editor's free order pays nothing, unlocks everything and leaves treasures") {
+    Island island;
+    island.world.player(0)->money = 0;
+    assets::IslandHeader::Deposit treasure;
+    treasure.ware = sim::ware::kTreasure;
+    treasure.x = 9;
+    treasure.y = 14;
+    treasure.amount = 500;
+    island.world.island(0).header.deposits.push_back(treasure);
+    sim::BuildOrder order;
+    order.player = 0;
+    order.island = 0;
+    order.free = true;
+    order.items = {{kKontor, 5, 10, 0, 0}};  // no ship, no goods, no gold
+    REQUIRE(sim::execute_build(island.world, island.buildings, order, island.names, nullptr).placed == 1);
+    order.items = {{kKontor2, 5, 11, 0, 0}, {kHouse, 8, 13, 0, 0}};  // Kontor II is locked for players
+    const sim::BuildPlan plan = sim::execute_build(island.world, island.buildings, order, island.names, nullptr);
+    CHECK(plan.placed == 2);
+    CHECK(island.at(5, 10)->id == kKontor2);
+    CHECK(island.world.players()[0].money == 0);
+    CHECK(island.world.islands()[0].header.deposits.size() == 1);
+    // Still checked like a player's order: the city's land, the terrain.
+    order.items = {{kRoad, 25, 25, 0, 0}};
+    CHECK(sim::plan_build(island.world, island.buildings, order).items[0].refusal == sim::BuildRefusal::Territory);
+}
+
+TEST_CASE("construction: the editor places and takes away buildings, each a step of undo") {
+    Island island;
+    sim::BuildOrder order;
+    order.player = 1;
+    order.island = 0;
+    order.items = {{kKontor, 5, 10, 0, 0}};
+    editor::PlacedBuildings kontor = editor::place_buildings(island.world, island.buildings, order, island.names);
+    REQUIRE(kontor.step != nullptr);
+    CHECK(island.world.cities().empty());  // made, not done yet
+    kontor.step->apply(island.world);
+    REQUIRE(island.world.cities().size() == 1);
+    CHECK(island.world.cities()[0].owner == 1);
+    order.items = {{kHouse, 8, 13, 0, 0}};
+    editor::PlacedBuildings house = editor::place_buildings(island.world, island.buildings, order, island.names);
+    REQUIRE(house.step != nullptr);
+    house.step->apply(island.world);
+    CHECK(island.world.house(0, 8, 13) != nullptr);
+    // Refused where a player could not build: nothing to do, the refusal told.
+    order.items = {{kHouse, 25, 25, 0, 0}};
+    editor::PlacedBuildings outside = editor::place_buildings(island.world, island.buildings, order, island.names);
+    CHECK(outside.step == nullptr);
+    CHECK(outside.plan.items[0].refusal == sim::BuildRefusal::Territory);
+    // The Kontor stays while its city has other buildings; the house goes.
+    CHECK(!editor::remove_building(island.world, island.buildings, 0, {5, 10}).ok());
+    CHECK(!editor::remove_building(island.world, island.buildings, 0, {20, 25}).ok());
+    auto gone = editor::remove_building(island.world, island.buildings, 0, {9, 14});
+    REQUIRE(gone.ok());
+    (*gone)->apply(island.world);
+    CHECK(island.world.house(0, 8, 13) == nullptr);
+    // The Kontor last, its piers with it; a road left in its city does not fall to ruins.
+    REQUIRE(island.at(4, 11)->id == 21073);
+    order.player = 1;
+    order.items = {{kRoad, 9, 16, 0, 0}};
+    editor::PlacedBuildings road = editor::place_buildings(island.world, island.buildings, order, island.names);
+    REQUIRE(road.step != nullptr);
+    road.step->apply(island.world);
+    auto kontor_gone = editor::remove_building(island.world, island.buildings, 0, {5, 10});
+    REQUIRE(kontor_gone.ok());
+    (*kontor_gone)->apply(island.world);
+    CHECK(island.world.cities().empty());
+    CHECK(island.at(4, 11)->id == kBeach);
+    CHECK(island.at(9, 16)->id == kGround);
+    CHECK(!editor::remove_building(island.world, island.buildings, 0, {4, 11}).ok());  // beach, not built
+    (*kontor_gone)->revert(island.world);
+    road.step->revert(island.world);
+    (*gone)->revert(island.world);
+    CHECK(island.world.house(0, 8, 13) != nullptr);
+    house.step->revert(island.world);
+    kontor.step->revert(island.world);
+    CHECK(island.world.cities().empty());
+    CHECK(island.at(5, 10)->id == kGround);
 }
 
 TEST_CASE("construction: houses get one inhabitant and leave nothing behind when demolished") {

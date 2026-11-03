@@ -101,6 +101,9 @@ struct BuildOrder {
     /// Turns buildings with a door towards the nearest road within 4 tiles (the original's
     /// "Automatische Ausrichtung zur Straße").
     bool orient_to_road = true;
+    /// The editor's order (ADR 0013): nothing is paid, no building is locked or limited, and a
+    /// treasure under a building stays in the ground. Everything else is checked as for a player.
+    bool free = false;
 };
 
 /// What becomes of one item.

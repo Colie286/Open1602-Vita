@@ -598,3 +598,72 @@ TEST_CASE("editor panel: the terrain tools go through their tools, kinds, pieces
     CHECK(!click(panel, m, "Back to the map").has_value());
     CHECK(panel.page() == EditorPanel::Page::Document);
 }
+
+TEST_CASE("editor panel: the buildings' tools go through their tools, groups, buildings, turns and owners") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(200, 560);
+    EditorModel m = document();
+    m.object_groups = 7;
+    m.object_pieces = 4;
+    m.object_group = "Farms";
+    m.object_name = "Cattle farm";
+    m.object_owner = "Merchant";
+    CHECK(!click(panel, m, "Edit buildings").has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::Objects);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Cattle farm (1/4)"));
+    CHECK(says(panel, "builds for the owner without costs"));
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        CHECK(w.rect.y + w.rect.h <= 760);
+    }
+
+    auto r = click(panel, m, "Build");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::Objects);
+    CHECK(r->objects.tool == app::EditorObjects::Tool::Remove);
+
+    m.objects.piece = 2;
+    m.objects.rotation = 3;
+    r = click(panel, m, "Farms");
+    REQUIRE(r.has_value());
+    CHECK(r->objects.group == 1);
+    CHECK(r->objects.piece == 0);  // a new group starts at its first building
+    CHECK(r->objects.rotation == 0);
+    r = click(panel, m, "Cattle farm (3/4)", ui::MouseButton::Right);
+    REQUIRE(r.has_value());
+    CHECK(r->objects.piece == 1);
+    m.objects = app::EditorObjects{};
+
+    // The turn only for a building that turns.
+    panel.layout(m);
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        if (w.text == "0\xB0") {
+            CHECK(!w.enabled);
+        }
+    }
+    m.object_turns = true;
+    r = click(panel, m, "0\xB0");
+    REQUIRE(r.has_value());
+    CHECK(r->objects.rotation == 1);
+
+    r = click(panel, m, "Merchant", ui::MouseButton::Right);
+    REQUIRE(r.has_value());
+    CHECK(r->objects.owner == 3);  // back from the first of four players
+
+    // Removing needs none of the building's settings.
+    m.objects.tool = app::EditorObjects::Tool::Remove;
+    panel.layout(m);
+    for (const ui::Form::Widget& w : panel.form().widgets()) {
+        if (w.text == "Farms" || w.text == "Merchant") {
+            CHECK(!w.enabled);
+        }
+    }
+    // A map without players has nobody to build for.
+    m.objects.tool = app::EditorObjects::Tool::Build;
+    m.players = 0;
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "no players to build for"));
+    CHECK(!click(panel, m, "Back to the map").has_value());
+    CHECK(panel.page() == EditorPanel::Page::Document);
+}

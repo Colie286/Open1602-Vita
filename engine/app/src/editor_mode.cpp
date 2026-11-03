@@ -21,6 +21,7 @@
 #include "o1602/editor/islands.hpp"
 #include "o1602/editor/original_check.hpp"
 #include "o1602/render/world_renderer.hpp"
+#include "o1602/sim/construction.hpp"
 #include "o1602/sim/growth.hpp"
 #include "o1602/sim/island_shapes.hpp"
 #include "o1602/sim/save_game.hpp"
@@ -388,6 +389,7 @@ EditorModel MapViewer::editor_model() const {
             m.terrain_turns = b->rotate > 0;
         }
     }
+    editor_object_model(m);
     m.terrain_selected = m_editor->selection.has_value();
     m.clip_width = m_editor->clip.width;
     m.clip_height = m_editor->clip.height;
@@ -505,6 +507,9 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
             break;
         case Kind::Terrain:
             editor_terrain_request(request);
+            break;
+        case Kind::Objects:
+            editor_objects_request(request);
             break;
         case Kind::TerrainCopy: {
             const auto& sel = m_editor->selection;
@@ -1231,6 +1236,38 @@ void MapViewer::draw_editor_marks() {
             }
         }
     }
+    // The building under the mouse on the page "Buildings": green where it can stand, red where
+    // not; the tile to take away in white.
+    if (panel != nullptr && panel->page() == EditorPanel::Page::Objects && !m_editor->placing &&
+        !m_hud->covers(static_cast<std::int32_t>(m_input->mouse_x()), static_cast<std::int32_t>(m_input->mouse_y()))) {
+        if (const auto tile = m_input->tile_at_mouse()) {
+            const assets::BuildingType* b = editor_object_piece();
+            if (m_editor->objects.tool == EditorObjects::Tool::Remove || b == nullptr) {
+                outline(tile->x, tile->y, 1, 1, ui::rgb_ink(assets::Rgba{250, 250, 250, 255}));
+            } else {
+                std::uint32_t w = 1;
+                std::uint32_t h = 1;
+                sim::rotated_size(*b, m_editor->objects.rotation, w, h);
+                std::int64_t x0 = std::int64_t{tile->x} - (std::int64_t{w} - 1) / 2;
+                std::int64_t y0 = std::int64_t{tile->y} - (std::int64_t{h} - 1) / 2;
+                bool fits = false;
+                if (const auto order = editor_object_order(tile->x, tile->y)) {
+                    // Where a click would put it: a Kontor finds its coast near the mouse.
+                    const sim::BuildPlan plan = sim::plan_build(world, m_buildings, *order);
+                    fits = plan.placed > 0;
+                    const sim::PlannedBuild& p = plan.items.front();
+                    if (fits && p.type != nullptr) {
+                        const sim::WorldIsland& isl = world.islands()[order->island];
+                        sim::rotated_size(*p.type, p.rotation, w, h);
+                        x0 = std::int64_t{isl.x} + p.x;
+                        y0 = std::int64_t{isl.y} + p.y;
+                    }
+                }
+                outline(x0, y0, w, h,
+                        ui::rgb_ink(fits ? assets::Rgba{90, 230, 90, 255} : assets::Rgba{230, 60, 60, 255}));
+            }
+        }
+    }
     // The terrain selected, in light blue, while the terrain page is open.
     if (panel != nullptr && panel->page() == EditorPanel::Page::Terrain && m_editor->selection &&
         m_editor->selection->island < world.islands().size()) {
@@ -1769,6 +1806,11 @@ bool MapViewer::editor_stroke(std::optional<render::TilePos> tile, Stroke phase)
         return false;
     }
     const EditorPanel* panel = m_hud ? m_hud->editor_panel() : nullptr;
+    if (panel != nullptr && panel->page() == EditorPanel::Page::Objects && !m_editor->placing) {
+        editor_end_stroke();
+        return editor_objects_stroke(tile, phase);
+    }
+    editor_end_objects();  // the page left while the button was held
     if (panel == nullptr || panel->page() != EditorPanel::Page::Terrain || m_editor->placing) {
         editor_end_stroke();  // the page left while the button was held
         return false;
