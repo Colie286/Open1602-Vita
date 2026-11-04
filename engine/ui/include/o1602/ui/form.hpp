@@ -109,6 +109,12 @@ public:
     /// A bar that fills from the left as something goes on: `done` of it (0..1), in the frame's
     /// gold inside a field's ground.
     void progress(Rect r, double done);
+    /// A box that explains what lies under the mouse (a setting's tooltip): framed like a panel,
+    /// opaque, the text wrapped to at most kTooltipWidth, below `anchor` (the thing it explains)
+    /// or above it where the screen ends, always within the 1024 x 768 design. Laid out last, it
+    /// lies over everything; it takes no clicks.
+    void tooltip(Rect anchor, std::string text);
+    static constexpr std::int32_t kTooltipWidth = 420;
 
     /// The field that takes the keys, if any.
     [[nodiscard]] std::optional<Id> focus() const noexcept { return m_focus; }
@@ -160,7 +166,8 @@ public:
             Check,
             Row,
             Slider,
-            Progress
+            Progress,
+            Tooltip
         };
         Kind kind = Kind::Label;
         Id id = 0;

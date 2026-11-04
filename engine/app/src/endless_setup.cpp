@@ -1182,7 +1182,7 @@ EndlessSetup multiplayer_setup(EndlessSetup setup, std::uint8_t players) {
     return setup;
 }
 
-std::string setup_label(SetupItem item) {
+std::string_view setup_label_key(SetupItem item) {
     static constexpr std::array<std::string_view, kSetupItems> kKeys = {
         "setup.refund",
         "setup.moving",
@@ -1258,7 +1258,12 @@ std::string setup_label(SetupItem item) {
     };
     static_assert(kKeys.size() == kSetupItems);
     const auto i = static_cast<std::size_t>(item);
-    return i < kKeys.size() ? ui::tr(kKeys[i]) : std::string{};
+    return i < kKeys.size() ? kKeys[i] : std::string_view{};
+}
+
+std::string setup_label(SetupItem item) {
+    const std::string_view key = setup_label_key(item);
+    return key.empty() ? std::string{} : ui::tr(key);
 }
 
 std::string setup_value(SetupItem item, std::size_t choice) {

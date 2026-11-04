@@ -228,6 +228,9 @@ void choose_previous(EndlessSetup& setup, SetupItem item);
 /// residents only with a number of them, how the conditions are combined only with two or more.
 [[nodiscard]] bool setup_item_used(const EndlessSetup& setup, SetupItem item) noexcept;
 
+/// The localisation key of an item's label; its explanation (the dialog's tooltip) is the key
+/// with ".tip".
+[[nodiscard]] std::string_view setup_label_key(SetupItem item);
 /// The item's name and a value's text in the language of the interface (Windows-1252).
 [[nodiscard]] std::string setup_label(SetupItem item);
 [[nodiscard]] std::string setup_value(SetupItem item, std::size_t choice);

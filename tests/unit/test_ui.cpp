@@ -814,3 +814,45 @@ TEST_CASE("ui: a paragraph that does not fit whole shows its fallback instead") 
     lines = texts(low);
     CHECK((lines == std::vector<std::string>{"short"}));
 }
+
+TEST_CASE("ui: a form's tooltip lies below what it explains, within the screen, and takes no clicks") {
+    ui::Form form;
+    form.button(1, ui::Rect{100, 130, 200, 30}, "OK");
+    form.tooltip(ui::Rect{100, 100, 200, 24}, "Hello world");
+    auto items = form.draw({nullptr, nullptr, nullptr});
+    // The button (frame, ground, text), then the tooltip: frame, ground, one line.
+    REQUIRE(items.size() >= 3);
+    const ui::DrawItem& frame = items[items.size() - 3];
+    CHECK(frame.kind == ui::DrawItem::Kind::Fill);
+    CHECK(frame.x == 100);
+    CHECK(frame.y == 128);                                // 4 below the anchor
+    CHECK(frame.w == 99 + 1 + 2 * ui::kTextPadding + 4);  // 11 bytes of 9 units, padding and border
+    CHECK(frame.h == 22 + 2 * ui::kTextPadding);
+    CHECK(items.back().text == "Hello world");
+    // Over the button, the button still takes the click.
+    (void)form.mouse(150, 140, true);
+    CHECK(form.mouse(150, 140, false) == std::optional<ui::Form::Id>(1));
+
+    // At the bottom right it goes above the anchor and stays inside the 1024 x 768 design.
+    form.clear();
+    form.tooltip(ui::Rect{1000, 740, 20, 24}, "Hello world");
+    items = form.draw({nullptr, nullptr, nullptr});
+    REQUIRE(items.size() == 3);
+    CHECK(items[0].x + items[0].w <= 1020);
+    CHECK(items[0].y + items[0].h == 736);
+
+    // A long text breaks into lines no wider than kTooltipWidth.
+    form.clear();
+    std::string text;
+    for (int i = 0; i < 30; ++i) {
+        text += "word ";
+    }
+    form.tooltip(ui::Rect{10, 10, 20, 20}, text);
+    items = form.draw({nullptr, nullptr, nullptr});
+    REQUIRE(items.size() > 3);
+    CHECK(items[0].w <= ui::Form::kTooltipWidth);
+    for (std::size_t i = 2; i < items.size(); ++i) {
+        CHECK(items[i].kind == ui::DrawItem::Kind::Text);
+        CHECK(items[i].text.find("...") == std::string::npos);
+    }
+}

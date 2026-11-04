@@ -288,6 +288,7 @@ void GameSettingsMenu::layout_preview(std::int32_t x, std::int32_t y) {
     std::snprintf(seed, sizeof(seed), m_scope == SetupScope::MultiplayerEndless ? "%llu" : "%llX",
                   static_cast<unsigned long long>(m_setup.world_seed));
     f.label(Rect{x + 12, button_y, kPreviewW - 200, 44}, ui::tr("setup.preview.seed", {seed}), Align::Left, Tone::Dim);
+    m_tips.push_back(Tip{Rect{x + kGroupW - 12 - 190, button_y, 190, 44}, "setup.preview.reroll"});
     f.button(kReroll, Rect{x + kGroupW - 12 - 190, button_y, 190, 44}, ui::tr("setup.preview.reroll"),
              m_mode != Mode::View && m_reroll);
 }
@@ -313,11 +314,41 @@ std::vector<ui::DrawItem> GameSettingsMenu::draw(const std::array<const ui::Font
                        ? fonts[static_cast<std::size_t>(m_font)]
                        : nullptr;
     layout();
+    layout_tooltip();
     return m_form.draw(fonts);
+}
+
+void GameSettingsMenu::layout_tooltip() {
+    m_tip_shown.clear();
+    const Tip* under = nullptr;
+    if (m_mouse) {
+        for (const Tip& t : m_tips) {
+            if (t.area.contains(m_mouse->first, m_mouse->second)) {
+                under = &t;
+            }
+        }
+    }
+    const auto now = std::chrono::steady_clock::now();
+    const std::string key = under != nullptr ? under->key : std::string{};
+    if (key != m_tip_key) {
+        m_tip_key = key;
+        m_tip_since = now;
+        m_tip_dismissed = false;
+    }
+    if (under == nullptr || m_tip_dismissed || now - m_tip_since < m_tip_delay) {
+        return;
+    }
+    m_tip_shown = under->key + ".tip";
+    m_form.tooltip(under->area, ui::tr(m_tip_shown));
 }
 
 GameSettingsMenu::Result GameSettingsMenu::mouse(std::int32_t x, std::int32_t y, bool down, ui::MouseButton button) {
     layout();
+    const double scale = m_form.scale() > 0.0 ? m_form.scale() : 1.0;
+    m_mouse.emplace(static_cast<std::int32_t>(x / scale), static_cast<std::int32_t>(y / scale));
+    if (down) {
+        m_tip_dismissed = true;  // a click is not reading: the explanation goes away
+    }
     const auto id = m_form.mouse(x, y, down, button);
     if (!id) {
         return Result::None;
@@ -387,6 +418,8 @@ EndlessSetup GameSettingsMenu::keep_decided(EndlessSetup preset) const {
 void GameSettingsMenu::layout() {
     ui::Form& f = m_form;
     f.clear();
+    m_tips.clear();
+    const auto tip = [&](Rect area, std::string_view key) { m_tips.push_back(Tip{area, std::string(key)}); };
     f.panel(kScreen);
     const bool victory = m_page == Page::Victory;
     const bool bugs = m_page == Page::Bugs;
@@ -487,12 +520,15 @@ void GameSettingsMenu::layout() {
         const std::int32_t top = group(g.heading, static_cast<std::int32_t>(items.size()) + extra, g.x);
         const std::int32_t extra_y = top + static_cast<std::int32_t>(items.size()) * kRowH;
         if (world) {
+            tip(Rect{g.x + 12, extra_y, kRowW, kRowH - 4}, "setup.island_page");
             const Rect value = row(g.x, extra_y, ui::tr("setup.island_page"), m_setup.own_world);
             f.button(kIslands, value, ui::tr("setup.island_page.open", {islands_summary(m_setup)}));
         } else if (nature) {
+            tip(Rect{g.x + 12, extra_y, kRowW, kRowH - 4}, "setup.disasters");
             const Rect value = row(g.x, extra_y, ui::tr("setup.disasters"), true);
             f.button(kDisasters, value, ui::tr("setup.disasters.open", {disasters_summary(m_setup.rules)}));
         } else if (economy) {
+            tip(Rect{g.x + 12, extra_y, kRowW, kRowH - 4}, "setup.balance");
             const Rect value = row(g.x, extra_y, ui::tr("setup.balance"), true);
             f.button(kBalance, value, ui::tr("setup.balance.open", {balance_summary(m_setup.rules)}));
         }
@@ -500,6 +536,7 @@ void GameSettingsMenu::layout() {
             const SetupItem item = items[i];
             const bool used = setup_item_used(m_setup, item);
             const std::int32_t y = top + static_cast<std::int32_t>(i) * kRowH;
+            tip(Rect{g.x + 12, y, kRowW, kRowH - 4}, setup_label_key(item));
             if (editable) {
                 f.cycle_button(kItem + static_cast<Id>(item), row(g.x, y, setup_label(item), used),
                                setup_value(m_setup, item), setup_item_open(m_setup, m_scope, item));
@@ -515,10 +552,12 @@ void GameSettingsMenu::layout() {
         // bugs, each with what is chosen (to look at too, for a game that is only shown).
         std::int32_t top = group({}, victory_row ? 2 : 1, kLeft);
         if (victory_row) {
+            tip(Rect{kLeft + 12, top, kRowW, kRowH - 4}, "setup.victory");
             const Rect value = row(kLeft, top, ui::tr("setup.victory"), m_setup.rules.victory.active());
             f.button(kVictory, value, ui::tr("setup.victory.open", {victory_summary(m_setup.rules.victory)}));
             top += kRowH;
         }
+        tip(Rect{kLeft + 12, top, kRowW, kRowH - 4}, "setup.bugs");
         const Rect value = row(kLeft, top, ui::tr("setup.bugs"), page_bugs(m_setup.rules.bugs).count() != 0);
         f.button(kBugs, value, ui::tr("setup.bugs.open", {bugs_summary(m_setup.rules.bugs)}));
     }
@@ -549,24 +588,32 @@ void GameSettingsMenu::layout() {
     if (islands) {
         // The kinds of world are the page's first item.
     } else if (victory) {
+        tip(Rect{520, kBottomY, 240, 44}, "setup.victory.off");
         f.button(kVictoryOff, Rect{520, kBottomY, 240, 44}, ui::tr("setup.victory.off"), true,
                  !m_setup.rules.victory.active());
     } else if (disasters) {
+        tip(Rect{520, kBottomY, 240, 44}, "setup.disasters.all_original");
         f.button(kDisastersOriginal, Rect{520, kBottomY, 240, 44}, ui::tr("setup.disasters.all_original"), true,
                  original_disasters(m_setup.rules) == m_setup.rules);
     } else if (balance) {
+        tip(Rect{260, kBottomY, 240, 44}, "setup.balance.all_original");
         f.button(kBalanceOriginal, Rect{260, kBottomY, 240, 44}, ui::tr("setup.balance.all_original"), true,
                  original_balance(m_setup.rules) == m_setup.rules);
+        tip(Rect{520, kBottomY, 240, 44}, "setup.balance.all_on");
         f.button(kBalanceAll, Rect{520, kBottomY, 240, 44}, ui::tr("setup.balance.all_on"), true,
                  open1602_balance(m_setup.rules) == m_setup.rules);
     } else if (bugs) {
+        tip(Rect{260, kBottomY, 240, 44}, "setup.bugs.all_original");
         f.button(kBugsOriginal, Rect{260, kBottomY, 240, 44}, ui::tr("setup.bugs.all_original"), true,
                  page_bugs(m_setup.rules.bugs) == page_bugs(sim::OriginalBugs::all()));
+        tip(Rect{520, kBottomY, 240, 44}, "setup.bugs.all_fixed");
         f.button(kBugsFixed, Rect{520, kBottomY, 240, 44}, ui::tr("setup.bugs.all_fixed"), true,
                  page_bugs(m_setup.rules.bugs) == sim::OriginalBugs{});
     } else {
+        tip(Rect{260, kBottomY, 240, 44}, "setup.original");
         f.button(kOriginal, Rect{260, kBottomY, 240, 44}, ui::tr("setup.original"), true,
                  same_setup(m_setup, keep_decided(EndlessSetup::original(m_scope)), m_scope));
+        tip(Rect{520, kBottomY, 240, 44}, "setup.defaults");
         f.button(kDefaults, Rect{520, kBottomY, 240, 44}, ui::tr("setup.defaults"), true,
                  same_setup(m_setup, keep_decided(EndlessSetup::defaults(m_scope)), m_scope));
     }

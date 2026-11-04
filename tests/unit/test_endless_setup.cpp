@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <climits>
 #include <cstdio>
 #include <optional>
@@ -1444,4 +1445,62 @@ TEST_CASE("endless setup: a step of the refund there and back gives the same rul
             CHECK(s.rules == start);
         }
     }
+}
+
+TEST_CASE("game settings: every setting and preset is explained in English and German") {
+    std::vector<std::string> keys;
+    for (std::size_t i = 0; i < app::kSetupItems; ++i) {
+        keys.emplace_back(app::setup_label_key(static_cast<SetupItem>(i)));
+    }
+    for (const char* key :
+         {"setup.island_page", "setup.disasters", "setup.balance", "setup.victory", "setup.bugs", "setup.original",
+          "setup.defaults", "setup.preview.reroll", "setup.victory.off", "setup.disasters.all_original",
+          "setup.balance.all_original", "setup.balance.all_on", "setup.bugs.all_original", "setup.bugs.all_fixed"}) {
+        keys.emplace_back(key);
+    }
+    for (const std::string_view code : {"de", "en"}) {
+        ui::set_language(code);
+        for (const std::string& key : keys) {
+            CHECK(ui::tr(key + ".tip") != key + ".tip");
+        }
+    }
+    ui::set_language(ui::kFallbackLanguage);
+}
+
+TEST_CASE("game settings: a setting the mouse rests on shows its explanation until it is clicked") {
+    app::GameSettingsMenu menu;
+    menu.open(EndlessSetup{});
+    const auto at = find_text(menu, app::setup_label(SetupItem::Refund));
+    REQUIRE(at.has_value());
+    // Not at once: the mouse has to rest on it.
+    (void)menu.mouse(at->first, at->second - 4, false);
+    (void)menu.draw(kNoFonts);
+    CHECK(menu.tooltip().empty());
+    menu.set_tooltip_delay(std::chrono::milliseconds(0));
+    bool shown = false;
+    for (const ui::DrawItem& d : menu.draw(kNoFonts)) {
+        shown = shown || (d.kind == ui::DrawItem::Kind::Text && d.text.starts_with("What you get back"));
+    }
+    CHECK(menu.tooltip() == "setup.refund.tip");
+    CHECK(shown);
+    // On the value of the same row as well.
+    const auto value = find_text(menu, value_of(menu.setup(), SetupItem::Refund));
+    REQUIRE(value.has_value());
+    (void)menu.mouse(value->first, value->second - 4, false);
+    (void)menu.draw(kNoFonts);
+    CHECK(menu.tooltip() == "setup.refund.tip");
+    // A click hides it until the mouse goes elsewhere.
+    (void)menu.mouse(value->first, value->second - 4, true);
+    (void)menu.mouse(value->first, value->second - 4, false);
+    (void)menu.draw(kNoFonts);
+    CHECK(menu.tooltip().empty());
+    const auto preset = find_text(menu, ui::tr("setup.defaults"));
+    REQUIRE(preset.has_value());
+    (void)menu.mouse(preset->first, preset->second - 4, false);
+    (void)menu.draw(kNoFonts);
+    CHECK(menu.tooltip() == "setup.defaults.tip");
+    // Beside every setting, none.
+    (void)menu.mouse(1000, 20, false);
+    (void)menu.draw(kNoFonts);
+    CHECK(menu.tooltip().empty());
 }

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <future>
@@ -64,6 +65,7 @@ public:
         m_page = Page::Settings;
         m_error.clear();
         m_reroll = true;
+        m_tip_key.clear();
     }
     /// Whether "Another world" may draw a new world number (after open(); a lobby's world keeps
     /// the number the host chose for it).
@@ -93,6 +95,12 @@ public:
     /// The world of the preview, when it is made (for the tests: wait_preview() waits for it).
     [[nodiscard]] const std::optional<sim::WorldPreview>& preview() const noexcept { return m_preview; }
     void wait_preview();
+    /// How long the mouse rests on a setting or a preset before its explanation shows (0 for the
+    /// tests).
+    void set_tooltip_delay(std::chrono::milliseconds delay) noexcept { m_tip_delay = delay; }
+    /// The localisation key of the explanation shown at the last draw (the key of the setting's
+    /// label with ".tip"), "" when none is shown.
+    [[nodiscard]] const std::string& tooltip() const noexcept { return m_tip_shown; }
     /// Escape or a right click: from the victory conditions or the original's bugs back to the
     /// settings; true if it went there, false if the dialog itself is to close.
     bool back() noexcept;
@@ -110,7 +118,14 @@ private:
         std::int32_t w = 0;
         std::uint8_t colour = 0;
     };
+    /// What a setting or a preset is explained by: where the mouse rests on it, and its key.
+    struct Tip {
+        ui::Rect area;
+        std::string key;
+    };
     void layout();
+    /// The explanation of what the mouse rests on, laid out over everything (after layout()).
+    void layout_tooltip();
     void layout_preview(std::int32_t x, std::int32_t y);
     /// Starts making the preview of the setup shown, if it is not the one made or being made;
     /// takes a finished one.
@@ -130,6 +145,14 @@ private:
     Mode m_mode = Mode::Start;
     Page m_page = Page::Settings;
     std::string m_error;
+
+    std::vector<Tip> m_tips;                                       ///< of the last layout
+    std::optional<std::pair<std::int32_t, std::int32_t>> m_mouse;  ///< design units
+    std::string m_tip_key;                                         ///< the tip under the mouse, "" for none
+    std::chrono::steady_clock::time_point m_tip_since;             ///< since when the mouse rests on it
+    std::chrono::milliseconds m_tip_delay{500};
+    bool m_tip_dismissed = false;  ///< a click on it hides it until the mouse leaves it
+    std::string m_tip_shown;
 
     PreviewMaker m_maker;
     PreviewColours m_colours{};
