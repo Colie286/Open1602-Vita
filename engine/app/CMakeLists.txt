@@ -71,7 +71,9 @@ if(UNIX AND NOT APPLE)
     install(FILES ${PROJECT_SOURCE_DIR}/data/icons/open1602.svg
         DESTINATION share/icons/hicolor/scalable/apps RENAME ${app_id}.svg)
 endif()
-# The licences of the libraries built into the program (MIT asks for its notice to go along).
+# The licences of the libraries built into the program (MIT and BSD ask for their notices to go along).
 install(FILES ${PROJECT_SOURCE_DIR}/third_party/enet/LICENSE DESTINATION share/doc/open1602/licenses RENAME enet.txt)
 install(FILES ${PROJECT_SOURCE_DIR}/third_party/lua/LICENSE DESTINATION share/doc/open1602/licenses RENAME lua.txt)
+install(FILES ${PROJECT_SOURCE_DIR}/third_party/dav1d/COPYING DESTINATION share/doc/open1602/licenses RENAME dav1d.txt)
+install(FILES ${PROJECT_SOURCE_DIR}/third_party/opus/COPYING DESTINATION share/doc/open1602/licenses RENAME opus.txt)
 install(FILES ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION share/doc/open1602)

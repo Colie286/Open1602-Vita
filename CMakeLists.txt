@@ -17,7 +17,7 @@ if(CMAKE_HOST_WIN32 AND DEFINED ENV{VSCMD_ARG_TGT_ARCH}
 endif()
 
 project(Open1602
-    VERSION 0.4.2
+    VERSION 0.5.0
     DESCRIPTION "Open-source engine reimplementation for Anno 1602"
     HOMEPAGE_URL "https://github.com/x4rd4s/open1602"
     LANGUAGES CXX)
