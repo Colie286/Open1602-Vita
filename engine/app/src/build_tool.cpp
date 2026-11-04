@@ -46,6 +46,28 @@ std::uint32_t tile_hash(std::uint32_t seed, std::uint16_t island, std::int32_t x
     return static_cast<std::uint32_t>(z ^ (z >> 31U));
 }
 
+/// A building drawn in one of RandAnz looks, RandAdd records apart: trees and the player's houses.
+bool varies(const assets::BuildingType& b) noexcept {
+    return b.rand_count > 1 && (b.kind == sim::kind::kForest || (b.prod_kind == sim::prod::kHouse && !b.native));
+}
+
+/// The look of `b` for a tile, as the original's menu draws one with rand() (the variant is part of
+/// the order). The same seed and tile always give the same look, so it stays put during a drag.
+std::uint32_t variant_at(const assets::BuildingTable& buildings, const assets::BuildingType& b, std::uint32_t seed,
+                         std::uint16_t island, std::int32_t x, std::int32_t y) noexcept {
+    if (!varies(b)) {
+        return b.id;
+    }
+    const std::uint32_t pick = tile_hash(seed, island, x, y) % b.rand_count;
+    const assets::BuildingType* v = buildings.by_record(b.record + pick * b.rand_add);
+    // A look of another size or kind would be another building.
+    if (v == nullptr || v->size_x != b.size_x || v->size_y != b.size_y || v->kind != b.kind ||
+        v->prod_kind != b.prod_kind) {
+        return b.id;
+    }
+    return v->id;
+}
+
 }  // namespace
 
 BuildTool::BuildTool(const assets::BuildingTable& buildings) : m_buildings(&buildings) {
@@ -171,7 +193,12 @@ std::optional<sim::BuildOrder> BuildTool::build_order(const sim::World& world, s
         const std::int32_t oy = spot.y - (m_layout->height - 1) / 2;
         order.items.reserve(m_layout->items.size());
         for (const Layout::Item& item : m_layout->items) {
-            order.items.push_back(sim::BuildItem{item.building, ox + item.x, oy + item.y, item.rotation, 0});
+            // Houses come in their looks again; a tree keeps the one it was copied with.
+            std::uint32_t id = item.building;
+            if (const assets::BuildingType* t = m_buildings->by_id(id); t != nullptr && t->kind != sim::kind::kForest) {
+                id = variant_at(*m_buildings, *t, m_variant_seed, spot.island, item.x, item.y);
+            }
+            order.items.push_back(sim::BuildItem{id, ox + item.x, oy + item.y, item.rotation, 0});
         }
         return order;
     }
@@ -184,19 +211,10 @@ std::optional<sim::BuildOrder> BuildTool::build_order(const sim::World& world, s
     order.player = player;
     order.island = spot.island;
     const Spot start = m_drag_start && m_drag_start->island == spot.island ? *m_drag_start : spot;
-    // Trees come in RandAnz variants RandAdd records apart; the original's menu draws one per tile
-    // with rand() (the variant is part of the order).
-    const auto variant = [&](std::int32_t x, std::int32_t y) {
-        if (b->kind != sim::kind::kForest || b->rand_count <= 1) {
-            return b->id;
-        }
-        const std::uint32_t pick = tile_hash(m_variant_seed, spot.island, x, y) % b->rand_count;
-        const assets::BuildingType* v = m_buildings->by_record(b->record + pick * b->rand_add);
-        return v != nullptr ? v->id : b->id;
-    };
     const auto add = [&](std::int32_t x, std::int32_t y) {
         if (order.items.size() < kMaxItems) {
-            order.items.push_back(sim::BuildItem{variant(x, y), x, y, m_rotation, 0});
+            order.items.push_back(
+                sim::BuildItem{variant_at(*m_buildings, *b, m_variant_seed, spot.island, x, y), x, y, m_rotation, 0});
         }
     };
     if (const auto line = line_kind(*b); m_drag_start && line) {

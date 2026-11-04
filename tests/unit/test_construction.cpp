@@ -508,8 +508,7 @@ TEST_CASE("construction: houses get one inhabitant and leave nothing behind when
     CHECK(island.world.cities()[0].inhabitants[0] == 1);
     // The Kontor stays while the city has other buildings.
     CHECK(island.demolish({5, 10}, {5, 10}) == 0);
-    // A rectangle leaves houses standing; a click removes them.
-    CHECK(island.demolish({7, 12}, {10, 15}) == 0);
+    // A click removes a house.
     CHECK(island.demolish({9, 14}, {9, 14}) == 1);
     CHECK(island.world.house(0, 8, 13) == nullptr);
     CHECK(island.world.cities()[0].inhabitants[0] == 0);
@@ -549,6 +548,15 @@ TEST_CASE("construction: the demolish preview marks only what the order removes"
     CHECK(sim::plan_demolish(island.world, island.buildings, *order).size() == 1);
     // Another player's view marks none of them.
     CHECK(tool.demolish_preview(island.world, 1, {0, 10, 15}).empty());
+    // A rectangle with nothing but houses in it takes the houses (Open1602).
+    tool.release();
+    tool.press({0, 7, 13});
+    const auto houses = tool.demolish_preview(island.world, 0, {0, 9, 15});
+    CHECK(houses.size() == 4);
+    CHECK(contains(houses, 8, 13));
+    const auto only_houses = tool.demolish_order(0, {0, 9, 15});
+    REQUIRE(only_houses.has_value());
+    CHECK((sim::plan_demolish(island.world, island.buildings, *only_houses) == std::vector<sim::TilePos>{{8, 13}}));
 }
 
 TEST_CASE("construction: a market claims land; demolished, the land and what stands on it is lost") {

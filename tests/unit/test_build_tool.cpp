@@ -22,6 +22,7 @@ constexpr std::uint32_t kKontor = 22001;
 constexpr std::uint32_t kKontor2 = 22002;
 constexpr std::uint32_t kHouse = 20899;
 constexpr std::uint32_t kDwelling = 20605;
+constexpr std::uint32_t kDwelling2 = 20610;
 constexpr std::uint32_t kPier = 21073;
 constexpr std::uint32_t kStoneWall = 22501;
 constexpr std::uint32_t kMonument = 20851;
@@ -58,7 +59,7 @@ assets::BuildingTable make_buildings() {
         "  @Nummer: 8\n  Id: 20899\n  Kind: 14\n  Gfx: 36\n  Size: 2, 2\n"
         "  Objekt: HAUS_BAUKOST\n    Money: 10\n  EndObj\n"
         // A dwelling (WOHNUNG) and a pier: the History Edition's „Mehrfachplatzierung“.
-        "  @Nummer: 9\n  Id: 20605\n  Kind: 14\n  Gfx: 50\n  Baugfx: 50\n  Size: 2, 2\n"
+        "  @Nummer: 9\n  Id: 20605\n  Kind: 14\n  Gfx: 50\n  Baugfx: 50\n  Size: 2, 2\n  RandAnz: 2\n  RandAdd: 9\n"
         "  Objekt: HAUS_PRODTYP\n    Kind: 13\n  EndObj\n"
         "  Objekt: HAUS_BAUKOST\n    Holz: 3\n    Money: 20\n  EndObj\n"
         "  @Nummer: 10\n  Id: 21073\n  Kind: 30\n  Gfx: 54\n  Baugfx: 51\n  Size: 1, 1\n"
@@ -83,6 +84,10 @@ assets::BuildingTable make_buildings() {
         "  Objekt: HAUS_PRODTYP\n    Kind: 13\n    BGruppe: 1\n  EndObj\n"
         "  Objekt: HAUS_BAUKOST\n    Holz: 3\n    Money: 40\n  EndObj\n"
         "  @Nummer: 17\n  Id: 20402\n  Kind: 1\n  Gfx: 80\n  Size: 1, 1\n  KreuzBase: 1\n"
+        // The dwelling's second look, RandAdd records on.
+        "  @Nummer: 18\n  Id: 20610\n  Kind: 14\n  Gfx: 82\n  Size: 2, 2\n"
+        "  Objekt: HAUS_PRODTYP\n    Kind: 13\n  EndObj\n"
+        "  Objekt: HAUS_BAUKOST\n    Holz: 3\n    Money: 20\n  EndObj\n"
         "EndObj\n",
         types);
     auto table = assets::BuildingTable::from_cod(doc);
@@ -213,7 +218,7 @@ TEST_CASE("build tool: houses are dragged out side by side, piers along a line, 
     REQUIRE(block.has_value());
     std::vector<std::pair<std::int32_t, std::int32_t>> at;
     for (const sim::BuildItem& item : block->items) {
-        CHECK(item.building == kDwelling);
+        CHECK((item.building == kDwelling || item.building == kDwelling2));
         at.emplace_back(item.x, item.y);
     }
     const std::vector<std::pair<std::int32_t, std::int32_t>> expected{{6, 3}, {4, 3}, {2, 3}, {6, 1}, {4, 1}, {2, 1}};
@@ -255,6 +260,47 @@ TEST_CASE("build tool: trees keep their variants during a drag") {
     // A hundred tiles show all three variants.
     const std::set<std::uint32_t> variants{20202, 20203, 20204};
     CHECK(ids == variants);
+}
+
+TEST_CASE("build tool: houses are placed in their different looks, as blueprints and copies too") {
+    const Map m;
+    app::BuildTool tool(m.buildings);
+    tool.set_mode(app::BuildTool::Mode::Build);
+    REQUIRE(tool.select(kDwelling));
+    // A row of houses shows both looks, and keeps them while the drag is shown.
+    tool.press({0, 0, 0});
+    const auto first = tool.build_order(m.world, 0, {0, 19, 1});
+    const auto again = tool.build_order(m.world, 0, {0, 19, 1});
+    REQUIRE(first.has_value());
+    REQUIRE(again.has_value());
+    REQUIRE(first->items.size() == 10);
+    std::set<std::uint32_t> ids;
+    for (std::size_t i = 0; i < first->items.size(); ++i) {
+        CHECK(first->items[i].building == again->items[i].building);
+        ids.insert(first->items[i].building);
+    }
+    CHECK((ids == std::set<std::uint32_t>{kDwelling, kDwelling2}));
+    tool.release();
+    // Single clicks: each new house may take another look.
+    ids.clear();
+    for (int i = 0; i < 32; ++i) {
+        const auto click = tool.build_order(m.world, 0, {0, 4, 4});
+        REQUIRE(click.has_value());
+        REQUIRE(click->items.size() == 1);
+        ids.insert(click->items[0].building);
+        tool.release();
+    }
+    CHECK((ids == std::set<std::uint32_t>{kDwelling, kDwelling2}));
+    // Blueprints too.
+    ids.clear();
+    for (int i = 0; i < 32; ++i) {
+        const auto plan = tool.blueprint_order(m.world, 0, {0, 4, 4});
+        REQUIRE(plan.has_value());
+        REQUIRE(plan->items.size() == 1);
+        ids.insert(plan->items[0].building);
+        tool.release();
+    }
+    CHECK((ids == std::set<std::uint32_t>{kDwelling, kDwelling2}));
 }
 
 TEST_CASE("build tool: a Kontor is paid from the nearest own ship, or the one chosen") {
