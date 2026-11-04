@@ -24,7 +24,7 @@ enum class PlayerKind : std::uint8_t {
     Computer = 0x0C,
     Trader = 0x0D,  ///< free trader
     Pirate = 0x0E,
-    /// Set by the game, not by scenarios: a player who lost (op 3 sub 9) or a slot nobody plays
+    /// Set by the game, not by scenarios: a player who lost or a slot nobody plays
     /// (no city and no ship at the start).
     Defeated = 0x09,
     Absent = 0x0A,

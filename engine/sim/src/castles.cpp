@@ -102,7 +102,7 @@ bool Military::castle(const CastleOrder& o) {
     }
     switch (o.op) {
         case CastleOrder::Op::Recruit: {
-            // Op 0x10: no gold, no inhabitants; weapons if the castle holds them.
+            // No gold, no inhabitants; weapons if the castle holds them.
             // Only the soldiers a castle trains (the unit families), not ships, towers or natives.
             const assets::FigureType* type = m_figures->get(o.figure);
             if (type == nullptr || type->combat.max_health == 0 || !m_figures->unit_of(o.figure)) {
@@ -187,7 +187,7 @@ bool Military::castle(const CastleOrder& o) {
             return true;
         }
         case CastleOrder::Op::Cancel: {
-            // Op 0x4C value 0: paid weapons come back as far as the unit is healthy.
+            // Cancelled: paid weapons come back as far as the unit is healthy.
             if (o.slot >= c->slots.size()) {
                 return false;
             }
@@ -300,7 +300,7 @@ void Military::castle_second(CostBuilding& c) {
             m_fetch.push_back(FetchRequest{c.island, c.x, c.y, weapon});
         }
     }
-    // Trained without weapons: done as soon as they are there (op 0x13 with the next points).
+    // Trained without weapons: done as soon as they are there (with the next points).
     for (CastleSlot& slot : c.slots) {
         if (slot.training && slot.progress >= kTrained && slot.armed) {
             slot.training = false;

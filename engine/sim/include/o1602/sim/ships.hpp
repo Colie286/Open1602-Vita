@@ -177,7 +177,7 @@ struct RouteEdit {
     bool on = true;
 };
 
-/// Kontor trade settings of one ware (city ops 0x14/0x1C-0x22).
+/// Kontor trade settings of one ware.
 struct TradeSetting {
     PlayerId player = kNoPlayer;
     std::uint16_t island = 0;
@@ -200,7 +200,7 @@ struct ExploreOrder {
 /// name, offering the ship for sale and buying a ship another player offers.
 struct ShipCommand {
     enum class Op : std::uint8_t {
-        /// 1 t of cannons from a hold becomes a mounted cannon (op 0x19 +1), `count` times while
+        /// 1 t of cannons from a hold becomes a mounted cannon, `count` times while
         /// a hold has 1 t and the ship room for another (Open1602: more than one at once).
         MountCannon,
         /// "Kanonenbestückung reduzieren": a mounted cannon back into a hold as 1 t, `count` times
@@ -208,13 +208,12 @@ struct ShipCommand {
         UnmountCannon,
         Dump,          ///< "Waren über Bord werfen": the goods of `hold` (0xFF = all holds) are lost
         Rename,        ///< `name`, 1 to kMaxNameLength bytes (Windows-1252)
-        OfferForSale,  ///< at Preis * `factor` / 128 (factor 0..384; op 0x20/0x21)
+        OfferForSale,  ///< at Preis * `factor` / 128 (factor 0..384)
         WithdrawSale,
         Buy,  ///< `player` buys the ship at its price from its owner (0x84D)
-        /// The white flag up (`on`: the ship stops and decides nothing more, never fires) or down
-        /// (op 0x23).
+        /// The white flag up (`on`: the ship stops and decides nothing more, never fires) or down.
         WhiteFlag,
-        Scuttle,  ///< "Schiff versenken": it sinks without an attacker (op 0x0C, attacker 7)
+        Scuttle,  ///< "Schiff versenken": it sinks without an attacker (attacker 7)
         /// Back and forth between where it lies and the world tile `x`, `y`, fighting what it
         /// meets (two position stops and the route on).
         Patrol,
@@ -269,7 +268,7 @@ enum class ExploreState : std::uint8_t {
     NotAllowed,  ///< not the player's ship, or sinking
 };
 
-/// Orders to a shipyard (building ops 0x1A, 0x1B, 0x26) and to a ship to go there for repair.
+/// Orders to a shipyard and to a ship to go there for repair.
 struct ShipyardOrder {
     enum class Op : std::uint8_t {
         Build,  ///< `ship_type` 0..3: HANDEL1, HANDEL2, KRIEG1, KRIEG2

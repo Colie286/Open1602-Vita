@@ -77,7 +77,7 @@ bool Fleet::shipyard(const ShipyardOrder& o) {
             }
             return true;
         }
-        // Ship op 0x24: only a ship lying in reach, only one ship per yard.
+        // Only a ship lying in reach, only one ship per yard.
         if (yard == nullptr ||
             !building_in_reach(*m_world, *m_buildings, yard->island, yard->x, yard->y, ship->x, ship->y) ||
             (yard->repair_ship != 0 && yard->repair_ship != ship->id && m_world->ship(yard->repair_ship) != nullptr)) {
@@ -141,7 +141,7 @@ bool Fleet::shipyard(const ShipyardOrder& o) {
             if (yard->order == CostBuilding::kNoOrder) {
                 return false;
             }
-            // Op 0x1A 0xFF: the progress is lost, the material in the yard stays.
+            // Cancelled: the progress is lost, the material in the yard stays.
             yard->order = CostBuilding::kNoOrder;
             yard->order_figure = 0;
             yard->progress = 0;

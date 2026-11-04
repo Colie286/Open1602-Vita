@@ -50,7 +50,7 @@ struct SoldierOrder {
     bool queue = false;
 };
 
-/// Further commands to one unit (soldier ops 0x0C, 0x28, 0x29, 0x2B).
+/// Further commands to one unit.
 struct SoldierCommand {
     enum class Op : std::uint8_t {
         Stop,
@@ -68,7 +68,7 @@ struct SoldierCommand {
     bool one_way = false;
 };
 
-/// Orders to a castle (building ops 0x10, 0x4C; "Training").
+/// Orders to a castle ("Training").
 struct CastleOrder {
     enum class Op : std::uint8_t {
         Recruit,  ///< train a unit of `figure` (SOLDAT1, KAVALERIE1, MUSKETIER1, KANONIER1)

@@ -161,7 +161,7 @@ struct Player {
 
     /// Sets or clears an unlocked level. The levels of the triumphal arch and the monument ask for
     /// 25 000 aristocrats in one city (BAUINFRA), so in practice only an allowance sets them
-    /// (op 3 sub 9, 0x55, 0x57) and building the last allowed one clears them (op 0x4D).
+    /// (a defeat, a growing city, a mission) and building the last allowed one clears them.
     constexpr void set_unlocked(std::uint32_t level, bool on) noexcept {
         if (level == infra::kNone || level > std::numeric_limits<std::uint8_t>::max()) {
             return;

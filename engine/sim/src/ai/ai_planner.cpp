@@ -62,7 +62,7 @@ void Engine::tutorial_money(AiPlayer& p) {
 bool Engine::peaceful(AiPlayer& p) {
     // A computer a scenario keeps quiet builds nothing while every
     // human holds a peace treaty with it and it likes each of them at least -30. Once one does not,
-    // the switch goes for good (op 0x3A).
+    // the switch goes for good.
     Player& self = player(p);
     if (!self.scenario.has(scenario_flag::kPassive)) {
         return false;

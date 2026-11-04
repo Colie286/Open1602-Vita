@@ -164,7 +164,7 @@ TEST_CASE("scores: a growing city wants a monument every 30 minutes") {
     world.set_time_ms(30 * 60'000);
     sim::allow_monument(world, c, &events);
     CHECK(world.player(0)->monuments_allowed == 1);
-    CHECK(world.player(0)->unlocked(14));  // op 0x55: the level no city reaches
+    CHECK(world.player(0)->unlocked(14));  // the level no city reaches
     REQUIRE(events.size() == 1);
     CHECK(events[0].kind == sim::CityEvent::Kind::Monument);
     CHECK(c.growing_since_ms == 30 * 60'000);  // the next in another 30 minutes

@@ -856,7 +856,7 @@ TEST_CASE("construction: a castle makes its city proud, once per player") {
     CHECK(island.world.city(0, 0)->satisfaction_bonus == 800);
 }
 
-TEST_CASE("construction: the last allowed triumphal arch locks its level again (op 0x4D)") {
+TEST_CASE("construction: the last allowed triumphal arch locks its level again") {
     Island island;
     island.found();
     sim::Player& p = *island.world.player(0);

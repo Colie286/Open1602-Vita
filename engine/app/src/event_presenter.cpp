@@ -528,7 +528,7 @@ std::vector<Notice> EventPresenter::game_events(const sim::World& world, sim::Pl
                 break;
             case sim::GameEvent::Kind::GameOver:
                 std::fprintf(stderr, "the game is over\n");
-                out.emplace_back(ScoreUpdate{sim::kNoPlayer, true});  // op 0x3E, after the winners are known
+                out.emplace_back(ScoreUpdate{sim::kNoPlayer, true});  // after the winners are known
                 if (e.player != local && world.player(local) != nullptr && !world.player(local)->won) {
                     expect_end_screen(sim::GameOutcome::Lost, kEndScreenDelayMs, now_ms);
                     // The winner's message: his mission's, or that of the victory conditions.
@@ -551,7 +551,7 @@ std::vector<Notice> EventPresenter::game_events(const sim::World& world, sim::Pl
                 break;
             case sim::GameEvent::Kind::PlayerDefeated:
                 std::fprintf(stderr, "%s is defeated\n", who.c_str());
-                out.emplace_back(ScoreUpdate{e.player, false});  // op 3 sub 9, the defeated one still counted
+                out.emplace_back(ScoreUpdate{e.player, false});  // the defeated one still counted
                 if (e.player == local) {
                     expect_end_screen(sim::GameOutcome::Lost, kDefeatDelayMs, now_ms);
                     out.emplace_back(announce(0x53));
@@ -563,7 +563,7 @@ std::vector<Notice> EventPresenter::game_events(const sim::World& world, sim::Pl
                 } else if (e.reason == sim::GameEvent::Reason::Bankrupt) {
                     out.emplace_back(announce(0x59, std::nullopt, e.player));  // the leaving player's colour
                 } else if (e.by != sim::kNoPlayer && !arch_for(local, e.player)) {
-                    // Op 3 sub 9: "Ein Konkurrent wurde besiegt!", unless nobody is credited, or
+                    // "Ein Konkurrent wurde besiegt!", unless nobody is credited, or
                     // to the credited player who hears of his triumphal arch instead; the icon in
                     // the colour of the defeated.
                     out.emplace_back(announce(0x5A, std::nullopt, e.player));

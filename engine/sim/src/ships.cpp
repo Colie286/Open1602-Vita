@@ -819,7 +819,7 @@ void Fleet::sink(Ship& ship, PlayerId attacker) {
     if (ship.sinking) {
         return;
     }
-    // Op 0x0C: the ship stops, turns to the nearest odd heading and goes down.
+    // The ship stops, turns to the nearest odd heading and goes down.
     ship.sinking = true;
     ship.held = false;
     trader_leave(ship);
@@ -1453,7 +1453,7 @@ bool Fleet::edit_route(const RouteEdit& e) {
             if (!route.has_stops()) {
                 return false;
             }
-            // Op 0x28: from the current stop, white flag and repair cancelled, a fresh course.
+            // From the current stop, white flag and repair cancelled, a fresh course.
             ship->previous = Target::position(ship->x, ship->y);
             ship->held = false;
             ship->repairing = false;
@@ -1772,7 +1772,7 @@ bool Fleet::set_trade(const TradeSetting& s) {
             t.buy = false;
             return true;
         case TradeSetting::Mode::Sell:
-            if (!t.sell) {  // switching on: keep nothing, half the base price (sub 0x20)
+            if (!t.sell) {  // switching on: keep nothing, half the base price
                 t.keep = 0;
                 t.sell_price = natives ? 0 : static_cast<std::uint16_t>(base * 64U / 128U);
             }
@@ -1786,7 +1786,7 @@ bool Fleet::set_trade(const TradeSetting& s) {
             }
             return true;
         case TradeSetting::Mode::Buy:
-            if (!t.buy) {  // up to the room, three quarters of the base price (sub 0x1D)
+            if (!t.buy) {  // up to the room, three quarters of the base price
                 t.limit = city->capacity;
                 t.buy_price = natives ? 0 : static_cast<std::uint16_t>(base * 96U / 128U);
             }

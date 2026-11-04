@@ -1545,7 +1545,7 @@ void Simulation::accomplish(PlayerId winner) {
 }
 
 void Simulation::accomplish(PlayerId winner, std::uint16_t message, bool co_winners) {
-    // Op 0x3E: the winner, and every other human or computer who meets his own
+    // The winner, and every other human or computer who meets his own
     // mission at this moment; the original checks players without a mission against mission 0
     // (S-106). Victory conditions count as everyone's mission, but a time limit has one winner.
     // The game is over for everybody.
@@ -1577,7 +1577,7 @@ void Simulation::accomplish(PlayerId winner, std::uint16_t message, bool co_winn
 }
 
 void Simulation::defeat(PlayerId id, GameEvent::Reason reason, bool blame) {
-    // Op 3 sub 9: the player is out. Unless he went bankrupt, the player blamed for
+    // The player is out. Unless he went bankrupt, the player blamed for
     // it (who last destroyed his Kontor or market) counts him as defeated. With 200 inhabitants
     // of the third class or higher in his largest city he may build a triumphal arch; otherwise
     // the allowance counts as used up straight away. The original does not credit him on the

@@ -374,7 +374,7 @@ bool Fleet::plunder(Ship& pirate, Ship& victim) {
             ++n;
         }
         if (n != 0) {
-            // Op 0x28 value 1: the route starts at its first stop.
+            // The route starts at its first stop.
             route.active = true;
             route.one_way = true;
             route.current = 0;

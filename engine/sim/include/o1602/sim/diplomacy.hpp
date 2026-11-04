@@ -120,17 +120,17 @@ public:
     [[nodiscard]] const std::array<DiplomacyEvent, kEvents>& events(PlayerId a) const noexcept;
     void set_events(PlayerId a, const std::array<DiplomacyEvent, kEvents>& events) noexcept;
 
-    /// Peace treaty: player a sends value v towards b (op 0x2F): None = war (or withdraws an
+    /// Peace treaty: player a sends value v towards b: None = war (or withdraws an
     /// offer, or breaks the treaty), Offered = offer, Signed = accept. Returns whether anything
     /// changed.
     bool set_peace(const World& world, PlayerId a, PlayerId b, Treaty v, std::uint64_t now_ms);
-    /// Trade treaty (op 0x30), same values.
+    /// Trade treaty, same values.
     bool set_trade(const World& world, PlayerId a, PlayerId b, Treaty v, std::uint64_t now_ms);
     /// Adds an event to a's memory about b.
     void add_event(PlayerId a, PlayerId b, DiplomacyEventType type, std::uint64_t now_ms);
     /// Damage player `victim` received from `attacker` (hits on ships, soldiers, buildings).
     void add_damage(PlayerId victim, PlayerId attacker, std::uint32_t damage) noexcept;
-    /// Kontor trade worth `gold` between them (op 0x4A): friendlier both ways.
+    /// Kontor trade worth `gold` between them: friendlier both ways.
     void add_trade(PlayerId a, PlayerId b, std::uint32_t value) noexcept;
 
     /// How a feels about b: events, damage, territory, the attitude a

@@ -47,7 +47,7 @@ struct CityEvent {
 void unlock_levels(World& world, const assets::BuildingTable& buildings, const City& city,
                    std::vector<CityEvent>* events);
 
-/// The people want a monument (op 0x55 from the city tick): a growing city with at
+/// The people want a monument (from the city tick): a growing city with at
 /// least 200 inhabitants of class 2 or higher allows its owner one more monument every 30
 /// minutes of game time it keeps growing.
 void allow_monument(World& world, City& city, std::vector<CityEvent>* events);
@@ -57,7 +57,7 @@ void allow_monument(World& world, City& city, std::vector<CityEvent>* events);
 /// up to 0x1D from 9000; 0 below 100. The message for 10000 (0x1E) is never reached.
 [[nodiscard]] std::uint8_t population_message(std::uint32_t einwohner) noexcept;
 
-/// Announces a city's population once it passes its next mark (city tick, op 0x48):
+/// Announces a city's population once it passes its next mark (city tick):
 /// residents plus `workers` (the Einwohner of the city list). Each mark comes once per city.
 void announce_population(City& city, std::uint32_t workers, std::vector<CityEvent>* events);
 

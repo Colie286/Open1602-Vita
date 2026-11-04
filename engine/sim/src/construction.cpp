@@ -2314,12 +2314,12 @@ BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, co
                     pride();
                     break;
                 case kInfraArch:
-                    // Op 0x4D 0x1000: the level holds while allowances are left.
+                    // The level holds while allowances are left.
                     add_count(p->arches_built, 1);
                     p->set_unlocked(kInfraArch, p->arches_allowed > p->arches_built);
                     break;
                 case kInfraMonument:
-                    add_count(p->monuments_built, 1);  // op 0x4D 0x2000
+                    add_count(p->monuments_built, 1);
                     p->set_unlocked(kInfraMonument, p->monuments_allowed > p->monuments_built);
                     break;
                 default:

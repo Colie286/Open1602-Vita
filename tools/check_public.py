@@ -9,6 +9,8 @@ Looks at every file git tracks (third_party/ and LICENSE aside) and fails when o
 - cites a code or data location of the original program (a hex number of the form 0x004xxxxx to
   0x006xxxxx, or an offset into one of its records in memory such as "city + 0x1F0"),
 - names a function of the original program (CamelCase_CamelCase, e.g. Foo_DoBar),
+- cites a command number of the original program ("op 0x4D", "ops 0x10, 0x4C", "op 3 sub 9",
+  "sub 0x20"),
 - links to documents that are not part of this repository (docs/re/), or
 - uses one of a few words about tooling that does not belong here.
 Each hit is printed as path:line: reason. Exit code 1 when there are any.
@@ -34,6 +36,7 @@ MEMORY_OFFSET = re.compile(r"\b(?:runtime(?: player| island| city)?|city|island|
 FUNCTION_NAME = re.compile(r"\b(?!SDL_|SDLK_|LUA_)[A-Z][a-z][A-Za-z]*_[A-Z][a-z][A-Za-z0-9]*\b")
 # Names of that shape that are not functions of the original program.
 ALLOWED_NAMES = {"Endlos_Laufend"}
+OPCODE = re.compile(r"\bops? (?:0x[0-9A-Fa-f]+|\d+ sub\b)|\bsub 0x[0-9A-Fa-f]+", re.IGNORECASE)
 PRIVATE_LINK = re.compile(r"docs/re/|docs/re\b|\]\((?:\.\./)*re/")
 
 # The terms are stored encoded so that this file does not match itself.
@@ -62,6 +65,8 @@ def check_line(line: str) -> list[str]:
     names = [n for n in FUNCTION_NAME.findall(line) if n not in ALLOWED_NAMES]
     if names:
         reasons.append(f"function name of the original program ({', '.join(sorted(set(names)))})")
+    if OPCODE.search(line):
+        reasons.append("command number of the original program")
     if PRIVATE_LINK.search(line):
         reasons.append("link to a document outside this repository")
     if WORDS.search(line) or CASE_WORDS.search(line):

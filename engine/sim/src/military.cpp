@@ -497,7 +497,7 @@ void Military::damage_building(std::uint16_t island, std::uint16_t x, std::uint1
     }
     list.erase(it);
     const PlayerId victim = cell.owner;
-    // A destroyed market or Kontor blames the attacker (op 0x52; the natives' curse looks at it).
+    // A destroyed market or Kontor blames the attacker (the natives' curse looks at it).
     if ((b->type->prod_kind == prod::kMarket || b->type->prod_kind == prod::kKontor) && acts(*m_world, attacker)) {
         m_world->diplomacy().set_blamed(victim, attacker);
     }

@@ -354,7 +354,7 @@ void allow_monument(World& world, City& city, std::vector<CityEvent>* events) {
     }
     city.growing_since_ms = world.time_ms();
     add_count(owner->monuments_allowed, 1);
-    owner->set_unlocked(infra::kMonument, true);  // op 0x55: the level only an allowance reaches
+    owner->set_unlocked(infra::kMonument, true);  // the level only an allowance reaches
     if (events != nullptr) {
         CityEvent e;
         e.kind = CityEvent::Kind::Monument;

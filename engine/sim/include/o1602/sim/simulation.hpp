@@ -43,7 +43,7 @@ class Engine;
 }
 
 /// The two switches of the production windows: working on
-/// or off (also building op 0x26), and whether market carts may collect
+/// or off, and whether market carts may collect
 /// the goods. The original's windows change both only on the
 /// clicking computer; here they are commands like everything else.
 struct ProductionSwitch {
@@ -63,7 +63,7 @@ struct ProductionSwitch {
 /// name, and keeping the building material from the people (no house upgrades).
 struct CityOrder {
     enum class Op : std::uint8_t {
-        TaxRate,       ///< `resident_class` pays `rate` (64..192, 128 = normal; op 0x31 sub 0x33)
+        TaxRate,       ///< `resident_class` pays `rate` (64..192, 128 = normal)
         Rename,        ///< `name`, 1 to kMaxNameLength bytes (Windows-1252)
         MaterialLock,  ///< `on`: the houses do not take the material to rise
     };

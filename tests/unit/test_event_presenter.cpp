@@ -260,7 +260,7 @@ TEST_CASE("event presenter: an own defeat plays its video directly, the defeat v
     CHECK(announcement(rival[1])->about == kRival);  // the icon in the leaving player's colour
 }
 
-TEST_CASE("event presenter: a rival's defeat announces the culprit's triumphal arch instead (op 3 sub 9)") {
+TEST_CASE("event presenter: a rival's defeat announces the culprit's triumphal arch instead") {
     Game g;
     sim::GameEvent defeated;
     defeated.kind = sim::GameEvent::Kind::PlayerDefeated;

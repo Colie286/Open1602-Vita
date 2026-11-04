@@ -653,7 +653,7 @@ bool apply_diplomacy(World& world, const DiplomacyOrder& order) {
                 self->money < static_cast<std::int64_t>(order.gold)) {
                 return false;
             }
-            // op 0x49: the counter grows by gold * 32 / (half the base price of Tabak = 17).
+            // The counter grows by gold * 32 / (half the base price of Tabak = 17).
             Relation& r = d.relation(order.partner, order.player);
             r.tribute = std::min(kCounterMax, r.tribute + order.gold * 32 / 17);
             if (Player* payer = world.player(order.player)) {

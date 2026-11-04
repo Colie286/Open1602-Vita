@@ -380,7 +380,7 @@ TEST_CASE("missions: a computer with nothing left is retired; the blamed player 
     CHECK(e->by == 0);
 }
 
-TEST_CASE("missions: without 200 citizens in the largest city the arch counts as used up (op 3 sub 9)") {
+TEST_CASE("missions: without 200 citizens in the largest city the arch counts as used up") {
     Game g;
     g.ship(0);
     g.ship(1);
