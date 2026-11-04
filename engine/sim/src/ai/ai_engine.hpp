@@ -427,6 +427,12 @@ private:
     std::optional<std::size_t> supply_source(AiPlayer& p, std::uint16_t home_island, std::uint8_t ware,
                                              std::uint16_t* price);
     bool home_supply_route(AiPlayer& p, Ship& s, City& home);
+    /// The wares a supply run brings to `home`, and how much of each it keeps (`target`).
+    [[nodiscard]] std::vector<std::uint8_t> supply_wares(const AiPlayer& p, const City& home,
+                                                         std::uint32_t* target) const;
+    /// Improved computers: each city's trade cart fetches a ware the city lacks from a partner's
+    /// city on its island.
+    void cart_supply(AiPlayer& p);
     void update_fleet_target(AiPlayer& p);
     void order_ship(AiPlayer& p);
     /// The original's: the cheapest offered ship, for a computer without ships or yard.

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <algorithm>
+#include <optional>
 #include <string>
+#include <utility>
 
 #include "../test_framework.hpp"
 
@@ -500,4 +502,51 @@ TEST_CASE("carts: a game saved while a cart drives and gates are closed runs on 
         crossed = crossed || land.world.ship(id)->x > 29;  // east of the wall, through the opened gate
     }
     CHECK(crossed);
+}
+
+TEST_CASE("carts: an improved computer fetches what its city lacks from a partner on its island by cart") {
+    // The human's city sells wood, the computer's has none; both have trade treaties and peace, and
+    // the island is a large one, where the computer does not mind its neighbour.
+    const auto run_game = [](bool classic, std::uint32_t& west_wood) {
+        Land land;
+        sim::City& west = *land.world.city(0, 0);
+        west.goods[kWood] = 50 * kTon;
+        west.trade[kWood].sell = true;
+        west.trade[kWood].sell_price = 10;
+        land.world.city(0, 1)->goods[kWood] = 0;
+        land.world.island(0).header.template_number = 1;
+        land.world.island(0).header.template_size = 4;
+        for (const auto& [a, b] : {std::pair{0, 1}, std::pair{1, 0}}) {
+            sim::Relation& r =
+                land.world.diplomacy().relation(static_cast<sim::PlayerId>(a), static_cast<sim::PlayerId>(b));
+            r.trade = sim::Treaty::Signed;
+            r.peace = sim::Treaty::Signed;
+        }
+        land.rules.bugs.classic_ai = classic;
+        sim::Simulation s(land.world, land.buildings, land.figures, land.rules);
+        std::optional<sim::TradeRoute> route;
+        for (std::uint32_t t = 0; t < 120'000 && west.goods[kWood] == 50 * kTon; t += sim::Simulation::kTickMs) {
+            s.tick();
+            if (const sim::Ship* cart = sim::trade_cart_of(land.world, 1, 0); cart != nullptr && !route) {
+                route = cart->route;
+            }
+        }
+        west_wood = west.goods[kWood];
+        return route;
+    };
+    std::uint32_t wood = 0;
+    const auto route = run_game(false, wood);
+    // A cart of its own, on a one-way run: wood loaded at the partner's city, unloaded at home.
+    REQUIRE(route.has_value());
+    CHECK(route->one_way);
+    CHECK(route->stops[0].target == sim::Target::city_of(0, 0));
+    CHECK(route->stops[0].entries[0].ware == kWood);
+    CHECK(!route->stops[0].entries[0].unload);
+    CHECK(route->stops[1].target == sim::Target::city_of(0, 1));
+    CHECK(route->stops[1].entries[0].ware == kWood);
+    CHECK(route->stops[1].entries[0].unload);
+    CHECK(wood < 50 * kTon);  // bought at the partner's Kontor
+    // The original's computers never send a cart out.
+    CHECK(!run_game(true, wood).has_value());
+    CHECK(wood == 50 * kTon);
 }

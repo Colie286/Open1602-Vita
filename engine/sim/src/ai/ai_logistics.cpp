@@ -146,6 +146,7 @@ void Engine::logistics(AiPlayer& p) {
         if (p.yard_valid) {
             healthy = yard_service(p);
         }
+        cart_supply(p);
         if (Ship* s = pick_logistics_ship(p, healthy)) {
             // As in the original, a ship the computer offered for sale is withdrawn when it gets
             // this job (a patrol keeps the offer).
@@ -433,37 +434,164 @@ std::optional<std::size_t> Engine::supply_source(AiPlayer& p, std::uint16_t home
     return best;
 }
 
-bool Engine::home_supply_route(AiPlayer& p, Ship& s, City& home) {
-    // One or two wares the home city lacks, from where they are, one-way home.
+std::vector<std::uint8_t> Engine::supply_wares(const AiPlayer& p, const City& home, std::uint32_t* target) const {
     std::vector<std::uint8_t> wares{m_buildings.food_ware(), m_buildings.materials().tools,
                                     m_buildings.materials().bricks, m_buildings.materials().wood, ware::kCloth};
-    std::uint32_t target = 10 * kTon;
+    *target = 10 * kTon;
     if (demand(home, ware::kSpices) > 0 || p.max_stage > 30) {
         wares.insert(wares.end(), {ware::kTobaccoGoods, ware::kSpices, ware::kAlcohol, ware::kOre, ware::kIron});
-        target = 20 * kTon;
+        *target = 20 * kTon;
     }
     if (demand(home, ware::kCocoa) > 0 || p.max_stage > 39) {
         wares.insert(wares.end(), {ware::kCocoa, ware::kClothes});
-        target = 30 * kTon;
+        *target = 30 * kTon;
     }
     if (p.max_stage > 49) {
         wares.insert(wares.end(), {ware::kGold, ware::kJewellery});
-        target = 40 * kTon;
+        *target = 40 * kTon;
     }
-    // Wares other supply ships already bring.
+    return wares;
+}
+
+namespace {
+
+/// The wares a route unloads.
+void unloaded_wares(const TradeRoute& route, std::vector<std::uint8_t>& out) {
+    for (const RouteStop& stop : route.stops) {
+        for (const RouteEntry& e : stop.entries) {
+            if (e.ware != 0 && e.unload) {
+                out.push_back(e.ware);
+            }
+        }
+    }
+}
+
+}  // namespace
+
+void Engine::cart_supply(AiPlayer& p) {
+    // Open1602's computers: a city buys what it lacks from a partner's city on its own island with
+    // its trade cart, as players do, before a ship sails for it. The original's computers never
+    // send a cart out.
+    if (classic()) {
+        return;
+    }
+    for (std::size_t h = 0; h < m_world.cities().size(); ++h) {
+        const City& home = m_world.cities()[h];
+        if (home.owner != p.player || !home.warehouse_x || !home.warehouse_y) {
+            continue;
+        }
+        const Ship* cart = trade_cart_of(m_world, p.player, home.island);
+        if (cart != nullptr && (cart->route.active || ship_moving(*cart))) {
+            continue;  // on its way
+        }
+        std::uint32_t target = 0;
+        const std::vector<std::uint8_t> wares = supply_wares(p, home, &target);
+        std::optional<std::size_t> source;
+        std::uint8_t ware = 0;
+        for (const std::uint8_t w : wares) {
+            if (home.stock(w) >= target) {
+                continue;
+            }
+            std::uint16_t best_price = 1000;
+            for (std::size_t i = 0; i < m_world.cities().size(); ++i) {
+                const City& c = m_world.cities()[i];
+                if (c.island != home.island || c.owner == p.player || !c.warehouse_x || !c.warehouse_y ||
+                    m_world.player(c.owner) == nullptr ||
+                    m_world.diplomacy().relation(p.player, c.owner).trade != Treaty::Signed) {
+                    continue;
+                }
+                const City::Trade* t = c.trade_of(w);
+                if (t == nullptr || !t->sell || c.stock(w) <= t->keep + 5 * kTon || t->sell_price >= best_price) {
+                    continue;
+                }
+                source = i;
+                best_price = t->sell_price;
+            }
+            if (source) {
+                ware = w;
+                break;
+            }
+        }
+        if (!source) {
+            continue;
+        }
+        const City& from = m_world.cities()[*source];
+        const std::uint8_t home_index = home.index;
+        const std::uint16_t island = home.island;
+        const Target load = Target::city_of(from.island, from.index);
+        const std::uint32_t amount = std::max<std::uint32_t>(target - home.stock(ware), 5 * kTon);
+        std::uint32_t id = cart != nullptr ? cart->id : 0;
+        if (cart == nullptr) {
+            const WorldIsland& isl = island_of(island);
+            CartRequest request;
+            request.player = p.player;
+            request.island = island;
+            request.city = home_index;
+            request.x = static_cast<std::uint16_t>(isl.x + *from.warehouse_x);
+            request.y = static_cast<std::uint16_t>(isl.y + *from.warehouse_y);
+            if (!execute(request).accepted) {
+                continue;
+            }
+            const Ship* made = trade_cart_of(m_world, p.player, island);
+            if (made == nullptr) {
+                continue;
+            }
+            id = made->id;
+            log(p, "trade cart %u on island %u", id, island);
+        }
+        // Load at the partner, unload at home, once.
+        const auto edit = [&](RouteEdit e) {
+            e.player = p.player;
+            e.ship = id;
+            execute(e);
+        };
+        RouteEdit clear;
+        clear.op = RouteEdit::Op::ClearStop;
+        clear.stop = 0xFF;
+        edit(clear);
+        const std::array<std::pair<Target, RouteEntry>, 2> stops = {
+            std::pair{load, RouteEntry{ware, false, amount}},
+            std::pair{Target::city_of(island, home_index), RouteEntry{ware, true, 50 * kTon}}};
+        for (std::uint8_t i = 0; i < stops.size(); ++i) {
+            RouteEdit stop;
+            stop.op = RouteEdit::Op::SetStop;
+            stop.stop = i;
+            stop.target = stops[i].first;
+            edit(stop);
+            RouteEdit entry;
+            entry.op = RouteEdit::Op::SetEntry;
+            entry.stop = i;
+            entry.entry = 0;
+            entry.value = stops[i].second;
+            edit(entry);
+        }
+        RouteEdit way;
+        way.op = RouteEdit::Op::OneWay;
+        way.on = true;
+        edit(way);
+        RouteEdit start;
+        start.op = RouteEdit::Op::Start;
+        edit(start);
+        log(p, "trade cart %u fetches ware %u from city %u/%u", id, ware, load.island, load.city);
+    }
+}
+
+bool Engine::home_supply_route(AiPlayer& p, Ship& s, City& home) {
+    // One or two wares the home city lacks, from where they are, one-way home.
+    std::uint32_t target = 0;
+    const std::vector<std::uint8_t> wares = supply_wares(p, home, &target);
+    // Wares other supply ships already bring, and the trade cart on the home island.
     std::vector<std::uint8_t> routed;
     for (const ShipNote& n : p.ships) {
         const Ship* o = m_world.ship(n.id);
         if (o == nullptr || o->id == s.id || !n.supply || !o->route.active) {
             continue;
         }
-        for (const RouteStop& stop : o->route.stops) {
-            for (const RouteEntry& e : stop.entries) {
-                if (e.ware != 0 && e.unload) {
-                    routed.push_back(e.ware);
-                }
-            }
-        }
+        unloaded_wares(o->route, routed);
+    }
+    if (const Ship* cart = trade_cart_of(m_world, p.player, home.island);
+        cart != nullptr && cart->route.active && !classic()) {
+        unloaded_wares(cart->route, routed);
     }
     struct Pick {
         std::uint8_t ware = 0;
