@@ -1344,6 +1344,7 @@ editor.players.human = Mensch
 editor.players.computer = Computer
 editor.players.colour = Farbe
 editor.players.money = Startkapital
+editor.players.money_now = Geld
 editor.players.money_value = {1} Gold
 editor.players.monuments = Denkmäler
 editor.players.arches = Bögen

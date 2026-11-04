@@ -1074,7 +1074,8 @@ void EditorPanel::layout_players(const EditorModel& model) {
     pair("editor.players.role", kPlayerRole,
          ui::tr(on && p->human ? "editor.players.human" : "editor.players.computer"), "editor.players.colour",
          kPlayerColour, on ? p->colour : std::string("-"));
-    f.label(Rect{m_x, y, m_w, 18}, ui::tr("editor.players.money"), Align::Left, tone);
+    f.label(Rect{m_x, y, m_w, 18}, ui::tr(model.savegame ? "editor.players.money_now" : "editor.players.money"),
+            Align::Left, tone);
     y += 18;
     f.cycle_button(kPlayerMoney, Rect{m_x, y, m_w, kButtonH},
                    on ? ui::tr("editor.players.money_value", {std::to_string(p->money)}) : std::string("-"), on);
@@ -1633,7 +1634,9 @@ void EditorPanel::layout_players_table(const EditorModel& model) {
         x[c + 1] = x[c] + room * shares[c] / 100 + kGap;
     }
     for (std::size_t c = 0; c < columns; ++c) {
-        f.label(Rect{x[c], y, x[c + 1] - x[c] - kGap, 18}, ui::tr(kHeads[c]), Align::Left, Tone::Dim);
+        // A saved game's players have their money now, not the money they start with.
+        const char* head = c == 3 && model.savegame ? "editor.players.money_now" : kHeads[c];
+        f.label(Rect{x[c], y, x[c + 1] - x[c] - kGap, 18}, ui::tr(head), Align::Left, Tone::Dim);
     }
     y += 20;
     // As many rows as fit above the note and the foot's buttons; the others on pages.

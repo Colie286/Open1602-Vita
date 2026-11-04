@@ -4639,7 +4639,8 @@ void MapViewer::record_campaign_part(assets::CampaignProgress& progress, const s
     }
     if (sim::ScriptHost* scripts = m_state->simulation.scripts()) {
         for (sim::ScriptState& s : scripts->save_states()) {
-            if (s.package == m_state->world.package_scenario()) {
+            // The part's script keeps the table: the scenario's own, or the one saved in its map.
+            if (!s.campaign.empty()) {
                 carry.table = std::move(s.campaign);
             }
         }

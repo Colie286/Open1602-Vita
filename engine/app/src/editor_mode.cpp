@@ -245,7 +245,7 @@ core::Status MapViewer::enter_editor(sim::World world, const std::filesystem::pa
 
 void MapViewer::start_editor() {
     if (!m_options.editor_file.empty()) {
-        if (auto opened = editor_open(m_options.editor_file); opened) {
+        if (auto opened = editor_open(m_options.editor_file, editor_slot_of(m_options.editor_file)); opened) {
             return;
         } else {
             std::fprintf(stderr, "error: --editor %s: %s\n", core::path_to_utf8(m_options.editor_file).c_str(),

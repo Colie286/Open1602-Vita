@@ -141,7 +141,8 @@ first only part 1 is open; winning a part alone opens the next, as the original'
 progress is kept with the original's (`progress.cfg` in the user data folder, a line
 `package <part> <campaign id>`).
 
-**Carried values.** The script of a part (the scenario's `script`) has a global table `campaign`.
+**Carried values.** The script of a part (the scenario's `script`, or, without one, the script saved
+in its map by the editor) has a global table `campaign`.
 When a part is won, the game keeps what is in it then, with the player's money, in
 `campaigns/<package>_<name>.<part>.carry` of the user data folder; the next part's script finds it
 in `campaign` after its top level ran, so a top level such as `campaign = {gold = 0}` gives the

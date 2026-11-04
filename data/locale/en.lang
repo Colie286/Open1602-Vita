@@ -1413,6 +1413,7 @@ editor.players.human = Human
 editor.players.computer = Computer
 editor.players.colour = Colour
 editor.players.money = Starting money
+editor.players.money_now = Money
 editor.players.money_value = {1} gold
 editor.players.monuments = Monuments
 editor.players.arches = Arches

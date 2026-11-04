@@ -454,13 +454,19 @@ std::optional<PackageScript> read_scenario_script(const assets::PackageScenario&
 }
 
 GameScripts::GameScripts(std::vector<PackageScript> scripts, const sim::World& world, Limits limits) : m_world(&world) {
+    // The script of a campaign's part: the package scenario's own (scenarios.toml `script`), else
+    // the one saved in its map (the editor's, kScenarioScript).
+    const auto named = [&](const PackageScript& s) { return s.name.empty() ? s.package : s.name; };
+    const bool own = std::any_of(scripts.begin(), scripts.end(),
+                                 [&](const PackageScript& s) { return named(s) == world.package_scenario(); });
+    const std::string campaign_script = own ? world.package_scenario() : std::string(kScenarioScript);
     for (PackageScript& script : scripts) {
         std::string name = script.name.empty() ? script.package : std::move(script.name);
         auto package = std::make_unique<Package>(std::move(script.package), std::move(name), limits);
         Package& p = *package;
         m_packages.push_back(std::move(package));
         const auto& part = world.campaign_part();
-        p.campaign = part && p.name == world.package_scenario();
+        p.campaign = part && !world.package_scenario().empty() && p.name == campaign_script;
         add_api(p);
         if (p.campaign) {
             (void)p.sandbox.add_value("game", "campaign", Value{part->campaign});

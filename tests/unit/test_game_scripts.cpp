@@ -516,6 +516,40 @@ TEST_CASE("script: a campaign part's script takes the table the part before left
     CHECK(loaded_states[0].campaign != carried);
 }
 
+TEST_CASE("script: a campaign part's map script knows its part when the scenario has no script of its own") {
+    const std::string source =
+        "campaign = {seen = 0}\n"
+        "function on_start() campaign.seen = game.part end\n";
+    Game game;
+    game.world.set_package_scenario("isles:south");
+    game.world.set_campaign_part(sim::World::CampaignPart{"isles:frost", 1, {}});
+    std::vector<script::PackageScript> sources;
+    sources.push_back(script::PackageScript{"isles", "x = 1\n", ""});
+    sources.push_back(
+        script::PackageScript{std::string(script::kScenarioScript), source, std::string(script::kScenarioScript)});
+    auto scripts = game.run(std::move(sources));
+    game.ticks(2);
+    const auto states = scripts->save_states();
+    REQUIRE(states.size() == 2);
+    CHECK(states[0].campaign.empty());
+    CHECK(!states[1].campaign.empty());  // the map's script keeps the part's table
+
+    // With a script of its own the scenario's keeps it, the map's not.
+    Game both;
+    both.world.set_package_scenario("isles:south");
+    both.world.set_campaign_part(sim::World::CampaignPart{"isles:frost", 1, {}});
+    std::vector<script::PackageScript> two;
+    two.push_back(script::PackageScript{"isles", source, "isles:south"});
+    two.push_back(
+        script::PackageScript{std::string(script::kScenarioScript), source, std::string(script::kScenarioScript)});
+    auto both_scripts = both.run(std::move(two));
+    both.ticks(2);
+    const auto both_states = both_scripts->save_states();
+    REQUIRE(both_states.size() == 2);
+    CHECK(!both_states[0].campaign.empty());
+    CHECK(both_states[1].campaign.empty());
+}
+
 TEST_CASE("script: cities, disasters, ships, fights and diplomacy reach the scripts") {
     Game game;
     sim::City city;
