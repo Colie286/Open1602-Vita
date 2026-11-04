@@ -46,7 +46,8 @@ goal.goods.tools = 50
 
 The game's editor writes a scenario into a package itself: its map to `maps/<name>.o1602` and its
 table here, with `file`, `stars`, `name.<language>` and `briefing.<language>`; the file's other
-tables, keys and comments stay as they are ([editor.md](../editor.md#saving-into-a-package)).
+tables, keys and comments stay as they are ([editor.md](../editor.md#saving-into-a-package)). It
+adds such a scenario as the next part of a campaign of the package the same way (`part.<n>`).
 
 A scenario whose map is missing or outside the package's folder, or with a value that cannot be
 read, is left out; the game's log names the file, the line and the key.

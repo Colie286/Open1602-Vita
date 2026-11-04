@@ -1781,3 +1781,42 @@ TEST_CASE("editor panel: the scenario's packages listed, and the scenario saved 
     CHECK(r->name == "islands");
     CHECK(panel.page() == EditorPanel::Page::Scenario);
 }
+
+TEST_CASE("editor panel: the dialog Campaign adds the scenario to a campaign of its package") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(184, 564);
+    EditorModel m = document();
+    CHECK(!panel.command(app::EditorCommand::Campaign, m).has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::Campaign);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "First save the map as a package's scenario"));
+
+    // A new campaign: its name typed.
+    m.package_scenario = "hansa:north";
+    CHECK(!panel.command(app::EditorCommand::Campaign, m).has_value());
+    CHECK(panel.typing());
+    panel.type("Frost!");
+    (void)panel.draw(m, kNoFonts);
+    CHECK(!find_enabled(panel, m, "Add as part 1"));
+    (void)panel.key(1);
+    panel.type("frost");
+    auto r = click(panel, m, "Add as part 1");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::CampaignAdd);
+    CHECK(r->name == "frost");
+
+    // The campaign listed now: the map is its part 2 and can be taken out again.
+    m.campaigns = {{"frost", {"hansa:south", "hansa:north"}}};
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "2. north (this map)"));
+    CHECK(!find_enabled(panel, m, "Add as part 3"));
+    r = click(panel, m, "Take out");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::CampaignRemove);
+    CHECK(r->name == "frost");
+    // The next choice is a new campaign again.
+    CHECK(!click(panel, m, "frost").has_value());
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "New campaign"));
+}

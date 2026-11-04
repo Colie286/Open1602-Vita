@@ -155,6 +155,7 @@ enum class EditorCommand : std::uint8_t {
     Find,
     Script,
     SavePackage,
+    Campaign,
     Keys,
 };
 
@@ -329,6 +330,14 @@ struct EditorModel {
     std::size_t package_folder = 0;
     std::string package_name;
     std::vector<std::string> package_scenarios;
+    /// The dialog "Campaign": the scenario the document is in its package ("<package>:<name>",
+    /// empty if it is none), and the package's campaigns with their parts (the scenarios' ids).
+    std::string package_scenario;
+    struct Campaign {
+        std::string name;  ///< the name in campaigns.toml
+        std::vector<std::string> parts;
+    };
+    std::vector<Campaign> campaigns;
     /// The document is a savegame opened as such: Save writes it back, marked as changed.
     bool savegame = false;
     bool can_undo = false;
@@ -521,10 +530,12 @@ struct EditorRequest {
         MarkerRemove,  ///< the marker `index` taken away
         /// The page "Load script" opens: the model's list of files is due, the scripts.
         ListScripts,
-        ScriptLoad,    ///< the script of file `index` of the model's list as the scenario's
-        ScriptReload,  ///< the script read again from the file it was loaded from
-        ScriptRemove,  ///< the scenario without a script
-        SavePackage,   ///< saved as the scenario `name` of package `index` (EditorModel::package_folders)
+        ScriptLoad,      ///< the script of file `index` of the model's list as the scenario's
+        ScriptReload,    ///< the script read again from the file it was loaded from
+        ScriptRemove,    ///< the scenario without a script
+        SavePackage,     ///< saved as the scenario `name` of package `index` (EditorModel::package_folders)
+        CampaignAdd,     ///< the scenario as the next part of campaign `name` (a new one if it has none)
+        CampaignRemove,  ///< the scenario, the last part of campaign `name`, taken out of it
     };
     Kind kind = Kind::Close;
     std::size_t index = 0;
@@ -583,7 +594,8 @@ public:
         Script,
         ScriptFiles,
         Packages,
-        PackageSave
+        PackageSave,
+        Campaign
     };
 
     explicit EditorPanel(ui::FormStyle style = {}) : m_form(style) {}
@@ -625,7 +637,8 @@ public:
     [[nodiscard]] bool typing() const noexcept {
         return m_page == Page::SaveAs || m_page == Page::CityName || m_page == Page::PlayerName ||
                m_page == Page::GoalText || m_page == Page::ScenarioText || m_page == Page::Find ||
-               m_page == Page::MarkerName || m_page == Page::PackageSave;
+               m_page == Page::MarkerName || m_page == Page::PackageSave ||
+               (m_page == Page::Campaign && m_new_campaign);
     }
     /// The text typed on the page "Find" (Windows-1252); empty on another page.
     [[nodiscard]] const std::string& find_text() const noexcept {
@@ -707,6 +720,7 @@ private:
     void layout_script(const EditorModel& model);
     void layout_packages(const EditorModel& model);
     void layout_package_save(const EditorModel& model);
+    void layout_campaign(const EditorModel& model);
     /// The height of a line of the check list in a dialog `width` design units wide.
     [[nodiscard]] static std::int32_t check_line_h(const EditorCheckLine& line, std::int32_t width) noexcept;
     /// The notice (or the note `note_key`, `short_key` where it does not fit whole) from `y`
@@ -731,6 +745,11 @@ private:
     std::string m_text;         ///< the name being typed
     std::size_t m_marker = 0;   ///< the marker whose name is typed (the page MarkerName)
     std::size_t m_package = 0;  ///< the package chosen to save into (EditorModel::package_folders)
+    /// The campaign chosen (EditorModel::campaigns; their number: a new one), and whether that is
+    /// the new one, whose name is typed.
+    std::size_t m_campaign = 0;
+    bool m_new_campaign = false;
+    std::string m_campaign_pick;  ///< a campaign just made, chosen once the model lists it
     EditorNewMap m_new;
     EditorNewIsland m_island;
     /// The size the page "Map size" offers.
@@ -751,6 +770,7 @@ private:
     std::int32_t m_check_h = 580;            ///< the height the check list's dialog wants
     std::int32_t m_files_h = 0;              ///< the height the dialog of the scripts to load needs
     std::int32_t m_packages_h = 0;           ///< the height the dialog of the packages needs
+    std::int32_t m_campaign_h = 480;         ///< the height the dialog of the campaigns needs
     bool m_previewing = false;               ///< the dice preview, as laid out last (its page is the column's)
 };
 

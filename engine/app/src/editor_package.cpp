@@ -89,6 +89,17 @@ std::pair<std::vector<core::DataLine>, std::vector<std::string>> scenario_lines(
 
 }  // namespace
 
+void MapViewer::package_written(assets::ModPackage& package) {
+    // The package's files changed: its hash, and its scenarios and campaigns for the menu's list.
+    package.hash = assets::package_hash(package.folder);
+    load_package_scenarios();
+    if (m_hud) {
+        if (MainMenu* menu = m_hud->menu()) {
+            menu->set_package_scenarios(m_package_scenarios, m_package_campaigns);
+        }
+    }
+}
+
 std::optional<std::pair<std::string, std::string>> MapViewer::editor_package_of(
     const std::filesystem::path& file) const {
     if (file.empty() || core::path_to_utf8(file.extension()) != kMapEnding) {
@@ -141,6 +152,20 @@ void MapViewer::editor_packages_model(EditorModel& m) const {
     }
     for (const assets::PackageScenario& s : m_package_scenarios) {
         m.package_scenarios.push_back(s.id);
+    }
+    if (!m_editor->package.empty()) {
+        m.package_scenario = m_editor->package + ":" + m_editor->package_scenario;
+        // Listed only once the scenario is one of the package's (saved there and read).
+        if (std::none_of(m_package_scenarios.begin(), m_package_scenarios.end(),
+                         [&](const assets::PackageScenario& s) { return s.id == m.package_scenario; })) {
+            m.package_scenario.clear();
+        }
+        const std::string prefix = m_editor->package + ":";
+        for (const assets::PackageCampaign& c : m_package_campaigns) {
+            if (c.package == m_editor->package) {
+                m.campaigns.push_back(EditorModel::Campaign{c.id.substr(prefix.size()), c.parts});
+            }
+        }
     }
     // The name offered: the scenario's in its package, else the file's, else the description's.
     m.package_name = m_editor->package_scenario;
@@ -205,17 +230,87 @@ void MapViewer::editor_save_to_package(const std::string& package, const std::st
     }
     m_editor->package = package;
     m_editor->package_scenario = name;
-    // The package's files changed: its hash, and its scenarios for the menu's list.
-    it->hash = assets::package_hash(it->folder);
-    load_package_scenarios();
-    if (m_hud) {
-        if (MainMenu* menu = m_hud->menu()) {
-            menu->set_package_scenarios(m_package_scenarios, m_package_campaigns);
-        }
-    }
+    package_written(*it);
     const std::string id = package + ":" + name;
     editor_notice(ui::tr("editor.package_save.saved", {core::utf8_to_cp1252(id)}), false,
                   "saved as the package's scenario " + id);
+}
+
+void MapViewer::editor_campaign(const std::string& campaign, bool add) {
+    if (!m_editor || m_editor->package.empty()) {
+        return;
+    }
+    const std::string& package = m_editor->package;
+    const std::string id = package + ":" + m_editor->package_scenario;
+    const auto failed = [&](const std::string& why) {
+        editor_notice(ui::tr("editor.campaign.failed", {core::utf8_to_cp1252(why)}), true,
+                      "campaign " + package + ":" + campaign + " not changed: " + why);
+    };
+    const auto it = std::find_if(m_packages.begin(), m_packages.end(),
+                                 [&](const assets::ModPackage& p) { return p.id == package && p.archive.empty(); });
+    if (it == m_packages.end() || !sim::valid_marker_name(campaign)) {
+        failed("no campaign of a package installed as a folder");
+        return;
+    }
+    const auto known = std::find_if(m_package_campaigns.begin(), m_package_campaigns.end(),
+                                    [&](const assets::PackageCampaign& c) { return c.id == package + ":" + campaign; });
+    const std::vector<std::string> parts =
+        known != m_package_campaigns.end() ? known->parts : std::vector<std::string>{};
+    std::vector<core::DataLine> lines;
+    std::vector<std::string> removed;
+    std::size_t part = 0;  // from 1
+    if (add) {
+        if (std::find(parts.begin(), parts.end(), id) != parts.end() || parts.size() >= assets::kMaxCampaignParts) {
+            failed("the scenario is a part already, or the campaign is full");
+            return;
+        }
+        part = parts.size() + 1;
+        lines.push_back({"part." + std::to_string(part), core::data_string(m_editor->package_scenario)});
+        if (parts.empty()) {
+            // A new campaign: its name in the list as the scenario's, until the file gives another.
+            if (const auto& info = m_editor->document.world().scenario_info()) {
+                // Told apart from the scenario of the same name in the list.
+                for (const sim::ScenarioText& t : info->names) {
+                    if (!t.text.empty() && (t.language == "de" || t.language == "en")) {
+                        const std::string& word = t.language == "de" ? "Kampagne" : "campaign";
+                        lines.push_back({"name." + t.language, core::data_string(t.text + " (" + word + ")")});
+                    }
+                }
+            }
+        }
+    } else {
+        if (parts.size() < 2 || parts.back() != id) {
+            failed("only the last part, and not the first, is taken out");
+            return;
+        }
+        part = parts.size();
+        removed.push_back("part." + std::to_string(part));
+    }
+    const std::filesystem::path toml = it->folder / std::string(assets::kCampaignsFile);
+    std::string text;
+    std::error_code ec;
+    if (std::filesystem::exists(toml, ec)) {
+        auto bytes = core::read_file(toml);
+        if (!bytes) {
+            failed(bytes.error().message);
+            return;
+        }
+        text.assign(bytes->begin(), bytes->end());
+    }
+    auto updated = core::set_data_table(text, campaign, lines, removed);
+    if (!updated) {
+        failed(std::string(assets::kCampaignsFile) + ": " + updated.error().message);
+        return;
+    }
+    const std::vector<std::uint8_t> bytes(updated->begin(), updated->end());
+    if (auto written = core::write_file_atomic(toml, bytes); !written) {
+        failed(std::string(assets::kCampaignsFile) + ": " + written.error().message);
+        return;
+    }
+    package_written(*it);
+    const std::string name = core::utf8_to_cp1252(package + ":" + campaign);
+    editor_notice(ui::tr(add ? "editor.campaign.added" : "editor.campaign.removed", {name, std::to_string(part)}),
+                  false, std::string(add ? "added to" : "taken out of") + " campaign " + package + ":" + campaign);
 }
 
 }  // namespace o1602::app

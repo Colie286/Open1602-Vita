@@ -326,6 +326,12 @@ private:
     /// Saves the document as the scenario `name` of the package `package` (a folder of mods):
     /// the map to its folder maps/<name>.o1602, the scenario's table in its scenarios.toml.
     void editor_save_to_package(const std::string& package, const std::string& name);
+    /// The document's scenario (one of its package's) as the next part of the package's campaign
+    /// `campaign`, a new one if the package has none of that name, or taken out of it as its last
+    /// part (campaigns.toml).
+    void editor_campaign(const std::string& campaign, bool add);
+    /// After a package's files were written: its hash again, its scenarios and campaigns read again.
+    void package_written(assets::ModPackage& package);
     /// The package and the scenario's name of a map in a package's folder maps, as
     /// editor_save_to_package writes it; nothing for another file.
     [[nodiscard]] std::optional<std::pair<std::string, std::string>> editor_package_of(

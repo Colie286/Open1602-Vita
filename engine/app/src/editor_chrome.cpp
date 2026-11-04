@@ -213,6 +213,8 @@ const char* EditorChrome::command_text(EditorCommand command) noexcept {
             return "editor.script.edit";
         case EditorCommand::SavePackage:
             return "editor.package_save.menu";
+        case EditorCommand::Campaign:
+            return "editor.campaign.menu";
         case EditorCommand::Keys:
             return "editor.menu.keys";
     }
@@ -256,7 +258,8 @@ std::vector<EditorChrome::MenuEntry> EditorChrome::entries(std::size_t menu, con
             return {{EditorCommand::Scenario, true},
                     {EditorCommand::Rules, true},
                     {EditorCommand::Goals, true},
-                    {EditorCommand::Script, true}};
+                    {EditorCommand::Script, true},
+                    {EditorCommand::Campaign, !model.savegame}};
         case 6:
             return {{EditorCommand::Check, true}};
         default:

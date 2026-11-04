@@ -6,6 +6,7 @@
 #include <cmath>
 
 #include "o1602/assets/game_data.hpp"
+#include "o1602/assets/package_scenarios.hpp"
 #include "o1602/core/text.hpp"
 #include "o1602/sim/limits.hpp"
 #include "o1602/sim/scenario_data.hpp"
@@ -147,6 +148,9 @@ constexpr Id kPackagesPage = 268;              ///< the packages the scenario ne
 constexpr Id kPackageSavePage = 269;           ///< saving as a package's scenario
 constexpr Id kPackageChoice = 270;             ///< the package to save into
 constexpr Id kScenarioBack = 271;              ///< from the packages back to the scenario's dialog
+constexpr Id kCampaignChoice = 272;            ///< the campaign shown, or a new one
+constexpr Id kCampaignAdd = 273;               ///< the scenario as the campaign's next part
+constexpr Id kCampaignRemove = 274;            ///< the scenario, the campaign's last part, taken out
 constexpr Id kCheckLine = 800;                 ///< + the line of the check list (a line that leads somewhere)
 constexpr Id kRecent = 190;                    ///< + the object placed lately (the page "Objects")
 constexpr Id kPlayerTable = 300;               ///< + 8 * the row + the column of the players' table
@@ -390,6 +394,13 @@ std::optional<EditorRequest> EditorPanel::command(EditorCommand command, const E
             return std::nullopt;
         case EditorCommand::SavePackage:
             return press(kPackageSavePage, model, true);
+        case EditorCommand::Campaign:
+            m_page = Page::Campaign;
+            m_campaign = 0;
+            m_new_campaign = model.campaigns.empty();
+            m_text.clear();
+            m_form.set_focus(m_new_campaign ? std::optional<Id>(kField) : std::nullopt);
+            return std::nullopt;
         case EditorCommand::Keys:
             return EditorRequest{EditorRequest::Kind::ShowKeys};
     }
@@ -504,7 +515,7 @@ bool EditorPanel::dialog() const noexcept {
            (m_page == P::Players || m_page == P::PlayerName || m_page == P::Relations || m_page == P::Rules ||
             m_page == P::Random || m_page == P::WorldSize || m_page == P::Check || m_page == P::Goals ||
             m_page == P::GoalText || m_page == P::Scenario || m_page == P::ScenarioText || m_page == P::Script ||
-            m_page == P::ScriptFiles || m_page == P::Packages || m_page == P::PackageSave);
+            m_page == P::ScriptFiles || m_page == P::Packages || m_page == P::PackageSave || m_page == P::Campaign);
 }
 
 ui::Rect EditorPanel::dialog_rect() const noexcept {
@@ -523,6 +534,7 @@ ui::Rect EditorPanel::dialog_rect() const noexcept {
                               : m_page == P::ScriptFiles                           ? m_files_h
                               : m_page == P::Packages                              ? m_packages_h
                               : m_page == P::PackageSave                           ? 360
+                              : m_page == P::Campaign                              ? m_campaign_h
                               : m_page == P::WorldSize                             ? 440
                               : m_page == P::Check                                 ? m_check_h
                               : wide                                               ? 620
@@ -560,6 +572,16 @@ void EditorPanel::layout(const EditorModel& model) {
         const std::size_t n = model.files.size();
         const auto rows = static_cast<std::int32_t>(std::min(n, kRows));
         m_files_h = 16 + 6 + 32 + (n == 0 ? 84 : kRowH + rows * kRowH + 4 + kButtonH + kGap) + kButtonH + 8;
+    }
+    if (m_page == Page::Campaign) {
+        // Without a package's scenario the dialog holds a note only.
+        // Else room for the name field and every part, the same in every state, so that the
+        // choice stays under the mouse while it goes round.
+        m_campaign_h = model.package_scenario.empty()
+                           ? 16 + 6 + 34 + 4 * 20 + kGap + kButtonH + 8
+                           : 16 + 6 + 34 + kLine + kButtonH + kGap + kLine + 38 + kLine +
+                                 static_cast<std::int32_t>(assets::kMaxCampaignParts) * kLine + 4 + 3 * 20 + kGap +
+                                 kButtonH + 8;
     }
     if (m_page == Page::Packages) {
         // The list of packages as tall as its lines, the button right below.
@@ -679,6 +701,9 @@ void EditorPanel::layout_page(const EditorModel& model) {
             break;
         case Page::PackageSave:
             layout_package_save(model);
+            break;
+        case Page::Campaign:
+            layout_campaign(model);
             break;
     }
 }
@@ -1981,6 +2006,81 @@ void EditorPanel::layout_package_save(const EditorModel& model) {
     f.button(kScenarioBack, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
 }
 
+void EditorPanel::layout_campaign(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.campaign.title"), Align::Left, Tone::Heading);
+    y += 34;
+    const std::int32_t quarter = (m_w - 3 * kGap) / 4;
+    const std::int32_t foot = m_top + m_height - kButtonH - 4;
+    if (model.package_scenario.empty()) {
+        f.paragraph(Rect{m_x, y, m_w, 4 * 20}, ui::tr("editor.campaign.no_package"), Tone::Dim, 20);
+        f.button(kBack, Rect{m_x + m_w - quarter, foot, quarter, kButtonH}, ui::tr("editor.dialog.close"));
+        return;
+    }
+    const std::size_t n = model.campaigns.size();
+    for (std::size_t c = 0; c < n && !m_campaign_pick.empty(); ++c) {
+        if (model.campaigns[c].name == m_campaign_pick) {
+            m_campaign = c;
+            m_campaign_pick.clear();
+        }
+    }
+    m_campaign = std::min(m_campaign, n);
+    m_new_campaign = m_campaign == n;
+    f.label(Rect{m_x, y, m_w, kLine}, ui::tr("editor.campaign.campaign"));
+    y += kLine;
+    f.cycle_button(
+        kCampaignChoice, Rect{m_x, y, m_w, kButtonH},
+        m_new_campaign ? ui::tr("editor.campaign.new") : core::utf8_to_cp1252(model.campaigns[m_campaign].name), n > 0);
+    y += kButtonH + kGap;
+    const bool taken = std::any_of(model.campaigns.begin(), model.campaigns.end(),
+                                   [&](const EditorModel::Campaign& c) { return c.name == m_text; });
+    if (m_new_campaign) {
+        f.label(Rect{m_x, y, m_w, kLine}, ui::tr("editor.campaign.name"));
+        y += kLine;
+        f.field(kField, Rect{m_x, y, m_w, 32}, m_text);
+        y += 38;
+    }
+    static const std::vector<std::string> kNone;
+    const std::vector<std::string>& parts = m_new_campaign ? kNone : model.campaigns[m_campaign].parts;
+    f.label(Rect{m_x, y, m_w, kLine}, ui::tr("editor.campaign.parts"), Align::Left, Tone::Dim);
+    y += kLine;
+    if (parts.empty()) {
+        f.label(Rect{m_x + 8, y, m_w - 8, kLine}, ui::tr("editor.campaign.no_parts"), Align::Left, Tone::Dim);
+        y += kLine;
+    }
+    for (std::size_t i = 0; i < parts.size(); ++i) {
+        const std::string& id = parts[i];
+        const bool own = id == model.package_scenario;
+        const std::string name = core::utf8_to_cp1252(id.substr(id.find(':') + 1));
+        f.label(Rect{m_x + 8, y, m_w - 8, kLine},
+                ui::tr(own ? "editor.campaign.part_this" : "editor.campaign.part", {count(i + 1), name}), Align::Left,
+                own ? Tone::Normal : Tone::Dim);
+        y += kLine;
+    }
+    const auto at = std::find(parts.begin(), parts.end(), model.package_scenario);
+    const bool contained = at != parts.end();
+    const bool full = parts.size() >= assets::kMaxCampaignParts;
+    const bool named = !m_new_campaign || (sim::valid_marker_name(m_text) && !taken);
+    const std::string note = contained ? ui::tr("editor.campaign.contained")
+                             : full    ? ui::tr("editor.campaign.full")
+                             : !named  ? ui::tr(taken ? "editor.campaign.taken" : "editor.package_save.bad_name")
+                                       : ui::tr("editor.campaign.note");
+    y += 4;
+    f.paragraph(Rect{m_x, y, m_w, std::max(2 * 20, foot - kGap - y)}, note,
+                !named && !m_text.empty() ? Tone::Warning : Tone::Dim, 20);
+    // The buttons as wide as their labels need: adding most, closing least.
+    const std::int32_t room = m_w - 2 * kGap;
+    const std::int32_t add_w = room * 45 / 100;
+    const std::int32_t remove_w = room * 30 / 100;
+    f.button(kCampaignAdd, Rect{m_x, foot, add_w, kButtonH}, ui::tr("editor.campaign.add", {count(parts.size() + 1)}),
+             !contained && !full && named);
+    f.button(kCampaignRemove, Rect{m_x + add_w + kGap, foot, remove_w, kButtonH}, ui::tr("editor.campaign.remove"),
+             contained && at + 1 == parts.end() && parts.size() > 1);
+    f.button(kBack, Rect{m_x + add_w + remove_w + 2 * kGap, foot, room - add_w - remove_w, kButtonH},
+             ui::tr("editor.dialog.close"));
+}
+
 void EditorPanel::layout_goal_text(const EditorModel& model) {
     const bool scenario = m_page == Page::ScenarioText;
     if (!scenario && m_mission >= model.missions.size()) {
@@ -2131,6 +2231,17 @@ std::vector<ui::DrawItem> EditorPanel::draw(const EditorModel& model,
 }
 
 std::optional<EditorRequest> EditorPanel::commit_name() {
+    if (m_page == Page::Campaign) {
+        if (!m_new_campaign || !sim::valid_marker_name(m_text)) {
+            return std::nullopt;
+        }
+        m_form.set_focus(std::nullopt);
+        m_new_campaign = false;
+        m_campaign_pick = m_text;  // shown once it is written and listed
+        EditorRequest r{EditorRequest::Kind::CampaignAdd};
+        r.name = m_text;
+        return r;
+    }
     if (m_page == Page::PackageSave) {
         if (!sim::valid_marker_name(m_text)) {
             return std::nullopt;
@@ -2526,6 +2637,27 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
             if (!model.package_folders.empty()) {
                 m_package =
                     step(std::min(m_package, model.package_folders.size() - 1), model.package_folders.size(), forward);
+            }
+            return std::nullopt;
+        case kCampaignChoice:
+            m_campaign = step(std::min(m_campaign, model.campaigns.size()), model.campaigns.size() + 1, forward);
+            m_new_campaign = m_campaign == model.campaigns.size();
+            m_text.clear();
+            m_form.set_focus(m_new_campaign ? std::optional<Id>(kField) : std::nullopt);
+            return std::nullopt;
+        case kCampaignAdd:
+            if (m_new_campaign || m_campaign >= model.campaigns.size()) {
+                return commit_name();
+            } else {
+                EditorRequest r{EditorRequest::Kind::CampaignAdd};
+                r.name = model.campaigns[m_campaign].name;
+                return r;
+            }
+        case kCampaignRemove:
+            if (m_campaign < model.campaigns.size()) {
+                EditorRequest r{EditorRequest::Kind::CampaignRemove};
+                r.name = model.campaigns[m_campaign].name;
+                return r;
             }
             return std::nullopt;
         case kScenarioBack:

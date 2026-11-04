@@ -270,6 +270,19 @@ core::Status MapViewer::editor_open(const std::filesystem::path& file, std::opti
     if (!sim::is_open1602_save(*bytes)) {
         give_mod_content(*world);  // the original's files have none of their own
     }
+    // A map saved into its package names the package as it was before the map was written into
+    // it: the package it is in is the one installed.
+    if (const auto package = editor_package_of(file); package && world->packages()) {
+        std::vector<assets::ContentPackage> packages = *world->packages();
+        for (assets::ContentPackage& p : packages) {
+            const auto it = std::find_if(m_packages.begin(), m_packages.end(),
+                                         [&](const assets::ModPackage& m) { return m.id == p.id; });
+            if (p.id == package->first && it != m_packages.end()) {
+                p = it->content();
+            }
+        }
+        world->set_packages(std::move(packages));
+    }
     for (const std::string& w : warnings) {
         std::fprintf(stderr, "warning: %s\n", w.c_str());
     }
@@ -905,6 +918,10 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
             }
             break;
         }
+        case Kind::CampaignAdd:
+        case Kind::CampaignRemove:
+            editor_campaign(request.name, request.kind == Kind::CampaignAdd);
+            break;
         case Kind::SavePackage: {
             // The packages as the dialog lists them: the folders (editor_packages_model).
             std::vector<std::string> folders;

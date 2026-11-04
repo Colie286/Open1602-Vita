@@ -111,7 +111,11 @@ core::Result<std::unique_ptr<Operation>> set_player(const sim::World& world, sim
     }
     sim::World after = world;
     (void)sim::take_banner(after, player, values.banner);
-    sim::Player& q = *after.player(player);
+    sim::Player* changed = after.player(player);
+    if (changed == nullptr) {
+        return make_error(ErrorCode::NotFound, "no player in slot " + std::to_string(player));
+    }
+    sim::Player& q = *changed;
     q.role = values.role;
     q.money = values.money;
     q.name = values.name;
