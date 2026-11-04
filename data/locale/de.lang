@@ -61,6 +61,22 @@ keys.heading.building = Beim Bauen
 keys.heading.groups = Gruppen und Auswahl
 keys.heading.units = Schiffe und Einheiten ausgewählt
 keys.heading.view = Anzeige
+keys.page.editor = Editor
+# Das Fenster „Tastenbelegung“ (keys_menu.cpp), geöffnet aus dem Fenster „Anzeige“
+keys.settings.title = Tastenbelegung
+keys.settings.none = Keine Taste
+keys.settings.press = Taste drücken ...
+keys.settings.press_add = Weitere Taste ...
+keys.settings.hint = Auf die Tasten einer Aktion klicken und die neue Taste drücken; ein Rechtsklick fügt eine Taste zu den vorhandenen hinzu. Gruppenziffern und Lesezeichen des Editors bleiben auf den Ziffern (keys.cfg ändert sie). Jede Änderung wird sofort gespeichert.
+keys.settings.hint.wait = Die Taste drücken, gern mit Strg, Umschalt oder Alt. Rücktaste: keine Taste. Escape oder ein Klick daneben: wie bisher.
+# {1} die Taste, {2} die Aktion, die sie hatte
+keys.settings.moved = {1} war die Taste von „{2}“; diese Aktion hat sie nicht mehr.
+keys.settings.reset = Alle Tasten sind wieder wie in den Vorgaben von Open1602.
+keys.settings.defaults = Vorgaben
+keys.context.general = überall
+keys.context.building = beim Bauen
+keys.context.units = Einheiten gewählt
+keys.context.editor = Editor
 # Clicks with a modifier in windows (F1, units and ships)
 keys.click = Klick
 keys.click.castle_all = Burg, Aussenden-Pfeil: alle fertigen Einheiten
@@ -927,6 +943,7 @@ display.on = an
 display.off = aus
 display.hint = Jede Größe: am Fensterrand ziehen. Vollbild: F11 oder Alt+Eingabe. Zoom: Mausrad, doppelt oder halb so groß mit Strg+Plus und Strg+Minus. Automatisch gespeichert wird nach Spielzeit, als „lastgame“.
 display.close = Schließen
+display.keys = Tastenbelegung ...
 
 stats.open = Warenbilanz
 stats.open_help = Warenbilanz: was Ihre Städte erzeugen, kaufen, verbrauchen und verkaufen (F2)

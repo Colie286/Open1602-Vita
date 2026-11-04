@@ -199,9 +199,13 @@ bool MapInput::editor_key(ui::KeyAction action) noexcept {
 }
 
 void MapInput::setup_keys() {
+    m_keys = default_keys();
+}
+
+ui::KeyBindings MapInput::default_keys() {
     using ui::KeyAction;
     using ui::KeyContext;
-    ui::KeyBindings& k = m_keys;
+    ui::KeyBindings k;
     const auto general = [&](ui::KeyChord c, KeyAction a, std::uint8_t p = 0) { k.bind(KeyContext::General, c, a, p); };
     const auto building = [&](ui::KeyChord c, KeyAction a, std::uint8_t p = 0) {
         k.bind(KeyContext::Building, c, a, p);
@@ -360,10 +364,12 @@ void MapInput::setup_keys() {
     units(chord(SDLK_R), KeyAction::EditRoute);
     units(chord(SDLK_DELETE), KeyAction::Delete);
     units(chord(SDLK_TAB), KeyAction::NextKindInSelection);
+    return k;
 }
 
 void MapInput::load_key_settings(const std::filesystem::path& default_file) {
     const std::filesystem::path path = m_keys_file.empty() ? default_file : m_keys_file;
+    m_keys_path = path;
     std::error_code ec;
     if (!std::filesystem::exists(path, ec)) {
         if (!m_keys_file.empty()) {
@@ -387,6 +393,34 @@ void MapInput::load_key_settings(const std::filesystem::path& default_file) {
     const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
     for (const std::string& w : m_keys.read_text(text, key_from_name)) {
         std::fprintf(stderr, "keys: %s: %s\n", core::path_to_utf8(path).c_str(), w.c_str());
+    }
+}
+
+void MapInput::update_key_settings() {
+    if (!m_hud) {
+        return;
+    }
+    if (m_hud->take_keys_request()) {
+        m_hud->open_keys(KeysModel{m_keys, default_keys(), key_label});
+    }
+    if (auto keys = m_hud->take_keys_change()) {
+        m_keys = std::move(*keys);
+        save_key_settings();
+    }
+}
+
+void MapInput::save_key_settings() const {
+    if (m_keys_path.empty()) {
+        return;
+    }
+    const ui::KeyBindings defaults = default_keys();
+    const std::string text = defaults.write_text(key_name, true) + "\n# Changed in the window of the keys\n" +
+                             m_keys.write_changes(defaults, key_name);
+    std::error_code ec;
+    std::filesystem::create_directories(m_keys_path.parent_path(), ec);
+    const auto* data = reinterpret_cast<const std::uint8_t*>(text.data());
+    if (auto status = core::write_file_atomic(m_keys_path, std::span<const std::uint8_t>(data, text.size())); !status) {
+        std::fprintf(stderr, "keys: %s\n", status.error().message.c_str());
     }
 }
 
@@ -449,6 +483,21 @@ ui::KeyContext MapInput::key_context() const {
 
 void MapInput::handle_key(int key, int scancode, std::uint16_t mod) {
     const ui::KeyPress press = key_press(key, scancode, mod);
+    if (m_hud && m_hud->keys_open()) {
+        // The window of the keys takes every key: the one an action waits for, or Escape.
+        using Kind = KeysMenu::KeyKind;
+        Kind kind = Kind::Other;
+        if (key == SDLK_ESCAPE) {
+            kind = Kind::Escape;
+        } else if (key == SDLK_BACKSPACE) {
+            kind = Kind::Backspace;
+        } else if (key == SDLK_LCTRL || key == SDLK_RCTRL || key == SDLK_LSHIFT || key == SDLK_RSHIFT ||
+                   key == SDLK_LALT || key == SDLK_RALT || key == SDLK_LGUI || key == SDLK_RGUI || key == SDLK_MODE) {
+            kind = Kind::Modifier;
+        }
+        m_hud->keys_key(press, kind);
+        return;
+    }
     if (m_hud && m_hud->menu_active() && !m_hud->asking() && !m_hud->helping()) {
         // The menu knows Escape (the window "Anzeige" closed, or a screen back) and the program's
         // keys, nothing of the game.

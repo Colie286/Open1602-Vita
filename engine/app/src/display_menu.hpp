@@ -25,7 +25,8 @@ struct DisplayModel {
 
 class DisplayMenu {
 public:
-    enum class Result : std::uint8_t { None, Changed, Close };
+    /// Keys: the button "Tastenbelegung" opens the window of the keys (keys_menu.hpp).
+    enum class Result : std::uint8_t { None, Changed, Close, Keys };
     /// The rows, top to bottom.
     enum class Item : std::uint8_t {
         Mode,

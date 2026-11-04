@@ -33,6 +33,7 @@ add_library(o1602_menus
     ../src/goods_window.cpp
     ../src/high_score_file.cpp
     ../src/key_help.cpp
+    ../src/keys_menu.cpp
     ../src/list_panels.cpp
     ../src/main_menu.cpp
     ../src/map_gestures.cpp

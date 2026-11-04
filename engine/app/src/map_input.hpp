@@ -147,6 +147,9 @@ public:
     /// Applies the key settings file (--keys, else `default_file`) over the defaults, or writes
     /// `default_file` with them.
     void load_key_settings(const std::filesystem::path& default_file);
+    /// The window of the keys (keys_menu.hpp): opens it when the window "Anzeige" asks for it, and
+    /// applies and keeps what it changed. Called once a frame.
+    void update_key_settings();
 
     /// Input events but the window's (mouse positions in output pixels).
     void handle_event(const SDL_Event& event);
@@ -233,6 +236,9 @@ public:
 private:
     /// The keys of ADR 0010.
     void setup_keys();
+    [[nodiscard]] static ui::KeyBindings default_keys();
+    /// Writes the key settings file: the defaults as comments, what differs from them as lines.
+    void save_key_settings() const;
     void handle_key(int key, int scancode, std::uint16_t mod);
     [[nodiscard]] ui::KeyContext key_context() const;
     void run_action(const ui::KeyBinding& binding);
@@ -314,6 +320,7 @@ private:
     bool m_original_mouse;
     bool m_confirm;
     std::filesystem::path m_keys_file;
+    std::filesystem::path m_keys_path;  ///< the key settings file read (or written) at the start
 
     ui::KeyBindings m_keys;
     ui::UnitSelection m_units;  ///< the selected ships or land units

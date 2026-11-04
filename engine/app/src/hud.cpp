@@ -313,6 +313,7 @@ Hud::Hud(SDL_Renderer* renderer, const assets::GameDirectory& game, const assets
         m_menu->set_preview_colours(preview);
         m_multiplayer->set_preview_colours(preview);
         m_display = std::make_unique<DisplayMenu>(style);
+        m_keys = std::make_unique<KeysMenu>(style);
         m_question_form.set_style(style);
         m_chat = std::make_unique<ChatWindow>(style);
         m_blueprint = std::make_unique<BlueprintWindow>(style);
@@ -707,6 +708,10 @@ bool Hud::back() {
     if (m_editing && m_editor && !m_menu_active && m_editor->back()) {
         return true;
     }
+    if (keys_open()) {
+        m_keys_open = false;  // back to the window "Anzeige"
+        return true;
+    }
     if (m_display_open) {
         m_display_open = false;
         return true;
@@ -855,6 +860,9 @@ ui::Rect Hud::layout(std::int32_t width, std::int32_t height, double ui_scale) {
     }
     if (m_display) {
         m_display->set_scale(scale);
+    }
+    if (m_keys) {
+        m_keys->set_scale(scale);
     }
     if (m_chat) {
         m_chat->set_scale(scale);
@@ -1109,6 +1117,26 @@ ui::Rect Hud::display_rect() const {
     return {v.x + std::max(0, (v.w - w) / 2), v.y + std::max(0, (v.h - h) / 2), w, h};
 }
 
+ui::Rect Hud::keys_rect() const {
+    const double s = m_keys ? m_keys->scale() : m_regions.scale;
+    const auto w = static_cast<std::int32_t>(KeysMenu::kWidth * s);
+    const auto h = static_cast<std::int32_t>(KeysMenu::kHeight * s);
+    // In the middle of the window: wider than the map's part of it.
+    const ui::Rect& v = m_regions.full;
+    return {v.x + std::max(0, (v.w - w) / 2), v.y + std::max(0, (v.h - h) / 2), w, h};
+}
+
+void Hud::draw_display() {
+    if (keys_open()) {
+        const ui::Rect r = keys_rect();
+        m_renderer->draw(m_keys->draw(m_keys_model, m_renderer->fonts(m_keys->scale())), r.x, r.y, m_keys->scale());
+    } else if (m_display_open && m_display) {
+        const ui::Rect r = display_rect();
+        m_renderer->draw(m_display->draw(m_display_model, m_renderer->fonts(m_display->scale())), r.x, r.y,
+                         m_display->scale());
+    }
+}
+
 ui::Rect Hud::chat_rect() const {
     const double s = m_chat ? m_chat->scale() : m_regions.scale;
     const auto w = static_cast<std::int32_t>(ChatWindow::kWidth * s);
@@ -1180,11 +1208,7 @@ void Hud::draw_menu() {
                          m_menu_scale);
     } else if (m_menu) {
         m_renderer->draw(m_menu->draw(m_renderer->fonts(m_menu_scale)), ox, oy, m_menu_scale);
-        if (m_display_open && m_display) {
-            const ui::Rect r = display_rect();
-            m_renderer->draw(m_display->draw(m_display_model, m_renderer->fonts(m_display->scale())), r.x, r.y,
-                             m_display->scale());
-        }
+        draw_display();
     }
     draw_question();
     draw_help();
@@ -1554,9 +1578,17 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
     std::optional<Action> action;
     // Over the main menu too: open_menu() closes the game's, so one open there came from its
     // "Options".
+    if (m_display_open && !m_end_active && !multiplayer_open() && !m_question && !m_help && keys_open()) {
+        const ui::Rect r = keys_rect();
+        keys_result(m_keys->mouse(x - r.x, y - r.y, down, m_keys_model, button));
+        return std::nullopt;
+    }
     if (m_display_open && !m_end_active && !multiplayer_open() && !m_question && !m_help) {
         const ui::Rect r = display_rect();
         switch (m_display->mouse(x - r.x, y - r.y, down, m_display_model, button)) {
+            case DisplayMenu::Result::Keys:
+                m_keys_requested = true;
+                break;
             case DisplayMenu::Result::Changed:
                 m_display_changed = true;
                 break;
@@ -2333,11 +2365,7 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
         m_renderer->draw(m_templates->draw(m_templates_model, m_renderer->fonts(m_templates->scale())), r.x, r.y,
                          m_templates->scale());
     }
-    if (m_display_open && m_display) {
-        const ui::Rect r = display_rect();
-        m_renderer->draw(m_display->draw(m_display_model, m_renderer->fonts(m_display->scale())), r.x, r.y,
-                         m_display->scale());
-    }
+    draw_display();
     if (m_goods_open && m_goods && m_figure_table != nullptr) {
         const ui::Rect r = goods_rect();
         // A shadow at the lower right, the parchment, then the window's ink.

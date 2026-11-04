@@ -129,6 +129,21 @@ void KeyBindings::unbind(KeyAction action, std::uint8_t param) {
     std::erase_if(m_bindings, [&](const KeyBinding& b) { return b.action == action && b.param == param; });
 }
 
+void KeyBindings::unbind(KeyContext context, KeyAction action, std::uint8_t param) {
+    std::erase_if(m_bindings,
+                  [&](const KeyBinding& b) { return b.context == context && b.action == action && b.param == param; });
+}
+
+std::vector<KeyChord> KeyBindings::keys(KeyContext context, KeyAction action, std::uint8_t param) const {
+    std::vector<KeyChord> out;
+    for (const KeyBinding& b : m_bindings) {
+        if (b.context == context && b.action == action && b.param == param) {
+            out.push_back(b.chord);
+        }
+    }
+    return out;
+}
+
 std::optional<KeyBinding> KeyBindings::find(KeyContext context, const KeyChord& chord) const {
     std::optional<KeyBinding> general;
     for (const KeyBinding& b : m_bindings) {
@@ -304,6 +319,49 @@ std::string KeyBindings::write_text(const KeyName& key_name, bool as_comments) c
             out += ' ' + std::to_string(b.param);
         }
         out += " = " + chord_text(b.chord, key_name) + '\n';
+    }
+    return out;
+}
+
+std::string KeyBindings::write_changes(const KeyBindings& defaults, const KeyName& key_name) const {
+    struct Slot {
+        KeyContext context;
+        KeyAction action;
+        std::uint8_t param;
+    };
+    std::vector<Slot> slots;
+    for (const KeyBindings* table : {&defaults, this}) {
+        for (const KeyBinding& b : table->m_bindings) {
+            if (std::none_of(slots.begin(), slots.end(), [&](const Slot& s) {
+                    return s.context == b.context && s.action == b.action && s.param == b.param;
+                })) {
+                slots.push_back(Slot{b.context, b.action, b.param});
+            }
+        }
+    }
+    // The same keys in another order are no change.
+    const auto same = [](const std::vector<KeyChord>& a, const std::vector<KeyChord>& b) {
+        return a.size() == b.size() && std::all_of(a.begin(), a.end(), [&](const KeyChord& c) {
+                   return std::find(b.begin(), b.end(), c) != b.end();
+               });
+    };
+    std::string out;
+    for (const Slot& s : slots) {
+        const std::vector<KeyChord> mine = keys(s.context, s.action, s.param);
+        if (same(mine, defaults.keys(s.context, s.action, s.param))) {
+            continue;
+        }
+        std::string left = std::string(context_name(s.context)) + ' ' + std::string(name(s.action));
+        if (s.param != 0 || s.action == KeyAction::GroupStore || s.action == KeyAction::GroupAdd ||
+            s.action == KeyAction::GroupRecall) {
+            left += ' ' + std::to_string(s.param);
+        }
+        if (mine.empty()) {
+            out += left + " = none\n";
+        }
+        for (const KeyChord& c : mine) {
+            out += left + " = " + chord_text(c, key_name) + '\n';
+        }
     }
     return out;
 }

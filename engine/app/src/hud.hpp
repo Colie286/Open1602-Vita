@@ -27,6 +27,7 @@
 #include "end_screen.hpp"
 #include "goods_window.hpp"
 #include "key_help.hpp"
+#include "keys_menu.hpp"
 #include "main_menu.hpp"
 #include "message_table.hpp"
 #include "multiplayer_menu.hpp"
@@ -378,11 +379,38 @@ public:
     /// (the History Edition's "Options").
     void open_display(DisplayModel model) {
         m_display_model = std::move(model);
+        m_keys_open = false;
         m_display_open = m_display != nullptr;
         m_goods_open = m_goods_open && !m_display_open;
         m_display_changed = false;
     }
     void close_display() noexcept { m_display_open = false; }
+    /// Whether the window "Anzeige" asked for the window of the keys since the last call.
+    [[nodiscard]] bool take_keys_request() noexcept { return std::exchange(m_keys_requested, false); }
+    /// The window of the keys (keys_menu.hpp) in place of the window "Anzeige", showing `model`;
+    /// closed, the window "Anzeige" is back.
+    void open_keys(KeysModel model) {
+        m_keys_model = std::move(model);
+        m_keys_open = m_keys != nullptr && m_display_open;
+        m_keys_changed = false;
+        if (m_keys_open) {
+            m_keys->open();
+        }
+    }
+    [[nodiscard]] bool keys_open() const noexcept { return m_keys_open && m_display_open && m_keys != nullptr; }
+    /// A key pressed while the window of the keys is open: it takes every key.
+    void keys_key(const ui::KeyPress& press, KeysMenu::KeyKind kind) {
+        if (keys_open()) {
+            keys_result(m_keys->key(press, kind, m_keys_model));
+        }
+    }
+    /// The keys as the window of the keys changed them since the last call, if it changed them.
+    [[nodiscard]] std::optional<ui::KeyBindings> take_keys_change() {
+        if (!std::exchange(m_keys_changed, false)) {
+            return std::nullopt;
+        }
+        return m_keys_model.keys;
+    }
     /// The goods trend under the stock of a Kontor (DisplaySettings::goods_trend).
     void set_goods_trend(bool on) noexcept { m_goods_trend = on; }
     [[nodiscard]] bool display_open() const noexcept { return m_display_open; }
@@ -676,6 +704,21 @@ private:
     bool m_display_changed = false;
     /// Top left of the window "Anzeige" on the screen (centred on the map).
     [[nodiscard]] ui::Rect display_rect() const;
+    [[nodiscard]] ui::Rect keys_rect() const;
+    void keys_result(KeysMenu::Result result) noexcept {
+        if (result == KeysMenu::Result::Changed) {
+            m_keys_changed = true;
+        } else if (result == KeysMenu::Result::Close) {
+            m_keys_open = false;
+        }
+    }
+    /// The window "Anzeige" or in its place the window of the keys, at `ox`, `oy`.
+    void draw_display();
+    std::unique_ptr<KeysMenu> m_keys;
+    KeysModel m_keys_model;
+    bool m_keys_open = false;
+    bool m_keys_requested = false;
+    bool m_keys_changed = false;
     std::unique_ptr<ChatWindow> m_chat;
     std::unique_ptr<BlueprintWindow> m_blueprint;
     std::optional<BlueprintAt> m_blueprint_at;

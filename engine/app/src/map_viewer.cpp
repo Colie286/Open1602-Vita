@@ -3192,6 +3192,9 @@ void MapViewer::apply_options() {
     if (const auto display = m_hud->take_display_change()) {
         apply_display(*display);
     }
+    if (m_input) {
+        m_input->update_key_settings();
+    }
     for (const OptionsEvent& e : m_hud->take_option_events()) {
         switch (e.kind) {
             case OptionsEvent::Kind::Save: {
@@ -4006,6 +4009,9 @@ void MapViewer::apply_menu() {
     }
     if (const auto display = m_hud->take_display_change()) {
         apply_display(*display);  // the window "Anzeige" from the History Edition's "Options"
+    }
+    if (m_input) {
+        m_input->update_key_settings();
     }
     // Only when they changed: a copy of thousands of names each frame costs (FB-15).
     if (menu != m_slots_menu || m_slots_shown != m_slots_revision) {

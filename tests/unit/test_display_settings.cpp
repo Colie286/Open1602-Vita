@@ -202,10 +202,13 @@ TEST_CASE("display menu: a click on a row changes it, the button closes the wind
     CHECK(model.settings.window_height == 720);
     CHECK(app::DisplayMenu::choose_previous(model, Item::UiScale));
     CHECK(model.settings.ui_scale == 300);
-    const std::int32_t cx = app::DisplayMenu::kWidth / 2;
+    const std::int32_t cx = app::DisplayMenu::kWidth - 24 - 90;
     const std::int32_t cy = app::DisplayMenu::kHeight - 34;
     CHECK(menu.mouse(cx, cy, true, model) == app::DisplayMenu::Result::None);
     CHECK(menu.mouse(cx, cy, false, model) == app::DisplayMenu::Result::Close);
+    // The button at the bottom left opens the keys.
+    CHECK(menu.mouse(100, cy, true, model) == app::DisplayMenu::Result::None);
+    CHECK(menu.mouse(100, cy, false, model) == app::DisplayMenu::Result::Keys);
 }
 
 TEST_CASE("display settings: edge scrolling's speed in steps of 25 %") {

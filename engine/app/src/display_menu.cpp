@@ -18,6 +18,7 @@ using ui::Rect;
 
 constexpr Id kItem = 1;  // + Item
 constexpr Id kClose = 20;
+constexpr Id kKeysButton = 21;
 
 constexpr std::int32_t kRowY = 64;
 constexpr std::int32_t kRowH = 36;
@@ -178,6 +179,9 @@ DisplayMenu::Result DisplayMenu::mouse(std::int32_t x, std::int32_t y, bool down
     if (*id == kClose) {
         return Result::Close;
     }
+    if (*id == kKeysButton) {
+        return Result::Keys;
+    }
     if (*id == kItem + static_cast<Id>(Item::EdgeSpeed)) {
         // The slider, let go: the nearest step.
         const std::int32_t speed = edge_speed_at(m_form.slid_to());
@@ -234,7 +238,8 @@ void DisplayMenu::layout(const DisplayModel& model) {
     }
     const std::int32_t below = kRowY + static_cast<std::int32_t>(kItems) * kRowH + 4;
     f.paragraph(Rect{24, below, kWidth - 48, kHeight - below - 60}, ui::tr("display.hint"), Tone::Dim);
-    f.button(kClose, Rect{(kWidth - 180) / 2, kHeight - 54, 180, 40}, ui::tr("display.close"));
+    f.button(kKeysButton, Rect{24, kHeight - 54, 260, 40}, ui::tr("display.keys"));
+    f.button(kClose, Rect{kWidth - 24 - 180, kHeight - 54, 180, 40}, ui::tr("display.close"));
 }
 
 }  // namespace o1602::app

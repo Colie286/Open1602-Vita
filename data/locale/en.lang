@@ -78,6 +78,22 @@ keys.heading.building = While building
 keys.heading.groups = Groups and selection
 keys.heading.units = Ships and units selected
 keys.heading.view = Display
+keys.page.editor = Editor
+# The window "Key settings" (keys_menu.cpp), opened from the window "Display"
+keys.settings.title = Key settings
+keys.settings.none = No key
+keys.settings.press = Press a key ...
+keys.settings.press_add = Another key ...
+keys.settings.hint = Click an action's keys and press the new key; a right click adds a key to those it has. Group digits and editor bookmarks stay on the digits (keys.cfg changes them). Every change is kept at once.
+keys.settings.hint.wait = Press the key, with Ctrl, Shift or Alt if you like. Backspace: no key. Escape or a click elsewhere: as it was.
+# {1} the key, {2} the action that had it
+keys.settings.moved = {1} was the key of „{2}“; that action no longer has it.
+keys.settings.reset = All keys are back to Open1602's defaults.
+keys.settings.defaults = Defaults
+keys.context.general = everywhere
+keys.context.building = while building
+keys.context.units = units selected
+keys.context.editor = editor
 # Clicks with a modifier in windows (F1, units and ships)
 keys.click = click
 keys.click.castle_all = Castle, send-out arrow: all trained units
@@ -961,6 +977,7 @@ display.on = on
 display.off = off
 display.hint = Any size: drag the window's edge. Full screen: F11 or Alt+Enter. Zoom: the mouse wheel, twice or half the size with Ctrl+Plus and Ctrl+Minus. Autosave counts game time and keeps the game as “lastgame”.
 display.close = Close
+display.keys = Keys ...
 
 # The window "Goods balance" (goods_window.cpp, docs/architecture/0012-goods-statistics.md) and the
 # line of the player status that opens it

@@ -65,6 +65,7 @@ add_executable(o1602_tests
     unit/test_messages.cpp
     unit/test_map_gestures.cpp
     unit/test_key_help.cpp
+    unit/test_keys_menu.cpp
     unit/test_selection.cpp
     unit/test_selection_panels.cpp
     unit/test_side_panels.cpp
