@@ -19,8 +19,10 @@ using app::OptionsPanel;
 
 namespace {
 
-/// A layout of the Ids first..last but `missing`, each a 20x10 box of its own place.
-assets::GadgetLayout layout(std::int32_t first, std::int32_t last, const std::vector<std::int32_t>& missing = {}) {
+/// A layout of the Ids first..last but `missing`, each a 20x10 box of its own place; `sliders`
+/// slide across.
+assets::GadgetLayout layout(std::int32_t first, std::int32_t last, const std::vector<std::int32_t>& missing = {},
+                            const std::vector<std::int32_t>& sliders = {}) {
     std::string text = "Objekt: GADGET\n";
     for (std::int32_t id = first; id <= last; ++id) {
         if (std::find(missing.begin(), missing.end(), id) != missing.end()) {
@@ -30,6 +32,9 @@ assets::GadgetLayout layout(std::int32_t first, std::int32_t last, const std::ve
         text += "  @Nummer: " + std::to_string(i) + "\n  Id: " + std::to_string(id) +
                 "\n  Kind: 6\n  Pos: " + std::to_string(i % 8 * 30) + ", " + std::to_string(i / 8 * 20) +
                 "\n  Size: 20, 10\n";
+        if (std::find(sliders.begin(), sliders.end(), id) != sliders.end()) {
+            text += "  Slidhorflg: 1\n";
+        }
     }
     return assets::parse_gad(text + "EndObj\n");
 }
@@ -50,7 +55,8 @@ struct Options {
     /// The History Edition's OPTION.GAD has a button for its own settings screen (47016).
     explicit Options(bool history = false)
         : panel(history ? layout(47002, 47040) : layout(47002, 47040, {47016}), disk_layout(history),
-                layout(49002, 49060), layout(66001, 66060, {66028, 66038}), &texts) {}  // seven voice rows
+                layout(49002, 49060, {}, {49015, 49018}), layout(66001, 66060, {66028, 66038}), &texts) {
+    }  // seven voice rows
 
     /// Whether gadget `id` of the page shown answers the mouse.
     bool answers(std::int32_t id, OptionsModel& model) {
@@ -357,4 +363,45 @@ TEST_CASE("options panel: the trade routes get an eighth voice row like the seve
     CHECK(model.audio.speech[7]);
     o.click(66028, model);
     CHECK(model.audio.speech[audio::kSpeechRoutes]);
+}
+
+TEST_CASE("options panel: a held volume slider is heard at once and saved once when let go") {
+    Options o;
+    OptionsModel model;
+    o.panel.opened();
+    o.panel.refresh(model);
+    o.click(47012, model);
+    o.panel.refresh(model);
+    const auto at = o.panel.panel().position(49015);  // music
+    REQUIRE(at.has_value());
+    const auto live = [](const std::vector<OptionsEvent>& events) {
+        return std::count_if(events.begin(), events.end(),
+                             [](const OptionsEvent& e) { return e.kind == OptionsEvent::Kind::Audio && e.value == 1; });
+    };
+    const auto saved = [](const std::vector<OptionsEvent>& events) {
+        return std::count_if(events.begin(), events.end(),
+                             [](const OptionsEvent& e) { return e.kind == OptionsEvent::Kind::Audio && e.value == 0; });
+    };
+    const std::int32_t y = (*at)[1] + 5;
+    auto events = o.panel.mouse((*at)[0] + 5, y, true, model);
+    CHECK(live(events) == 1);
+    CHECK(saved(events) == 0);
+    const std::int32_t volume = model.audio.music_volume;
+    CHECK(volume < 0);
+    CHECK(volume > -4000);
+    // Held still for a while: nothing new to hear, nothing written.
+    for (int frame = 0; frame < 100; ++frame) {
+        events = o.panel.mouse((*at)[0] + 5, y, true, model);
+        CHECK(events.empty());
+    }
+    events = o.panel.mouse((*at)[0] + 15, y, true, model);
+    CHECK(live(events) == 1);
+    CHECK(saved(events) == 0);
+    CHECK(model.audio.music_volume > volume);
+    events = o.panel.mouse((*at)[0] + 15, y, false, model);
+    CHECK(live(events) == 0);
+    CHECK(saved(events) == 1);
+    // A click elsewhere afterwards saves nothing more for the slider.
+    events = o.panel.mouse(0, 0, false, model);
+    CHECK(saved(events) == 0);
 }

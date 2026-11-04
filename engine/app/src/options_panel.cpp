@@ -437,12 +437,18 @@ std::vector<OptionsEvent> OptionsPanel::mouse(std::int32_t x, std::int32_t y, bo
     const auto audio_changed = [&] { out.push_back(OptionsEvent{OptionsEvent::Kind::Audio}); };
     for (const ui::PanelEvent& e : panel().mouse(x, y, down)) {
         if (e.kind == ui::PanelEvent::Kind::Slid) {
-            if (e.id == kMusicSlider) {
-                a.music_volume = m_musik.slider(kMusicSlider, 0, -kMinVolume) + kMinVolume;
-                audio_changed();
-            } else if (e.id == kEffectsSlider) {
-                a.effect_volume = m_musik.slider(kEffectsSlider, 0, -kMinVolume) + kMinVolume;
-                audio_changed();
+            // Sent every frame while the slider is held: only a new value is passed on, and only
+            // as a live change, so that the settings are written once when it is let go.
+            std::int32_t* volume = e.id == kMusicSlider     ? &a.music_volume
+                                   : e.id == kEffectsSlider ? &a.effect_volume
+                                                            : nullptr;
+            if (volume != nullptr) {
+                const std::int32_t now = m_musik.slider(e.id, 0, -kMinVolume) + kMinVolume;
+                if (now != *volume) {
+                    *volume = now;
+                    m_volume_unsaved = true;
+                    out.push_back(OptionsEvent{OptionsEvent::Kind::Audio, 1});
+                }
             }
             continue;
         }
@@ -565,6 +571,10 @@ std::vector<OptionsEvent> OptionsPanel::mouse(std::int32_t x, std::int32_t y, bo
                 }
                 break;
         }
+    }
+    if (m_volume_unsaved && m_musik.held() != kMusicSlider && m_musik.held() != kEffectsSlider) {
+        m_volume_unsaved = false;
+        audio_changed();  // let go: now it is saved
     }
     return out;
 }

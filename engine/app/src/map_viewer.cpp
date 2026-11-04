@@ -3263,6 +3263,11 @@ void MapViewer::apply_options() {
                 m_app_settings.audio = model.audio;
                 if (m_sound) {
                     m_sound->set_settings(model.audio);
+                }
+                if (e.value != 0) {
+                    break;  // a volume slider is still held: heard now, saved when let go
+                }
+                if (m_sound) {
                     model.tracks = m_sound->tracks();
                 }
                 save_settings();

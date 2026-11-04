@@ -46,7 +46,8 @@ struct OptionsEvent {
         Quit,           ///< "Ende": leave the game
         Fullscreen,     ///< OptionsModel::fullscreen changed (`value` 1: on)
         Display,        ///< open the window "Anzeige"
-        Audio,          ///< OptionsModel::audio changed
+        Audio,          ///< OptionsModel::audio changed (`value` 1: a volume slider is still held,
+                        ///< so the change is heard but not yet saved; a final one follows)
         PlayTrack,      ///< play `text` now (and enable it)
         TestEffects,    ///< the test sound
         MissionWindow,  ///< OptionsModel::mission_window changed
@@ -107,10 +108,11 @@ private:
     std::int32_t m_slots_down = 0;      ///< the arrows that scroll the savegames
     std::int32_t m_slots_up = 0;
     bool m_editing = false;
-    bool m_new_slot = false;       ///< the name is typed into a free slot (Enter saves)
-    std::string m_name;            ///< the name being typed
-    bool m_renamed = false;        ///< m_name is the new name of the selected slot (until saved)
-    std::size_t m_list_first = 0;  ///< first music title shown
+    bool m_new_slot = false;        ///< the name is typed into a free slot (Enter saves)
+    std::string m_name;             ///< the name being typed
+    bool m_renamed = false;         ///< m_name is the new name of the selected slot (until saved)
+    std::size_t m_list_first = 0;   ///< first music title shown
+    bool m_volume_unsaved = false;  ///< a volume slider moved and has not been let go yet
     std::int32_t m_humans_icon = 507;
 };
 
