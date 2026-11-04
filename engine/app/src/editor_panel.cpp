@@ -7,6 +7,7 @@
 
 #include "o1602/assets/game_data.hpp"
 #include "o1602/sim/limits.hpp"
+#include "o1602/sim/scenario_data.hpp"
 #include "o1602/sim/simulation.hpp"
 #include "o1602/sim/world.hpp"
 #include "o1602/ui/localization.hpp"
@@ -133,6 +134,13 @@ constexpr Id kMissionTab = 210;                ///< + the mission (the tabs of t
 constexpr Id kMissionHolder = 230;             ///< + the player slot holding the mission shown
 constexpr std::size_t kMissionTabs = 16;       ///< the most missions (editor::kMaxMissions)
 constexpr std::size_t kMaxMissionText = 1000;  ///< the longest text of a mission, as the editor's
+constexpr Id kMarkerRename = 260;              ///< the selected marker's name to type
+constexpr Id kMarkerRemove = 261;              ///< the selected marker taken away
+constexpr Id kMarkerBack = 262;                ///< from the marker's name back to the markers
+constexpr Id kScriptLoad = 263;                ///< the list of scripts to load
+constexpr Id kScriptReload = 264;              ///< the script read again from its file
+constexpr Id kScriptRemove = 265;              ///< the scenario without a script
+constexpr Id kScriptBack = 266;                ///< from the list of scripts back to the dialog
 constexpr Id kCheckLine = 800;                 ///< + the line of the check list (a line that leads somewhere)
 constexpr Id kRecent = 190;                    ///< + the object placed lately (the page "Objects")
 constexpr Id kPlayerTable = 300;               ///< + 8 * the row + the column of the players' table
@@ -294,7 +302,8 @@ void EditorPanel::ask_name(std::string_view name) {
 
 bool EditorPanel::show_selection() noexcept {
     if (m_page == Page::New || m_page == Page::Open || m_page == Page::SaveAs || m_page == Page::CityName ||
-        m_page == Page::PlayerName || m_page == Page::GoalText || m_page == Page::ScenarioText) {
+        m_page == Page::PlayerName || m_page == Page::GoalText || m_page == Page::ScenarioText ||
+        m_page == Page::Markers || m_page == Page::MarkerName) {
         return false;
     }
     m_page = Page::Selection;
@@ -370,6 +379,9 @@ std::optional<EditorRequest> EditorPanel::command(EditorCommand command, const E
             m_text.clear();
             m_form.set_focus(kField);
             return std::nullopt;
+        case EditorCommand::Script:
+            m_page = Page::Script;
+            return std::nullopt;
         case EditorCommand::Keys:
             return EditorRequest{EditorRequest::Kind::ShowKeys};
     }
@@ -418,6 +430,10 @@ std::optional<EditorRequest> EditorPanel::choose_tool(EditorTool tool, const Edi
                 m_island.placeholder = true;
             }
             return std::nullopt;
+        case EditorTool::Marker:
+            m_page = Page::Markers;
+            m_first = 0;
+            return std::nullopt;
         default:
             break;
     }
@@ -449,6 +465,9 @@ std::optional<EditorTool> EditorPanel::active_tool(const EditorModel& model) con
         case Page::CityGoods:
         case Page::Fertility:
             return EditorTool::Select;
+        case Page::Markers:
+        case Page::MarkerName:
+            return EditorTool::Marker;
         case Page::Islands:
         case Page::IslandFiles:
             return m_island.placeholder && model.has_plan ? EditorTool::Placeholder : EditorTool::Island;
@@ -476,7 +495,8 @@ bool EditorPanel::dialog() const noexcept {
     return m_screen_w > 0 && !m_previewing &&
            (m_page == P::Players || m_page == P::PlayerName || m_page == P::Relations || m_page == P::Rules ||
             m_page == P::Random || m_page == P::WorldSize || m_page == P::Check || m_page == P::Goals ||
-            m_page == P::GoalText || m_page == P::Scenario || m_page == P::ScenarioText);
+            m_page == P::GoalText || m_page == P::Scenario || m_page == P::ScenarioText || m_page == P::Script ||
+            m_page == P::ScriptFiles);
 }
 
 ui::Rect EditorPanel::dialog_rect() const noexcept {
@@ -491,6 +511,8 @@ ui::Rect EditorPanel::dialog_rect() const noexcept {
     const std::int32_t want = m_page == P::PlayerName                              ? 230
                               : m_page == P::GoalText || m_page == P::ScenarioText ? 330
                               : m_page == P::Scenario                              ? 470
+                              : m_page == P::Script                                ? 400
+                              : m_page == P::ScriptFiles                           ? m_files_h
                               : m_page == P::WorldSize                             ? 440
                               : m_page == P::Check                                 ? m_check_h
                               : wide                                               ? 620
@@ -522,6 +544,12 @@ void EditorPanel::layout(const EditorModel& model) {
             h += check_line_h(line, text_w);
         }
         m_check_h = h;
+    }
+    if (m_page == Page::ScriptFiles) {
+        // The list of scripts as tall as its rows, the buttons right below.
+        const std::size_t n = model.files.size();
+        const auto rows = static_cast<std::int32_t>(std::min(n, kRows));
+        m_files_h = 16 + 6 + 32 + (n == 0 ? 84 : kRowH + rows * kRowH + 4 + kButtonH + kGap) + kButtonH + 8;
     }
     if (dialog()) {
         // A page of the whole map: a dialog in the window's middle, laid out inside its frame.
@@ -619,7 +647,117 @@ void EditorPanel::layout_page(const EditorModel& model) {
         case Page::Find:
             layout_find(model);
             break;
+        case Page::Markers:
+            layout_markers(model);
+            break;
+        case Page::MarkerName:
+            layout_marker_name(model);
+            break;
+        case Page::Script:
+            layout_script(model);
+            break;
+        case Page::ScriptFiles:
+            layout_open(model);
+            break;
     }
+}
+
+void EditorPanel::layout_markers(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.markers.title"), Align::Left, Tone::Heading);
+    y += 30;
+    f.paragraph(Rect{m_x, y, m_w, 3 * 20}, ui::tr("editor.markers.note"), Tone::Dim, 20);
+    y += 3 * 20 + 4;
+    const std::size_t n = model.markers.size();
+    if (n == 0) {
+        f.label(Rect{m_x, y, m_w, kLine}, ui::tr("editor.markers.none"), Align::Left, Tone::Dim);
+        y += kLine + kGap;
+    } else {
+        m_first = std::min(m_first, n > kRows ? n - kRows : 0);
+        for (std::size_t i = m_first; i < n && i < m_first + kRows; ++i) {
+            const auto row = static_cast<Id>(i - m_first);
+            f.row(kFirstRow + row, Rect{m_x, y, m_w, kRowH - 2}, model.marker == i);
+            f.label(Rect{m_x + 4, y, m_w - 8, kRowH - 2}, model.markers[i].name);
+            y += kRowH;
+        }
+        if (n > kRows) {
+            y += 4;
+            const std::int32_t half = (m_w - kGap) / 2;
+            f.button(kPrevious, Rect{m_x, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
+            f.button(kNext, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.next"), m_first + kRows < n);
+            y += kButtonH;
+        }
+        y += kGap;
+    }
+    const bool chosen = model.marker && *model.marker < n;
+    if (chosen) {
+        // Where the selected marker lies: a line of its own, the list has the names only.
+        f.label(Rect{m_x, y, m_w, kLine}, model.markers[*model.marker].place, Align::Left, Tone::Dim);
+        y += kLine + 2;
+    }
+    f.button(kMarkerRename, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.markers.rename"), chosen);
+    y += kButtonH + kGap;
+    f.button(kMarkerRemove, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.markers.remove"), chosen);
+    y += kButtonH + kGap;
+    const std::int32_t bottom = m_top + m_height - 4;
+    if (!model.notice.empty() && bottom - y - 2 >= 2 * 20) {
+        f.paragraph(Rect{m_x, y + 2, m_w, std::max(0, bottom - y - 2)}, model.notice,
+                    model.notice_is_error ? Tone::Warning : Tone::Dim, 20);
+    }
+}
+
+void EditorPanel::layout_marker_name(const EditorModel& model) {
+    if (!model.marker || *model.marker >= model.markers.size()) {
+        m_page = Page::Markers;  // the marker is gone (undone)
+        layout_markers(model);
+        return;
+    }
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.markers.rename_title"), Align::Left, Tone::Heading);
+    y += 34;
+    f.field(kField, Rect{m_x, y, m_w, 32}, m_text);
+    y += 38;
+    const bool valid = sim::valid_marker_name(m_text);
+    f.paragraph(Rect{m_x, y, m_w, 3 * 20}, ui::tr("editor.markers.name_rule"), valid ? Tone::Dim : Tone::Warning, 20);
+    y += 3 * 20 + kGap;
+    const std::int32_t half = (m_w - kGap) / 2;
+    f.button(kStore, Rect{m_x, y, half, kButtonH}, ui::tr("editor.city.rename_ok"), valid);
+    f.button(kMarkerBack, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
+}
+
+void EditorPanel::layout_script(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.script.title"), Align::Left, Tone::Heading);
+    y += 34;
+    const bool has = model.script_bytes > 0;
+    f.entry(Rect{m_x, y, m_w, kLine}, ui::tr("editor.script.size"),
+            has ? ui::tr("editor.script.lines", {count(model.script_lines), count((model.script_bytes + 1023) / 1024)})
+                : ui::tr("editor.script.none"),
+            Tone::Dim);
+    y += kLine;
+    f.entry(Rect{m_x, y, m_w, kLine}, ui::tr("editor.script.file"),
+            model.script_file.empty() ? std::string("-") : model.script_file, Tone::Dim);
+    y += kLine + 4;
+    if (has) {
+        const bool fine = model.script_problem.empty();
+        f.paragraph(Rect{m_x, y, m_w, 3 * 20},
+                    fine ? ui::tr("editor.script.fine") : ui::tr("editor.script.problem", {model.script_problem}),
+                    fine ? Tone::Dim : Tone::Warning, 20);
+        y += 3 * 20 + 4;
+    }
+    f.paragraph(Rect{m_x, y, m_w, 4 * 20}, ui::tr("editor.script.note"), Tone::Dim, 20);
+    y += 4 * 20 + kGap;
+    const std::int32_t third = (m_w - 2 * kGap) / 3;
+    f.button(kScriptLoad, Rect{m_x, y, third, kButtonH}, ui::tr("editor.script.load"));
+    f.button(kScriptReload, Rect{m_x + third + kGap, y, third, kButtonH}, ui::tr("editor.script.reload"),
+             model.script_reload);
+    f.button(kScriptRemove, Rect{m_x + 2 * (third + kGap), y, third, kButtonH}, ui::tr("editor.script.remove"), has);
+    const std::int32_t foot = m_top + m_height - kButtonH - 4;
+    const std::int32_t quarter = (m_w - 3 * kGap) / 4;
+    f.button(kBack, Rect{m_x + m_w - quarter, foot, quarter, kButtonH}, ui::tr("editor.dialog.close"));
 }
 
 void EditorPanel::layout_find(const EditorModel& model) {
@@ -735,13 +873,20 @@ void EditorPanel::layout_open(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
     const bool islands = m_page == Page::IslandFiles;
-    f.label(Rect{m_x, y, m_w, 28}, ui::tr(islands ? "editor.islands.load_title" : "editor.open.title"), Align::Left,
-            Tone::Heading);
+    const bool scripts = m_page == Page::ScriptFiles;
+    f.label(Rect{m_x, y, m_w, 28},
+            ui::tr(islands   ? "editor.islands.load_title"
+                   : scripts ? "editor.script.load_title"
+                             : "editor.open.title"),
+            Align::Left, Tone::Heading);
     y += 32;
     if (model.files.empty()) {
-        f.paragraph(Rect{m_x, y, m_w, 60}, ui::tr(islands ? "editor.islands.no_files" : "editor.open.empty"), Tone::Dim,
-                    20);
-        y += 64;
+        f.paragraph(Rect{m_x, y, m_w, 80},
+                    ui::tr(islands   ? "editor.islands.no_files"
+                           : scripts ? "editor.script.no_files"
+                                     : "editor.open.empty"),
+                    Tone::Dim, 20);
+        y += 84;
     } else {
         const std::size_t n = model.files.size();
         m_first = std::min(m_first, n > kRows ? n - kRows : 0);
@@ -766,7 +911,10 @@ void EditorPanel::layout_open(const EditorModel& model) {
         f.button(kNext, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.next"), m_first + kRows < n);
         y += kButtonH + kGap;
     }
-    f.button(islands ? kIslandPage : kCancel, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.cancel"));
+    f.button(islands   ? kIslandPage
+             : scripts ? kScriptBack
+                       : kCancel,
+             Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.cancel"));
 }
 
 void EditorPanel::layout_save(const EditorModel& model) {
@@ -1913,6 +2061,16 @@ std::optional<EditorRequest> EditorPanel::commit_name() {
         r.name = m_text;
         return r;
     }
+    if (m_page == Page::MarkerName) {
+        if (!sim::valid_marker_name(m_text)) {
+            return std::nullopt;
+        }
+        m_page = Page::Markers;
+        m_form.set_focus(std::nullopt);
+        EditorRequest r{EditorRequest::Kind::MarkerRename, m_marker};
+        r.name = m_text;
+        return r;
+    }
     if (m_page == Page::CityName) {
         if (!sim::valid_name(m_text, sim::CityOrder::kMaxNameLength)) {
             return std::nullopt;
@@ -2368,6 +2526,35 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
             m_page = Page::Selection;
             m_form.set_focus(std::nullopt);
             return std::nullopt;
+        case kMarkerRename:
+            if (model.marker && *model.marker < model.markers.size()) {
+                m_marker = *model.marker;
+                m_text = model.markers[m_marker].name;
+                m_page = Page::MarkerName;
+                m_form.set_focus(kField);
+                m_form.select_all();
+            }
+            return std::nullopt;
+        case kMarkerRemove:
+            if (model.marker && *model.marker < model.markers.size()) {
+                return EditorRequest{EditorRequest::Kind::MarkerRemove, *model.marker};
+            }
+            return std::nullopt;
+        case kMarkerBack:
+            m_page = Page::Markers;
+            m_form.set_focus(std::nullopt);
+            return std::nullopt;
+        case kScriptLoad:
+            m_page = Page::ScriptFiles;
+            m_first = 0;
+            return EditorRequest{EditorRequest::Kind::ListScripts};
+        case kScriptReload:
+            return EditorRequest{EditorRequest::Kind::ScriptReload};
+        case kScriptRemove:
+            return EditorRequest{EditorRequest::Kind::ScriptRemove};
+        case kScriptBack:
+            m_page = Page::Script;
+            return std::nullopt;
         case kCityOwner: {
             EditorRequest r{EditorRequest::Kind::CityOwner};
             r.index = forward ? 1 : 0;
@@ -2556,6 +2743,20 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
         }
         return std::nullopt;
     }
+    if (*id >= kFirstRow && *id < kFirstRow + static_cast<Id>(kRows) && m_page == Page::Markers) {
+        const std::size_t index = m_first + static_cast<std::size_t>(*id - kFirstRow);
+        if (index < model.markers.size()) {
+            return EditorRequest{EditorRequest::Kind::MarkerSelect, index};
+        }
+        return std::nullopt;
+    }
+    if (*id >= kFirstRow && m_page == Page::ScriptFiles) {
+        const std::size_t index = m_first + static_cast<std::size_t>(*id - kFirstRow);
+        if (index < model.files.size()) {
+            m_page = Page::Script;
+            return EditorRequest{EditorRequest::Kind::ScriptLoad, index};
+        }
+    }
     if (*id >= kFirstRow && m_page == Page::IslandFiles) {
         const std::size_t index = m_first + static_cast<std::size_t>(*id - kFirstRow);
         if (index < model.files.size()) {
@@ -2637,6 +2838,9 @@ std::optional<EditorRequest> EditorPanel::key(int key) {
         case 27:
             if (m_page == Page::CityName) {
                 m_page = Page::Selection;
+                m_form.set_focus(std::nullopt);
+            } else if (m_page == Page::MarkerName) {
+                m_page = Page::Markers;
                 m_form.set_focus(std::nullopt);
             } else if (m_page == Page::PlayerName) {
                 m_page = Page::Players;

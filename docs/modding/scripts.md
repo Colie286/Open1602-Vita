@@ -19,7 +19,8 @@ sends ships.
 ```
 
 A package has at most one script, a UTF-8 text file. A scenario of a package may bring one more,
-which runs only in that scenario, after the package's ([scenarios.md](scenarios.md)); in a part of
+which runs only in that scenario, after the package's ([scenarios.md](scenarios.md)), and a scenario
+made in the editor may carry a script of its own, which runs last ([editor.md](../editor.md#script)); in a part of
 a campaign its table `campaign` goes on to the next part ([scenarios.md](scenarios.md#campaigns)). When a game starts or is loaded, the game runs
 the top level of each package's script, in the packages' load order, each in a sandbox of its own:
 what one package's script defines, another's does not see. Then the game calls the functions the
@@ -114,6 +115,9 @@ ware number.
 | `game.ships(player)` | the ships of `player` (nil: all), a list of tables: `id`, `name`, `player` (nil without an owner), `figure` (its number in `figuren.cod`), `x`, `y` (the world tile it is on), `cannons`, `trader` (the free trader's) |
 | `game.relation(a, b)` | the treaties between players `a` and `b`: `peace` and `trade`, each `"signed"`, `"none"` (war, or no trade treaty), `"offered"` (by `a`) or `"received"` (from `b`), and `hostile` (their units fight); nil for no such players or the same player twice |
 | `game.units(player)` | the land units of `player` (nil: all), a list of tables: `id`, `player`, `figure` (its number in `figuren.cod`), `x`, `y` (the world tile it stands on), `island` (nil off the islands) and `health` (hit points left) |
+| `game.markers()` | the markers of the scenario made in the editor, a list of tables: `name`, `shape` (`"point"` or `"area"`), `x`, `y` (the world tile at its top left), `width`, `height` (1 for a point) |
+| `game.marker(name)` | the marker of that name as `game.markers` gives it; nil for none |
+| `game.in_marker(name, x, y)` | whether the world tile `x`, `y` lies in the marker of that name (false for none) |
 | `game.mission(player)` | the mission of `player` as a table: `text` and its goals by the keys of a scenario's goals ([scenarios.md](scenarios.md#goals)): `inhabitants`, `cities`, `balance`, `trade_balance`, `defeated`, `castle`, `cathedral`, `goods` (a table of goods' ids and tons) and `city` (`inhabitants`, `class`, `count`); `other` is true if it has goals or loss conditions of the original's maps these keys do not name. Nil for no mission or no such player |
 
 ## What a script changes

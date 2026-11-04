@@ -191,6 +191,7 @@ bool MapInput::editor_key(ui::KeyAction action) noexcept {
         case KeyAction::EditorToolUnit:
         case KeyAction::EditorToolResource:
         case KeyAction::EditorToolRemove:
+        case KeyAction::EditorToolMarker:
             return true;
         default:
             return false;
@@ -333,6 +334,7 @@ void MapInput::setup_keys() {
     editor(chord(SDLK_U), KeyAction::EditorToolUnit);
     editor(chord(SDLK_R, false, true), KeyAction::EditorToolResource);
     editor(chord(SDLK_X), KeyAction::EditorToolRemove);
+    editor(chord(SDLK_M), KeyAction::EditorToolMarker);
     // Building
     building(chord(SDLK_R), KeyAction::RotateBuilding);
     building(chord(SDLK_R, false, true), KeyAction::RotateBuildingBack);
@@ -782,6 +784,7 @@ void MapInput::run_action(const ui::KeyBinding& b) {
         case KeyAction::EditorToolUnit:
         case KeyAction::EditorToolResource:
         case KeyAction::EditorToolRemove:
+        case KeyAction::EditorToolMarker:
             if (m_editor) {
                 m_host.editor_key(b.action, b.param);
             }

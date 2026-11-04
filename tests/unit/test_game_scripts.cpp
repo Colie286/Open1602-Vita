@@ -225,6 +225,33 @@ TEST_CASE("script: players, messages and errors") {
     CHECK(errors.size() == script::kMaxScriptErrors + 1);
 }
 
+TEST_CASE("script: a scenario's markers by their names") {
+    Game game;
+    game.world.set_markers({
+        {"harbour", sim::ScenarioMarker::Shape::Point, 41, 32, 1, 1},
+        {"coast", sim::ScenarioMarker::Shape::Area, 40, 30, 8, 6},
+    });
+    std::vector<script::PackageScript> sources;
+    sources.push_back(
+        script::PackageScript{std::string(script::kScenarioScript),
+                              "local c = game.marker('coast')\n"
+                              "print(#game.markers(), game.markers()[1].name, c.shape, c.x, c.y, c.width, "
+                              "c.height)\n"
+                              "print(game.marker('harbour').shape, game.marker('nowhere'))\n"
+                              "print(game.in_marker('coast', 47, 35), game.in_marker('coast', 48, 35), "
+                              "game.in_marker('nowhere', 1, 1))\n"
+                              "print(pcall(game.marker, 3))\n",
+                              std::string(script::kScenarioScript)});
+    auto scripts = game.run(std::move(sources));
+    const auto notes = scripts->take_notes();
+    REQUIRE(notes.size() == 4);
+    CHECK(notes[0].text == "2\tharbour\tarea\t40\t30\t8\t6");
+    CHECK(notes[1].text == "point\tnil");
+    CHECK(notes[2].text == "true\tfalse\tfalse");
+    CHECK(notes[3].text.find("must be a string") != std::string::npos);
+    CHECK(notes[0].package == "scenario");
+}
+
 TEST_CASE("script: a script whose top level fails stays off") {
     Game game;
     auto scripts = game.run(one("broken", "function on_start() state = 1 end\nerror('at load')"));

@@ -104,6 +104,7 @@ KeyHelpPlace key_help_place(KeyAction action) noexcept {
         case KeyAction::EditorToolUnit:
         case KeyAction::EditorToolResource:
         case KeyAction::EditorToolRemove:
+        case KeyAction::EditorToolMarker:
             return {0, 1};
         case KeyAction::ModeBuild:
         case KeyAction::ModeMilitary:

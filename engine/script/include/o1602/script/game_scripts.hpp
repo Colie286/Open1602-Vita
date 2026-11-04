@@ -45,6 +45,9 @@ struct PackageScript {
     std::string name;
 };
 
+/// The name of a scenario's own script (section SLUA): its errors and its saved state go by it.
+inline constexpr std::string_view kScenarioScript = "scenario";
+
 /// The scripts of `packages` that have one, in their order. A script that cannot be read is
 /// reported in `problems` and left out.
 [[nodiscard]] std::vector<PackageScript> read_package_scripts(std::span<const assets::ModPackage> packages,

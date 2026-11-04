@@ -171,6 +171,18 @@ Value city_table(const sim::City& city) {
     });
 }
 
+/// A marker of the scenario as scripts see it.
+Value marker_table(const sim::ScenarioMarker& m) {
+    return make_table({
+        {"name", m.name},
+        {"shape", std::string(m.shape == sim::ScenarioMarker::Shape::Point ? "point" : "area")},
+        {"x", std::int64_t{m.x}},
+        {"y", std::int64_t{m.y}},
+        {"width", std::int64_t{m.width}},
+        {"height", std::int64_t{m.height}},
+    });
+}
+
 /// The id of a trade good as scripts name it: "anno1602:<name>" for the original's, "<package>:<name>"
 /// for a package's.
 std::string good_id(const sim::World& world, std::uint8_t ware) {
@@ -497,6 +509,44 @@ void GameScripts::add_api(Package& package) {
 
     add("time", [this](std::span<const Value>) -> core::Result<Value> {
         return Value{static_cast<std::int64_t>(m_world->time_ms() / 1000)};
+    });
+    add("markers", [this](std::span<const Value>) -> core::Result<Value> {
+        std::vector<Value> markers;
+        for (const sim::ScenarioMarker& m : m_world->markers()) {
+            markers.push_back(marker_table(m));
+        }
+        return make_table({}, std::move(markers));
+    });
+    // The marker of that name, and whether a world tile lies in it.
+    const auto find_marker = [this](std::span<const Value> args) -> const sim::ScenarioMarker* {
+        const auto* name = args.empty() ? nullptr : std::get_if<std::string>(&args[0]);
+        if (name == nullptr) {
+            return nullptr;
+        }
+        const auto& markers = m_world->markers();
+        const auto it =
+            std::find_if(markers.begin(), markers.end(), [&](const sim::ScenarioMarker& m) { return m.name == *name; });
+        return it != markers.end() ? &*it : nullptr;
+    };
+    add("marker", [find_marker](std::span<const Value> args) -> core::Result<Value> {
+        if (args.empty() || !std::holds_alternative<std::string>(args[0])) {
+            return script_error("game.marker: the marker's name must be a string");
+        }
+        const sim::ScenarioMarker* m = find_marker(args);
+        return m != nullptr ? marker_table(*m) : Value{};
+    });
+    add("in_marker", [find_marker](std::span<const Value> args) -> core::Result<Value> {
+        if (args.empty() || !std::holds_alternative<std::string>(args[0])) {
+            return script_error("game.in_marker: the marker's name must be a string");
+        }
+        const auto x = integer(args, 1);
+        const auto y = integer(args, 2);
+        if (!x || !y) {
+            return script_error("game.in_marker: the tile's x and y must be numbers");
+        }
+        const sim::ScenarioMarker* m = find_marker(args);
+        return Value{m != nullptr && *x >= m->x && *y >= m->y && *x < std::int64_t{m->x} + m->width &&
+                     *y < std::int64_t{m->y} + m->height};
     });
     add("players", [this](std::span<const Value>) -> core::Result<Value> {
         std::vector<Value> ids;

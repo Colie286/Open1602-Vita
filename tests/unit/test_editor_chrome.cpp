@@ -140,7 +140,8 @@ TEST_CASE("editor chrome: the tool bar chooses tools and names them with their k
         std::size_t tools = 0;
         std::optional<ui::Rect> land;
         for (const ui::Form::Widget& wd : chrome.form().widgets()) {
-            if (wd.kind == ui::Form::Widget::Kind::Button && wd.id >= 50 && wd.id < 50 + 19) {
+            if (wd.kind == ui::Form::Widget::Kind::Button && wd.id >= 50 &&
+                wd.id < 50 + static_cast<int>(app::kEditorTools)) {
                 ++tools;
                 CHECK(wd.rect.y >= EditorChrome::kMenuH);
                 CHECK(wd.rect.y + wd.rect.h <= 768 - EditorChrome::kStatusH);

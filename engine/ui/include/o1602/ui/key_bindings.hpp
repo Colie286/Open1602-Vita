@@ -126,6 +126,7 @@ enum class KeyAction : std::uint16_t {
     EditorToolUnit,
     EditorToolResource,
     EditorToolRemove,
+    EditorToolMarker,
 };
 
 enum class KeyContext : std::uint8_t { General, Building, Units, Editor };

@@ -306,6 +306,16 @@ private:
     [[nodiscard]] std::optional<std::size_t> editor_slot_of(const std::filesystem::path& file) const;
     /// Writes the savegame of the document back to its slot, marked as changed.
     void editor_save_game();
+    /// The page "Markers": a click selects the marker under it or sets a point, a drag an area.
+    bool editor_marker_stroke(std::optional<render::TilePos> tile, Stroke phase);
+    void editor_markers_model(EditorModel& m) const;
+    void editor_markers_request(const EditorRequest& request);
+    /// The scenario's script from `file` (a step of undo); false with a notice if it cannot be.
+    bool editor_load_script(const std::filesystem::path& file);
+    /// The file the script was loaded from, kept in the editor's state (section EDIT) of the
+    /// scenario when it is saved, and found there again when it is opened, so that "Reload" works.
+    void editor_keep_script_file();
+    void editor_find_script_file();
     /// A new map in the editor.
     core::Status editor_new(const EditorNewMap& map);
     /// Saves the document under `file`; what happened goes to the panel's notice.
@@ -840,6 +850,13 @@ private:
         /// A savegame opened as such (from the list of savegames): its slot, which Save writes
         /// back as a savegame marked as changed. Nothing for a scenario or a new map.
         std::optional<std::size_t> slot{};
+        /// The marker selected (the page "Markers"), and the drag that makes a new one: where it
+        /// began and where the mouse is.
+        std::optional<std::size_t> marker{};
+        std::optional<std::pair<std::int64_t, std::int64_t>> marker_from{};
+        std::optional<std::pair<std::int64_t, std::int64_t>> marker_to{};
+        /// The file the scenario's script was loaded from, for "Reload"; empty: none.
+        std::filesystem::path script_file{};
     };
     std::optional<EditorSession> m_editor;
     /// The editor aside while a test game of its map runs: its world (view only), its document,

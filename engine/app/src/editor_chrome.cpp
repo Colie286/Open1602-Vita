@@ -21,7 +21,7 @@ constexpr Id kFirstMenu = 1;    ///< + the menu
 constexpr Id kFirstEntry = 20;  ///< + the entry of the open menu
 constexpr Id kFirstTool = 50;   ///< + EditorTool
 
-constexpr std::int32_t kToolButton = 34;  ///< a tool's button, square
+constexpr std::int32_t kToolButton = 32;  ///< a tool's button, square
 constexpr std::int32_t kToolGap = 2;
 constexpr std::int32_t kGroupGap = 8;
 constexpr std::int32_t kEntryH = 26;
@@ -50,7 +50,8 @@ constexpr std::array<EditorChrome::ToolEntry, kEditorTools> kTools = {{
     {EditorTool::Ship, "editor.tool.ship", false},
     {EditorTool::Unit, "editor.tool.unit", false},
     {EditorTool::Resource, "editor.tool.resource", false},
-    {EditorTool::Remove, "editor.tool.remove", false},
+    {EditorTool::Remove, "editor.tool.remove", true},
+    {EditorTool::Marker, "editor.tool.marker", false},
 }};
 
 /// The tools' symbols: 12 x 12 cells, '#' drawn, by EditorTool.
@@ -113,6 +114,9 @@ constexpr std::array<Icon, kEditorTools> kIcons = {{
     // Remove: a cross
     {"##........##", "###......###", ".###....###.", "..###..###..", "...######...", "....####....", "....####....",
      "...######...", "..###..###..", ".###....###.", "###......###", "##........##"},
+    // Marker: a flag on a pole
+    {"..#.........", "..#######...", "..########..", "..#######...", "..######....", "..#.........", "..#.........",
+     "..#.........", "..#.........", "..#.........", ".###........", "#####......."},
 }};
 
 std::int32_t px(std::int32_t v, double scale) {
@@ -205,6 +209,8 @@ const char* EditorChrome::command_text(EditorCommand command) noexcept {
             return "editor.export_image";
         case EditorCommand::Find:
             return "editor.find";
+        case EditorCommand::Script:
+            return "editor.script.edit";
         case EditorCommand::Keys:
             return "editor.menu.keys";
     }
@@ -244,7 +250,10 @@ std::vector<EditorChrome::MenuEntry> EditorChrome::entries(std::size_t menu, con
         case 4:
             return {{EditorCommand::Players, true}};
         case 5:
-            return {{EditorCommand::Scenario, true}, {EditorCommand::Rules, true}, {EditorCommand::Goals, true}};
+            return {{EditorCommand::Scenario, true},
+                    {EditorCommand::Rules, true},
+                    {EditorCommand::Goals, true},
+                    {EditorCommand::Script, true}};
         case 6:
             return {{EditorCommand::Check, true}};
         default:

@@ -114,6 +114,7 @@ constexpr std::pair<KeyAction, std::string_view> kNames[] = {
     {KeyAction::EditorToolUnit, "editor_tool_unit"},
     {KeyAction::EditorToolResource, "editor_tool_resource"},
     {KeyAction::EditorToolRemove, "editor_tool_remove"},
+    {KeyAction::EditorToolMarker, "editor_tool_marker"},
 };
 
 }  // namespace

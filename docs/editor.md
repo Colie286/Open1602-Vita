@@ -230,6 +230,25 @@ size, islands, players and buildings on or off.
 The introduction is the page shown before the scenario starts; the missions' own texts are set
 under Goals.
 
+## Markers
+
+**Set markers** (the last tool, M) shows the scenario's markers on the map and lists them in the
+column: named points and areas the scenario's script finds by their names (`game.marker`,
+[scripts.md](modding/scripts.md)). A click on the open map sets a point, a drag an area; a click on
+a marker, or on its row, selects it. A new marker is named `marker_1`, `marker_2`, ...; **Rename**
+gives it a name of lower case letters, digits and `_`, **Delete** takes it away. Each is a step of
+undo.
+
+## Script
+
+**Script** (menu Scenario) gives the scenario a Lua script of its own, saved with it, which runs in
+the game like a package's script ([scripts.md](modding/scripts.md)), after the packages'. **Load**
+lists the `.lua` files in the folder `scripts` in Open1602's user data folder; **Reload** reads the
+file loaded last again after it was changed elsewhere (the scenario keeps where it came from, so
+this works after it is opened again); **Remove** takes the script away. The dialog
+shows the script's size and its first syntax error with the line; an error while the game runs is
+shown in the status line with its line, as for a package's script. Test play runs the script too.
+
 ## Rules
 
 **Rules** (menu Scenario) sets the game settings the scenario is made for, the same ones the start dialog offers
@@ -317,6 +336,7 @@ there are, a target player who starts without the cities the loss conditions ask
 | U | Place land units |
 | Shift+R | Place resources |
 | X | Remove |
+| M | Set markers |
 | R | Turn the piece or object in hand |
 | + and -, Ctrl and the mouse wheel | Larger and smaller brush |
 | Right button dragged | Land, Water, the brush and Random fill draw the other way (water for land) |

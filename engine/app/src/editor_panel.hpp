@@ -127,8 +127,9 @@ enum class EditorTool : std::uint8_t {
     Unit,
     Resource,
     Remove,
+    Marker,  ///< a named point or area for the scenario's scripts (the page "Markers")
 };
-inline constexpr std::size_t kEditorTools = 19;
+inline constexpr std::size_t kEditorTools = 20;
 
 /// What the editor's menu bar asks for (EditorChrome), the same as the keys do.
 enum class EditorCommand : std::uint8_t {
@@ -152,6 +153,7 @@ enum class EditorCommand : std::uint8_t {
     TestPlay,
     ExportImage,
     Find,
+    Script,
     Keys,
 };
 
@@ -166,6 +168,12 @@ struct EditorPick {
     std::uint32_t y = 0;
     std::uint32_t id = 0;  ///< Ship, Soldier: its id
     friend bool operator==(const EditorPick&, const EditorPick&) = default;
+};
+
+/// A marker of the scenario as the page "Markers" lists it (Windows-1252).
+struct EditorMarkerRow {
+    std::string name;
+    std::string place;  ///< where it lies: "point 41, 32", "area 40, 30, 8 x 6"
 };
 
 /// A file the editor can open, as the list shows it.
@@ -297,6 +305,17 @@ struct EditorModel {
     /// Islands the world plan makes when a game starts (ADR 0013), 0 for a world without a plan.
     std::size_t planned_islands = 0;
     std::size_t players = 0;  ///< humans and computers
+    /// The scenario's markers as the page "Markers" lists them, and the one selected.
+    std::vector<EditorMarkerRow> markers;
+    std::optional<std::size_t> marker;
+    /// The scenario's script (the dialog "Script"): its size, the file it was loaded from (its
+    /// name, Windows-1252), whether that file can be read again, and what is wrong with the text
+    /// (the first syntax error with its line, Windows-1252), empty if nothing.
+    std::size_t script_bytes = 0;
+    std::size_t script_lines = 0;
+    std::string script_file;
+    bool script_reload = false;
+    std::string script_problem;
     /// The document is a savegame opened as such: Save writes it back, marked as changed.
     bool savegame = false;
     bool can_undo = false;
@@ -482,6 +501,14 @@ struct EditorRequest {
         ShowIsland,    ///< the island `index` in the view's middle, selected
         ExportImage,   ///< the map as a picture (PNG) in the screenshots' folder
         FindGo,        ///< the view to EditorModel::found[`index`], selected
+        MarkerSelect,  ///< the marker `index` selected and in the view's middle
+        MarkerRename,  ///< the marker `index` named `name`
+        MarkerRemove,  ///< the marker `index` taken away
+        /// The page "Load script" opens: the model's list of files is due, the scripts.
+        ListScripts,
+        ScriptLoad,    ///< the script of file `index` of the model's list as the scenario's
+        ScriptReload,  ///< the script read again from the file it was loaded from
+        ScriptRemove,  ///< the scenario without a script
     };
     Kind kind = Kind::Close;
     std::size_t index = 0;
@@ -534,7 +561,11 @@ public:
         GoalText,
         Scenario,
         ScenarioText,
-        Find
+        Find,
+        Markers,
+        MarkerName,
+        Script,
+        ScriptFiles
     };
 
     explicit EditorPanel(ui::FormStyle style = {}) : m_form(style) {}
@@ -575,7 +606,8 @@ public:
     /// A name is being typed: the keys go here.
     [[nodiscard]] bool typing() const noexcept {
         return m_page == Page::SaveAs || m_page == Page::CityName || m_page == Page::PlayerName ||
-               m_page == Page::GoalText || m_page == Page::ScenarioText || m_page == Page::Find;
+               m_page == Page::GoalText || m_page == Page::ScenarioText || m_page == Page::Find ||
+               m_page == Page::MarkerName;
     }
     /// The text typed on the page "Find" (Windows-1252); empty on another page.
     [[nodiscard]] const std::string& find_text() const noexcept {
@@ -652,6 +684,9 @@ private:
     void layout_goal_text(const EditorModel& model);
     void layout_scenario(const EditorModel& model);
     void layout_find(const EditorModel& model);
+    void layout_markers(const EditorModel& model);
+    void layout_marker_name(const EditorModel& model);
+    void layout_script(const EditorModel& model);
     /// The height of a line of the check list in a dialog `width` design units wide.
     [[nodiscard]] static std::int32_t check_line_h(const EditorCheckLine& line, std::int32_t width) noexcept;
     /// The notice (or the note `note_key`, `short_key` where it does not fit whole) from `y`
@@ -673,7 +708,8 @@ private:
     std::int32_t m_w = kWidth - 2 * kMargin;
     std::int32_t m_top = 0;
     std::int32_t m_height = 400;
-    std::string m_text;  ///< the name being typed
+    std::string m_text;        ///< the name being typed
+    std::size_t m_marker = 0;  ///< the marker whose name is typed (the page MarkerName)
     EditorNewMap m_new;
     EditorNewIsland m_island;
     /// The size the page "Map size" offers.
@@ -692,6 +728,7 @@ private:
     Page m_laid_page = Page::Document;       ///< the page laid out last
     std::vector<std::size_t> m_page_starts;  ///< where the pages before began (the check list, the stock)
     std::int32_t m_check_h = 580;            ///< the height the check list's dialog wants
+    std::int32_t m_files_h = 0;              ///< the height the dialog of the scripts to load needs
     bool m_previewing = false;               ///< the dice preview, as laid out last (its page is the column's)
 };
 

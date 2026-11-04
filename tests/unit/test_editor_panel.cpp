@@ -1625,3 +1625,77 @@ TEST_CASE("editor panel: the page Find lists what holds the text and goes there"
     CHECK(panel.page() == EditorPanel::Page::Document);
     CHECK(panel.find_text().empty());
 }
+
+TEST_CASE("editor panel: the page Markers lists the markers, renames and deletes the one selected") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(184, 564);
+    EditorModel m = document();
+    CHECK(!panel.choose_tool(app::EditorTool::Marker, m).has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::Markers);
+    CHECK(panel.active_tool(m) == app::EditorTool::Marker);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "No markers yet."));
+    m.markers = {{"harbour", "point 41, 32"}, {"coast", "area 40, 30, 8 \xd7 6"}};
+    (void)panel.draw(m, kNoFonts);
+    auto r = click(panel, m, "coast");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::MarkerSelect);
+    CHECK(r->index == 1);
+    m.marker = 1;
+    (void)panel.draw(m, kNoFonts);
+    r = click(panel, m, "Delete");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::MarkerRemove);
+    CHECK(r->index == 1);
+    CHECK(!click(panel, m, "Rename").has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::MarkerName);
+    CHECK(panel.typing());
+    panel.type("Bad Name");             // typed over the name offered
+    CHECK(!panel.key(13).has_value());  // not a marker's name
+    (void)panel.key(1);
+    panel.type("east_coast");
+    r = panel.key(13);
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::MarkerRename);
+    CHECK(r->index == 1);
+    CHECK(r->name == "east_coast");
+    CHECK(panel.page() == EditorPanel::Page::Markers);
+}
+
+TEST_CASE("editor panel: the dialog Script loads, reloads and removes the scenario's script") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(184, 564);
+    EditorModel m = document();
+    CHECK(!panel.command(app::EditorCommand::Script, m).has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::Script);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "no script"));
+    CHECK(!click(panel, m, "Remove").has_value());  // nothing to remove
+    m.script_bytes = 2048;
+    m.script_lines = 70;
+    m.script_file = "quest.lua";
+    m.script_reload = true;
+    m.script_problem = "scenario:3: 'then' expected";
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "70 lines, 2 KB"));
+    CHECK(says(panel, "Error in the script: scenario:3: 'then' expected"));
+    auto r = click(panel, m, "Reload");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::ScriptReload);
+    r = click(panel, m, "Remove");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::ScriptRemove);
+    r = click(panel, m, "Load");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::ListScripts);
+    REQUIRE(panel.page() == EditorPanel::Page::ScriptFiles);
+    m.files = {{"quest.lua", "Own scripts"}};
+    (void)panel.draw(m, kNoFonts);
+    r = click(panel, m, "quest.lua");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::ScriptLoad);
+    CHECK(r->index == 0);
+    CHECK(panel.page() == EditorPanel::Page::Script);
+}

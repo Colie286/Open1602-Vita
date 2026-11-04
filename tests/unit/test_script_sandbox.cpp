@@ -101,6 +101,17 @@ TEST_CASE("script: errors name the script and line and leave the state usable") 
     CHECK(std::get<std::int64_t>(evaluate(sandbox, "function result() return 5 end")) == 5);
 }
 
+TEST_CASE("script: a text is read without running it, a syntax error with its line") {
+    script::Sandbox sandbox;
+    CHECK(sandbox.compile("scenario", "x = 1\nerror('not run')\n").ok());
+    CHECK(!sandbox.has_function("later"));
+    REQUIRE(sandbox.compile("scenario", "function later() end").ok());
+    CHECK(!sandbox.has_function("later"));  // read, not run
+    const auto bad = sandbox.compile("scenario", "x = 1\nif then\n");
+    REQUIRE(!bad.ok());
+    CHECK(contains(bad.error().message, "scenario:2:"));
+}
+
 TEST_CASE("script: no files, no clock, no loading of code") {
     script::Sandbox sandbox;
     CHECK(text(sandbox,

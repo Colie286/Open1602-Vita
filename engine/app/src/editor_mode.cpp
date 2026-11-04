@@ -214,6 +214,7 @@ core::Status MapViewer::enter_editor(sim::World world, const std::filesystem::pa
                                    {},
                                    {}});
     m_editor->slot = slot;
+    editor_find_script_file();
     m_input->set_editor(true);
     if (m_hud) {
         m_hud->close_menu();
@@ -376,6 +377,7 @@ void MapViewer::editor_save(const std::filesystem::path& file) {
                       target.error().message);
         return;
     }
+    editor_keep_script_file();
     auto bytes = m_editor->document.save(m_buildings);
     if (!bytes) {
         editor_notice(ui::tr("editor.save_failed", {ui::error_text(bytes.error(), "editor")}), true,
@@ -709,6 +711,7 @@ EditorModel MapViewer::editor_model() const {
     m.file = m_editor->file.empty() ? m_editor->source_name : shown_name(m_editor->file);
     m.modified = doc.modified();
     m.savegame = m_editor->slot.has_value();
+    editor_markers_model(m);
     m.width = world.width();
     m.height = world.height();
     m.islands = world.islands().size();
@@ -964,6 +967,15 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         case Kind::ScenarioStep:
         case Kind::ScenarioText:
             editor_scenario_request(request);
+            break;
+        case Kind::MarkerSelect:
+        case Kind::MarkerRename:
+        case Kind::MarkerRemove:
+        case Kind::ListScripts:
+        case Kind::ScriptLoad:
+        case Kind::ScriptReload:
+        case Kind::ScriptRemove:
+            editor_markers_request(request);
             break;
         case Kind::TerrainCopy: {
             const auto& sel = m_editor->selection;
@@ -1806,6 +1818,26 @@ void MapViewer::draw_editor_marks() {
             }
         }
     };
+    // The scenario's markers while their page is open: points and areas in light blue, the one
+    // selected in white, a new one being dragged in green.
+    if (const EditorPanel* panel = m_hud->editor_panel();
+        panel != nullptr &&
+        (panel->page() == EditorPanel::Page::Markers || panel->page() == EditorPanel::Page::MarkerName)) {
+        const std::int32_t ink = ui::rgb_ink(assets::Rgba{120, 200, 250, 255});
+        const std::int32_t chosen = ui::rgb_ink(assets::Rgba{250, 250, 250, 255});
+        const auto& markers = m_editor->document.world().markers();
+        for (std::size_t i = 0; i < markers.size(); ++i) {
+            const sim::ScenarioMarker& mk = markers[i];
+            outline(mk.x, mk.y, mk.width, mk.height, m_editor->marker == i ? chosen : ink);
+            text_at(mk.x + mk.width / 2.0, mk.y + mk.height / 2.0, core::utf8_to_cp1252(mk.name));
+        }
+        if (m_editor->marker_from && m_editor->marker_to) {
+            const auto [ax, ay] = *m_editor->marker_from;
+            const auto [bx, by] = *m_editor->marker_to;
+            outline(std::min(ax, bx), std::min(ay, by), static_cast<double>(std::abs(bx - ax) + 1),
+                    static_cast<double>(std::abs(by - ay) + 1), ui::rgb_ink(assets::Rgba{90, 220, 90, 255}));
+        }
+    }
     // The placeholders of the world plan: islands made when a game starts, in yellow.
     using PlacingKind = EditorSession::Placing::Kind;
     if (const auto& planned = world.planned_islands()) {
@@ -2569,6 +2601,14 @@ bool MapViewer::editor_stroke(std::optional<render::TilePos> tile, Stroke phase,
         return editor_objects_stroke(tile, phase);
     }
     editor_end_objects();  // the page left while the button was held
+    if (panel != nullptr && panel->page() == EditorPanel::Page::Markers && !m_editor->placing) {
+        editor_end_stroke();
+        if (erase) {
+            return false;  // the right button drags the map
+        }
+        return editor_marker_stroke(tile, phase);
+    }
+    m_editor->marker_from.reset();  // the page left while the button was held
     if (panel == nullptr || panel->page() != EditorPanel::Page::Terrain || m_editor->placing) {
         editor_end_stroke();  // the page left while the button was held
         return false;
