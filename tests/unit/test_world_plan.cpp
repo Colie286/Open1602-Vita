@@ -531,6 +531,45 @@ TEST_CASE("world plan: large islands on a large map still leave every start both
     }
 }
 
+TEST_CASE("world plan: on a large map the islands grow, so that the land asked for fits") {
+    // At the sides asked for, 15 % of 4000 x 4000 would take far more islands than a world has:
+    // the sides grow alike, the land is what was asked for, the plan keeps the sides asked for.
+    using Landscape = sim::WorldSettings::Landscape;
+    for (const auto spread : {Landscape::Spread::Even, Landscape::Spread::Mixed, Landscape::Spread::FewGiants}) {
+        sim::WorldSettings s = sim::settings_for_players(8);
+        s.width = 4000;
+        s.height = 4000;
+        s.shapes = sim::WorldSettings::Shapes::Own;
+        s.landscape.spread = spread;
+        s.seed = 3;
+        std::vector<std::string> warnings;
+        auto plan = sim::plan_world(s, templates(), &warnings);
+        REQUIRE(plan.ok());
+        CHECK(warnings.empty());
+        CHECK(plan->landscape == s.landscape);
+        std::uint64_t area = 0;
+        std::uint16_t largest = 0;
+        for (const auto& o : plan->own_islands) {
+            area += std::uint64_t{o.width} * o.height;
+            largest = std::max({largest, o.width, o.height});
+        }
+        CHECK(largest > s.landscape.max_side);
+        const std::uint64_t map = std::uint64_t{s.width} * s.height;
+        const std::uint64_t land = area * s.landscape.fill() / 1000;
+        CHECK(land * 100 >= map * s.landscape.land * 90 / 100);
+        CHECK(land * 100 <= map * s.landscape.land * 115 / 100);
+    }
+    // The original's size keeps the sides asked for.
+    sim::WorldSettings small;
+    small.shapes = sim::WorldSettings::Shapes::Own;
+    small.seed = 3;
+    auto plan = sim::plan_world(small, templates());
+    REQUIRE(plan.ok());
+    for (const auto& o : plan->own_islands) {
+        CHECK(std::max(o.width, o.height) <= small.landscape.max_side);
+    }
+}
+
 TEST_CASE("world plan: the map grows for islands far larger than the original's") {
     sim::WorldSettings s;
     CHECK(sim::fit_landscape(s).width == 500);  // templates: as chosen

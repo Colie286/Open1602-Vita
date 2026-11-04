@@ -194,7 +194,7 @@ std::uint32_t volcano_limit(const WorldSettings& s) {
 class Planner {
 public:
     Planner(const WorldSettings& s, const std::vector<TemplateInfo>& templates, std::vector<std::string>* warnings)
-        : m_s(s), m_templates(templates), m_warnings(warnings), m_random(s.seed, kPlanStream) {}
+        : m_s(s), m_asked(s.landscape), m_templates(templates), m_warnings(warnings), m_random(s.seed, kPlanStream) {}
 
     core::Result<WorldPlan> run();
 
@@ -219,6 +219,9 @@ private:
         return std::max<std::int32_t>(shapes::kMinSide, m_s.landscape.min_side * 2 / 3);
     }
     [[nodiscard]] std::int32_t gap() const noexcept;
+    /// Shapes::Own: a map whose land would take more islands than a world has (kMaxPlannedIslands)
+    /// at the sides asked for gets larger islands, the smallest and the largest side grown alike.
+    void grow_islands();
     void place_starts();
     void place_homes();
     void place_locals(std::uint32_t total);
@@ -236,7 +239,10 @@ private:
     [[nodiscard]] std::vector<std::size_t> in_reach(std::size_t start) const;
     WorldPlan finish();
 
-    const WorldSettings& m_s;
+    /// The settings, the islands' sides grown for a large map (grow_islands).
+    WorldSettings m_s;
+    WorldSettings::Landscape m_asked;  ///< the landscape as asked for, which the plan keeps
+    std::uint32_t m_grown = 1000;      ///< per mille: how much grow_islands() grew the sides
     const std::vector<TemplateInfo>& m_templates;
     std::vector<std::string>* m_warnings;
     Random m_random;
@@ -442,7 +448,9 @@ void Planner::place_starts() {
             }
         }
     }
-    m_reach = static_cast<std::uint32_t>(std::clamp(isqrt(min_distance2(m_starts)) * 60 / 100, 70, 140));
+    // Grown islands (grow_islands) need as much more room around a start.
+    const auto farthest = static_cast<std::int32_t>(140 * m_grown / 1000);
+    m_reach = static_cast<std::uint32_t>(std::clamp(isqrt(min_distance2(m_starts)) * 60 / 100, 70, farthest));
 }
 
 bool Planner::place_near(const Point& start, Dims dims, std::uint32_t min_r, std::uint32_t max_r, bool home) {
@@ -595,6 +603,58 @@ std::uint64_t own_target(const WorldSettings& s) {
     const std::uint64_t land =
         std::clamp(l.land, WorldSettings::Landscape::kMinLand, WorldSettings::Landscape::kMaxLand);
     return std::uint64_t{s.width} * s.height * land / 100 * 1000 / l.fill();
+}
+
+void Planner::grow_islands() {
+    if (!free_sizes()) {
+        return;
+    }
+    WorldSettings::Landscape& l = m_s.landscape;
+    const auto lo = std::int64_t{std::clamp<std::uint16_t>(l.min_side, shapes::kMinSide, shapes::kMaxSide)};
+    const auto hi =
+        std::int64_t{std::clamp<std::uint16_t>(l.max_side, static_cast<std::uint16_t>(lo), shapes::kMaxSide)};
+    // The mean rectangle of draw_dims(), over its draws u = 0..1000: the side squared, times the
+    // other side's share (own_dims: round about as long, long ones about 0.44 as wide).
+    const std::int64_t span = hi - lo;
+    std::int64_t sum = 0;
+    for (std::int64_t u = 0; u <= 1000; ++u) {
+        switch (l.spread) {
+            case WorldSettings::Landscape::Spread::Mixed: {
+                const std::int64_t side = lo + span * u * u / 1000000;
+                sum += side * side * 7;
+                break;
+            }
+            case WorldSettings::Landscape::Spread::FewGiants: {
+                const std::int64_t giant = hi - span / 5 * u / 1000;
+                const std::int64_t small = lo + span / 3 * u / 1000;
+                sum += giant * giant + small * small * 6;
+                break;
+            }
+            case WorldSettings::Landscape::Spread::Even: {
+                const std::int64_t side = lo + span * u / 1000;
+                sum += side * side * 7;
+                break;
+            }
+        }
+    }
+    std::int64_t mean = sum / (1001 * 7);
+    if (l.outline == WorldSettings::Landscape::Outline::Long) {
+        mean = mean * 44 / 100;
+    }
+    // A share of the islands a world has: the rest for the islands near the starts, and room for
+    // the islands that miss their place in the first try.
+    constexpr std::int64_t kIslands = kMaxPlannedIslands * 3 / 5;
+    const auto wanted = static_cast<std::int64_t>(own_target(m_s)) / std::max<std::int64_t>(mean, 1);
+    if (wanted <= kIslands) {
+        return;
+    }
+    // The sides grow with the square root of the islands too many, at most to the largest side.
+    m_grown = static_cast<std::uint32_t>(isqrt(wanted * 1000000 / kIslands));
+    const auto grow = [&](std::int64_t side) {
+        return static_cast<std::uint16_t>(std::min<std::int64_t>(side * m_grown / 1000, shapes::kMaxSide));
+    };
+    l.min_side = grow(lo);
+    l.max_side = grow(hi);
 }
 
 void Planner::place_land(bool warn_full) {
@@ -1025,7 +1085,7 @@ WorldPlan Planner::finish() {
     }
     out.shapes = m_s.shapes;
     out.seed = m_s.seed;
-    out.landscape = m_s.landscape;
+    out.landscape = m_asked;
     for (std::size_t c = 0; c < kCropBuildings.size(); ++c) {
         plan.crops[c] = ScenarioPlan::Resource{kCropBuildings[c], scaled(kCropCounts[d][c]), 0};
     }
@@ -1080,6 +1140,7 @@ core::Result<WorldPlan> Planner::run() {
     if (m_templates.empty()) {
         return core::make_error(core::ErrorCode::NotFound, "no island templates in the game directory");
     }
+    grow_islands();
     std::uint32_t density = 100;
     switch (m_s.islands) {
         case Amount::None:
