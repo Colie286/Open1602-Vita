@@ -602,8 +602,10 @@ void Engine::task_settle_land(AiPlayer& p) {
         if (o != nullptr && m_world.behaviour(*o) == FactionBehaviour::Natives && island_size(island) >= 4) {
             continue;
         }
+        // The original's computers keep off the largest islands where another computer has a
+        // city, though not where a human has one; improved, a computer's city counts as a human's.
         const bool human = o != nullptr && o->role == PlayerRole::Human;
-        if ((!human && island_size(island) > 3) || own_city_count(c.owner) < 2 || free < 300 ||
+        if ((classic() && !human && island_size(island) > 3) || own_city_count(c.owner) < 2 || free < 300 ||
             has_population(c, 0, 50)) {
             return;
         }

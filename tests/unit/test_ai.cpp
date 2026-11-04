@@ -1955,3 +1955,38 @@ TEST_CASE("ai: when a city moves on to the next stage comes from the game's bala
     CHECK(max_stage(2) >= 0x14);  // the pioneers (stage 0x14) or later
     CHECK(max_stage(11) == 0);    // ten inhabitants are not enough: still a city just founded
 }
+
+TEST_CASE("ai: improved computers settle on a large island another computer holds, the original's do not") {
+    // The big island counts as one of the largest (a template of size class 4); a second computer
+    // has a young city there (fewer than 50 inhabitants) and two more on islets, so that the island
+    // is open to others.
+    constexpr sim::PlayerId kOther = 4;
+    const auto founded = [&](bool classic, sim::PlayerRole other = sim::PlayerRole::Computer) {
+        Game g;
+        g.add_islet(2, 80);
+        g.world.island(1).header.template_number = 1;
+        g.world.island(1).header.template_size = 4;
+        std::vector<sim::Player> players = g.world.players();
+        players.push_back(sim::Player{});
+        players.back().role = other;
+        g.world.set_players(players);
+        const auto add_city = [&](std::uint16_t island, sim::PlayerId owner, std::uint32_t people) {
+            sim::City c;
+            c.island = island;
+            c.owner = owner;
+            c.inhabitants = {people};
+            g.world.add_city(c);
+        };
+        add_city(1, kOther, 20);
+        add_city(0, kOther, 20);
+        add_city(2, kOther, 20);
+        sim::Rules rules;
+        rules.bugs.classic_ai = classic;
+        sim::Simulation s(g.world, g.buildings, g.figures, rules);
+        return run_until(s, 600'000, [&] { return g.cities_of(kComputer) != 0; });
+    };
+    CHECK(founded(false));
+    CHECK(!founded(true));
+    // A human's city there the original's computers settle beside.
+    CHECK(founded(true, sim::PlayerRole::Human));
+}
