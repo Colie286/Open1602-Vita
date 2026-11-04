@@ -25,7 +25,9 @@ State on 2026-11-04. The details of each item follow under [Open items](#open-it
 
 ### Still open
 
-Nothing: with videos in WebM (AV1 and Opus, 2026-11-04) every item is done.
+Every item of the list is done (the last, videos in WebM, on 2026-11-04). Left from ADR 0007's
+section 4: a package's own waving flag as PNG for a banner ([flags.md](flags.md); its coat of arms is
+done, `arms.toml`).
 
 ### Smaller adjustments
 

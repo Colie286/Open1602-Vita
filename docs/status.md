@@ -1,8 +1,9 @@
 # Implementation status
 
-Status: 2026-10-26 (latest steps: packages with a manifest and the packages of each game, tests for
-the side panel's windows, faster computer players and sea map, videos read on a thread of their own,
-the programs built into `bin/`). This page is the overview
+Status: 2026-11-04 (latest steps: packages replace the original's buildings, figures, ships, coats of
+arms, music, sounds and message voices; videos of packages in WebM; ship route search two and a half
+times faster; the editor saves scenarios into packages, with markers, a script and factions per
+slot). This page is the overview
 and the single place for the status of the project. The details are in the linked documents, each in
 its "Open" section. It is updated with every completed step.
 
@@ -37,10 +38,11 @@ Symbols: ✅ done · 🟡 partly · ⬜ open · ❓ behaviour of the original no
   their attitude done) · M6 🟡 (lockstep, desync detection with resync,
   reconnecting, lobby, LAN search, Open1602's own multiplayer menu, 4 to 12 players, host migration; open: see
   Multiplayer in 1.2) · M7 🟡 (freely assignable keys, mouse-wheel zoom, pixel scaling, screenshot,
-  bug fixes, any window size and full screen, free zoom and the interface's size done; open: editor) · M8 🟡 (packages with
+  bug fixes, any window size and full screen, free zoom and the interface's size done; open: editor) · M8 ✅ (packages with
   manifest and zip archives, values, buildings, figures, goods, classes and levels of their own,
-  graphics and sound, videos in WebM (AV1 and Opus), Lua scripts, scenarios and campaigns, factions,
-  computer players from data and the island generator stage 2 done; open: see 2.2).
+  graphics and sound of their own and in place of the original's, videos in WebM (AV1 and Opus), Lua
+  scripts, scenarios and campaigns, also saved from the editor, factions, computer players from data
+  and the island generator stage 2; every item of [open-work.md](modding/open-work.md#summary) is done).
 - **Savegames**: since 2026-10-18 Open1602 saves in its own format `.o1602`
   ([o1602-save.md](formats/o1602-save.md), [ADR 0009](architecture/0009-own-save-format.md)): without
   the limits of the original (7 players, 150 ships, 400 soldiers, 350 towers), with a checksum, compressed,
@@ -179,6 +181,7 @@ are listed in 2.1.
 | What | Dependency | Source |
 |---|---|---|
 | Flag menu with free RGB colour as in Anno 1503 | Interface | [ADR 0007](architecture/0007-extensibility-and-modding.md) |
+| Flags of packages as PNG (a banner's own waving flag; its coat of arms is done, `arms.toml`) | – | [flags.md](modding/flags.md) |
 | Replays from the session's frames | M6 | [ADR 0011](architecture/0011-multiplayer-lockstep.md) |
 | Ideas: full refund shortly after building; own road pathfinding alongside that of the original; pirate distance of the difficulty level as a setting (S-068) | open, decision needed | – |
 
@@ -194,7 +197,7 @@ are recorded in the ADRs.
 
 | Point | Status |
 |---|---|
-| Tests | 930 test cases on 2026-10-26 (counted with `grep -c '^TEST_CASE'`; ctest runs them as the tests `unit` and `data`): 853 in the 87 files of `tests/unit/`, which need no original data, and 77 in the 13 files of `tests/data/`, which skip without `ANNO1602_DIR` (one of them needs no data). Sea and land routes, world generator, new games, AI (founding, diplomacy, determinism), multiplayer and a fuzz test over the own savegame (`O1602_FUZZ_ITERATIONS` for longer runs) and the recorded bytes of every savegame section have their own. The SDL layer (`engine/platform`, `render_sdl`) has its own executable `o1602_sdl_tests` (37 cases), built with the game and run headless in the game's CI jobs (dummy drivers, software renderer). Without their own unit tests: the parts of the game executable outside `o1602::menus` (`engine/app`); `o1602-tool` has ctest smoke tests on synthetic files, and CI starts the game without data (also under ASan/UBSan). A CI job measures the line and branch coverage of `engine/` by the tests without data (gcovr report as an artifact). How to run them: [tests/README.md](../tests/README.md) |
+| Tests | 1512 test cases on 2026-11-04 (counted with `grep -c '^TEST_CASE'`; ctest runs them as the tests `unit` and `data`): 1432 in the 127 files of `tests/unit/`, which need no original data, and 80 in the 13 files of `tests/data/`, which skip without `ANNO1602_DIR` (one of them needs no data). Sea and land routes, world generator, new games, AI (founding, diplomacy, determinism), multiplayer and a fuzz test over the own savegame (`O1602_FUZZ_ITERATIONS` for longer runs) and the recorded bytes of every savegame section have their own. The SDL layer (`engine/platform`, `render_sdl`) has its own executable `o1602_sdl_tests` (40 cases), built with the game and run headless in the game's CI jobs (dummy drivers, software renderer). Without their own unit tests: the parts of the game executable outside `o1602::menus` (`engine/app`); `o1602-tool` has ctest smoke tests on synthetic files, and CI starts the game without data (also under ASan/UBSan). A CI job measures the line and branch coverage of `engine/` by the tests without data (gcovr report as an artifact). How to run them: [tests/README.md](../tests/README.md) |
 | Builds | presets `debug`, `release`, `asan`, `tsan`, `ci`, `coverage` and `vcpkg` (`release` and `vcpkg` build the game, the others with `-DO1602_BUILD_GAME=ON`; `release` and `vcpkg` put the game and `o1602-tool` into `bin/`, the others into `build/<preset>/bin/`, on macOS the game as `Open1602.app`), locally under Linux without warnings; CI for Linux (GCC, Clang, ASan, TSan, coverage), Windows (MSVC 2026, Visual Studio 2026), macOS 15 and the game with SDL3 on all three. the game has run on Windows (the maintainer with the English installation, a player with release v0.1.1); macOS has never run on a real machine |
 | Player commands | complete for the simulation (since 2026-10-18 also the town window and ship window); the selection windows trigger them; white flag, scuttling, patrol, command chains and group commands with offset have been added |
 | Local player | the first human in a single player game; in multiplayer the slot taken in the lobby |

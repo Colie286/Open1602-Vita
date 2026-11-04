@@ -10,8 +10,10 @@ the guide of each file. What a package can do and what is still to come is in
 The repository has a package that uses every file once: [`data/mods/example`](../../data/mods/example).
 It adds pepper, a farm that grows it and a lighthouse, both drawn with images of their own, a court the
 merchants need and the computers build (a public building of a kind of its own), sounds and
-music, a script, a scenario with a campaign, a kind of island world and an island template, and changes a few values
-of the original. Copy it, rename the folder and change it, or read it next to the guides below.
+music, a WebM video for a message, a script, a scenario with a campaign, a kind of island world and an
+island template, and changes a few values of the original. It also replaces some of the original's
+art: the small merchant ship is drawn as a cog, the watchtower as the lighthouse, and the red
+player's coat of arms is a lighthouse in red. Copy it, rename the folder and change it, or read it next to the guides below.
 The tests load it with and without the original's data and expect no warning, so it always works
 with the version of Open1602 it comes with.
 
@@ -72,10 +74,26 @@ Each file does one thing; a package has only the files it needs.
 | scenarios and campaigns | `scenarios.toml`, `campaigns.toml` | [scenarios.md](scenarios.md) |
 
 The original's buildings, figures and goods are named `anno1602:<name>`, for example
-`anno1602:bakery` ([names](values.md#names)). Images, sounds, maps and scripts are files in the
+`anno1602:bakery` ([names](values.md#names)).
+
+A package can also **replace** what the original shows and plays, without changing the game: its
+buildings, figures and ships (`building_images.toml`, `figure_images.toml`), the coats of arms
+(`arms.toml`), the music and the sound effects (`replaces` in `music.toml` and `sounds.toml`) and
+the voice, text, icon and video of a message (`["anno1602:<number>"]` in `messages.toml`). A game
+keeps nothing of these: a savegame made with such a package loads without it and looks like the
+original. Images, sounds, maps and scripts are files in the
 package's folder, named by their path with `/` (`gfx/lighthouse.png`).
 
-### 4. Check it
+### 4. Make scenarios in the editor
+
+The game's editor (**Editor** in the main menu, or `open1602 --editor`) saves a scenario straight
+into a package with **Save to a package**: the map goes to `maps/<name>.o1602` and its table into
+`scenarios.toml`, whose comments, order and other keys (goals, money, slots, a script) stay as they
+are ([scenarios.md](scenarios.md), [editor.md](../editor.md#saving-into-a-package)). The
+editor also writes the scenario's markers and script, which the package's script can read
+([scripts.md](scripts.md)).
+
+### 5. Check it
 
 `o1602-tool check-mod` reads the packages of a folder as the game does and lists every problem
 with the file and the line, without starting the game:
@@ -90,14 +108,17 @@ problem: lighthouse/figure_images.toml line 2: [anno1602:small_merchant_ship]: i
 It needs the original's installation (`ANNO1602_DIR`), since a package builds on its buildings and
 figures, and exits with 1 when there is a problem. The game writes the same lines to its log.
 
-### 5. Play it
+To see the package's pictures on a map without starting the game, render it:
+`o1602-tool render-world <savegame> out.png --zoom 0 --mods ~/.local/share/Open1602/mods`.
+
+### 6. Play it
 
 A new game uses every package that is turned on in the main menu's screen "Mods"
 ([packages.md](packages.md#the-screen-mods)). The game keeps the packages it was started with in
 its savegame; a multiplayer game lets in only computers with the same packages, and the host can
 send them.
 
-### 6. Share it
+### 7. Share it
 
 Pack the folder as a zip archive (`lighthouse.zip`) and put it into another player's `mods`
 folder; the game reads it as the folder ([packages.md](packages.md#a-package-as-a-zip-archive)).
