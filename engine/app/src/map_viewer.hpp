@@ -228,7 +228,8 @@ private:
     /// The answer to that question: the game starts with the chosen player.
     void finish_pending_load(std::size_t option);
     /// A savegame or scenario as a world, not started.
-    /// `warnings`: how many the loader gave (they are written to the log).
+    /// `warnings`: how many the loader gave (they are written to the log); the notes of the
+    /// generator for islands made when the game starts are not among them (log_world_notes).
     [[nodiscard]] core::Result<sim::World> read_world(const std::filesystem::path& path,
                                                       std::size_t* warnings = nullptr) const;
     /// The game goes on in another world (a savegame, a scenario, a new game): the new game is
@@ -254,6 +255,9 @@ private:
     /// A game that loaded with `warnings` (parts skipped, other game data) or without its running
     /// state: a note in the status line, the details are in the log.
     void report_load_problems(std::size_t warnings);
+    /// What the generator noted while it made a new world's islands (an island it found no room
+    /// for, a start without a crop within reach): only in the log, since nothing failed to load.
+    static void log_world_notes(const std::vector<std::string>& notes);
     /// What the mods give a game that does not bring its own (a new game, one from a file of the
     /// original): their factions and balance, and the installed packages as the game's.
     void give_mod_content(sim::World& world) const;

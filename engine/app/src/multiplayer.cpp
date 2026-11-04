@@ -796,15 +796,13 @@ core::Status MapViewer::start_hosted_game() {
                                          static_cast<std::uint32_t>(t->tm_mday), static_cast<std::uint32_t>(t->tm_hour),
                                          static_cast<std::uint32_t>(t->tm_min), device());
         }
-        std::vector<std::string> warnings;
-        auto made = sim::start_new_game(m_game, m_buildings, *texts, o, &warnings);
+        std::vector<std::string> notes;
+        auto made = sim::start_new_game(m_game, m_buildings, *texts, o, &notes);
         if (!made) {
             return made.error();
         }
         give_mod_content(*made);
-        for (const auto& w : warnings) {
-            std::fprintf(stderr, "warning: %s\n", w.c_str());
-        }
+        log_world_notes(notes);
         world = std::move(made).value();
         name_more_players(*world);
     } else if (m_hosted_world) {

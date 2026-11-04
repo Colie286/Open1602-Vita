@@ -257,6 +257,7 @@ core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDir
         }
     }
     std::vector<std::string> warnings;
+    std::vector<std::string> world_notes;  // of a world made now: in the log, no load problem
     std::vector<assets::ModPackage> packages;
     {
         std::vector<std::string> problems;
@@ -286,7 +287,7 @@ core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDir
         }
         sim::NewGameOptions start = *options.new_game;
         start.world.climates = rules.balance.climates;
-        world = sim::start_new_game(game, *buildings, *texts, start, &warnings);
+        world = sim::start_new_game(game, *buildings, *texts, start, &world_notes);
         if (world) {
             world->set_factions(rules.factions);
             world->replace_factions(rules.faction_replacements);
@@ -307,7 +308,7 @@ core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDir
             world = sim::read_game(*bytes, *buildings, &warnings, &*figures);
             if (world && world->planned_islands()) {
                 // A scenario that makes its islands when the game starts (ADR 0013).
-                world = sim::roll_planned_islands(*world, game, *buildings, options.world, &warnings);
+                world = sim::roll_planned_islands(*world, game, *buildings, options.world, &world_notes);
             }
         } else {
             auto file = assets::ChunkFile::from_bytes(std::move(bytes).value());
@@ -338,6 +339,7 @@ core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDir
     for (const auto& w : warnings) {
         std::fprintf(stderr, "warning: %s\n", w.c_str());
     }
+    log_world_notes(world_notes);
     auto banners = render::BannerTable::original();
     banners.add_more_players();
     for (std::size_t i = 0; i < world->players().size(); ++i) {
@@ -3744,18 +3746,25 @@ void MapViewer::report_load_problems(std::size_t warnings) {
     }
 }
 
+void MapViewer::log_world_notes(const std::vector<std::string>& notes) {
+    for (const std::string& n : notes) {
+        std::fprintf(stderr, "new world: %s\n", n.c_str());
+    }
+}
+
 core::Result<sim::World> MapViewer::read_world(const std::filesystem::path& path, std::size_t* warning_count) const {
     auto bytes = core::read_file(path);
     if (!bytes) {
         return bytes.error();
     }
     std::vector<std::string> warnings;
+    std::vector<std::string> world_notes;
     core::Result<sim::World> world = core::make_error(core::ErrorCode::NotFound, "no game");
     if (sim::is_open1602_save(*bytes)) {
         world = sim::read_game(*bytes, m_buildings, &warnings, &m_figures);
         if (world && world->planned_islands()) {
             // A scenario that makes its islands when the game starts (ADR 0013).
-            world = sim::roll_planned_islands(*world, m_game, m_buildings, m_options.world, &warnings);
+            world = sim::roll_planned_islands(*world, m_game, m_buildings, m_options.world, &world_notes);
         }
     } else {
         auto file = assets::ChunkFile::from_bytes(std::move(bytes).value());
@@ -3770,6 +3779,7 @@ core::Result<sim::World> MapViewer::read_world(const std::filesystem::path& path
     for (const auto& w : warnings) {
         std::fprintf(stderr, "warning: %s\n", w.c_str());
     }
+    log_world_notes(world_notes);
     if (warning_count != nullptr) {
         *warning_count = warnings.size();
     }
@@ -3972,15 +3982,13 @@ core::Status MapViewer::start_endless(std::uint8_t level, sim::BannerId banner, 
                              static_cast<std::uint32_t>(t->tm_mday), static_cast<std::uint32_t>(t->tm_hour),
                              static_cast<std::uint32_t>(t->tm_min), device());
     }
-    std::vector<std::string> warnings;
-    auto world = sim::start_new_game(m_game, m_buildings, *texts, o, &warnings);
+    std::vector<std::string> notes;
+    auto world = sim::start_new_game(m_game, m_buildings, *texts, o, &notes);
     if (!world) {
         return world.error();
     }
     give_mod_content(*world);
-    for (const auto& w : warnings) {
-        std::fprintf(stderr, "warning: %s\n", w.c_str());
-    }
+    log_world_notes(notes);
     if (further) {
         // A computer with that colour takes the human's, and the name of its new colour.
         if (const auto other = sim::take_banner(*world, sim::first_human_player(*world), banner)) {

@@ -405,16 +405,14 @@ core::Status MapViewer::editor_new(const EditorNewMap& map) {
     custom.seed = map.seed;
     apply_landscape_choice(custom, map.landscape);
     o.custom = sim::fit_landscape(custom);
-    std::vector<std::string> warnings;
-    auto world = sim::start_new_game(m_game, m_buildings, *texts, o, &warnings);
+    std::vector<std::string> notes;
+    auto world = sim::start_new_game(m_game, m_buildings, *texts, o, &notes);
     if (!world) {
         return world.error();
     }
     give_mod_content(*world);
     name_more_players(*world);
-    for (const std::string& w : warnings) {
-        std::fprintf(stderr, "warning: %s\n", w.c_str());
-    }
+    log_world_notes(notes);
     return enter_editor(std::move(world).value(), {});
 }
 
@@ -668,9 +666,10 @@ void MapViewer::editor_test_play() {
         return;
     }
     std::vector<std::string> warnings;
+    std::vector<std::string> notes;
     auto world = sim::read_game(*bytes, m_buildings, &warnings, &m_figures);
     if (world && world->planned_islands()) {
-        world = sim::roll_planned_islands(*world, m_game, m_buildings, m_options.world, &warnings);
+        world = sim::roll_planned_islands(*world, m_game, m_buildings, m_options.world, &notes);
     }
     if (!world) {
         failed(world.error());
@@ -679,6 +678,7 @@ void MapViewer::editor_test_play() {
     for (const std::string& w : warnings) {
         std::fprintf(stderr, "warning: %s\n", w.c_str());
     }
+    log_world_notes(notes);
     // A test game is a game: what it does is not the editor's, but should it end the program, the
     // changes are kept.
     editor_keep_recovery(true);
