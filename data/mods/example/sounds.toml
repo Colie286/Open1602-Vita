@@ -1,3 +1,8 @@
 # Sounds of this package's buildings and figures (sounds.md).
 [horn]
 file = "sounds/horn.flac"
+
+# A sound in place of one of the original's SAMPLES plays wherever the game plays that file:
+# [cannon]
+# file = "sounds/horn.flac"
+# replaces = "kanone5"

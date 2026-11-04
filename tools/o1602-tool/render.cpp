@@ -6,15 +6,18 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "mod_rules.hpp"
 #include "tool.hpp"
 
 #include "o1602/assets/building_table.hpp"
 #include "o1602/assets/chunk_file.hpp"
 #include "o1602/assets/data_fixes.hpp"
+#include "o1602/assets/figure_looks.hpp"
 #include "o1602/assets/figure_table.hpp"
 #include "o1602/assets/game_directory.hpp"
 #include "o1602/assets/island.hpp"
@@ -170,6 +173,21 @@ int cmd_render_world(const Args& args) {
         (void)assets::fixes::fix_buildings(*buildings);
         (void)assets::fixes::fix_figures(*figures);
     }
+    // --mods FOLDER: the packages' pictures, of their own and in place of the original's
+    // (graphics.toml, figure_images.toml, building_images.toml).
+    render::GraphicsOptions graphics_options;
+    if (const auto it = args.options.find("--mods"); it != args.options.end()) {
+        std::vector<std::string> problems;
+        const auto packages = assets::load_mod_packages(std::filesystem::path(std::string(it->second)), problems);
+        const assets::FigureTable original_figures = *figures;
+        app::ModRules rules = app::load_mod_rules(packages, *buildings, *figures, problems);
+        assets::apply_figure_looks(*figures, original_figures, rules.looks);
+        graphics_options.package_images = std::move(rules.images);
+        graphics_options.sprite_redirects = std::move(rules.redirects);
+        for (const std::string& p : problems) {
+            std::fprintf(stderr, "mods: %s\n", p.c_str());
+        }
+    }
     // --build "ID@X,Y[,R];..." places buildings for the first human player (world tiles).
     if (const auto it = args.options.find("--build"); it != args.options.end()) {
         std::vector<std::string> names;
@@ -264,7 +282,6 @@ int cmd_render_world(const Args& args) {
             });
         }
     }
-    render::GraphicsOptions graphics_options;
     graphics_options.derive_missing_sheets = !args.flag("--original-sheets");
     auto banners = render::BannerTable::original(&*figures, render::BannerOptions{args.flag("--original-flags")});
     // --banner P:RRGGBB gives player P a new banner in any colour (tinted generic flag).

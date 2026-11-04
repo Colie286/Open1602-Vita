@@ -22,6 +22,10 @@ struct MusicTrack {
     std::string title;
     std::filesystem::path file;
     bool battle = false;  ///< played while shots fall, as the original's Fight tracks
+    /// The title of a MUSIC8 track (its file name without ".wav", case ignored) this one plays in
+    /// place of; empty for a track of its own. A replacing track keeps the original's title, place
+    /// and kind in the list.
+    std::string replaces;
 
     friend bool operator==(const MusicTrack&, const MusicTrack&) = default;
 };

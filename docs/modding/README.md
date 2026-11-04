@@ -59,8 +59,9 @@ Each file does one thing; a package has only the files it needs.
 | unlock levels | `levels.toml` | [levels.md](levels.md) |
 | the build menu | `build_menu.toml` | [build-menu.md](build-menu.md) |
 | messages of the status bar | `messages.toml` | [messages.md](messages.md) |
-| images of buildings, figures and ships; icons | `graphics.toml`, `figure_images.toml`, `icons.toml` | [graphics.md](graphics.md) |
-| music and sounds | `music.toml`, `sounds.toml` | [sounds.md](sounds.md) |
+| images of buildings, figures and ships, also in place of the original's; icons | `graphics.toml`, `figure_images.toml`, `building_images.toml`, `icons.toml` | [graphics.md](graphics.md) |
+| coats of arms of the players | `arms.toml` | [flags.md](flags.md#coats-of-arms-of-a-package) |
+| music and sounds, also in place of the original's | `music.toml`, `sounds.toml` | [sounds.md](sounds.md) |
 | numbers of the game: trader, disasters, computers' gifts | `balance.toml` | [balance.md](balance.md) |
 | what the computer players build | `computers.toml`, `slots.toml` | [computer-players.md](computer-players.md) |
 | the neutral factions: pirates, trader, natives | `factions.toml` | [factions.md](factions.md) |

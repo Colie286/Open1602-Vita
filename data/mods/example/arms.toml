@@ -1,0 +1,4 @@
+# Coats of arms of this package (flags.md): the red player's coat of arms becomes the lighthouse,
+# in red, wherever the interface shows it.
+["anno1602:red"]
+icon = "example:arms"

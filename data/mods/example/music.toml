@@ -2,3 +2,8 @@
 [shanty]
 file = "music/shanty.flac"
 title = "Example Shanty"
+
+# A track in place of one of the original's MUSIC8 keeps its title and place in the music list:
+# [calm]
+# file = "music/shanty.flac"
+# replaces = "Greensleaves"

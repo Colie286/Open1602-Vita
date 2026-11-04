@@ -10,6 +10,7 @@
 
 #include "o1602/render/banner.hpp"
 #include "o1602/sim/player.hpp"
+#include "o1602/ui/package_icons.hpp"
 #include "o1602/ui/panel.hpp"
 
 namespace o1602::app {
@@ -19,15 +20,11 @@ namespace o1602::app {
     return banners != nullptr && player != nullptr ? banners->get(player->banner) : nullptr;
 }
 
-/// The colour variant of `art` for `banner` on gadget `id` (Panel::set_graphic).
-inline void set_banner_graphic(ui::Panel& panel, std::int32_t id, const render::BannerArt& art,
-                               const render::Banner* banner, std::int32_t press_offset = 0) {
-    const render::BannerArtSprite s = render::banner_art(art, banner);
-    std::optional<ui::ColourTint> tint;
-    if (s.tint) {
-        tint = ui::ColourTint{*s.tint, art.stride, art.variants, art.base, s.pattern};
-    }
-    panel.set_graphic(id, s.gfx, press_offset, tint);
+/// The icon a package draws as the coat of arms of `banner` (arms.toml), if `art` is a coat of
+/// arms and a package gives the banner one.
+[[nodiscard]] inline std::optional<std::int32_t> package_arms_of(const render::BannerArt& art,
+                                                                 const render::Banner* banner) {
+    return art.arms && banner != nullptr ? ui::package_arms_sprite(banner->id) : std::nullopt;
 }
 
 /// A package's icon (`sprite`, from kFirstPackageIcon) on gadget `id`, standing for the player of
@@ -40,6 +37,22 @@ inline void set_package_icon(ui::Panel& panel, std::int32_t id, std::int32_t spr
         tint = ui::ColourTint{banner->colour, 1, 1, 0, 0};
     }
     panel.set_graphic(id, sprite, press_offset, tint);
+}
+
+/// The colour variant of `art` for `banner` on gadget `id` (Panel::set_graphic); a package's coat
+/// of arms of the banner instead, if it has one.
+inline void set_banner_graphic(ui::Panel& panel, std::int32_t id, const render::BannerArt& art,
+                               const render::Banner* banner, std::int32_t press_offset = 0) {
+    if (const auto icon = package_arms_of(art, banner)) {
+        set_package_icon(panel, id, *icon, banner);
+        return;
+    }
+    const render::BannerArtSprite s = render::banner_art(art, banner);
+    std::optional<ui::ColourTint> tint;
+    if (s.tint) {
+        tint = ui::ColourTint{*s.tint, art.stride, art.variants, art.base, s.pattern};
+    }
+    panel.set_graphic(id, s.gfx, press_offset, tint);
 }
 
 }  // namespace o1602::app

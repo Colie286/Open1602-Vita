@@ -135,6 +135,44 @@ bool PlacedSources::pixels(std::uint32_t i, std::vector<std::uint8_t>& rgba) con
     return true;
 }
 
+RedirectedSprites::RedirectedSprites(const SpriteSource& base, std::vector<assets::SpriteRedirect> redirects)
+    : m_base(&base), m_redirects(std::move(redirects)) {
+    // Those that lead out of the base, or overlap one before them (a building whose sprites share
+    // another's), are left out.
+    std::erase_if(m_redirects, [&](const assets::SpriteRedirect& r) {
+        return r.count == 0 || std::uint64_t{r.to} + r.count > base.count() ||
+               std::uint64_t{r.from} + r.count > base.count();
+    });
+    std::sort(m_redirects.begin(), m_redirects.end(),
+              [](const assets::SpriteRedirect& a, const assets::SpriteRedirect& b) { return a.from < b.from; });
+    std::uint64_t end = 0;
+    std::erase_if(m_redirects, [&](const assets::SpriteRedirect& r) {
+        if (r.from < end) {
+            return true;
+        }
+        end = std::uint64_t{r.from} + r.count;
+        return false;
+    });
+}
+
+std::uint32_t RedirectedSprites::target(std::uint32_t i) const noexcept {
+    const auto it = std::upper_bound(m_redirects.begin(), m_redirects.end(), i,
+                                     [](std::uint32_t a, const assets::SpriteRedirect& r) { return a < r.from; });
+    if (it == m_redirects.begin()) {
+        return i;
+    }
+    const assets::SpriteRedirect& r = *std::prev(it);
+    return i - r.from < r.count ? r.to + (i - r.from) : i;
+}
+
+void RedirectedSprites::size(std::uint32_t i, std::uint32_t& width, std::uint32_t& height) const {
+    m_base->size(target(i), width, height);
+}
+
+bool RedirectedSprites::pixels(std::uint32_t i, std::vector<std::uint8_t>& rgba) const {
+    return m_base->pixels(target(i), rgba);
+}
+
 IconPixels package_icon_pixels(const assets::PackageIcon& icon, double scale) {
     IconPixels out;
     std::vector<std::uint8_t> read;

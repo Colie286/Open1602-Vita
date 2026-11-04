@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "o1602/assets/building_looks.hpp"
 #include "o1602/assets/package_graphics.hpp"
 #include "o1602/render/sprite_source.hpp"
 
@@ -59,6 +60,23 @@ private:
 
     std::vector<Placed> m_placed;  ///< sorted by `at`
     std::uint32_t m_count = 0;
+};
+
+/// A source with some of its sprites drawn as others of it (assets/building_looks.hpp): sprite
+/// `from + i` of a redirect is sprite `to + i` of `base`. The base must outlive it.
+class RedirectedSprites final : public SpriteSource {
+public:
+    RedirectedSprites(const SpriteSource& base, std::vector<assets::SpriteRedirect> redirects);
+    [[nodiscard]] std::uint32_t count() const override { return m_base->count(); }
+    void size(std::uint32_t i, std::uint32_t& width, std::uint32_t& height) const override;
+    bool pixels(std::uint32_t i, std::vector<std::uint8_t>& rgba) const override;
+
+private:
+    /// The sprite of the base drawn for `i`.
+    [[nodiscard]] std::uint32_t target(std::uint32_t i) const noexcept;
+
+    const SpriteSource* m_base;
+    std::vector<assets::SpriteRedirect> m_redirects;  ///< sorted by `from`, not overlapping
 };
 
 /// The picture of a package's icon, RGBA with its alpha as the PNG has it.

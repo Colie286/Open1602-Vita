@@ -62,11 +62,19 @@ struct BannerArt {
     /// Sprites drawn for one banner (Banner::id), as an offset from `first`: the pirates' skull among
     /// the military message icons.
     std::vector<std::pair<std::string, std::int32_t>> own;
+    /// The family is a coat of arms: a package's arms of a banner (arms.toml) stand in for it.
+    bool arms = false;
 
     /// The four colours of the original one after the other from `first`.
     [[nodiscard]] static BannerArt at(std::int32_t first) {
         BannerArt art;
         art.first = first;
+        return art;
+    }
+    /// The same for coats of arms.
+    [[nodiscard]] static BannerArt arms_at(std::int32_t first) {
+        BannerArt art = at(first);
+        art.arms = true;
         return art;
     }
 };

@@ -170,7 +170,7 @@ void EndScreen::update_strip() {
         p.set_visible(slot_id(s), used);
         if (used) {
             const sim::EndScreenRow& r = m_summary.rows[m_order[place]];
-            set_banner_graphic(p, slot_id(s), render::BannerArt::at(m_button_arms),
+            set_banner_graphic(p, slot_id(s), render::BannerArt::arms_at(m_button_arms),
                                m_banners != nullptr ? m_banners->get(r.banner) : nullptr, m_button_press);
             p.set_selected(slot_id(s), m_order[place] == m_row);
         }
@@ -209,7 +209,7 @@ void EndScreen::show(std::size_t row) {
     p.set_text(kTotal, std::to_string(s.total));
     p.set_text(kName, r.name.empty() ? ui::tr("end.player", {std::to_string(r.player + 1)}) : r.name);
     // The coat of arms in the player's colour (the further colours: the white one recoloured).
-    set_banner_graphic(p, kArms, render::BannerArt::at(m_arms),
+    set_banner_graphic(p, kArms, render::BannerArt::arms_at(m_arms),
                        m_banners != nullptr ? m_banners->get(r.banner) : nullptr);
     if (m_strip) {
         // Keep the shown player in the strip.

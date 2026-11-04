@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "o1602/assets/building_looks.hpp"
 #include "o1602/assets/building_table.hpp"
 #include "o1602/assets/figure_looks.hpp"
 #include "o1602/assets/figure_table.hpp"
@@ -15,6 +16,7 @@
 #include "o1602/assets/goods.hpp"
 #include "o1602/assets/own_buildings.hpp"
 #include "o1602/assets/own_figures.hpp"
+#include "o1602/assets/package_arms.hpp"
 #include "o1602/assets/package_graphics.hpp"
 #include "o1602/assets/package_sounds.hpp"
 #include "o1602/assets/resident_classes.hpp"
@@ -50,6 +52,8 @@ struct ModRules {
     std::vector<assets::PackageImage> images;
     /// The figures the packages draw with their images (figure_images.toml).
     std::vector<assets::FigureLook> looks;
+    /// The original's buildings the packages draw with their images (building_images.toml).
+    std::vector<assets::SpriteRedirect> redirects;
     /// The music of the packages (music.toml).
     std::vector<audio::MusicTrack> music;
     /// The sounds of the packages with their sound numbers (sounds.toml).
@@ -59,6 +63,11 @@ struct ModRules {
 /// The icons of `packages` (icons.toml), numbered in their load order, after Open1602's own.
 [[nodiscard]] std::vector<assets::PackageIcon> load_package_icons(std::span<const assets::ModPackage> packages,
                                                                   std::vector<std::string>& problems);
+
+/// The coats of arms of `packages` (arms.toml), with the icons they name.
+[[nodiscard]] std::vector<assets::PackageArms> load_package_arms(std::span<const assets::ModPackage> packages,
+                                                                 std::span<const assets::PackageIcon> icons,
+                                                                 std::vector<std::string>& problems);
 
 /// The kinds of island world of `packages` (landscapes.toml), in their load order.
 [[nodiscard]] std::vector<sim::PackageLandscape> load_package_landscapes(std::span<const assets::ModPackage> packages,

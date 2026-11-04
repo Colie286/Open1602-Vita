@@ -368,6 +368,7 @@ core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDir
     viewer->m_classes = std::move(rules.classes);
     viewer->m_levels = std::move(rules.levels);
     viewer->m_package_images = std::move(rules.images);
+    viewer->m_sprite_redirects = std::move(rules.redirects);
     viewer->m_figure_looks = std::move(rules.looks);
     assets::apply_figure_looks(viewer->m_figures, viewer->m_original_figures, viewer->m_figure_looks);
     viewer->m_packages = std::move(packages);
@@ -635,6 +636,7 @@ void MapViewer::start_preloading() {
     options.derive_missing_sheets = m_options.derive_small_figures;
     options.dither = m_app_settings.display.classic_graphics;
     options.package_images = m_package_images;
+    options.sprite_redirects = m_sprite_redirects;
     options.template_sprites = assets::tint_template_sprites(m_own_units, m_figures, m_own_ships);
     // The thread works on its own copies: nothing it reads changes under it.
     m_preloader = std::make_unique<render::GraphicsPreloader>(
@@ -3440,7 +3442,9 @@ void MapViewer::use_game_packages() {
     const std::vector<assets::ModPackage> known = known_packages();
     const std::vector<assets::ModPackage> used = wanted ? assets::packages_for(known, *wanted, problems) : m_packages;
     // The icons first: the messages and the build menu may name them.
-    ui::set_package_icons(load_package_icons(used, problems));
+    std::vector<assets::PackageIcon> icons = load_package_icons(used, problems);
+    ui::set_package_arms(load_package_arms(used, icons, problems));
+    ui::set_package_icons(std::move(icons));
     if (m_hud) {
         m_hud->forget_package_icons();
     }
@@ -3596,9 +3600,10 @@ void MapViewer::reload_mods() {
     m_figures = m_original_figures;
     sim::apply_figure_values(m_figures, m_original_figures, m_state->world.balance());
     assets::apply_figure_looks(m_figures, m_original_figures, m_figure_looks);
-    if (rules.images != m_package_images) {
+    if (rules.images != m_package_images || rules.redirects != m_sprite_redirects) {
         // Other pictures: the zoom levels are made again with them.
         m_package_images = std::move(rules.images);
+        m_sprite_redirects = std::move(rules.redirects);
         start_preloading();
         reload_graphics();
     }

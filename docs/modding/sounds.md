@@ -5,9 +5,11 @@ FLAC files ([ADR 0007](../architecture/0007-extensibility-and-modding.md) sectio
 [open-work.md](open-work.md)).
 
 **Status:** Done are the file `music.toml` (tracks of a package beside the original's `MUSIC8`, as
-normal or as battle music), sounds of messages in all three formats ([messages.md](messages.md))
-and `sounds.toml`, the sounds a package's buildings and figures make
-([own-buildings.md](own-buildings.md), [own-figures.md](own-figures.md)).
+normal or as battle music, or in place of one of them), sounds of messages in all three formats
+([messages.md](messages.md)) and `sounds.toml`, the sounds a package's buildings and figures make
+([own-buildings.md](own-buildings.md), [own-figures.md](own-figures.md)) and sounds in place of the
+original's `SAMPLES`. The voice of an original message is replaced in `messages.toml`
+(`["anno1602:<number>"]` with `sound`, [messages.md](messages.md)).
 
 ## The formats
 
@@ -45,12 +47,31 @@ battle = true
 | `file` | a path in the package, folders split by `/` | the sound file of the track (required) |
 | `title` | 1 to 64 bytes | what the music list in the options shows; the table's name if not given |
 | `battle` | `true` or `false` | battle music, played while shots fall near the middle of the view as the original's `Fight` tracks; `false` if not given |
+| `replaces` | 1 to 64 bytes | the title of a track of `MUSIC8` (its file name without `.wav`, case ignored), which this one plays in place of |
 
 The packages' tracks come after the original's in the music list, in the packages' load order, and
 are played at random or in order with them; the player turns them off there as the original's. A
 track whose file is missing or is no sound file, or whose title another track has, is passed over
 with a warning that names the file and the line. A track is decoded when it starts, beside the
 game, as the original's are.
+
+### Replacing a track of the original
+
+```toml
+# mods/shanty/music.toml
+[calm]
+file = "music/calm.ogg"
+replaces = "Greensleaves"
+
+[battle]
+file = "music/battle.flac"
+replaces = "Fight1"
+```
+
+A track with `replaces` takes the original track's place: the music list keeps the original's title
+and order, the player turns it off there as before, and a `Fight` track stays battle music; its own
+`title` and `battle` are not used. If two packages replace the same track, the one loaded later
+wins. A title `MUSIC8` has not is passed over with a warning on the console.
 
 ## Sounds of messages
 
@@ -98,8 +119,25 @@ like = "anno1602:watchtower"
 build_sound = "lighthouse:horn"
 ```
 
-The original's buildings and figures keep their sounds; a package changes those only by copying
-them into a building or figure of its own.
+### Replacing a sound of the original
+
+A sound with `replaces` plays in place of a file of the original's `SAMPLES` folder, wherever the
+game plays it: buildings, figures, ships, battles, scenery and the interface.
+
+```toml
+# mods/cannons/sounds.toml
+[boom]
+file = "sounds/boom.ogg"
+replaces = "kanone5"
+```
+
+| Field | Limits | Meaning |
+|---|---|---|
+| `replaces` | the name of a file of `SAMPLES` without `.wav`, case ignored | the original's sound this one plays in place of |
+
+A file that two sound numbers share (`schwertb`, `steinmtz`) is replaced for both. If two packages
+replace the same file, the one loaded later wins. A name `SAMPLES` has not gives a warning; the
+sound then plays only where a package names it by its id.
 
 ## In the code
 
@@ -108,4 +146,5 @@ dr_flac in `third_party`). `engine/audio/include/o1602/audio/package_music.hpp`:
 and `MusicTrack`, which `audio::Music` plays beside `MUSIC8`'s tracks
 (`app::GameSound::set_package_music`). `engine/assets/include/o1602/assets/package_sounds.hpp`:
 `apply_sounds_file` and `PackageSound`; `audio::Effects::set_package_sounds` plays them by their
-numbers beside the original's (`app::GameSound::set_package_sounds`).
+numbers beside the original's (`app::GameSound::set_package_sounds`), and
+`audio::Effects::set_replaced_sounds` in place of the original's (`audio::samples_named`).

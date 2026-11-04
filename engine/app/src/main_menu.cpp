@@ -842,7 +842,7 @@ void MainMenu::refresh_colour() {
             continue;
         }
         const bool lit = hovered == id || (!m_typing && p.held() == id);
-        set_banner_graphic(p, id, render::BannerArt::at(lit ? g->gfx + kGfxArmsGold : g->gfx), banner,
+        set_banner_graphic(p, id, render::BannerArt::arms_at(lit ? g->gfx + kGfxArmsGold : g->gfx), banner,
                            lit ? 0 : kGfxArmsGold);
         if (lit) {
             preview = banner;

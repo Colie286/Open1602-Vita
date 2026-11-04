@@ -94,6 +94,44 @@ pirates' skull among the military message icons). The windows set a gadget's pic
 `set_banner_graphic` (`engine/app/src/banner_graphic.hpp`); the interface renderer recolours and
 caches it per colour.
 
+## Coats of arms of a package
+
+```
+<user data folder>/mods/<package>/arms.toml
+```
+
+A package gives a banner a coat of arms of its own: an icon of `icons.toml`
+([graphics.md](graphics.md#icons)) that the interface draws wherever it shows that banner's coat of
+arms: the info panel, the diplomacy window, the ship and city lists, the trade route, the pirates'
+order, the end screen, the flag menu, the island's owner in the resource bar and the marks over
+the units (M). Each table names the
+banner by its id: `anno1602:red`, `anno1602:blue`, `anno1602:yellow`, `anno1602:white`,
+`anno1602:pirates`, and for the further players `open1602:orange`, `open1602:green`,
+`open1602:teal`, `open1602:pink`, `open1602:magenta`, `open1602:grey`, `open1602:purple`,
+`open1602:brown`.
+
+```toml
+# mods/heraldry/icons.toml
+[lion]
+image = "arms/lion.png"
+tint = true
+
+# mods/heraldry/arms.toml
+["anno1602:red"]
+icon = "heraldry:lion"
+```
+
+| Field | Limits | Meaning |
+|---|---|---|
+| `icon` | an icon of a package, `<package>:<name>` | the coat of arms (required) |
+
+The interface draws the icon in every place at the size of the original's coat of arms there, made
+smaller where it is larger, so draw it the size of the largest (the end screen's). An icon with
+`tint = true` takes on the banner's colour in its pure grey pixels; one icon may then serve several
+banners. The message icons in the status bar stay the original's. If two packages give the same
+banner arms, the one loaded later wins; a banner no game has is passed over silently. Only the
+picture changes: a game keeps nothing of it.
+
 ## The flag menu
 
 The single player's banner screen (`FARBWAHL.GAD`) keeps the original's four hall banners and adds, for the endless

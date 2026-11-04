@@ -16,7 +16,7 @@ State on 2026-11-04. The details of each item follow under [Open items](#open-it
 | 1. Packages | a manifest with version, dependencies (version ranges) and load order; packages as folders or zip archives; the packages a game uses are kept in its savegame and checked in multiplayer, where the host sends missing ones; the main menu's screen "Mods" |
 | 2. Content | change 16 values of the original's buildings and 10 of its figures; add buildings and figures of its own, each copying one of the original, and replace another package's building; soldiers that castles train and ships that shipyards build, which computers train and build too |
 | 3. Goods, classes, levels | add trade goods, change the original's classes and add up to eight in all with their needs and public buildings, change and add unlock levels with messages of their own |
-| 4. Graphics and sound | PNG images for buildings, figures, ships and icons; music and sounds as WAV, Ogg Vorbis or FLAC for messages, buildings and figures; Smacker, Bink 2 and WebM videos (AV1 and Opus) for messages |
+| 4. Graphics and sound | PNG images for buildings, figures, ships and icons; music and sounds as WAV, Ogg Vorbis or FLAC for messages, buildings and figures; Smacker, Bink 2 and WebM videos (AV1 and Opus) for messages; the original's buildings, figures, ships, coats of arms, music, sounds and message voices replaced by a package's |
 | 5. Computer players | they build the chains of a package's goods; they train soldiers and build ships of packages; their stage orders, public buildings, producers (building, tries, crop, what they wait for, what counts), cheat amounts, when a city moves on and the crop of their first colony are data; the 55 slots of a city record are named and changed by `slots.toml`, with up to 50 public buildings of a kind of their own that classes need and the computers build |
 | 6. Lua scripts | a sandboxed Lua 5.4 script per package that hears what happens and reads and changes the game (money, goods, missions, buildings, ships, land units, diplomacy, who wins) |
 | 7. Scenarios and campaigns | scenarios with maps, briefings, goals and scripts; campaigns of up to five parts that carry money and a script table on |
@@ -205,7 +205,12 @@ sprite the figure draws). Part 5 done on 2026-11-01 ([sounds.md](sounds.md#sound
 ([messages.md](messages.md#sound-and-video)): a message of a package plays a Smacker or Bink 2
 video of the package's own (`video = "<path>"`). Part 7 done on 2026-11-04
 ([webm.md](../formats/webm.md)): the package's videos may be WebM files with AV1 pictures and Opus
-sound, decoded by dav1d and libopus in `third_party`.
+sound, decoded by dav1d and libopus in `third_party`. Part 8 done on 2026-11-04: a package
+replaces the original's art and sound in place: `building_images.toml` draws the original's
+buildings with its images ([graphics.md](graphics.md#buildings-of-the-original)), `arms.toml` the
+coats of arms of a banner with an icon ([flags.md](flags.md#coats-of-arms-of-a-package)), `replaces`
+in `music.toml` and `sounds.toml` plays a file in place of a track of `MUSIC8` or a sound of
+`SAMPLES` ([sounds.md](sounds.md)).
 
 ### 5. Computer players from data (section 3; MD-4)
 

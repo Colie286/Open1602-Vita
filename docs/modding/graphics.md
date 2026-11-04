@@ -7,8 +7,10 @@ A content package may bring its own pictures as PNG images
 
 **Status:** Done are the file `graphics.toml`, PNG images for the buildings of a package at all three
 zoom levels, the field `gfx` of such a building that names an image, the file `icons.toml` with
-icons for the build menu, the goods and the messages, and the file `figure_images.toml`, which
-draws the original's figures and ships with a package's images. Figures and ships of a package's
+icons for the build menu, the goods and the messages, the file `figure_images.toml`, which
+draws the original's figures and ships with a package's images, and `building_images.toml`, which
+does the same for the original's buildings. Coats of arms of a package are in
+[flags.md](flags.md#coats-of-arms-of-a-package). Figures and ships of a package's
 own (new figure numbers) come with the content registry's figures. Sounds and music are in
 [sounds.md](sounds.md).
 
@@ -115,6 +117,43 @@ Only the picture changes: the figure keeps its values, animations and sounds, an
 nothing of it, so a game looks as the packages of the computer it runs on say. The smoke and the
 bow wave of a ship and the effects of combat stay the original's.
 
+## Buildings of the original
+
+```
+<user data folder>/mods/<package>/building_images.toml
+```
+
+A building of the original is drawn with an image of `graphics.toml`. Each table names the
+building as `buildings.toml` does ([values.md](values.md#names)): `["anno1602:<name>"]` or
+`["anno1602:<Id>"]` of `haeuser.cod`.
+
+```toml
+# mods/stone/building_images.toml
+["anno1602:grain_mill"]
+image = "stone:mill"
+
+["anno1602:20502"]
+image = "stone:bakery"
+```
+
+| Field | Limits | Meaning |
+|---|---|---|
+| `image` | an image of a package, `<package>:<name>` ([graphics.toml](#the-file)) | the sprites the building draws instead of its own (required) |
+
+The image holds the sprites in the order the original's sheet has them from the building's `Gfx`,
+as for a [building of a package](#buildings-that-draw-an-image): one per tile of the footprint, row
+by row; the same for each of the other three directions; the same for each further frame of its
+animation. An image with fewer sprites than the building draws is passed over with a warning that
+names how many it needs. A sprite at the largest zoom level is 64 pixels wide and stands on its
+bottom row.
+
+Only the picture changes: the islands keep the original's sprite numbers, and the terrain sheet
+draws those with the image's sprites. So a game keeps nothing of it and looks as the packages of
+the computer it runs on say; a game saved with the package loads without it and shows the
+original's buildings. Each table names one record of `haeuser.cod`: a crop's three records
+(growing, ripe, withered) and a road's pieces are named one by one. If two packages draw the same
+building, the one loaded later wins.
+
 ## Icons
 
 ```
@@ -161,6 +200,9 @@ A good of a game played without the package of its icon shows the original's ico
 at a zoom level (`PackageImageSource`), which `render::load_world_graphics` places at their numbers
 among the terrain's (`GraphicsOptions::package_images`). Figures and ships: `engine/assets/include/o1602/assets/figure_looks.hpp`,
 `apply_figure_images_file` and `apply_figure_looks`, which the viewer applies to its figure table;
+buildings of the original: `engine/assets/include/o1602/assets/building_looks.hpp`,
+`apply_building_images_file`, whose redirects `render::RedirectedSprites` applies to the terrain sheet
+(`GraphicsOptions::sprite_redirects`);
 `render::land_figure_sprites` and the ships' hull draw such a figure from the terrain sheet. Icons:
 `apply_icons_file` and `PackageIcon`;
 `engine/ui/include/o1602/ui/package_icons.hpp` holds the game's icons for the interface

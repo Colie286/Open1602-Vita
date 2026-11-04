@@ -332,7 +332,7 @@ private:
         }
         const std::vector<diplomacy::Offer> offers = diplomacy::open_offers(c.world(), c.local);
         const bool flash = (c.now_ms / kOfferBlinkMs) % 2 == 0;
-        const render::BannerArt arms = render::BannerArt::at(m_shield);
+        const render::BannerArt arms = render::BannerArt::arms_at(m_shield);
         for (std::size_t k = 0; k < diplomacy::kMaxPartners; ++k) {
             const auto slot = static_cast<std::int32_t>(k);
             const bool shown = k < partners.size();
@@ -370,7 +370,7 @@ private:
             return;
         }
         p.set_text(name + row, player_name(*player));
-        const render::BannerArt arms = render::BannerArt::at(m_shield);
+        const render::BannerArt arms = render::BannerArt::arms_at(m_shield);
         set_banner_graphic(p, shield + row, arms, c.banner(b));
         set_banner_graphic(p, shadow + row, arms, c.banner(b));
         const sim::Diplomacy& d = c.world().diplomacy();

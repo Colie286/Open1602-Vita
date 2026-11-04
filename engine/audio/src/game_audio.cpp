@@ -136,6 +136,16 @@ std::optional<std::string> sample_file(SampleId id) {
     return std::string("SAMPLES/") + kSampleFiles[id] + ".wav";
 }
 
+std::vector<SampleId> samples_named(std::string_view name) {
+    std::vector<SampleId> ids;
+    for (std::size_t id = 0; id < kSampleFiles.size(); ++id) {
+        if (kSampleFiles[id] != nullptr && lower(kSampleFiles[id]) == lower(name)) {
+            ids.push_back(static_cast<SampleId>(id));
+        }
+    }
+    return ids;
+}
+
 float gain_of(std::int32_t centibel) noexcept {
     if (centibel >= 0) {
         return 1.0F;
@@ -221,6 +231,8 @@ void Effects::flush() {
             if (r.id >= assets::kFirstPackageSound) {
                 const std::size_t slot = r.id - assets::kFirstPackageSound;
                 sound = slot < m_package.size() ? m_package[slot] : nullptr;
+            } else if (r.id < m_replaced.size() && m_replaced[r.id]) {
+                sound = m_replaced[r.id];
             } else if (const auto file = sample_file(r.id)) {
                 sound = m_bank->get(*file);
             }
@@ -359,6 +371,18 @@ Music::Music(Mixer& mixer, SoundBank& bank, std::vector<std::string> tracks, std
     : m_mixer(&mixer), m_bank(&bank), m_tracks(std::move(tracks)), m_fights(std::move(fights)), m_random(seed) {
     // A package's track with the title of one of MUSIC8 is left out: the title names one track.
     for (MusicTrack& t : own) {
+        if (!t.replaces.empty()) {
+            // In place of a MUSIC8 track, case ignored; a later package wins.
+            const auto same = [&](const std::string& m) { return lower(m) == lower(t.replaces); };
+            const auto normal = std::find_if(m_tracks.begin(), m_tracks.end(), same);
+            const auto fight = std::find_if(m_fights.begin(), m_fights.end(), same);
+            if (normal == m_tracks.end() && fight == m_fights.end()) {
+                std::fprintf(stderr, "music: no track of MUSIC8 is called \"%s\"\n", t.replaces.c_str());
+                continue;
+            }
+            m_replaced[normal != m_tracks.end() ? *normal : *fight] = t.file;
+            continue;
+        }
         const bool taken = std::find(m_tracks.begin(), m_tracks.end(), t.title) != m_tracks.end() ||
                            std::find(m_fights.begin(), m_fights.end(), t.title) != m_fights.end();
         if (taken) {
@@ -511,7 +535,10 @@ void Music::start(const std::string& title) {
         m_history.erase(m_history.begin());
     }
     const auto own = std::find_if(m_own.begin(), m_own.end(), [&](const MusicTrack& t) { return t.title == title; });
-    const auto path = own != m_own.end() ? std::optional(own->file) : m_bank->find("MUSIC8/" + title + ".wav");
+    const auto replaced = m_replaced.find(title);
+    const auto path = own != m_own.end()             ? std::optional(own->file)
+                      : replaced != m_replaced.end() ? std::optional(replaced->second)
+                                                     : m_bank->find("MUSIC8/" + title + ".wav");
     if (!path) {
         return;
     }

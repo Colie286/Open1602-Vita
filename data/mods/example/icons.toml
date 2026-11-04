@@ -1,3 +1,9 @@
 # An icon of this package: example:pepper, shown wherever the good pepper is (graphics.md).
 [pepper]
 image = "icons/pepper.png"
+
+# A coat of arms: a lighthouse on a field of pure grey, which takes on the colour of the banner
+# that wears it (arms.toml, flags.md).
+[arms]
+image = "icons/arms.png"
+tint = true

@@ -18,6 +18,8 @@ add_library(o1602_assets
     src/package_graphics.cpp
     src/package_sounds.cpp
     src/resident_classes.cpp
+    src/building_looks.cpp
+    src/package_arms.cpp
     src/figure_looks.cpp
     src/own_figures.cpp
     src/figure_table.cpp

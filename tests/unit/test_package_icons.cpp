@@ -10,10 +10,12 @@
 #include <vector>
 
 #include "../test_framework.hpp"
+#include "banner_graphic.hpp"
 #include "message_table.hpp"
 
 #include "o1602/assets/cod_parser.hpp"
 #include "o1602/assets/goods.hpp"
+#include "o1602/assets/package_arms.hpp"
 #include "o1602/assets/package_graphics.hpp"
 #include "o1602/core/compress.hpp"
 #include "o1602/core/file.hpp"
@@ -295,4 +297,48 @@ TEST_CASE("package icons: Open1602's own icons are compiled in and come first") 
         CHECK(icon->sprite >= assets::kFirstPackageIcon);
         CHECK(icon->sprite < assets::kFirstPackageIcon + static_cast<std::int32_t>(icons.size()));
     }
+}
+
+TEST_CASE("package icons: arms.toml draws a banner's coat of arms with an icon") {
+    std::vector<assets::PackageIcon> icons(2);
+    icons[0].id = "heraldry:lion";
+    icons[0].sprite = assets::kFirstPackageIcon + 7;
+    icons[1].id = "heraldry:eagle";
+    icons[1].sprite = assets::kFirstPackageIcon + 8;
+    std::vector<assets::PackageArms> arms;
+    std::vector<std::string> warnings;
+    assets::apply_arms_file(arms, "heraldry",
+                            "[\"anno1602:red\"]\nicon = \"heraldry:lion\"\n"
+                            "[\"open1602:orange\"]\nicon = \"heraldry:eagle\"\n"
+                            "[red]\nicon = \"heraldry:lion\"\n"                // line 5: no banner id
+                            "[\"anno1602:blue\"]\nicon = \"heraldry:bear\"\n"  // line 8: no such icon
+                            "[\"anno1602:white\"]\ncolour = 3\n",              // lines 9, 10
+                            icons, warnings);
+    CHECK((arms ==
+           std::vector<assets::PackageArms>{{"anno1602:red", "heraldry:lion"}, {"open1602:orange", "heraldry:eagle"}}));
+    REQUIRE(warnings.size() == 4);
+    CHECK(warnings[0].find("line 5: [red]: names no banner") != std::string::npos);
+    CHECK(warnings[1] == "heraldry/arms.toml line 8: 'icon' names no icon of a package (icons.toml, <package>:<name>)");
+    CHECK(warnings[2].find("line 10: 'colour' is no field of a coat of arms") != std::string::npos);
+    CHECK(warnings[3].find("line 9: [anno1602:white] needs an 'icon'") != std::string::npos);
+    // A later package's arms of the same banner win.
+    assets::apply_arms_file(arms, "more", "[\"anno1602:red\"]\nicon = \"heraldry:eagle\"\n", icons, warnings);
+    REQUIRE(arms.size() == 2);
+    CHECK(assets::find_package_arms(arms, "anno1602:red")->icon == "heraldry:eagle");
+
+    ui::set_package_icons(icons);
+    ui::set_package_arms(arms);
+    auto banners = render::BannerTable::original();
+    banners.add_more_players();
+    const render::Banner* red = banners.get(0);
+    const render::Banner* blue = banners.get(1);
+    REQUIRE(red != nullptr);
+    REQUIRE(blue != nullptr);
+    CHECK(app::package_arms_of(render::BannerArt::arms_at(548), red) == assets::kFirstPackageIcon + 8);
+    CHECK(!app::package_arms_of(render::BannerArt::arms_at(548), blue));
+    // Message icons and other art in player colour stay the original's.
+    CHECK(!app::package_arms_of(render::BannerArt::at(548), red));
+    CHECK(!app::package_arms_of(render::BannerArt::arms_at(548), nullptr));
+    ui::set_package_arms({});
+    ui::set_package_icons({});
 }

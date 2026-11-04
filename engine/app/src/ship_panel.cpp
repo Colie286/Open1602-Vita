@@ -1607,8 +1607,9 @@ private:
             m_route.set_selected(kStopName + s, m_pick_stop == stop);
             m_route.set_graphic(kStopSymbol + s, m_gfx_stop + (city != nullptr ? 0 : 1), 0);
             if (city != nullptr) {
-                set_banner_graphic(m_route, kStopArms + s, render::BannerArt::at(m_gfx_arms), c.banner(city->owner));
-                set_banner_graphic(m_route, kStopArmsShadow + s, render::BannerArt::at(m_gfx_arms),
+                set_banner_graphic(m_route, kStopArms + s, render::BannerArt::arms_at(m_gfx_arms),
+                                   c.banner(city->owner));
+                set_banner_graphic(m_route, kStopArmsShadow + s, render::BannerArt::arms_at(m_gfx_arms),
                                    c.banner(city->owner));
             }
             if (m_route_row && !m_stop_page) {
@@ -1975,7 +1976,7 @@ private:
             m_piratord.set_visible(kPirateChoice + k, shown);
             m_piratord.set_selected(kPirateChoice + k, o == m_hire_choice);
             if (shown) {
-                set_banner_graphic(m_piratord, kPirateArms + k, render::BannerArt::at(m_gfx_pirate_arms),
+                set_banner_graphic(m_piratord, kPirateArms + k, render::BannerArt::arms_at(m_gfx_pirate_arms),
                                    c.banner(m_opponents[static_cast<std::size_t>(o)]));
             }
         }

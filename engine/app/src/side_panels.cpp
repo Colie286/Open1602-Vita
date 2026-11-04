@@ -565,7 +565,7 @@ void InfoPanel::refresh(const sim::PlayerFigures& f, const render::Banner* banne
         m_panel.set_text(kInfoRows[i].first + 1, std::to_string(values[i]));
     }
     // The coat of arms in the player's colour, the balance icon green or red.
-    const render::BannerArt arms = render::BannerArt::at(m_arms);
+    const render::BannerArt arms = render::BannerArt::arms_at(m_arms);
     set_banner_graphic(m_panel, kInfoArms, arms, banner);
     set_banner_graphic(m_panel, kInfoArmsShadow, arms, banner);
     m_panel.set_graphic(kInfoBalanceIcon, m_balance_icon + (f.balance < 0 ? 1 : 0), 0);

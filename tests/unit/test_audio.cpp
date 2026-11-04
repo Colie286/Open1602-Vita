@@ -568,7 +568,7 @@ TEST_CASE("audio: music.toml adds a package's tracks after MUSIC8's") {
 
     // The tracks join MUSIC8's; one with a title MUSIC8 has is left out. The package's track plays
     // from its own file.
-    own.push_back(audio::MusicTrack{"A Song", folder / "music" / "sea.ogg", false});
+    own.push_back(audio::MusicTrack{"A Song", folder / "music" / "sea.ogg", false, {}});
     auto game = assets::GameDirectory::open(fake.root);
     REQUIRE(game.ok());
     std::vector<std::string> tracks;
@@ -581,6 +581,50 @@ TEST_CASE("audio: music.toml adds a package's tracks after MUSIC8's") {
     music.play("Sea Shanty");
     music.finish_loading();
     CHECK(music.playing() == "Sea Shanty");
+}
+
+TEST_CASE("audio: music.toml replaces a track of MUSIC8 by its title") {
+    FakeGame fake;
+    std::filesystem::create_directories(fake.root / "mods" / "shanty" / "music");
+    fake.write("mods/shanty/music/sea.ogg", sound_fixture("tone.ogg"));
+    const auto folder = fake.root / "mods" / "shanty";
+    std::vector<audio::MusicTrack> own;
+    std::vector<std::string> warnings;
+    audio::apply_music_file(own, "shanty", folder,
+                            "[b]\n"
+                            "file = \"music/sea.ogg\"\n"
+                            "replaces = \"B SONG\"\n"
+                            "[again]\n"  // a title taken: no matter for a replacement
+                            "file = \"music/sea.ogg\"\n"
+                            "title = \"b\"\n"
+                            "replaces = \"nowhere\"\n"
+                            "[empty]\n"
+                            "file = \"music/sea.ogg\"\n"
+                            "replaces = \"\"\n",  // line 10
+                            warnings);
+    REQUIRE(own.size() == 2);
+    CHECK(own[0].replaces == "B SONG");
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings[0].find("line 10: 'replaces' is the title of a MUSIC8 track") != std::string::npos);
+
+    auto game = assets::GameDirectory::open(fake.root);
+    REQUIRE(game.ok());
+    std::vector<std::string> tracks;
+    std::vector<std::string> fights;
+    audio::Music::scan(*game, tracks, fights);
+    // The original's file no longer decodes: what plays is the package's.
+    fake.write("MUSIC8/b Song.wav", {'n', 'o'});
+    audio::SoundBank bank(*game);
+    audio::Mixer mixer(22050, 8);
+    audio::Music music(mixer, bank, tracks, fights, 1602, own);
+    CHECK((music.tracks() == std::vector<std::string>{"A Song", "b Song", "c song"}));
+    music.play("b Song");
+    music.finish_loading();
+    CHECK(music.playing() == "b Song");
+    audio::Music plain(mixer, bank, tracks, fights);
+    plain.play("b Song");
+    plain.finish_loading();
+    CHECK(plain.playing().empty());
 }
 
 TEST_CASE("audio: a package's sound plays by its number among the original's") {
@@ -604,6 +648,45 @@ TEST_CASE("audio: a package's sound plays by its number among the original's") {
     effects.request(audio::kWavEvent, 0.0F, 0.0F);  // the original's still
     effects.flush();
     CHECK(mixer.playing_count(audio::Group::Effects) == 2);
+}
+
+TEST_CASE("audio: a package's sound plays in place of the original's") {
+    CHECK((audio::samples_named("KANONE5") == std::vector<audio::SampleId>{1}));
+    CHECK(audio::samples_named("schwertb").size() == 2);  // two numbers share the file
+    CHECK(audio::samples_named("nothing").empty());
+
+    FakeGame fake;
+    std::filesystem::create_directories(fake.root / "mod" / "sounds");
+    fake.write("mod/sounds/boom.wav", wave(1, 1, 22050, 8, std::vector<std::uint8_t>(100, 128)));
+    std::vector<assets::PackageSound> sounds;
+    std::vector<std::string> warnings;
+    assets::apply_sounds_file(sounds, "boom", fake.root / "mod",
+                              "[event]\nfile = \"sounds/boom.wav\"\nreplaces = \"Event\"\n"
+                              "[bad]\nfile = \"sounds/boom.wav\"\nreplaces = \"../x\"\n",  // line 5
+                              warnings);
+    REQUIRE(sounds.size() == 1);
+    CHECK(sounds[0].replaces == "event");
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings[0].find("line 6: 'replaces' is the name of a sound file of SAMPLES") != std::string::npos);
+
+    auto game = assets::GameDirectory::open(fake.root);
+    REQUIRE(game.ok());
+    // The original's file no longer decodes: what plays is the package's.
+    fake.write("SAMPLES/Event.wav", {'n', 'o'});
+    audio::SoundBank bank(*game);
+    audio::Mixer mixer(22050, 64);
+    audio::Effects effects(mixer, bank);
+    effects.request(audio::kWavEvent, 0.0F, 0.0F);
+    effects.flush();
+    CHECK(mixer.playing_count(audio::Group::Effects) == 0);
+    auto pcm = std::make_shared<audio::Pcm>();
+    pcm->samples.assign(2205, 1000);
+    std::vector<std::shared_ptr<const audio::Pcm>> replaced(audio::kWavEvent + 1);
+    replaced[audio::kWavEvent] = pcm;
+    effects.set_replaced_sounds(std::move(replaced));
+    effects.request(audio::kWavEvent, 0.0F, 0.0F);
+    effects.flush();
+    CHECK(mixer.playing_count(audio::Group::Effects) == 1);
 }
 
 TEST_CASE("audio: sounds.toml numbers a package's sounds after the original's") {

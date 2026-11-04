@@ -49,6 +49,14 @@ void apply_music_file(std::vector<MusicTrack>& tracks, std::string_view package,
                 } else {
                     track.title = *s;
                 }
+            } else if (e.key == "replaces") {
+                if (s == nullptr || s->empty() || s->size() > kMaxTrackTitle) {
+                    warnings.push_back(field + "is the title of a MUSIC8 track, 1 to " +
+                                       std::to_string(kMaxTrackTitle) + " bytes");
+                    ok = false;
+                } else {
+                    track.replaces = *s;
+                }
             } else if (e.key == "battle") {
                 if (e.value.boolean() == nullptr) {
                     warnings.push_back(field + "is true or false");
@@ -72,7 +80,9 @@ void apply_music_file(std::vector<MusicTrack>& tracks, std::string_view package,
             warnings.push_back(at + file + " is missing or no WAV, Ogg Vorbis or FLAC file");
             continue;
         }
-        if (std::any_of(tracks.begin(), tracks.end(), [&](const MusicTrack& m) { return m.title == track.title; })) {
+        if (track.replaces.empty() && std::any_of(tracks.begin(), tracks.end(), [&](const MusicTrack& m) {
+                return m.replaces.empty() && m.title == track.title;
+            })) {
             warnings.push_back(at + "a track is called \"" + track.title + "\" already; this one is passed over");
             continue;
         }

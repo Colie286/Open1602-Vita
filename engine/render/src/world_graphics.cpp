@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdio>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -88,6 +89,11 @@ core::Result<WorldGraphics> load_world_graphics(const assets::GameDirectory& gam
             terrain_with_packages.place(image.first, *package_sources.back());
         }
         pointers.front() = &terrain_with_packages;
+    }
+    std::optional<RedirectedSprites> redirected;
+    if (!options.sprite_redirects.empty() && pointers.front() == &terrain_with_packages) {
+        redirected.emplace(terrain_with_packages, options.sprite_redirects);
+        pointers.front() = &*redirected;
     }
     // Tinted player flags after all sheets: one block of frames per banner with a tinted flag.
     std::vector<std::optional<std::uint32_t>> flag_slot;  // block index per banner

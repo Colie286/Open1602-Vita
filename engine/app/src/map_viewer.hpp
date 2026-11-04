@@ -687,6 +687,8 @@ private:
     std::vector<assets::PackageImage> m_package_images;
     /// The figures the packages draw with their images (figure_images.toml), applied to m_figures.
     std::vector<assets::FigureLook> m_figure_looks;
+    /// The original's buildings the packages draw with their images (building_images.toml).
+    std::vector<assets::SpriteRedirect> m_sprite_redirects;
     /// The content packages installed in <data folder>/mods, in their load order (docs/modding/packages.md).
     std::vector<assets::ModPackage> m_packages;
     /// Packages received from hosts, in <data folder>/mods-cache: used only by games that name them.

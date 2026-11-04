@@ -1,0 +1,4 @@
+# The original's watchtower drawn with this package's lighthouse (graphics.md): the image holds the
+# four sprites the watchtower draws. A game keeps nothing of it.
+["anno1602:watchtower"]
+image = "example:lighthouse"

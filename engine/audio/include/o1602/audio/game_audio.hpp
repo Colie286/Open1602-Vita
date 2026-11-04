@@ -8,8 +8,10 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <future>
+#include <map>
 #include <memory>
 #include <optional>
 #include <random>
@@ -45,6 +47,9 @@ inline constexpr SampleId kWavTest = 57;  ///< "Test" of the effects' volume: th
 /// File of a sound relative to the game directory ("SAMPLES/kanone5.wav"), nothing for the
 /// numbers the original leaves silent (GameInit).
 [[nodiscard]] std::optional<std::string> sample_file(SampleId id);
+/// The sound numbers that play SAMPLES/`name`.wav (case ignored; some files have two), none for a
+/// name that is no file of the original's.
+[[nodiscard]] std::vector<SampleId> samples_named(std::string_view name);
 
 /// Volume in the original's unit, 1/100 dB of attenuation (-4000 .. 0), as a gain.
 [[nodiscard]] float gain_of(std::int32_t centibel) noexcept;
@@ -97,6 +102,9 @@ public:
     /// The sounds of the packages by their numbers from assets::kFirstPackageSound
     /// (package_sounds.hpp); nullptr for one that could not be decoded.
     void set_package_sounds(std::vector<std::shared_ptr<const Pcm>> sounds) { m_package = std::move(sounds); }
+    /// Sounds of packages in place of the original's, by the original's numbers (sounds.toml
+    /// `replaces`); nullptr where the original's plays.
+    void set_replaced_sounds(std::vector<std::shared_ptr<const Pcm>> by_id) { m_replaced = std::move(by_id); }
     /// Queues a sound at (x, y) of the view: one of the original's, or of a package.
     void request(SampleId id, float x, float y);
     /// Plays what was queued since the last call.
@@ -118,6 +126,7 @@ private:
     float m_gain = 1.0F;
     std::vector<Request> m_queue;
     std::vector<std::shared_ptr<const Pcm>> m_package;
+    std::vector<std::shared_ptr<const Pcm>> m_replaced;
 };
 
 /// The widest view the original hears its scenery in (birds and surf): its game view at 1024 x 768
@@ -276,6 +285,8 @@ private:
     std::vector<std::string> m_tracks;
     std::vector<std::string> m_fights;
     std::vector<MusicTrack> m_own;  ///< the packages' tracks, played from their files
+    /// MUSIC8 titles a package's track plays in place of, with that track's file.
+    std::map<std::string, std::filesystem::path> m_replaced;
     std::vector<bool> m_enabled;
     std::mt19937 m_random;
     AudioSettings m_settings;

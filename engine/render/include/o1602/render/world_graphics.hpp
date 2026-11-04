@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "o1602/assets/building_looks.hpp"
 #include "o1602/assets/figure_table.hpp"
 #include "o1602/assets/game_directory.hpp"
 #include "o1602/assets/package_graphics.hpp"
@@ -45,6 +46,9 @@ struct GraphicsOptions {
     /// The images of the content packages (assets/package_graphics.hpp): their sprites join the
     /// terrain's at their sprite numbers. An image that cannot be read stays empty, with a warning.
     std::vector<assets::PackageImage> package_images{};
+    /// Sprites of the terrain sheet drawn with those of the packages' images: the original's
+    /// buildings a package draws anew (building_images.toml).
+    std::vector<assets::SpriteRedirect> sprite_redirects{};
     /// Sprites of the terrain sheet (with the packages' images) drawn as tint templates, as first
     /// sprite and count: the units of packages with `tint = true` (WorldGraphics::template_tint).
     std::vector<std::pair<std::uint32_t, std::uint32_t>> template_sprites{};

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "o1602/assets/goods.hpp"
+#include "o1602/assets/package_arms.hpp"
 #include "o1602/assets/package_graphics.hpp"
 
 namespace o1602::ui {
@@ -28,6 +29,12 @@ void set_package_icons(std::vector<assets::PackageIcon> icons);
 [[nodiscard]] std::span<const assets::PackageIcon> package_icons() noexcept;
 /// The sprite number of the icon `id` ("<package>:<name>"), nothing if no package has it.
 [[nodiscard]] std::optional<std::int32_t> package_icon_sprite(std::string_view id) noexcept;
+
+/// Makes `arms` the packages' coats of arms (arms.toml), with set_package_icons().
+void set_package_arms(std::vector<assets::PackageArms> arms);
+/// The sprite of the icon a package draws as the coat of arms of banner `banner` (its id), nothing
+/// if none does or its icon is gone.
+[[nodiscard]] std::optional<std::int32_t> package_arms_sprite(std::string_view banner) noexcept;
 
 /// The sprite of the icon of good `w`: the package's icon it shows, else the original's at
 /// `gfx_ware` (GFXWARE of the window's layout).

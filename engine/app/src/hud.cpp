@@ -498,13 +498,19 @@ void Hud::draw_resources() {
             // the others (LC-5).
             const render::Banner* banner =
                 m_banners != nullptr ? m_banners->get(static_cast<sim::BannerId>(r.shield)) : nullptr;
-            const render::BannerArt art = render::BannerArt::at(m_gfx_baumat + 17);
+            const render::BannerArt art = render::BannerArt::arms_at(m_gfx_baumat + 17);
             const render::BannerArtSprite sprite =
                 banner != nullptr ? render::banner_art(art, banner)
                                   : render::BannerArtSprite{art.first + std::min(r.shield, 3), std::nullopt};
-            icon(sprite.gfx, 666);
-            if (sprite.tint) {
-                items.back().tint = ui::ColourTint{*sprite.tint, art.stride, art.variants, art.base, sprite.pattern};
+            if (const auto arms = package_arms_of(art, banner)) {
+                icon(*arms, 666);  // a package's coat of arms, as set_package_icon draws it
+                items.back().tint = ui::ColourTint{banner->colour, 1, 1, 0, 0};
+            } else {
+                icon(sprite.gfx, 666);
+                if (sprite.tint) {
+                    items.back().tint =
+                        ui::ColourTint{*sprite.tint, art.stride, art.variants, art.base, sprite.pattern};
+                }
             }
         } else if (const auto native = r.natives ? ui::package_icon_sprite("open1602:native") : std::nullopt) {
             // A native village: the native figure next to the number like the coat of arms, as in the
@@ -523,10 +529,11 @@ void Hud::draw_unit_arms(const std::vector<UnitArms>& marks, sim::BannerId banne
         return;
     }
     const render::Banner* b = m_banners != nullptr ? m_banners->get(banner) : nullptr;
-    const render::BannerArt art = render::BannerArt::at(m_gfx_baumat + 17);
+    const render::BannerArt art = render::BannerArt::arms_at(m_gfx_baumat + 17);
     const render::BannerArtSprite sprite =
         b != nullptr ? render::banner_art(art, b)
                      : render::BannerArtSprite{art.first + std::min<std::int32_t>(banner, 3), std::nullopt};
+    const std::optional<std::int32_t> package_arms = package_arms_of(art, b);
     constexpr std::uint8_t kPole = 28;  // dark brown, as the frames of the key overview
     std::vector<ui::DrawItem> items;
     items.reserve(2 * marks.size());
@@ -541,12 +548,14 @@ void Hud::draw_unit_arms(const std::vector<UnitArms>& marks, sim::BannerId banne
         items.push_back(pole);
         ui::DrawItem arms;
         arms.kind = ui::DrawItem::Kind::Sprite;
-        arms.gfx = sprite.gfx;
+        arms.gfx = package_arms.value_or(sprite.gfx);
         arms.x = m.arms.x;
         arms.y = m.arms.y;
         arms.w = m.arms.w;
         arms.h = m.arms.h;
-        if (sprite.tint) {
+        if (package_arms) {
+            arms.tint = ui::ColourTint{b->colour, 1, 1, 0, 0};  // a package's arms: as set_package_icon
+        } else if (sprite.tint) {
             arms.tint = ui::ColourTint{*sprite.tint, art.stride, art.variants, art.base, sprite.pattern};
         }
         items.push_back(std::move(arms));

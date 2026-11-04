@@ -4,6 +4,7 @@
 #include <string_view>
 
 #include "o1602/assets/unlock_levels.hpp"
+#include "o1602/audio/game_audio.hpp"
 #include "o1602/core/file.hpp"
 #include "o1602/sim/climates.hpp"
 #include "o1602/sim/computer_orders.hpp"
@@ -21,6 +22,19 @@ std::vector<assets::PackageIcon> load_package_icons(std::span<const assets::ModP
         }
     }
     return icons;
+}
+
+std::vector<assets::PackageArms> load_package_arms(std::span<const assets::ModPackage> packages,
+                                                   std::span<const assets::PackageIcon> icons,
+                                                   std::vector<std::string>& problems) {
+    std::vector<assets::PackageArms> arms;
+    for (const assets::ModPackage& package : packages) {
+        if (const auto bytes = core::read_file(package.folder / assets::kArmsFile)) {
+            const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
+            assets::apply_arms_file(arms, package.id, text, icons, problems);
+        }
+    }
+    return arms;
 }
 
 std::vector<sim::PackageLandscape> load_package_landscapes(std::span<const assets::ModPackage> packages,
@@ -91,13 +105,26 @@ ModRules load_mod_rules(std::span<const assets::ModPackage> packages, assets::Bu
             const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
             assets::apply_figure_images_file(rules.looks, package.id, text, rules.images, figures, problems);
         }
+        if (const auto bytes = core::read_file(package.folder / assets::kBuildingImagesFile)) {
+            const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
+            assets::apply_building_images_file(rules.redirects, package.id, text, rules.images, buildings, problems);
+        }
         if (const auto bytes = core::read_file(package.folder / audio::kMusicFile)) {
             const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
             audio::apply_music_file(rules.music, package.id, package.folder, text, problems);
         }
         if (const auto bytes = core::read_file(package.folder / assets::kSoundsFile)) {
             const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
+            const std::size_t before = rules.sounds.size();
             assets::apply_sounds_file(rules.sounds, package.id, package.folder, text, problems);
+            for (std::size_t i = before; i < rules.sounds.size(); ++i) {
+                assets::PackageSound& sound = rules.sounds[i];
+                if (!sound.replaces.empty() && audio::samples_named(sound.replaces).empty()) {
+                    problems.push_back(sound.id + ": SAMPLES has no sound \"" + sound.replaces +
+                                       "\" to replace; it plays only where it is named");
+                    sound.replaces.clear();
+                }
+            }
         }
     }
     // Then the figures, with the images they draw, which the buildings may name as their workers.

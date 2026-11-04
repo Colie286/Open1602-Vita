@@ -5,6 +5,7 @@
 #include <limits>
 #include <optional>
 
+#include "o1602/assets/building_looks.hpp"
 #include "o1602/assets/original_names.hpp"
 #include "o1602/assets/package_graphics.hpp"
 #include "o1602/assets/resident_classes.hpp"
@@ -252,8 +253,7 @@ void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& ow
         // The image holds every sprite the building draws: its tiles, turned four ways, in every
         // frame of its animation (render::building_sprite).
         if (image != nullptr) {
-            const std::uint64_t needed = std::uint64_t{b.tile_count()} + std::uint64_t{b.rotate} * 3 +
-                                         (b.anim_count > 1 ? std::uint64_t{b.anim_add} * (b.anim_count - 1) : 0);
+            const std::uint64_t needed = building_sprite_count(b);
             if (needed > image->count) {
                 warnings.push_back(at + id + ": its image " + image->id + " holds " + std::to_string(image->count) +
                                    " sprites, the building draws " + std::to_string(needed));

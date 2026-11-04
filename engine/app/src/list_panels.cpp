@@ -69,7 +69,7 @@ public:
         m_panel.set_text(m_base + kHeading, m_order == Order::Table ? heading + " (" + count + ")"
                                                                     : ui::tr("list.heading.ordered",
                                                                              {heading, count, order_name(m_order)}));
-        const render::BannerArt arms = render::BannerArt::at(m_arms);
+        const render::BannerArt arms = render::BannerArt::arms_at(m_arms);
         set_banner_graphic(m_panel, m_base + kArms, arms, c.banner(c.local));
         set_banner_graphic(m_panel, m_base + kArmsShadow, arms, c.banner(c.local));
         m_panel.set_visible(m_base + kPageDown, m_first + kRows < m_rows.size());
@@ -87,7 +87,7 @@ public:
             m_panel.set_text(m_base + kName + row, r.name);
             if (r.owner) {
                 // Cities: the small coat of arms of the owner (icons 4..7).
-                set_banner_graphic(m_panel, m_base + kIcon + row, render::BannerArt::at(m_icons + kCityIcons),
+                set_banner_graphic(m_panel, m_base + kIcon + row, render::BannerArt::arms_at(m_icons + kCityIcons),
                                    c.banner(*r.owner));
             } else {
                 m_panel.set_graphic(m_base + kIcon + row, m_icons + r.icon, 0);

@@ -62,7 +62,8 @@ TEST_CASE("the example package has every file a package can have") {
           "buildings.toml", "figures.toml",    "computers.toml",  "own_buildings.toml", "own_figures.toml",
           "goods.toml",     "classes.toml",    "levels.toml",     "script.lua",         "scenarios.toml",
           "campaigns.toml", "graphics.toml",   "icons.toml",      "figure_images.toml", "music.toml",
-          "sounds.toml",    "landscapes.toml", "climates.toml",   "slots.toml"}) {
+          "sounds.toml",    "landscapes.toml", "climates.toml",   "slots.toml",         "building_images.toml",
+          "arms.toml"}) {
         if (!fs::is_regular_file(kMods / "example" / name)) {
             std::fprintf(stderr, "missing: %s\n", name);
             CHECK(false);
@@ -79,6 +80,11 @@ TEST_CASE("the example package loads without a warning, as far as it needs no or
 
     const IconsInUse icons(app::load_package_icons(packages, problems));
     CHECK(ui::package_icon_sprite("example:pepper").has_value());
+    {
+        const std::vector<assets::PackageArms> arms = app::load_package_arms(packages, ui::package_icons(), problems);
+        REQUIRE(arms.size() == 1);
+        CHECK(arms[0].banner == "anno1602:red");
+    }
     const std::vector<sim::PackageLandscape> landscapes = app::load_package_landscapes(packages, problems);
     CHECK(landscapes.size() == 1);
     std::vector<sim::Climate> climates;
@@ -133,6 +139,8 @@ TEST_CASE("data: the example package loads without a warning") {
     const IconsInUse icons(app::load_package_icons(packages, problems));
     const app::ModRules rules = app::load_mod_rules(packages, *buildings, *figures, problems);
     CHECK(rules.own.size() == 3);
+    REQUIRE(rules.redirects.size() == 1);  // the watchtower drawn as the lighthouse
+    CHECK(rules.redirects[0].count <= 4);
     const sim::ComputerSlot* court = sim::find_computer_slot(rules.balance.computer_slots, "court");
     REQUIRE(court != nullptr);
     CHECK(court->kind == sim::ComputerSlot::Kind::Public);

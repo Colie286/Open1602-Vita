@@ -19,6 +19,11 @@ std::vector<assets::PackageIcon>& icons() {
     return list;
 }
 
+std::vector<assets::PackageArms>& arms() {
+    static std::vector<assets::PackageArms> list;
+    return list;
+}
+
 }  // namespace
 
 std::vector<assets::PackageIcon> builtin_icons() {
@@ -51,6 +56,17 @@ std::span<const assets::PackageIcon> package_icons() noexcept {
 std::optional<std::int32_t> package_icon_sprite(std::string_view id) noexcept {
     if (const assets::PackageIcon* icon = assets::find_package_icon(icons(), id)) {
         return icon->sprite;
+    }
+    return std::nullopt;
+}
+
+void set_package_arms(std::vector<assets::PackageArms> list) {
+    arms() = std::move(list);
+}
+
+std::optional<std::int32_t> package_arms_sprite(std::string_view banner) noexcept {
+    if (const assets::PackageArms* a = assets::find_package_arms(arms(), banner)) {
+        return package_icon_sprite(a->icon);
     }
     return std::nullopt;
 }

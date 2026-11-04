@@ -29,6 +29,10 @@ struct PackageSound {
     std::string id;            ///< "<package>:<name>"
     std::uint16_t number = 0;  ///< its sound number, from kFirstPackageSound
     std::filesystem::path file;
+    /// The original's sound this one plays in place of: the name of its file in SAMPLES, without
+    /// ".wav", in lower case ("kanone5"); empty for a sound of its own. Which names there are, the
+    /// game's audio knows (audio::samples_named).
+    std::string replaces;
 
     friend bool operator==(const PackageSound&, const PackageSound&) = default;
 };
