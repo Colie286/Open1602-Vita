@@ -394,6 +394,7 @@ struct EditorModel {
     EditorTerrain terrain;
     std::size_t terrain_pieces = 0;
     std::uint32_t terrain_id = 0;
+    std::string terrain_name;  ///< what the piece is ("Wald"), empty: its number shows
     std::uint32_t terrain_width = 1;
     std::uint32_t terrain_height = 1;
     bool terrain_turns = false;

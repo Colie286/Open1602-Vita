@@ -193,3 +193,24 @@ TEST_CASE("factions: 'scripted' gives settlers or pirates a behaviour of their s
     CHECK(!factions[sim::faction::kTrader].scripted);
     CHECK(!factions[sim::faction::kPirates].scripted);
 }
+
+TEST_CASE("factions: a package names its faction by language for the editor") {
+    std::vector<sim::Faction> factions = sim::base_factions();
+    std::vector<std::string> warnings;
+    sim::apply_faction_file(factions, "seas",
+                            "[league]\n"
+                            "behaviour = \"settlers\"\n"
+                            "name.en = \"Hanse League\"\n"
+                            "name.de = \"St\xC3\xA4"
+                            "dtebund\"\n"
+                            "name.fr = 3\n",  // line 5: no text
+                            warnings);
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings[0].starts_with("seas/factions.toml line 5: 'name.fr' must be name.<language>"));
+    REQUIRE(factions.size() == 5);
+    const auto& names = factions[4].names;
+    REQUIRE(names.size() == 2);
+    CHECK((names[0].first == "en" && names[0].second == "Hanse League"));
+    CHECK((names[1].first == "de" && names[1].second == "St\xE4"
+                                                        "dtebund"));  // Windows-1252 for the fonts
+}

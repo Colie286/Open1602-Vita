@@ -132,6 +132,7 @@ void MapViewer::editor_markers_request(const EditorRequest& request) {
             if (request.index < markers.size()) {
                 const sim::ScenarioMarker& mk = markers[request.index];
                 m_editor->marker = request.index;
+                m_editor->notice.clear();  // a note of another marker ("placed: marker_3") goes
                 m_camera.center_on(render::TilePos{mk.x + mk.width / 2, mk.y + mk.height / 2});
             }
             break;

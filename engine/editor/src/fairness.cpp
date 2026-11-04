@@ -2,6 +2,7 @@
 #include "o1602/editor/fairness.hpp"
 
 #include <algorithm>
+#include <iterator>
 #include <optional>
 
 #include "o1602/assets/game_data.hpp"
@@ -34,7 +35,8 @@ std::optional<std::pair<std::uint32_t, std::uint32_t>> start_of(const sim::World
         }
     }
     for (const sim::Ship& s : world.ships()) {
-        if (s.owner == p) {
+        // A ship at sea, not a trade cart (which the ships' list holds too) nor one off the map.
+        if (s.owner == p && !s.cart() && !s.sinking && s.x < world.width() && s.y < world.height()) {
             return std::pair{std::uint32_t{s.x}, std::uint32_t{s.y}};
         }
     }
@@ -106,8 +108,11 @@ std::vector<StartArea> start_areas(const sim::World& world, const assets::Buildi
     return areas;
 }
 
-std::vector<Unfairness> unfairness(const std::vector<StartArea>& areas) {
+std::vector<Unfairness> unfairness(const std::vector<StartArea>& all) {
     std::vector<Unfairness> out;
+    // A start at sea with no land in reach (a fleet the mission gives) has nothing to compare.
+    std::vector<StartArea> areas;
+    std::copy_if(all.begin(), all.end(), std::back_inserter(areas), [](const StartArea& a) { return a.islands > 0; });
     if (areas.size() < 2) {
         return out;
     }

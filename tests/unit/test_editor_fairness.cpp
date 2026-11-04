@@ -14,6 +14,7 @@ using editor::Unfairness;
 TEST_CASE("editor fairness: uneven land, crops, ore and gold between the starts are found") {
     StartArea a;
     a.player = 0;
+    a.islands = 2;
     a.land = 1000;
     a.crops = {1, 0, 1, 0, 0, 0};
     a.ore = 2;
@@ -34,6 +35,11 @@ TEST_CASE("editor fairness: uneven land, crops, ore and gold between the starts 
         {Unfairness::Kind::Gold, 1},
     };
     CHECK(uneven == expected);
+
+    // A start at sea with no island in reach (a fleet) is left out: nothing to compare it with.
+    StartArea fleet;
+    fleet.player = 2;
+    CHECK(editor::unfairness({a, fleet}).empty());
 }
 
 TEST_CASE("editor fairness: a world without starts has no start areas") {

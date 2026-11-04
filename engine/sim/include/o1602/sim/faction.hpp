@@ -16,6 +16,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace o1602::sim {
@@ -71,6 +72,9 @@ struct Faction {
     /// players (no computer player, no pirates' ships and raids); scripts do. Its relations stay
     /// those of `behaviour`. Settlers and pirates only.
     bool scripted = false;
+    /// The names a package gives its faction (factions.toml `name.<language>`), by language code,
+    /// Windows-1252. Not in a saved game: a game's faction takes them from the packages by its id.
+    std::vector<std::pair<std::string, std::string>> names;
 
     friend bool operator==(const Faction&, const Faction&) = default;
 };

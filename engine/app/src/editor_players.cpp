@@ -13,6 +13,7 @@
 #include "map_viewer.hpp"
 #include "names.hpp"
 
+#include "o1602/assets/localized_names.hpp"
 #include "o1602/editor/players.hpp"
 #include "o1602/ui/localization.hpp"
 
@@ -52,10 +53,17 @@ void MapViewer::editor_players_model(EditorModel& m) const {
         e.arches_allowed = p.arches_allowed;
         e.colour = colour_name(p.banner);
         e.faction = p.faction;
-        // A package's faction by its own name ("league" of "example:league"): the table has little room.
-        const std::string& id = world.faction(p).id;
+        // A package's faction by the name its package gives it, else by its own id ("league" of
+        // "example:league"): the table has little room. A saved game's factions have no names: the
+        // installed packages' have.
+        const sim::Faction& faction = world.faction(p);
+        const auto installed = std::find_if(m_factions.begin(), m_factions.end(),
+                                            [&](const sim::Faction& f) { return f.id == faction.id; });
+        const auto& names = !faction.names.empty() || installed == m_factions.end() ? faction.names : installed->names;
         e.faction_name =
-            p.faction == sim::faction::kSettlers ? ui::tr("editor.players.settlers") : id.substr(id.find(':') + 1);
+            p.faction == sim::faction::kSettlers
+                ? ui::tr("editor.players.settlers")
+                : assets::name_in(names, ui::current_language(), faction.id.substr(faction.id.find(':') + 1));
         m.player_slots.push_back(std::move(e));
     }
     for (EditorPlayer& e : m.player_slots) {

@@ -16,6 +16,8 @@
 #include "map_viewer.hpp"
 #include "names.hpp"
 
+#include "o1602/assets/game_data.hpp"
+#include "o1602/assets/resident_classes.hpp"
 #include "o1602/assets/text_table.hpp"
 #include "o1602/core/file.hpp"
 #include "o1602/core/png_writer.hpp"
@@ -104,8 +106,26 @@ std::string tiles(std::uint32_t x, std::uint32_t y) {
 /// stage of growth than the one the build menu offers is named as that one.
 std::string building_name(const assets::BuildingType& b, const assets::BuildingTable& buildings,
                           const assets::TextTable* texts) {
+    if (texts != nullptr && b.prod_kind == assets::prod::kHouse && b.id != assets::id::kHouse) {
+        // A house of another stage or class than the build menu's: the build menu's name and the
+        // class of its inhabitants.
+        if (const assets::BuildingType* house = buildings.by_id(assets::id::kHouse)) {
+            const auto& classes = buildings.resident_classes();
+            const std::size_t k = b.resident_class;
+            std::string people = k < classes.size() ? assets::class_name(classes[k], ui::current_language()) : "";
+            if (people.empty()) {
+                const std::vector<std::string>& game = texts->section("GAME");
+                people = k < assets::kResidentClasses && 3 + k < game.size() ? game[3 + k] : number(k + 1);
+            }
+            return ui::tr("editor.prop.house", {building_name(*house, buildings, texts), people});
+        }
+    }
     if (texts != nullptr) {
-        for (const assets::BuildingType* t : {&b, sim::growing_record(buildings, b), sim::ripe_record(buildings, b)}) {
+        // A beach or river mouth variant is named as the building on land it stands for.
+        const assets::BuildingType* land =
+            b.land_record != assets::BuildingType::kNoRecord ? buildings.by_record(b.land_record) : nullptr;
+        for (const assets::BuildingType* t :
+             {&b, sim::growing_record(buildings, b), sim::ripe_record(buildings, b), land}) {
             const ui::BuildCategory* cat = t != nullptr ? ui::build_menu().category_of(t->id) : nullptr;
             if (cat == nullptr) {
                 continue;
@@ -115,6 +135,69 @@ std::string building_name(const assets::BuildingType& b, const assets::BuildingT
                 return name;
             }
         }
+    }
+    // Not in the build menu: what kind of thing it is, and its number to tell it apart.
+    const char* what = nullptr;
+    switch (b.kind) {
+        case assets::kind::kRuin:
+        case assets::kind::kBeachRuin:
+            what = "editor.prop.kind.ruin";
+            break;
+        case assets::kind::kRock:
+            what = "editor.prop.kind.rock";
+            break;
+        case assets::kind::kForest:
+            what = "editor.prop.kind.forest";
+            break;
+        case assets::kind::kWall:
+        case assets::kind::kWallBeach:
+        case assets::kind::kTower:
+        case assets::kind::kTowerBeach:
+        case assets::kind::kGate:
+            what = "editor.prop.kind.wall";
+            break;
+        case assets::kind::kRoad:
+        case assets::kind::kBridge:
+        case assets::kind::kSquare:
+            what = "editor.prop.kind.road";
+            break;
+        case assets::kind::kPier:
+        case assets::kind::kHarbour:
+            what = "editor.prop.kind.pier";
+            break;
+        case assets::kind::kGround:
+            what = "editor.prop.kind.ground";
+            break;
+        case assets::kind::kBeach:
+        case assets::kind::kBeachMouth:
+        case assets::kind::kBeachOuter:
+        case assets::kind::kBeachInner:
+        case assets::kind::kBeachVariant:
+            what = "editor.prop.kind.beach";
+            break;
+        case assets::kind::kSea:
+        case assets::kind::kSurf:
+        case assets::kind::kSurfCorner:
+            what = "editor.prop.kind.sea";
+            break;
+        case assets::kind::kRiver:
+        case assets::kind::kRiverCorner:
+        case assets::kind::kRiverMouth:
+            what = "editor.prop.kind.river";
+            break;
+        case assets::kind::kSlope:
+        case assets::kind::kSlopeCorner:
+        case assets::kind::kSlopeSpring:
+            what = "editor.prop.kind.slope";
+            break;
+        default:
+            what = b.prod_kind == assets::prod::kPirateHouse ? "editor.prop.kind.pirates"
+                   : b.destroyed                             ? "editor.prop.kind.ruin"
+                                                             : nullptr;
+            break;
+    }
+    if (what != nullptr) {
+        return ui::tr("editor.prop.building_kind", {ui::tr(what), number(b.id)});
     }
     return ui::tr("editor.prop.building_number", {number(b.id)});
 }
@@ -163,6 +246,11 @@ std::string limit_text(const editor::LimitProblem& p) {
 }
 
 }  // namespace
+
+std::string MapViewer::editor_building_name(const assets::BuildingType& b, const assets::BuildingTable& buildings,
+                                            const assets::TextTable* texts) {
+    return building_name(b, buildings, texts);
+}
 
 sim::World MapViewer::sea_world(std::uint32_t width, std::uint32_t height) const {
     sim::World world(width, height);
@@ -631,6 +719,8 @@ void MapViewer::editor_end_test_play() {
     adopt_state(std::move(parked.state), parked.source);
     m_editor.emplace(std::move(parked.editor));
     m_input->set_editor(true);
+    // The editor's Ctrl+F finds: a frame rate switched on in the test game would stay for good.
+    m_show_fps = false;
     if (m_hud) {
         m_hud->close_menu();
         m_hud->set_editing(true);
@@ -807,6 +897,12 @@ EditorModel MapViewer::editor_model() const {
         m.terrain_pieces = pieces.size();
         if (const assets::BuildingType* b = editor_terrain_piece()) {
             m.terrain_id = b->id;
+            // Its kind without the number (the pieces of a group are told apart by their place).
+            m.terrain_name = editor_building_name(*b, m_buildings, m_hud ? m_hud->texts() : nullptr);
+            const std::string own = " (" + std::to_string(b->id) + ")";
+            if (m.terrain_name.ends_with(own)) {
+                m.terrain_name.resize(m.terrain_name.size() - own.size());
+            }
             m.terrain_width = b->size_x;
             m.terrain_height = b->size_y;
             m.terrain_turns = b->rotate > 0;
@@ -1746,6 +1842,11 @@ std::vector<EditorCheckLine> MapViewer::editor_check() const {
                 if (a.crops[c] != 0) {
                     crops += (crops.empty() ? "" : ", ") + ui::tr(kCrops[c]);
                 }
+            }
+            if (a.islands == 0) {
+                lines.push_back(
+                    Line{ui::tr("editor.check.start_sea", {who(a.player), number(a.rival)}), Line::Kind::Note});
+                continue;
             }
             lines.push_back(
                 Line{ui::tr("editor.check.start", {who(a.player), number(a.islands), number(a.land),

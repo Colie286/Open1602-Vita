@@ -39,7 +39,8 @@ struct StartArea {
 [[nodiscard]] std::vector<StartArea> start_areas(const sim::World& world, const assets::BuildingTable& buildings);
 
 /// What is uneven between the start areas: more than this share less land than the richest
-/// (percent), a crop that some areas have and others not, ore or gold in some only.
+/// (percent), a crop that some areas have and others not, ore or gold in some only. Starts at sea
+/// with no island in reach are left out.
 inline constexpr std::uint32_t kFairLandPercent = 70;
 struct Unfairness {
     enum class Kind : std::uint8_t { Land, Crop, Ore, Gold };

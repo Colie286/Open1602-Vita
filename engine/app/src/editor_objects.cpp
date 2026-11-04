@@ -167,7 +167,9 @@ void MapViewer::editor_object_model(EditorModel& m) const {
         const assets::TextTable* texts = m_hud ? m_hud->texts() : nullptr;
         std::string name = texts != nullptr ? c.name(index, texts->section(c.names)) : c.name(index, none);
         if (name.empty()) {
-            name = ui::tr("editor.prop.building_number", {std::to_string(c.at(index).value_or(0))});
+            const assets::BuildingType* b = m_buildings.by_id(c.at(index).value_or(0));
+            name = b != nullptr ? editor_building_name(*b, m_buildings, texts)
+                                : ui::tr("editor.prop.building_number", {std::to_string(c.at(index).value_or(0))});
         }
         m.object_name = std::move(name);
         m.object_group = ui::tr("editor.objects.group." + std::to_string(c.button));

@@ -1464,7 +1464,8 @@ void EditorPanel::layout_terrain(const EditorModel& model) {
             std::string piece = ui::tr("editor.terrain.no_piece");
             if (model.terrain_pieces > 0) {
                 piece = ui::tr("editor.terrain.piece_value",
-                               {count(model.terrain_id), count(t.piece + 1), count(model.terrain_pieces)});
+                               {model.terrain_name.empty() ? count(model.terrain_id) : model.terrain_name,
+                                count(t.piece + 1), count(model.terrain_pieces)});
             }
             value(kTerrainPiece, "editor.terrain.piece", std::move(piece), pieces);
             value(kTerrainRotation, "editor.terrain.rotation", ui::tr(kTerrainRotationTexts[t.rotation & 3U]),

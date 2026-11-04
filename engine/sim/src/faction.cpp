@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "o1602/core/data_file.hpp"
+#include "o1602/core/text.hpp"
 
 namespace o1602::sim {
 
@@ -171,6 +172,23 @@ void apply_faction_file(std::vector<Faction>& factions, std::string_view package
                     warnings.push_back(at + "'replaces' names a faction of another behaviour");
                 } else if (replacements != nullptr) {
                     replacements->push_back(FactionReplacement{factions[*replaced].id, faction.id});
+                }
+                continue;
+            }
+            if (e.key.starts_with("name.")) {
+                // A name to show (the editor's players): name.de = "Liga".
+                const std::string language = e.key.substr(5);
+                const std::string* text = e.value.string();
+                const bool code = !language.empty() && language.size() <= 16 &&
+                                  std::all_of(language.begin(), language.end(), [](char c) {
+                                      return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '-';
+                                  });
+                if (!code || text == nullptr || text->empty()) {
+                    warnings.push_back(at + "'" + e.key + "' must be name.<language> = \"a name\"");
+                } else {
+                    auto& names = faction.names;
+                    std::erase_if(names, [&](const auto& n) { return n.first == language; });
+                    names.emplace_back(language, core::utf8_to_cp1252(*text));
                 }
                 continue;
             }

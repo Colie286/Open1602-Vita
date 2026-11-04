@@ -44,6 +44,7 @@
 #include "o1602/assets/package_graphics.hpp"
 #include "o1602/assets/package_scenarios.hpp"
 #include "o1602/assets/palette.hpp"
+#include "o1602/assets/text_table.hpp"
 #include "o1602/core/file.hpp"
 #include "o1602/core/result.hpp"
 #include "o1602/editor/document.hpp"
@@ -99,6 +100,11 @@ public:
     [[nodiscard]] static std::filesystem::path data_folder();
     /// A player as the editor's lists name it (Windows-1252): its own name, else its colour.
     [[nodiscard]] static std::string editor_player_label(const sim::Player& p);
+    /// A building's or ground's name for the editor (Windows-1252): the build menu's, a house's by
+    /// its inhabitants' class, else what kind of thing it is and its number.
+    [[nodiscard]] static std::string editor_building_name(const assets::BuildingType& b,
+                                                          const assets::BuildingTable& buildings,
+                                                          const assets::TextTable* texts);
     /// The player's own scenarios (<data folder>/scenarios), listed after the game folder's;
     /// made if it is missing.
     [[nodiscard]] static std::filesystem::path own_scenario_folder();

@@ -89,6 +89,7 @@ nests.per = 2
 | Field | Value |
 |---|---|
 | `behaviour` | `"settlers"`, `"trader"`, `"pirates"` or `"natives"`: what the simulation does for the faction's players. Required for a new faction; it does not change later |
+| `name.<language>` | the faction's name as the editor shows it, by language code (`name.de = "Liga"`, `name.en = "League"`); without one the editor shows the name of its table (`league`) |
 | `replaces` | a faction of the same behaviour whose slots the new one takes in the games started afterwards (new games and the original's scenarios and savegames); the first package that replaces a faction gets its slots |
 | the numbers | as above |
 
