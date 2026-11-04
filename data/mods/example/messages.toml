@@ -14,8 +14,9 @@ icon = "example:pepper"
 kind = "events"
 sound = "sounds/horn.flac"
 
-# Sent by harbour.lua when the scenario starts.
+# Sent by harbour.lua when the scenario starts, with a video of the package (AV1 and Opus in WebM).
 [welcome]
 like = 0x3C
 text = "Welcome to the harbour. The coast needs a light."
 text.de = "Willkommen im Hafen. Die Küste braucht ein Licht."
+video = "videos/beacon.webm"

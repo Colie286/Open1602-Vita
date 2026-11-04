@@ -95,6 +95,8 @@ add_subdirectory(third_party/enet)
 add_subdirectory(third_party/stb_vorbis)
 add_subdirectory(third_party/dr_flac)
 add_subdirectory(third_party/lua)
+add_subdirectory(third_party/dav1d)
+add_subdirectory(third_party/opus)
 add_subdirectory(engine)
 
 if(O1602_BUILD_TOOLS)

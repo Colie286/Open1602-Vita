@@ -18,7 +18,7 @@
 //   o1602-tool render-world <file.szs|.gam> <out.png> [--zoom 0|1|2] [--rotation 0-3] [--time MS]
 //                           [--tile X,Y] [--size WxH] [--owners]
 //                                                        render the world map or a part of it
-//   o1602-tool export, new-world, bench, scenario, smk, bk2, state, check-mod,
+//   o1602-tool export, new-world, bench, scenario, smk, bk2, webm, state, check-mod,
 //   export-island see usage()
 //
 // The palette defaults to $ANNO1602_DIR/TOOLGFX/STADTFLD.COL.
@@ -80,6 +80,7 @@ int usage() {
         "  o1602-tool smk        <file.smk> [--png DIR] [--every N] [--wav TRACK OUT.wav]\n"
         "                        (Smacker video: header, decode all frames; frames as PNG, a track as WAVE)\n"
         "  o1602-tool bk2        <file.bk2> [--png DIR] [--every N] [--wav TRACK OUT.wav]\n"
+        "  o1602-tool webm       <file.webm> [--png DIR] [--every N] [--wav TRACK OUT.wav]\n"
         "                        (Bink 2 video: header, decode all frames and their time; frames as PNG, a\n"
         "                         track as WAVE)\n"
         "  o1602-tool state      <file.gam|.szs|.o1602> [--wares] [--production] [--buildings] [--mods FOLDER]\n"
@@ -168,6 +169,9 @@ int main(int argc, char** argv) {
     }
     if (command == "bk2") {
         return cmd_bk2(args);
+    }
+    if (command == "webm") {
+        return cmd_webm(args);
     }
     if (command == "state") {
         return cmd_state(args);

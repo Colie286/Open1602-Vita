@@ -7,11 +7,10 @@ original's, with its own text in every language, an icon, a sound and a video
 
 **Status:** Done are the file `messages.toml`, new messages, changes to the original's messages,
 texts per language with placeholders, own sounds (WAV, Ogg Vorbis, FLAC), the original's videos and
-videos of the package's own (Smacker or Bink 2). The status bar,
+videos of the package's own (Smacker, Bink 2 or WebM with AV1 and Opus). The status bar,
 the voices and the videos take everything from the message table (`app::MessageTable`). A
 package's script posts its messages with `game.message` ([scripts.md](scripts.md)), and `--message`
-shows one at the start. Still open: videos in a modern format (a package's videos are Smacker or
-Bink 2 files, as the original's). A message shows an icon
+shows one at the start. A message shows an icon
 of a package's own with `icon = "<package>:<name>"` ([graphics.md](graphics.md#icons)).
 
 ## Where a mod's messages are
@@ -72,7 +71,7 @@ with their number in `Text.cod`'s `[MELDUNG]` section, in decimal or hex (`anno1
 | `icon` | `"notice"`, `"scroll"`, `"combat"`, `"player"`, `"plague"`, `"fire"`, `"drought"`, `"volcano"`, or an icon of a package `"<package>:<name>"` ([icons.toml](graphics.md#icons)) | The icon in the status bar; the first four in the colour of the player the message is about, a package's as it is drawn, or in that colour too if it is a template (`tint = true` in icons.toml) |
 | `kind` | `"general"`, `"events"`, `"island"`, `"players"`, `"trade"`, `"combat"`, `"orders"`, `"diplomacy"`, `"routes"` | Which switch of the voice and video options mutes it (`general`: only the master switch; `routes`: Open1602's switch of „Überprüft Eure Handelsrouten!“) |
 | `sound` | file name, number or `false` | A WAV, Ogg Vorbis or FLAC file of the package (relative to its folder, never outside it), a file of the original's `Speech8` (`sound = 530`), or none (`false`: only the short message sound) |
-| `video` | number, path or `false` | A video of the original's `VideoSmk` (`video = 23` plays `VideoSmk/23.smk`), a video file of the package (`video = "videos/beacon.smk"`, see below), or none |
+| `video` | number, path or `false` | A video of the original's `VideoSmk` (`video = 23` plays `VideoSmk/23.smk`), a video file of the package (`video = "videos/beacon.webm"`, see below), or none |
 | `video_always` | `true`/`false` | Play the video also when the place of the message is on screen (else only when it is not) |
 | `normal_speed` | `true`/`false` | The game goes back to normal speed (as with fire, plague and attacks) |
 
@@ -99,9 +98,12 @@ original's voices of a message it borrowed with `like`.
 Sounds may be WAV (PCM, 8 or 16 bits), Ogg Vorbis or FLAC files, mono or stereo, any rate
 ([sounds.md](sounds.md)); they are read once when the game starts.
 
-A video of the package is a Smacker file (`.smk`, as the Königsedition's) or a Bink 2 file
-(`.bk2`, as the History Edition's) in the package's folder; the game tells them by the name and
-checks their first bytes. It plays like the original's message videos, in the minimap's window
+A video of the package is a Smacker file (`.smk`, as the Königsedition's), a Bink 2 file
+(`.bk2`, as the History Edition's) or a WebM file with AV1 pictures and Opus sound (`.webm`, the
+modern format, made for example with `ffmpeg -i in.mp4 -c:v libsvtav1 -crf 35 -pix_fmt yuv420p
+-c:a libopus out.webm`; [webm.md](../formats/webm.md) says what it plays) in the package's folder;
+the game tells them by the name and checks their first bytes. The example package's welcome
+message plays `videos/beacon.webm`. It plays like the original's message videos, in the minimap's window
 with its sound, and the video options switch it off by the message's `kind`. Several messages may
 name the same file. A file that is missing, outside the package or of another kind is passed over
 with a warning, and the message then speaks its sound.

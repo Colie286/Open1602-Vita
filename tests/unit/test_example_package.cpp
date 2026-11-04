@@ -94,6 +94,7 @@ TEST_CASE("the example package loads without a warning, as far as it needs no or
     CHECK(islands[0].id == "example:lagoon");
     app::MessageTable messages;
     messages.load_mods(packages, problems);
+    CHECK(messages.package_videos().size() == 1);  // videos/beacon.webm
 
     const std::vector<assets::PackageScenario> scenarios = assets::load_package_scenarios(packages, problems);
     CHECK(scenarios.size() == 1);

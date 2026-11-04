@@ -102,6 +102,7 @@ add_executable(o1602_tests
     unit/test_unit_selection.cpp
     unit/test_video.cpp
     unit/test_bink.cpp
+    unit/test_webm.cpp
     unit/test_net.cpp
     unit/test_cursor_resource.cpp
     unit/test_endless_setup.cpp

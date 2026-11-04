@@ -7,7 +7,7 @@ ADR 0007 tracks the same items from the code's side.
 
 ## Summary
 
-State on 2026-11-03. The details of each item follow under [Open items](#open-items).
+State on 2026-11-04. The details of each item follow under [Open items](#open-items).
 
 ### Done
 
@@ -16,7 +16,7 @@ State on 2026-11-03. The details of each item follow under [Open items](#open-it
 | 1. Packages | a manifest with version, dependencies (version ranges) and load order; packages as folders or zip archives; the packages a game uses are kept in its savegame and checked in multiplayer, where the host sends missing ones; the main menu's screen "Mods" |
 | 2. Content | change 16 values of the original's buildings and 10 of its figures; add buildings and figures of its own, each copying one of the original, and replace another package's building; soldiers that castles train and ships that shipyards build, which computers train and build too |
 | 3. Goods, classes, levels | add trade goods, change the original's classes and add up to eight in all with their needs and public buildings, change and add unlock levels with messages of their own |
-| 4. Graphics and sound | PNG images for buildings, figures, ships and icons; music and sounds as WAV, Ogg Vorbis or FLAC for messages, buildings and figures; Smacker and Bink 2 videos for messages |
+| 4. Graphics and sound | PNG images for buildings, figures, ships and icons; music and sounds as WAV, Ogg Vorbis or FLAC for messages, buildings and figures; Smacker, Bink 2 and WebM videos (AV1 and Opus) for messages |
 | 5. Computer players | they build the chains of a package's goods; they train soldiers and build ships of packages; their stage orders, public buildings, producers (building, tries, crop, what they wait for, what counts), cheat amounts, when a city moves on and the crop of their first colony are data; the 55 slots of a city record are named and changed by `slots.toml`, with up to 50 public buildings of a kind of their own that classes need and the computers build |
 | 6. Lua scripts | a sandboxed Lua 5.4 script per package that hears what happens and reads and changes the game (money, goods, missions, buildings, ships, land units, diplomacy, who wins) |
 | 7. Scenarios and campaigns | scenarios with maps, briefings, goals and scripts; campaigns of up to five parts that carry money and a script table on |
@@ -25,9 +25,7 @@ State on 2026-11-03. The details of each item follow under [Open items](#open-it
 
 ### Still open
 
-| Item | What is missing | Size |
-|---|---|---|
-| 4 | videos in a modern format (today only Smacker and Bink 2) | medium: a decoder in `third_party` (e.g. a royalty-free format such as AV1 or VP9 in WebM) |
+Nothing: with videos in WebM (AV1 and Opus, 2026-11-04) every item is done.
 
 ### Smaller adjustments
 
@@ -47,7 +45,8 @@ the **first page for modders**, [README.md](README.md); and the **package check*
 `o1602-tool check-mod <mods folder>`, which reads the packages as the game does and lists every
 problem without starting the game.
 
-- Next item to work on: videos in a modern format (item 4), the last open one.
+- Done on 2026-11-04: videos in a modern format (item 4), the last open one: WebM with AV1 and Opus
+  ([webm.md](../formats/webm.md)).
 
 ## What a mod can do today
 
@@ -204,7 +203,9 @@ sprite the figure draws). Part 5 done on 2026-11-01 ([sounds.md](sounds.md#sound
 `sounds.toml` numbers a package's sounds from 1000, and its buildings (`build_sound`) and figures
 (`sound`, `shot_sound`, `hit_sound`) name them. Part 6 done on 2026-11-01
 ([messages.md](messages.md#sound-and-video)): a message of a package plays a Smacker or Bink 2
-video of the package's own (`video = "<path>"`). Still open: videos in a modern format.
+video of the package's own (`video = "<path>"`). Part 7 done on 2026-11-04
+([webm.md](../formats/webm.md)): the package's videos may be WebM files with AV1 pictures and Opus
+sound, decoded by dav1d and libopus in `third_party`.
 
 ### 5. Computer players from data (section 3; MD-4)
 

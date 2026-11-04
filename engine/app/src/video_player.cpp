@@ -34,6 +34,8 @@ std::optional<std::filesystem::path> find_video(const assets::GameDirectory& gam
 
 template <typename V>
 constexpr bool kIsBink = std::is_same_v<V, video::Bink>;
+template <typename V>
+constexpr bool kIsSmacker = std::is_same_v<V, video::Smacker>;
 
 std::uint64_t frame_us(const VideoPlayer::Clip& clip) {
     return std::visit(
@@ -73,6 +75,18 @@ core::Result<VideoPlayer::Clip> open_clip(const std::filesystem::path& file, std
                            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     if (extension == ".bk2") {
         auto video = video::Bink::open_file(file);
+        if (!video) {
+            return video.error();
+        }
+        for (std::size_t t = 0; t < video->info().tracks.size(); ++t) {
+            if (wanted(t)) {
+                add(video->audio(t));
+            }
+        }
+        return VideoPlayer::Clip{std::move(*video)};
+    }
+    if (extension == ".webm") {
+        auto video = video::Webm::open_file(file);
         if (!video) {
             return video.error();
         }
@@ -196,8 +210,8 @@ VideoPlayer::Load VideoPlayer::poll(std::uint64_t now_ms) {
     m_start_ms = now_ms;
     const auto [w, h, smooth] = std::visit(
         []<typename V>(const V& v) {
-            if constexpr (kIsBink<V>) {
-                // The History Edition's are large already: scaled smoothly, as it does.
+            if constexpr (!kIsSmacker<V>) {
+                // The History Edition's and packages' WebM videos are large already: scaled smoothly.
                 return std::tuple{static_cast<std::int32_t>(v.info().width), static_cast<std::int32_t>(v.info().height),
                                   true};
             } else {

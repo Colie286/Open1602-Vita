@@ -9,7 +9,7 @@
 //
 // The Königsedition has them as Smacker files (VideoSmk/<number>.smk), the History Edition as
 // Bink 2 files of the same names (VideoSmk/<number>.bk2, docs/formats/bk2.md); a Smacker file
-// comes first.
+// comes first. Content packages may also bring WebM videos (AV1 and Opus, docs/formats/webm.md).
 #pragma once
 
 #include <cstdint>
@@ -24,6 +24,7 @@
 #include "o1602/audio/wav.hpp"
 #include "o1602/video/bink.hpp"
 #include "o1602/video/smacker.hpp"
+#include "o1602/video/webm.hpp"
 
 struct SDL_Renderer;
 struct SDL_Texture;
@@ -85,8 +86,8 @@ public:
     /// ... and is made again with the new one, the current frame uploaded anew.
     void set_renderer(SDL_Renderer* renderer);
 
-    /// A decoded video of either edition.
-    using Clip = std::variant<video::Smacker, video::Bink>;
+    /// A decoded video of either edition, or a package's WebM video.
+    using Clip = std::variant<video::Smacker, video::Bink, video::Webm>;
 
 private:
     /// The file of a video number: the installation's, or a package's.

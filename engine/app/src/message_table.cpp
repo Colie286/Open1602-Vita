@@ -91,8 +91,8 @@ std::optional<std::filesystem::path> package_path(std::string_view utf8) {
     return relative;
 }
 
-/// Whether the file is a Smacker (.smk: "SMK2", "SMK4") or Bink 2 file (.bk2: "KB2"), by its name
-/// and its first bytes: the player picks the decoder by the name.
+/// Whether the file is a Smacker (.smk: "SMK2", "SMK4"), Bink 2 (.bk2: "KB2") or WebM file (.webm:
+/// an EBML header), by its name and its first bytes: the player picks the decoder by the name.
 bool is_video_file(const std::filesystem::path& file) {
     std::string extension = file.extension().string();
     std::ranges::transform(extension, extension.begin(),
@@ -105,6 +105,9 @@ bool is_video_file(const std::filesystem::path& file) {
     const std::string_view head(magic.data(), magic.size());
     if (extension == ".smk") {
         return head == "SMK2" || head == "SMK4";
+    }
+    if (extension == ".webm") {
+        return head == std::string_view("\x1A\x45\xDF\xA3", 4);
     }
     return extension == ".bk2" && head.starts_with("KB2");
 }
@@ -279,7 +282,7 @@ void MessageTable::apply(const core::DataTable& table, MessageDefinition& m, con
                 m.playback.video_base = static_cast<std::uint16_t>(*n);
                 m.playback.videos = 1;
             } else if (const auto relative = s != nullptr ? package_path(*s) : std::nullopt; relative) {
-                // A Smacker or Bink 2 file of the package, as the original's videos are.
+                // A Smacker, Bink 2 or WebM file of the package.
                 if (const auto number = package_video(folder / *relative, at + *s + ": ", warnings)) {
                     m.playback.video_base = *number;
                     m.playback.videos = 1;
@@ -287,7 +290,7 @@ void MessageTable::apply(const core::DataTable& table, MessageDefinition& m, con
             } else {
                 warnings.push_back(at +
                                    "'video' must be a number of VideoSmk, a video file in the package's folder "
-                                   "(.smk, .bk2) or false");
+                                   "(.smk, .bk2, .webm) or false");
             }
         } else if (e.key == "video_always" || e.key == "normal_speed") {
             const std::uint16_t flag =
@@ -357,7 +360,7 @@ std::optional<std::uint16_t> MessageTable::package_video(const std::filesystem::
         return static_cast<std::uint16_t>(kFirstPackageVideo + (it - m_videos.begin()));
     }
     if (!is_video_file(normal)) {
-        warnings.push_back(at + "missing or no Smacker (.smk) or Bink 2 (.bk2) video");
+        warnings.push_back(at + "missing or no Smacker (.smk), Bink 2 (.bk2) or WebM (.webm) video");
         return std::nullopt;
     }
     if (m_videos.size() >= kMaxPackageVideos) {

@@ -25,8 +25,8 @@ Symbols: ✅ done · 🟡 partly · ⬜ open · ❓ behaviour of the original no
   ADR 0010; feedback also in the terminal.
 - **Multiplayer** works in lockstep through the host over the network, with Open1602's own menu,
   a lobby and a search for games on the local network ([ADR 0011](architecture/0011-multiplayer-lockstep.md)).
-- **The large open blocks** are the editor, host migration beyond the local network and the modding
-  foundations (content packs, computer players from data, the rest of the island generator's stage 2).
+- **The large open blocks** are the editor and host migration beyond the local network; the items of
+  mod support are done ([open-work.md](modding/open-work.md#summary)).
 - **Compared with the running original** on 2026-10-20:
   the differences found and what is still open about them are in section 1.4.
 - **Milestones** (defined in [00-plan.md](00-plan.md#6-milestones)): M0 ✅ · M1 ✅ (every field of the
@@ -39,9 +39,8 @@ Symbols: ✅ done · 🟡 partly · ⬜ open · ❓ behaviour of the original no
   Multiplayer in 1.2) · M7 🟡 (freely assignable keys, mouse-wheel zoom, pixel scaling, screenshot,
   bug fixes, any window size and full screen, free zoom and the interface's size done; open: editor) · M8 🟡 (packages with
   manifest and zip archives, values, buildings, figures, goods, classes and levels of their own,
-  graphics and sound, Lua scripts, scenarios and campaigns, factions, computer players partly from
-  data and the island generator stage 2 done; open: see 2.2 and
-  [open-work.md](modding/open-work.md#summary)).
+  graphics and sound, videos in WebM (AV1 and Opus), Lua scripts, scenarios and campaigns, factions,
+  computer players from data and the island generator stage 2 done; open: see 2.2).
 - **Savegames**: since 2026-10-18 Open1602 saves in its own format `.o1602`
   ([o1602-save.md](formats/o1602-save.md), [ADR 0009](architecture/0009-own-save-format.md)): without
   the limits of the original (7 players, 150 ships, 400 soldiers, 350 towers), with a checksum, compressed,
@@ -179,7 +178,6 @@ are listed in 2.1.
 | What | Dependency | Source |
 |---|---|---|
 | Flag menu with free RGB colour as in Anno 1503 | Interface | [ADR 0007](architecture/0007-extensibility-and-modding.md) |
-| Mod support: videos in a modern format (the last open item; everything else is done, see the summary of open-work.md) | M8 | [open-work.md](modding/open-work.md#summary) |
 | Replays from the session's frames | M6 | [ADR 0011](architecture/0011-multiplayer-lockstep.md) |
 | Ideas: full refund shortly after building; own road pathfinding alongside that of the original; pirate distance of the difficulty level as a setting (S-068) | open, decision needed | – |
 
