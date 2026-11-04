@@ -15,6 +15,7 @@
 #include "o1602/assets/goods.hpp"
 #include "o1602/assets/package_arms.hpp"
 #include "o1602/assets/package_graphics.hpp"
+#include "o1602/assets/package_interface.hpp"
 
 namespace o1602::ui {
 
@@ -35,6 +36,13 @@ void set_package_arms(std::vector<assets::PackageArms> arms);
 /// The sprite of the icon a package draws as the coat of arms of banner `banner` (its id), nothing
 /// if none does or its icon is gone.
 [[nodiscard]] std::optional<std::int32_t> package_arms_sprite(std::string_view banner) noexcept;
+
+/// Makes `sprites` the original's interface sprites the packages draw anew (interface.toml), with
+/// set_package_icons().
+void set_interface_sprites(std::vector<assets::InterfaceSprite> sprites);
+/// The icon a package draws in place of sprite `gfx` of the interface's sheet `block` (Blocknr,
+/// ui::sheet_file()), nullptr if none does or its icon is gone.
+[[nodiscard]] const assets::PackageIcon* interface_icon(std::int32_t block, std::int32_t gfx) noexcept;
 
 /// The sprite of the icon of good `w`: the package's icon it shows, else the original's at
 /// `gfx_ware` (GFXWARE of the window's layout).

@@ -209,17 +209,68 @@ std::string installation_language(const assets::GameDirectory& game, const asset
     return std::string(kFallbackLanguage);
 }
 
-void set_language(std::string_view code, const std::filesystem::path& user_folder) {
+void set_language(std::string_view code, const std::filesystem::path& user_folder,
+                  std::span<const std::filesystem::path> package_folders) {
     State next;
     next.language = lower_ascii(code);
     next.texts.merge(builtin_catalogue(next.language));
-    if (!user_folder.empty()) {
-        if (const auto bytes = core::read_file(user_folder / (next.language + ".lang"))) {
+    const auto merge_file = [&](const std::filesystem::path& path) {
+        if (const auto bytes = core::read_file(path)) {
             next.texts.merge(
                 Catalogue::parse(std::string_view(reinterpret_cast<const char*>(bytes->data()), bytes->size())));
         }
+    };
+    const std::string file = next.language + ".lang";
+    for (const std::filesystem::path& folder : package_folders) {
+        merge_file(folder / kPackageLocaleFolder / file);
+    }
+    if (!user_folder.empty()) {
+        merge_file(user_folder / file);
     }
     state() = std::move(next);
+}
+
+void check_catalogue(std::string_view utf8, std::string_view where, std::vector<std::string>& problems) {
+    const Catalogue english = builtin_catalogue(kFallbackLanguage);
+    // The highest {N} of a text, 0 if it has none.
+    const auto highest = [](std::string_view text) {
+        int n = 0;
+        for (std::size_t i = 0; i + 2 < text.size(); ++i) {
+            if (text[i] == '{' && text[i + 2] == '}' && text[i + 1] >= '1' && text[i + 1] <= '9') {
+                n = std::max(n, text[i + 1] - '0');
+            }
+        }
+        return n;
+    };
+    if (utf8.starts_with("\xEF\xBB\xBF")) {
+        utf8.remove_prefix(3);
+    }
+    std::size_t number = 0;
+    while (!utf8.empty()) {
+        ++number;
+        const std::size_t nl = utf8.find('\n');
+        const std::string_view line = trim(utf8.substr(0, nl));
+        utf8 = nl == std::string_view::npos ? std::string_view{} : utf8.substr(nl + 1);
+        if (line.empty() || line.front() == '#') {
+            continue;
+        }
+        const std::string at = std::string(where) + " line " + std::to_string(number) + ": ";
+        const std::size_t eq = line.find('=');
+        const std::string_view key = eq == std::string_view::npos ? std::string_view{} : trim(line.substr(0, eq));
+        if (key.empty()) {
+            problems.push_back(at + "is no \"key = text\" line and is passed over");
+            continue;
+        }
+        const std::string* original = english.find(key);
+        if (original == nullptr) {
+            problems.push_back(at + "'" + std::string(key) + "' is no text of Open1602; nothing shows it");
+            continue;
+        }
+        if (const int used = highest(line.substr(eq + 1)); used > highest(*original)) {
+            problems.push_back(at + "'" + std::string(key) + "' uses {" + std::to_string(used) +
+                               "}, which the game does not fill in there");
+        }
+    }
 }
 
 const std::string& current_language() {

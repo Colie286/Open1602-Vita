@@ -19,6 +19,7 @@
 #include "o1602/assets/package_arms.hpp"
 #include "o1602/assets/package_flags.hpp"
 #include "o1602/assets/package_graphics.hpp"
+#include "o1602/assets/package_interface.hpp"
 #include "o1602/assets/package_sounds.hpp"
 #include "o1602/assets/resident_classes.hpp"
 #include "o1602/audio/package_music.hpp"
@@ -71,6 +72,13 @@ struct ModRules {
 [[nodiscard]] std::vector<assets::PackageArms> load_package_arms(std::span<const assets::ModPackage> packages,
                                                                  std::span<const assets::PackageIcon> icons,
                                                                  std::vector<std::string>& problems);
+
+/// The original's interface sprites `packages` draw with their icons (interface.toml), numbered as
+/// in the sheets of the History Edition if `history_edition`.
+[[nodiscard]] std::vector<assets::InterfaceSprite> load_package_interface(std::span<const assets::ModPackage> packages,
+                                                                          std::span<const assets::PackageIcon> icons,
+                                                                          bool history_edition,
+                                                                          std::vector<std::string>& problems);
 
 /// The kinds of island world of `packages` (landscapes.toml), in their load order.
 [[nodiscard]] std::vector<sim::PackageLandscape> load_package_landscapes(std::span<const assets::ModPackage> packages,

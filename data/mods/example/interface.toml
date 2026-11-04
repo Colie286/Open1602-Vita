@@ -1,0 +1,6 @@
+# The original's interface art drawn with icons of this package (graphics.md): the first star of
+# the endless game's level choice (START.BSH sprite 21, 24 x 22 pixels) becomes a gold star. The
+# History Edition's START.BSH has two sprites more before it.
+["start:21"]
+icon = "example:star"
+history = 23

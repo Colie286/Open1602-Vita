@@ -80,6 +80,7 @@ constexpr std::pair<KeyAction, std::string_view> kNames[] = {
     {KeyAction::ShowFps, "show_fps"},
     {KeyAction::ShowCoordinates, "show_coordinates"},
     {KeyAction::ShowUnitArms, "show_unit_arms"},
+    {KeyAction::ReloadPackages, "reload_packages"},
     {KeyAction::Fullscreen, "fullscreen"},
     {KeyAction::Quit, "quit"},
     {KeyAction::EditorUndo, "editor_undo"},

@@ -72,7 +72,8 @@ public:
     /// The render device was reset and the textures lost their contents: all go and are made
     /// again when next drawn (an image from the pixels given then).
     void release_textures();
-    /// The packages' icons changed (ui::set_package_icons()): their pictures are read again.
+    /// The packages' icons changed (ui::set_package_icons(), ui::set_interface_sprites()): the
+    /// sprites are made again when next drawn.
     void forget_package_icons();
     /// The renderer was made again (the device was lost): textures come from `renderer` from now
     /// on. release_textures() goes before the old renderer does.

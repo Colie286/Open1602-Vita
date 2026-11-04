@@ -1,0 +1,15 @@
+# Open1602's own texts in French, the beginning of a translation (languages.md). Every key this
+# file lacks is shown in English. Choose the language with --language fr or "language = fr" in
+# settings.cfg; the original's texts stay those of the installation.
+language.name = Français
+
+# Questions
+dialog.yes = Oui
+dialog.no = Non
+dialog.quit_game = Quitter la partie ?\nElle est sauvegardée sous « lastgame ».
+dialog.quit_anno = Quitter Anno 1602 ?
+
+# The display window
+display.title = Affichage
+display.on = activé
+display.off = désactivé

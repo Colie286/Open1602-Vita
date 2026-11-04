@@ -82,6 +82,9 @@ int cmd_check_mod(const Args& args) {
     auto banners = render::BannerTable::original();
     banners.add_more_players();
     app::check_arms_banners(app::load_package_arms(packages, icons, problems), banners, problems);
+    app::check_interface_sprites(
+        app::load_package_interface(packages, icons, !game->localized_root().empty(), problems), icons, *game,
+        problems);
     ui::set_package_icons(std::move(icons));
     (void)app::load_package_landscapes(packages, problems);
     (void)sim::load_package_islands(packages, problems);
@@ -95,6 +98,7 @@ int cmd_check_mod(const Args& args) {
     }
     app::MessageTable messages;
     messages.load_mods(packages, problems);
+    app::check_package_catalogues(packages, problems);
     (void)ui::load_build_menu_mods(ui::original_build_menu(), packages, *buildings, problems, rules.own);
     const std::vector<assets::PackageScenario> scenarios = assets::load_package_scenarios(packages, problems);
     (void)assets::load_package_campaigns(packages, scenarios, problems);

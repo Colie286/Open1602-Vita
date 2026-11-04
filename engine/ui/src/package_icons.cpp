@@ -24,6 +24,11 @@ std::vector<assets::PackageArms>& arms() {
     return list;
 }
 
+std::vector<assets::InterfaceSprite>& interface_sprites() {
+    static std::vector<assets::InterfaceSprite> list;
+    return list;
+}
+
 }  // namespace
 
 std::vector<assets::PackageIcon> builtin_icons() {
@@ -69,6 +74,20 @@ std::optional<std::int32_t> package_arms_sprite(std::string_view banner) noexcep
         return package_icon_sprite(a->icon);
     }
     return std::nullopt;
+}
+
+void set_interface_sprites(std::vector<assets::InterfaceSprite> sprites) {
+    interface_sprites() = std::move(sprites);
+}
+
+const assets::PackageIcon* interface_icon(std::int32_t block, std::int32_t gfx) noexcept {
+    if (interface_sprites().empty()) {
+        return nullptr;
+    }
+    if (const assets::InterfaceSprite* s = assets::find_interface_sprite(interface_sprites(), block, gfx)) {
+        return assets::find_package_icon(icons(), s->icon);
+    }
+    return nullptr;
 }
 
 std::int32_t ware_sprite(std::int32_t gfx_ware, const assets::Goods& goods, std::uint32_t w) noexcept {

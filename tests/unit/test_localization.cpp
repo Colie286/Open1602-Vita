@@ -8,6 +8,7 @@
 #include <iterator>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "../test_framework.hpp"
 
@@ -34,6 +35,7 @@ struct TempFolder {
     TempFolder& operator=(const TempFolder&) = delete;
 
     void write(std::string_view name, std::string_view text) const {
+        std::filesystem::create_directories((path / name).parent_path());
         std::ofstream out(path / name, std::ios::binary);
         out << text;
     }
@@ -173,4 +175,39 @@ TEST_CASE("localization: a catalogue in the user's folder extends and overrides 
     CHECK(ui::tr("dialog.yes") == "Jawohl");
     CHECK(ui::tr("dialog.no") == "Nein");
     CHECK(ui::tr("mod.text") == "Neu");
+}
+
+TEST_CASE("localization: the packages' catalogues come between the built-in one and the user's") {
+    const LanguageGuard guard;
+    const TempFolder folder("o1602-test-locale-packages");
+    folder.write("first/locale/fr.lang",
+                 "language.name = Fran\xC3\xA7"
+                 "ais\ndialog.yes = Oui\ndialog.no = Non\n");
+    folder.write("second/locale/fr.lang", "dialog.no = Non merci\n");
+    folder.write("user/fr.lang", "dialog.yes = Oui !\n");
+    const std::vector<std::filesystem::path> packages = {folder.path / "first", folder.path / "second"};
+    ui::set_language("fr", folder.path / "user", packages);
+    CHECK(ui::current_language() == "fr");
+    CHECK(ui::tr("language.name") ==
+          "Fran\xE7"
+          "ais");                                            // Windows-1252
+    CHECK(ui::tr("dialog.no") == "Non merci");               // the later package wins
+    CHECK(ui::tr("dialog.yes") == "Oui !");                  // and the player's own over both
+    CHECK(ui::tr("dialog.quit_anno") == "Quit Anno 1602?");  // English for the rest
+}
+
+TEST_CASE("localization: check-mod names keys and arguments of a package's catalogue the game has not") {
+    std::vector<std::string> problems;
+    ui::check_catalogue(
+        "# French\n"
+        "dialog.yes = Oui\n"
+        "dialog.yess = Oui\n"                                      // line 3: no such key
+        "dialog.break_peace = Rompre la paix avec {1} et {2} ?\n"  // line 4: no {2}
+        "nothing here\n",                                          // line 5
+        "french/locale/fr.lang", problems);
+    REQUIRE(problems.size() == 3);
+    CHECK(problems[0] == "french/locale/fr.lang line 3: 'dialog.yess' is no text of Open1602; nothing shows it");
+    CHECK(problems[1] ==
+          "french/locale/fr.lang line 4: 'dialog.break_peace' uses {2}, which the game does not fill in there");
+    CHECK(problems[2] == "french/locale/fr.lang line 5: is no \"key = text\" line and is passed over");
 }

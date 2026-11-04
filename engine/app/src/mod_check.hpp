@@ -10,8 +10,10 @@
 #include <vector>
 
 #include "o1602/assets/game_content.hpp"
+#include "o1602/assets/game_directory.hpp"
 #include "o1602/assets/package_arms.hpp"
 #include "o1602/assets/package_flags.hpp"
+#include "o1602/assets/package_interface.hpp"
 #include "o1602/audio/package_music.hpp"
 #include "o1602/render/banner.hpp"
 
@@ -29,6 +31,16 @@ void check_arms_banners(std::span<const assets::PackageArms> arms, const render:
 /// A problem for each flag of a banner that `banners` has not. The game passes it over.
 void check_flag_banners(std::span<const assets::PackageFlag> flags, const render::BannerTable& banners,
                         std::vector<std::string>& problems);
+
+/// A problem for each interface sprite (interface.toml) that the installation's sheet of the large
+/// art has not, and for each icon of another size than the sprite it replaces: the interface draws
+/// it at its own size, which a panel or button may not fit.
+void check_interface_sprites(std::span<const assets::InterfaceSprite> sprites,
+                             std::span<const assets::PackageIcon> icons, const assets::GameDirectory& game,
+                             std::vector<std::string>& problems);
+
+/// The problems of the packages' catalogues (<package>/locale/<code>.lang, ui::check_catalogue).
+void check_package_catalogues(std::span<const assets::ModPackage> packages, std::vector<std::string>& problems);
 
 /// The packages and problems as one JSON object:
 /// {"packages":[{"id":..,"version":..}],"problems":[{"text":..,"package":..,"file":..,"line":N}]}.

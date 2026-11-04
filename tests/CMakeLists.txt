@@ -92,6 +92,7 @@ add_executable(o1602_tests
     unit/test_building_looks.cpp
     unit/test_mod_check.cpp
     unit/test_package_flags.cpp
+    unit/test_package_interface.cpp
     unit/test_figure_looks.cpp
     unit/test_script_sandbox.cpp
     unit/test_game_scripts.cpp

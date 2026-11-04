@@ -3143,7 +3143,8 @@ void MapViewer::apply_language() {
         const auto texts = assets::TextTable::load(m_game);
         code = ui::installation_language(m_game, texts ? &texts.value() : nullptr);
     }
-    ui::set_language(code, data_folder() / "locale");
+    ui::set_language(code, data_folder() / "locale", m_locale_packages);
+    m_language_applied = true;
     std::fprintf(stderr, "language: %s\n", ui::current_language().c_str());
 }
 
@@ -3453,14 +3454,26 @@ void MapViewer::give_mod_content(sim::World& world) const {
     world.set_infra_levels(m_levels);
 }
 
-void MapViewer::use_game_packages() {
+void MapViewer::use_game_packages(bool again) {
     std::vector<std::string> problems;
     const auto& wanted = m_state->world.packages();
     const std::vector<assets::ModPackage> known = known_packages();
     const std::vector<assets::ModPackage> used = wanted ? assets::packages_for(known, *wanted, problems) : m_packages;
+    // Their catalogues first: the texts below are made in the language they give.
+    std::vector<std::filesystem::path> locale_packages;
+    for (const assets::ModPackage& package : used) {
+        locale_packages.push_back(package.folder);
+    }
+    if (again || locale_packages != m_locale_packages) {
+        m_locale_packages = std::move(locale_packages);
+        if (m_language_applied) {
+            apply_language();
+        }
+    }
     // The icons first: the messages and the build menu may name them.
     std::vector<assets::PackageIcon> icons = load_package_icons(used, problems);
     ui::set_package_arms(load_package_arms(used, icons, problems));
+    ui::set_interface_sprites(load_package_interface(used, icons, !m_game.localized_root().empty(), problems));
     ui::set_package_icons(std::move(icons));
     if (m_hud) {
         m_hud->forget_package_icons();
@@ -3565,7 +3578,7 @@ ModsModel MapViewer::mods_model() const {
     return model;
 }
 
-void MapViewer::reload_mods() {
+void MapViewer::reload_mods(bool again) {
     std::vector<std::string> problems;
     m_packages = assets::load_mod_packages(data_folder() / "mods", problems, m_app_settings.disabled_mods);
     for (const std::string& p : problems) {
@@ -3617,7 +3630,8 @@ void MapViewer::reload_mods() {
     m_figures = m_original_figures;
     sim::apply_figure_values(m_figures, m_original_figures, m_state->world.balance());
     assets::apply_figure_looks(m_figures, m_original_figures, m_figure_looks);
-    if (rules.images != m_package_images || rules.redirects != m_sprite_redirects || rules.flags != m_package_flags) {
+    if (again || rules.images != m_package_images || rules.redirects != m_sprite_redirects ||
+        rules.flags != m_package_flags) {
         // Other pictures: the zoom levels are made again with them.
         m_package_images = std::move(rules.images);
         m_sprite_redirects = std::move(rules.redirects);
@@ -3631,6 +3645,18 @@ void MapViewer::reload_mods() {
     sim::apply_building_values(m_buildings, m_original_buildings, m_state->world.balance());
     sim::apply_resident_classes(m_buildings, m_original_buildings, m_state->world.resident_classes());
     sim::apply_infra_levels(m_buildings, m_original_buildings, m_state->world.infra_levels());
+}
+
+void MapViewer::reload_packages() {
+    if (m_session) {
+        // Each computer of the game must draw on the same rules and scripts.
+        m_events.notify(ui::tr("notice.reload_multiplayer"), "notice.reload_multiplayer", platform::ticks_ms());
+        return;
+    }
+    std::fprintf(stderr, "mods: reading the packages again\n");
+    reload_mods(true);
+    use_game_packages(true);
+    m_events.notify(ui::tr("notice.packages_reloaded"), "notice.packages_reloaded", platform::ticks_ms());
 }
 
 std::string MapViewer::toggle_mod(const std::string& id) {

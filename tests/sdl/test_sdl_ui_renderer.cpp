@@ -13,9 +13,11 @@
 
 #include "o1602/assets/game_directory.hpp"
 #include "o1602/core/file.hpp"
+#include "o1602/core/png_writer.hpp"
 #include "o1602/platform/window.hpp"
 #include "o1602/render/sdl_ui_renderer.hpp"
 #include "o1602/ui/font.hpp"
+#include "o1602/ui/package_icons.hpp"
 
 using namespace o1602;
 
@@ -371,4 +373,44 @@ TEST_CASE("sdl ui renderer: a tinted sprite is its white variant recoloured, cac
     // Shade 0.48 * 200 + 5 = 101 of 128 (flag_tint.hpp).
     CHECK(box(canvas, 12, 2, 18, 8, assets::Rgba{0, 181, 71, 255}));
     CHECK(box(canvas, 22, 2, 28, 8, assets::Rgba{201, 86, 142, 255}));
+}
+
+TEST_CASE("sdl ui renderer: a sprite of the original a package draws anew is its icon (interface.toml)") {
+    Setup s;
+    // A green icon of 3 x 5 pixels in place of TOOLS.BSH sprite 1 (9 x 2).
+    const std::filesystem::path png = s.folder.root / "button.png";
+    std::vector<std::uint8_t> rgba(std::size_t{3} * 5 * 4, 0);
+    for (std::size_t i = 0; i < rgba.size(); i += 4) {
+        rgba[i + 1] = 200;
+        rgba[i + 3] = 255;
+    }
+    REQUIRE(core::write_png_rgba(png, 3, 5, rgba).ok());
+    assets::PackageIcon icon;
+    icon.id = "test:button";
+    icon.sprite = assets::kFirstPackageIcon;
+    icon.file = png;
+    icon.width = 3;
+    icon.height = 5;
+    ui::set_package_icons({icon});
+    ui::set_interface_sprites({assets::InterfaceSprite{0, 1, "test:button", std::nullopt}});
+    s.ui.forget_package_icons();
+
+    CHECK(s.ui.sprite_size(0, 1) == (std::pair<std::int32_t, std::int32_t>{3, 5}));
+    CHECK(s.ui.sprite_size(0, 0) == (std::pair<std::int32_t, std::int32_t>{6, 4}));  // the original's
+    auto replaced = item(ui::DrawItem::Kind::Sprite, 2, 2);
+    replaced.gfx = 1;
+    auto original = item(ui::DrawItem::Kind::Sprite, 12, 2);
+    s.ui.draw({replaced, original}, 0, 0, 1.0);
+    s.canvas.read();
+    CHECK(box(s.canvas, 2, 2, 5, 7, assets::Rgba{0, 200, 0, 255}));
+    CHECK(box(s.canvas, 12, 2, 18, 6, assets::Rgba{60, 0, 0, 255}));
+
+    // Without the package the original's sprite again.
+    ui::set_interface_sprites({});
+    ui::set_package_icons({});
+    s.ui.forget_package_icons();
+    s.canvas.clear(kBackground);
+    s.ui.draw({replaced}, 0, 0, 1.0);
+    s.canvas.read();
+    CHECK(box(s.canvas, 2, 2, 11, 4, assets::Rgba{60, 0, 0, 255}));
 }

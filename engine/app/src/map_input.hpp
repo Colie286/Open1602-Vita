@@ -75,6 +75,8 @@ public:
         /// one, opens the list of the templates.
         virtual void save_template() = 0;
         virtual void toggle_unit_arms() = 0;
+        /// Reads the packages' files again (KeyAction::ReloadPackages).
+        virtual void reload_packages() = 0;
         /// F11, Alt+Enter: window or full screen.
         virtual void toggle_fullscreen() = 0;
         /// The Pause key: the original's pause with its video (without videos the game still stops).

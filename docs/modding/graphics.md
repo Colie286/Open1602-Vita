@@ -182,16 +182,63 @@ smaller to fit it; so make it the size of the original's icon it stands beside. 
 wrong or an image that cannot be read is passed over with a warning that names the file and the
 line. The packages have at most 4096 icons in all.
 
-Three files name an icon by its id:
+These files name an icon by its id:
 
 | File | Field | Shows the icon |
 |---|---|---|
 | [`build_menu.toml`](build-menu.md) | `icon = "spice:mill"` (or the number of a sprite of the original) | in the pop-up of the build menu and in the building's window |
 | [`goods.toml`](goods.md) | `picture = "spice:pepper"` | wherever the good's icon is: Kontor, ships, production chains, goods window |
 | [`messages.toml`](messages.md) | `icon = "spice:harvest"` (or one of the original's kinds) | in the status bar |
+| [`arms.toml`](flags.md#coats-of-arms-of-a-package) | `icon = "heraldry:lion"` | as a banner's coat of arms |
+| [`interface.toml`](#interface-art-of-the-original) | `icon = "panels:back"` | in place of a sprite of the original's interface |
 
 The icons get sprite numbers from 100000 in the packages' load order; a game keeps only their ids.
 A good of a game played without the package of its icon shows the original's icon its `icon` names.
+
+## Interface art of the original
+
+```
+<user data folder>/mods/<package>/interface.toml
+```
+
+A package draws sprites of the original's interface with icons of its own: buttons, panels, the
+windows' backgrounds, the main menu's background, the build menu's pictures. Each table names a
+sprite as `"<sheet>:<number>"` and the icon of `icons.toml` drawn in its place, wherever the
+interface shows that sprite.
+
+```toml
+# mods/panels/icons.toml
+[menu]
+image = "menu.png"        # 1024 x 768, as START.BSH sprite 0
+
+# mods/panels/interface.toml
+["start:0"]               # the main menu's background
+icon = "panels:menu"
+```
+
+| Sheet | File of the large art | Holds |
+|---|---|---|
+| `tools` | `TOOLGFX/TOOLS.BSH` | the side panel, the windows and their buttons |
+| `start` | `TOOLGFX/START.BSH` | the main menu, the mission and colour screens |
+| `symbol` | `TOOLGFX/SYMBOL.BSH` | small symbols |
+| `bauhaus` | `TOOLGFX/BAUHAUS.BSH` | the buildings' pictures of the build menu |
+| `bauship` | `TOOLGFX/BAUSHIP.BSH` | the ships' and soldiers' pictures |
+
+| Field | Limits | Meaning |
+|---|---|---|
+| `icon` | an icon of a package, `<package>:<name>` | the picture drawn in place of the sprite (required) |
+| `history` | 0 to 65535 | the sprite's number in the History Edition's sheet, if it differs (its `START.BSH` has two sprites more before the stars, 21 here and 23 there) |
+
+The number is the sprite's in the sheet of the large art (1024 pixels wide); the smaller art (640
+and 800 pixels) has the same numbers, and the icon is made smaller for it as every icon is.
+`o1602-tool bsh-info TOOLGFX/START.BSH` lists the sprites with their sizes and
+`o1602-tool bsh-export` writes them as PNG. Draw the icon as large as the sprite it replaces: the
+windows place it as they placed the original's, and one larger than its gadget is made smaller to
+fit it. `o1602-tool check-mod` names a sprite the installation has not and an icon of another size.
+An icon with `tint = true` takes on the colour of the player where the original's sprite was drawn
+in a player's colour. If two packages draw the same sprite, the one loaded later wins. Only the
+picture changes: a game keeps nothing of it, and without the package the original's sprite is
+back.
 
 ## In the code
 

@@ -27,7 +27,12 @@ State on 2026-11-04. The details of each item follow under [Open items](#open-it
 
 Every item of the list is done (the last, videos in WebM, on 2026-11-04), and so is ADR 0007's
 section 4: a package's own waving flag as PNG for a banner (`flags.toml`,
-[flags.md](flags.md#flags-of-a-package), 2026-11-04).
+[flags.md](flags.md#flags-of-a-package), 2026-11-04). Beyond the list, also on 2026-11-04: catalogues
+of Open1602's own texts per package (`locale/<code>.lang`, [languages.md](languages.md#languages-of-a-package)),
+the original's interface art drawn with a package's icons (`interface.toml`,
+[graphics.md](graphics.md#interface-art-of-the-original)), Ctrl+Shift+R to read the packages again in
+a running game, and a check-mod that also checks music, banners, catalogues and interface sprites and
+prints JSON.
 
 ### Smaller adjustments
 

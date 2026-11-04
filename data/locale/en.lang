@@ -38,6 +38,9 @@ notice.load_failed = Loading failed: {1}
 # {1}: how many problems
 notice.load_problems = Loaded with {1} problem(s): parts of the game could not be used. The log has the details.
 notice.packages = This game uses mods that are missing here or differ: {1}. The log has the details.
+# Ctrl+Shift+R (keys.action.reload_packages)
+notice.packages_reloaded = The mods' files were read again. The log names their problems.
+notice.reload_multiplayer = In a game with other people the mods cannot be read again.
 notice.screenshot_failed = Screenshot failed: {1}
 notice.gates_closed = City gates closed: foreign soldiers cannot pass.
 notice.gates_opened = City gates open.
@@ -175,6 +178,7 @@ keys.action.show_fertility = Fertility for the crop of the selected farm or fiel
 keys.action.show_fps = Show frame rate
 keys.action.show_coordinates = Show coordinates
 keys.action.show_unit_arms = Unit identification (coat of arms over own units)
+keys.action.reload_packages = Read the packages' files again (for their makers)
 keys.action.fullscreen = Window or full screen
 keys.action.quit = Quit
 keys.action.editor_undo = Editor: undo

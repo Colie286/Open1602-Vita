@@ -21,6 +21,7 @@ add_library(o1602_assets
     src/building_looks.cpp
     src/package_arms.cpp
     src/package_flags.cpp
+    src/package_interface.cpp
     src/figure_looks.cpp
     src/own_figures.cpp
     src/figure_table.cpp

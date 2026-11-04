@@ -200,7 +200,11 @@ double SdlUiRenderer::art_scale() const noexcept {
 
 std::optional<std::pair<std::int32_t, std::int32_t>> SdlUiRenderer::sprite_size(std::int32_t block,
                                                                                 std::int32_t gfx) const {
-    if (const assets::PackageIcon* icon = assets::package_icon_at(ui::package_icons(), gfx)) {
+    const assets::PackageIcon* icon = assets::package_icon_at(ui::package_icons(), gfx);
+    if (icon == nullptr) {
+        icon = ui::interface_icon(block, gfx);  // a sprite of the original a package draws anew
+    }
+    if (icon != nullptr) {
         // As package_icon_pixels() makes it at the art's scale.
         const double scale = std::min(1.0, art_scale());
         return std::make_pair(std::max(1, static_cast<std::int32_t>(std::lround(icon->width * scale))),
@@ -280,6 +284,8 @@ SdlUiRenderer::Texture SdlUiRenderer::sprite(std::int32_t block, std::int32_t gf
     const assets::PackageIcon* icon = assets::package_icon_at(ui::package_icons(), gfx);
     if (icon != nullptr) {
         block = -1;  // the same picture in every sheet
+    } else {
+        icon = ui::interface_icon(block, gfx);  // a sprite of the original a package draws anew
     }
     const bool tinting = own_colours(mode) && tint && (tint->shape || tint->base < tint->variants);
     const SpriteKey key{
@@ -371,17 +377,12 @@ SdlUiRenderer::Texture SdlUiRenderer::package_icon(const assets::PackageIcon& ic
 }
 
 void SdlUiRenderer::forget_package_icons() {
-    for (auto it = m_sprites.begin(); it != m_sprites.end();) {
-        if (std::get<1>(it->first) >= assets::kFirstPackageIcon) {
-            const Texture& t = it->second.texture;
-            m_sprite_bytes -= std::min(
-                m_sprite_bytes, std::size_t{static_cast<std::uint32_t>(t.w)} * static_cast<std::uint32_t>(t.h) * 4);
-            SDL_DestroyTexture(t.texture);
-            it = m_sprites.erase(it);
-        } else {
-            ++it;
-        }
+    // The icons, and the original's sprites, which a package may draw anew now or no longer.
+    for (auto& [k, sprite] : m_sprites) {
+        SDL_DestroyTexture(sprite.texture.texture);
     }
+    m_sprites.clear();
+    m_sprite_bytes = 0;
 }
 
 SdlUiRenderer::Texture SdlUiRenderer::text(const std::string& s, std::int32_t slot, ui::ArtSize size,

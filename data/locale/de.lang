@@ -27,6 +27,8 @@ notice.load_failed = Laden fehlgeschlagen: {1}
 # {1}: how many problems
 notice.load_problems = Mit {1} Problem(en) geladen: Teile des Spiels ließen sich nicht verwenden. Einzelheiten stehen im Protokoll.
 notice.packages = Dieses Spiel nutzt Mods, die hier fehlen oder anders sind: {1}. Einzelheiten stehen im Protokoll.
+notice.packages_reloaded = Die Dateien der Mods wurden neu gelesen. Ihre Probleme stehen im Protokoll.
+notice.reload_multiplayer = In einem Spiel mit anderen Menschen können die Mods nicht neu gelesen werden.
 notice.screenshot_failed = Bildschirmfoto fehlgeschlagen: {1}
 notice.gates_closed = Stadttore geschlossen: fremde Soldaten kommen nicht hindurch.
 notice.gates_opened = Stadttore geöffnet.
@@ -150,6 +152,7 @@ keys.action.show_fertility = Fruchtbarkeit für die Pflanze des gewählten Hofs 
 keys.action.show_fps = Bilder pro Sekunde zeigen
 keys.action.show_coordinates = Koordinaten zeigen
 keys.action.show_unit_arms = Einheiten-Identifikation (Wappen über den eigenen Einheiten)
+keys.action.reload_packages = Dateien der Pakete neu lesen (für deren Ersteller)
 keys.action.fullscreen = Fenster oder Vollbild
 keys.action.quit = Beenden
 keys.action.editor_undo = Editor: rückgängig

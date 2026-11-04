@@ -335,7 +335,7 @@ void Panel::draw_gadget(std::vector<DrawItem>& out, std::size_t index, std::uint
         case GadgetKind::Unused:
         case GadgetKind::Area:
             break;
-        case GadgetKind::Graphic:
+        case GadgetKind::Graphic: {
             item.kind = DrawItem::Kind::Sprite;
             item.gfx = gfx;
             item.tint = s.graphic ? s.tint : std::nullopt;
@@ -343,8 +343,11 @@ void Panel::draw_gadget(std::vector<DrawItem>& out, std::size_t index, std::uint
             item.rows = s.rows;
             item.first_col = s.first_col;
             item.cols = s.cols;
-            if (const assets::PackageIcon* icon = assets::package_icon_at(package_icons(), gfx);
-                icon != nullptr && (icon->width > static_cast<std::uint32_t>(std::max(g.size[0], 1)) ||
+            const assets::PackageIcon* icon = assets::package_icon_at(package_icons(), gfx);
+            if (icon == nullptr) {
+                icon = interface_icon(g.block, gfx);  // a sprite of the original a package draws anew
+            }
+            if (icon != nullptr && (icon->width > static_cast<std::uint32_t>(std::max(g.size[0], 1)) ||
                                     icon->height > static_cast<std::uint32_t>(std::max(g.size[1], 1)))) {
                 // A package's icon larger than its place: made smaller to fit it.
                 item.w = trunc_scaled(g.size[0] * k);
@@ -352,6 +355,7 @@ void Panel::draw_gadget(std::vector<DrawItem>& out, std::size_t index, std::uint
             }
             out.push_back(item);
             break;
+        }
         case GadgetKind::GraphicRaster:
             item.kind = DrawItem::Kind::SpriteRaster;
             item.gfx = s.graphic ? s.graphic->first : g.gfx;

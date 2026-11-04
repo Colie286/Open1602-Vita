@@ -136,6 +136,10 @@ private:
     void toggle_fps() override { m_show_fps = !m_show_fps; }
     void toggle_coordinates() override { m_show_coordinates = !m_show_coordinates; }
     void toggle_unit_arms() override { m_show_unit_arms = !m_show_unit_arms; }
+    /// Reads the packages' files again, for their makers: pictures, icons, sounds, music, texts,
+    /// messages, the build menu and the scripts, which start anew as after loading. Not in a game of
+    /// several computers, which must stay alike.
+    void reload_packages() override;
     void toggle_fertility() override;
     void toggle_fullscreen() override;
     void toggle_pause_video() override;
@@ -197,7 +201,8 @@ private:
     /// The settings and savegame names of the user's data folder into the panel (at the start).
     void load_options();
     /// Chooses the language of Open1602's own texts: --language, else settings.cfg, else the
-    /// installation's; catalogues in <data folder>/locale extend the built-in ones.
+    /// installation's; the catalogues of the packages in use (<package>/locale) and then those in
+    /// <data folder>/locale extend the built-in ones.
     void apply_language();
     /// What the settings panel asked for this frame (save, load, quit, sounds, window size).
     void apply_options();
@@ -249,7 +254,8 @@ private:
     /// Loads what the game's packages give beside the game, its messages and build menu, from the
     /// packages it names (all installed for a game that names none); packages installed in addition
     /// are not used (ADR 0007 section 7). A missing or different package is noted in the status line.
-    void use_game_packages();
+    /// `again`: their catalogues are read again even if the packages are the same.
+    void use_game_packages(bool again = false);
     /// What the main menu asked for this frame.
     void apply_menu();
     /// The end screen of a decided game, when it is due (EventPresenter::end_screen_due). Called
@@ -538,8 +544,9 @@ private:
     /// The screen "Mods": the packages of the mods folder with their state, then those received.
     [[nodiscard]] ModsModel mods_model() const;
     /// Loads the mods folder's packages anew after one was turned on or off or added: what new
-    /// games get from them (a running game keeps what it has).
-    void reload_mods();
+    /// games get from them (a running game keeps what it has). `again`: the world's sprites are made
+    /// again even if the packages name the same images (their files may have changed).
+    void reload_mods(bool again = false);
     /// Copies the received package in `folder` into the mods folder; what the screen "Mods" says.
     std::string adopt_mod(const std::filesystem::path& folder);
     /// Turns the package `id` of the mods folder on (with the packages it needs) or off, and
@@ -708,6 +715,10 @@ private:
     std::vector<assets::SpriteRedirect> m_sprite_redirects;
     /// The flags the packages give banners (flags.toml).
     std::vector<assets::PackageFlag> m_package_flags;
+    /// The folders of the packages whose catalogues tr() has (apply_language()).
+    std::vector<std::filesystem::path> m_locale_packages;
+    /// Whether apply_language() chose the language yet (load_options()).
+    bool m_language_applied = false;
     /// The content packages installed in <data folder>/mods, in their load order (docs/modding/packages.md).
     std::vector<assets::ModPackage> m_packages;
     /// Packages received from hosts, in <data folder>/mods-cache: used only by games that name them.

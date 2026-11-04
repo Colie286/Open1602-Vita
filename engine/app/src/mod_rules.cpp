@@ -37,6 +37,20 @@ std::vector<assets::PackageArms> load_package_arms(std::span<const assets::ModPa
     return arms;
 }
 
+std::vector<assets::InterfaceSprite> load_package_interface(std::span<const assets::ModPackage> packages,
+                                                            std::span<const assets::PackageIcon> icons,
+                                                            bool history_edition, std::vector<std::string>& problems) {
+    std::vector<assets::InterfaceSprite> sprites;
+    for (const assets::ModPackage& package : packages) {
+        if (const auto bytes = core::read_file(package.folder / assets::kInterfaceFile)) {
+            const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
+            assets::apply_interface_file(sprites, package.id, text, icons, problems);
+        }
+    }
+    assets::use_edition(sprites, history_edition);
+    return sprites;
+}
+
 std::vector<sim::PackageLandscape> load_package_landscapes(std::span<const assets::ModPackage> packages,
                                                            std::vector<std::string>& problems) {
     std::vector<sim::PackageLandscape> presets;

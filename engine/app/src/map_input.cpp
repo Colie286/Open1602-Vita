@@ -285,6 +285,7 @@ void MapInput::setup_keys() {
     general(chord(SDLK_F, true), KeyAction::ShowFps);
     general(chord(SDLK_K, true), KeyAction::ShowCoordinates);
     general(chord(SDLK_M), KeyAction::ShowUnitArms);
+    general(chord(SDLK_R, true, true), KeyAction::ReloadPackages);
     general(chord(SDLK_F11), KeyAction::Fullscreen);
     general(ui::KeyChord{static_cast<std::int32_t>(SDLK_RETURN), false, false, true}, KeyAction::Fullscreen);
     general(chord(SDLK_Q, true), KeyAction::Quit);
@@ -1055,6 +1056,9 @@ void MapInput::run_action(const ui::KeyBinding& b) {
             break;
         case KeyAction::ShowUnitArms:
             m_host.toggle_unit_arms();
+            break;
+        case KeyAction::ReloadPackages:
+            m_host.reload_packages();
             break;
         case KeyAction::Fullscreen:
             m_host.toggle_fullscreen();

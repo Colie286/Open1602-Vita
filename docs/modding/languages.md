@@ -65,6 +65,33 @@ same code, so a new language works without rebuilding (choose it with `--languag
 `settings.cfg` until it is built in). To build it in, add it to `data/locale/` and name a
 `language.detect` line.
 
+## Languages of a package
+
+A package brings its catalogues in its folder `locale`, named like the built-in ones:
+
+```
+<user data folder>/mods/<package>/locale/fr.lang
+```
+
+They are read the same way and take effect for every game in which the package is in use, in
+the main menu as well. For the chosen language the texts come, each over the one before, from
+
+1. English (the built-in catalogue),
+2. the built-in catalogue of the language, if there is one,
+3. the packages' catalogues of the language, in their load order (a later package wins),
+4. the player's own catalogue in the folder `locale` of the user's data folder.
+
+So a package can bring a language Open1602 does not have (French, Italian, ...) or change some of
+Open1602's texts in a language it has. The language is still chosen as above: a language only a
+package has is chosen with `--language` or `language = fr` in `settings.cfg`. The original's texts
+(Text.cod, the speech, the videos) stay those of the installation; a package's own messages bring
+their text per language in `messages.toml` (`text.fr`, [messages.md](messages.md)).
+
+`o1602-tool check-mod` names each line of a package's catalogue with a key English has not (no
+part of the game asks for it, so it is never shown) and each `{N}` the game does not fill in for
+that key. The example package has the beginning of a French catalogue,
+[data/mods/example/locale/fr.lang](../../data/mods/example/locale/fr.lang).
+
 ## In the code
 
 `ui::tr("key")` gives the text of the current language in Windows-1252, ready for the game's fonts;

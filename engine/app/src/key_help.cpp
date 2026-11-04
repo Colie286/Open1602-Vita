@@ -157,6 +157,7 @@ KeyHelpPlace key_help_place(KeyAction action) noexcept {
         case KeyAction::ShowFps:
         case KeyAction::ShowCoordinates:
         case KeyAction::ShowUnitArms:
+        case KeyAction::ReloadPackages:
         case KeyAction::Fullscreen:
             return {4, 0};
     }
