@@ -792,11 +792,13 @@ private:
             }
             // The destroyed Kontor of a defenceless city of another human or computer player can be
             // built over with a Kontor of one's own, which takes the city over: the ship offers it.
+            // With a trade treaty the ship trades there instead, as in the original.
             const auto kontor =
                 city.warehouse_x && city.warehouse_y
                     ? sim::building_at(w, c.buildings, city.island, {*city.warehouse_x, *city.warehouse_y})
                     : std::nullopt;
-            k.found = kontor && kontor->type->destroyed && city.owner != ship.owner && owner != nullptr &&
+            k.found = !k.foreign_kontor && kontor && kontor->type->destroyed && city.owner != ship.owner &&
+                      owner != nullptr &&
                       (owner->role == sim::PlayerRole::Human || owner->role == sim::PlayerRole::Computer) &&
                       sim::city_defenceless(w, c.buildings, city.island, city.index);
         } else if (const auto site = sim::kontor_site_near(w, c.buildings, ship.x, ship.y)) {

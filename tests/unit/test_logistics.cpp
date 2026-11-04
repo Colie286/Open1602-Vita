@@ -462,6 +462,15 @@ TEST_CASE("logistics: a destroyed Kontor gives its own room and no market bonus"
     CHECK(town.city().capacity == 20 * 32);
 }
 
+TEST_CASE("logistics: a city without a standing market or Kontor holds 10 t of each ware") {
+    Town town;
+    town.place(kDestroyedKontor, 24, 3);
+    town.finish({{24, 3}});
+    sim::Logistics logistics(town.world, town.buildings, town.figures);
+    // The destroyed Kontor's 20 t, one market's room short, as in the original.
+    CHECK(town.city().capacity == 10 * 32);
+}
+
 TEST_CASE("logistics: after loading a city holds no more than its warehouse takes") {
     Town town;
     town.place(kKontor, 24, 3);

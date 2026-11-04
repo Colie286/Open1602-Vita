@@ -741,36 +741,38 @@ TEST_CASE("military: a Kontor over the destroyed Kontor of a defenceless city ta
     f.world.city(0, 0)->warehouse_x = 20;
     f.world.city(0, 0)->warehouse_y = 5;
     CHECK(sim::city_defenceless(f.world, f.buildings, 0, 0));
+    const auto& m = f.buildings.materials();
+    sim::City& stock = *f.world.city(0, 0);
+    stock.goods.assign(std::max<std::size_t>(stock.goods.size(), 64), 0);
+    stock.goods[m.tools] = 30 * 32;
+    stock.goods[m.wood] = 30 * 32;
     sim::BuildOrder order;
     order.player = 0;
     order.items = {sim::BuildItem{kKontor, 20, 5, 0, 0}};
+    // Without a ship it cannot be taken over, the city's own material notwithstanding (as in the original).
+    const sim::BuildPlan refused = sim::execute_build(f.world, f.buildings, order, {}, nullptr);
+    CHECK(refused.takeover);
+    CHECK(refused.placed == 0);
+    CHECK(refused.items[0].refusal == sim::BuildRefusal::ShipTooFar);
+    CHECK(f.world.city(0, 0)->owner == 1);
+    // From a ship before the ruin, as its Kontor button offers it; the city's stock stays.
+    sim::Ship ship = sim::make_ship("Boat", 30, 8, 21, 0);
+    ship.cargo.resize(2);
+    ship.cargo[0] = sim::CargoSlot{m.tools, 30 * 32, 0};
+    ship.cargo[1] = sim::CargoSlot{m.wood, 30 * 32, 0};
+    f.world.add_ship(ship);
+    sim::BuildOrder from_ship = order;
+    from_ship.ship = f.world.ships().back().id;
     std::vector<sim::ConstructionEvent> events;
-    const sim::BuildPlan plan = sim::execute_build(f.world, f.buildings, order, {}, &events);
+    const sim::BuildPlan plan = sim::execute_build(f.world, f.buildings, from_ship, {}, &events);
     CHECK(plan.takeover);
     REQUIRE(plan.placed == 1);
     CHECK(f.world.city(0, 0)->owner == 0);
     CHECK(f.world.islands()[0].map.top(15, 2).owner == 0);
     CHECK(std::any_of(events.begin(), events.end(),
                       [](const auto& e) { return e.kind == sim::ConstructionEvent::Kind::CityTaken; }));
-    // The same from a ship before the ruin, as its Kontor button offers it.
-    {
-        Field h;
-        h.build(kKontorDestroyed, 20, 5, 1);
-        h.world.city(0, 0)->warehouse_x = 20;
-        h.world.city(0, 0)->warehouse_y = 5;
-        sim::Ship ship = sim::make_ship("Boat", 30, 8, 21, 0);
-        ship.cargo.resize(2);
-        const auto& m = h.buildings.materials();
-        ship.cargo[0] = sim::CargoSlot{m.tools, 30 * 32, 0};
-        ship.cargo[1] = sim::CargoSlot{m.wood, 30 * 32, 0};
-        h.world.add_ship(ship);
-        sim::BuildOrder from_ship = order;
-        from_ship.ship = h.world.ships().back().id;
-        const sim::BuildPlan taken = sim::execute_build(h.world, h.buildings, from_ship, {}, nullptr);
-        CHECK(taken.takeover);
-        CHECK(taken.placed == 1);
-        CHECK(h.world.city(0, 0)->owner == 0);
-    }
+    CHECK(f.world.city(0, 0)->goods[m.tools] == 30 * 32);
+    CHECK(f.world.city(0, 0)->goods[m.wood] == 30 * 32);
     // A city with a standing Kontor cannot be taken.
     Field g;
     g.build(kKontor, 20, 5, 1);

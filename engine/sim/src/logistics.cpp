@@ -2204,7 +2204,8 @@ std::unordered_map<std::uint32_t, std::uint32_t> city_capacities(const World& wo
         }
         Storage& s = storage[std::uint32_t{p.island} << 8 | b->city];
         // Only standing markets and Kontors add room; a destroyed Kontor
-        // still gives its own (small) base.
+        // still gives its own (small) base. With none standing, the base is one market's room
+        // short, as in the original (a destroyed Kontor alone holds 10 t of each ware).
         if (!b->type->destroyed) {
             ++s.count;
         }
@@ -2214,7 +2215,8 @@ std::unordered_map<std::uint32_t, std::uint32_t> city_capacities(const World& wo
     }
     std::unordered_map<std::uint32_t, std::uint32_t> capacities;
     for (const auto& [key, s] : storage) {
-        capacities[key] = s.base + (s.count > 0 ? s.count - 1 : 0) * kStorehouseRoom;
+        capacities[key] = s.count > 0 ? s.base + (s.count - 1) * kStorehouseRoom
+                                      : (s.base > kStorehouseRoom ? s.base - kStorehouseRoom : 0);
     }
     return capacities;
 }

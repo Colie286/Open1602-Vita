@@ -303,9 +303,11 @@ std::optional<sim::BuildOrder> BuildTool::build_order(const sim::World& world, s
             island.map.contains(spot.x, spot.y)
                 ? island.map.top(static_cast<std::uint32_t>(spot.x), static_cast<std::uint32_t>(spot.y))
                 : sim::MapCell{};
-        if (cell.city != sim::MapCell::kNoCity) {
-            order.ship.reset();  // an upgrade in the city pays from the warehouse
+        const sim::City* city = world.city(spot.island, cell.city);
+        if (city != nullptr && city->owner == player) {
+            order.ship.reset();  // an upgrade in the own city pays from the warehouse
         }
+        // A Kontor over another player's destroyed Kontor takes the city over: the ship pays.
     }
     return order;
 }
