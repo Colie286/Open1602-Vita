@@ -361,6 +361,18 @@ TEST_CASE("raw producers: mines take ore from their deposit") {
     CHECK(deposits.size() == 1);
     CHECK(deposits[0].ware == kGold);
     CHECK(logistics.stats().ore_mined == 5 * 32);
+    CHECK(logistics.take_exhausted_mines().empty());
+    // The mine tells of the exhausted vein once, after Maxnorohst idle cycles.
+    sim::Production& deep = land.world.productions()[land.index(7, 6)];
+    deep.idle_cycles = 15;
+    logistics.handle(needs(land.index(7, 6), 0));
+    logistics.handle(needs(land.index(7, 6), 0));
+    const std::vector<std::uint32_t> told = logistics.take_exhausted_mines();
+    REQUIRE(told.size() == 1);
+    CHECK(told[0] == land.index(7, 6));
+    CHECK((deep.flags & sim::Production::kVeinExhaustedFlag) != 0);
+    logistics.handle(needs(land.index(7, 6), 0));
+    CHECK(logistics.take_exhausted_mines().empty());
 }
 
 TEST_CASE("raw producers: with endless veins the deep mine digs a big vein for ever") {

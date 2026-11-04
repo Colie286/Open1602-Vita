@@ -30,6 +30,7 @@ struct ProductionEvent {
         Started,        ///< a cycle with rate > 0 started after an idle one
         Stopped,        ///< no new cycle after a working one
         NeedsRawGoods,  ///< the building asks for `ware` (carriers, farmers, miners, market carts)
+        VeinExhausted,  ///< a mine found its vein exhausted (once per mine, MELDUNG 0x2D)
     };
     Kind kind = Kind::Produced;
     std::uint32_t production = 0;  ///< index into World::productions()

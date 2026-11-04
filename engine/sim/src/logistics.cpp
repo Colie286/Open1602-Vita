@@ -924,7 +924,12 @@ void Logistics::mine_ore(std::uint32_t home) {
     });
     const std::uint32_t amount = mine.raw_amount;
     if (it == deposits.end() || amount == 0 || it->amount < amount) {
-        return;  // exhausted: the mine idles and reports it after Maxnorohst cycles
+        // Exhausted: the mine idles and tells it once, after Maxnorohst idle cycles.
+        if (p.idle_cycles >= mine.max_idle_cycles && (p.flags & Production::kVeinExhaustedFlag) == 0) {
+            p.flags = static_cast<std::uint8_t>(p.flags | Production::kVeinExhaustedFlag);
+            m_exhausted_mines.push_back(home);
+        }
+        return;
     }
     const bool any_mine = it->kind == kSmallVein || it->amount >= kBigVeinShared;
     if (!any_mine && mine.ore_mountain != 0) {

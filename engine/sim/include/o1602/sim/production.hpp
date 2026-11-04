@@ -46,7 +46,7 @@ struct Production {
     std::uint8_t rate = 0;         ///< working rate of the running cycle, kFullRate = full speed, 0 = idle
     std::uint8_t anim_phase = 0;   ///< animation offset of the building (0..15, presentation only)
     std::uint8_t idle_cycles = 0;  ///< cycles without raw material (0..15)
-    std::uint8_t flags = 0;        ///< further bits of the original (+0x0F bits 4..7), meaning open
+    std::uint8_t flags = 0;        ///< further bits of the original (+0x0F bits 4..7), see the k*Flag
     std::uint16_t countdown = 0;   ///< game seconds until the running cycle ends
     std::uint16_t raw = 0;         ///< raw material in the building (Rohstoff)
     std::uint16_t raw2 = 0;        ///< second raw material (Workstoff)
@@ -62,6 +62,8 @@ struct Production {
     static constexpr std::uint8_t kFullRate = 128;
     /// `flags` bit: the player forbids market carts to collect here (+0x0F bit 4).
     static constexpr std::uint8_t kNoPickupFlag = 0x10;
+    /// `flags` bit: a mine has told that its vein is exhausted (+0x0F bit 5).
+    static constexpr std::uint8_t kVeinExhaustedFlag = 0x20;
     /// `flags` bit: the building burns (+0x0F bit 7, not saved): no new cycle, no smoke.
     static constexpr std::uint8_t kBurningFlag = 0x80;
     static constexpr std::uint16_t kProgressDone = 512;  ///< market: `produced` of a full cycle

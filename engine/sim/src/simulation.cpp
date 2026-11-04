@@ -1134,6 +1134,12 @@ void Simulation::production_step() {
     for (std::size_t i = first; i < m_production_events.size(); ++i) {
         m_logistics.handle(m_production_events.events()[i]);
     }
+    for (const std::uint32_t mine : m_logistics.take_exhausted_mines()) {
+        ProductionEvent e;
+        e.kind = ProductionEvent::Kind::VeinExhausted;
+        e.production = mine;
+        m_production_events.push(e);
+    }
 }
 
 void Simulation::cities_step() {

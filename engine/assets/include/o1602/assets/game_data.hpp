@@ -52,6 +52,9 @@ inline constexpr std::uint8_t kFirstSoldier = 25;  ///< wSOLDAT1: soldiers in a 
 inline constexpr std::uint8_t kLastSoldier = 44;   ///< ... up to wPIONIER4
 /// A unit in a hold is the ware of its figure plus this (SOLDAT1 = 1 is wSOLDAT1 = 25).
 inline constexpr std::uint8_t kSoldierOffset = kFirstSoldier - 1;
+/// A savegame names the good of a ship's hold by its producer's Id - 20000; a unit, which has no
+/// producer, by its ware plus this (wSOLDAT1 is 9901).
+inline constexpr std::uint16_t kSoldierCargoCode = 9876;
 inline constexpr std::uint8_t kCornField = 45;
 inline constexpr std::uint8_t kTobaccoField = 46;
 inline constexpr std::uint8_t kSpiceField = 47;

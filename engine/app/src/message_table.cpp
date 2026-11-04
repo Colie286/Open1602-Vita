@@ -38,7 +38,10 @@ constexpr std::array<std::pair<std::string_view, MessageIcon>, 8> kIcons{{
 constexpr std::array<std::string_view, audio::kMessageKinds> kKinds{
     "general", "events", "island", "players", "trade", "combat", "orders", "diplomacy", "routes"};
 
-/// Which icon an original message shows: that is not in the data.
+/// Which icon an original message shows, as in the original: the plague, fire, drought and volcano
+/// their own; pirate attacks and bombardments the swords; a computer's answer to a founding the
+/// mouth; offers and treaties the scroll; everything else (a rival's new city or ship too) the
+/// exclamation mark in the colour of the player the message is about.
 MessageIcon original_icon(std::uint16_t message) {
     switch (message) {
         case 0x01:
@@ -49,15 +52,18 @@ MessageIcon original_icon(std::uint16_t message) {
             return MessageIcon::Drought;
         case 0x5E:
             return MessageIcon::Volcano;
+        case 0x05:
+        case 0x08:
+        case 0x0F:
+            return MessageIcon::Combat;
+        case 0x49:
+        case 0x4A:
+        case 0x4B:
+            return MessageIcon::Player;
         default:
             break;
     }
-    const audio::MessageAudio* m = audio::message_audio(message);
-    const std::uint8_t kind = m != nullptr ? m->kind : 0;
-    return kind == 5                ? MessageIcon::Combat
-           : kind == 4 || kind == 7 ? MessageIcon::Scroll
-           : kind == 3              ? MessageIcon::Player
-                                    : MessageIcon::Notice;
+    return message >= 0x4D && message <= 0x52 ? MessageIcon::Scroll : MessageIcon::Notice;
 }
 
 /// "42" or "0x2A".

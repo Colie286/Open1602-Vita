@@ -446,8 +446,16 @@ void load_ships(World& world, const assets::ChunkFile& file, const assets::Build
         ship.cargo.resize(s.cargo.size());
         std::size_t next = 0;
         for (const auto& c : s.cargo) {
-            // Cargo names the good by its producer, like the warehouse chunk KONTOR2.
-            const std::uint8_t ware = ware_of_producer(buildings, c.producer);
+            // Cargo names the good by its producer, like the warehouse chunk KONTOR2; a unit by its
+            // own code (the soldiers aboard at the start of a scenario).
+            std::uint8_t ware = ware_of_producer(buildings, c.producer);
+            if (ware == 0 && c.producer >= 20000U + ware::kSoldierCargoCode + ware::kFirstSoldier &&
+                c.producer <= 20000U + ware::kSoldierCargoCode + ware::kLastSoldier) {
+                // The unit's colour variant becomes its family, as for the soldiers on land.
+                const auto figure = assets::unit_of_ware(c.producer - 20000U - ware::kSoldierCargoCode);
+                const auto variant = assets::FigureTable::unit_variant(figure);
+                ware = assets::unit_ware(variant ? variant->family : figure);
+            }
             if (ware != 0 && c.amount != 0) {
                 if (next == ship.cargo.size()) {
                     ship.cargo.emplace_back();

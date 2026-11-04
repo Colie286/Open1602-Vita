@@ -412,8 +412,9 @@ std::optional<std::size_t> Engine::supply_source(AiPlayer& p, std::uint16_t home
     for (std::size_t i = 0; i < cities.size(); ++i) {
         const City& c = cities[i];
         const Player* o = m_world.player(c.owner);
-        // Only human and computer partners (the original also takes natives and pirates, S-101).
-        if (c.owner == p.player || o == nullptr || (o->role != PlayerRole::Human && o->role != PlayerRole::Computer)) {
+        // Any partner with a trade treaty, the pirates' nest and the natives' villages too, as in the
+        // original.
+        if (c.owner == p.player || o == nullptr) {
             continue;
         }
         if (m_world.diplomacy().relation(p.player, c.owner).trade != Treaty::Signed) {

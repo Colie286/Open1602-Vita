@@ -1121,7 +1121,13 @@ private:
             for (std::size_t c = 0; c < 8; ++c) {
                 const std::size_t o = 0x174 + 8 * c;
                 if (c < s.cargo.size() && s.cargo[c].ware != 0) {
-                    const std::uint16_t id = producer_id(s.cargo[c].ware);
+                    const std::uint8_t w = s.cargo[c].ware;
+                    // A unit by its own code, in the colour variant of the owner's banner.
+                    const std::uint16_t id =
+                        is_soldier_ware(w) ? static_cast<std::uint16_t>(
+                                                 assets::unit_ware(unit_figure(assets::unit_of_ware(w), s.owner, 0)) +
+                                                 ware::kSoldierCargoCode)
+                                           : producer_id(w);
                     if (get16(r, o) == 0 || m_buildings.by_id(get16(r, o) + kIdOffset) == nullptr ||
                         m_buildings.by_id(get16(r, o) + kIdOffset)->ware != s.cargo[c].ware) {
                         put16(r, o, id);

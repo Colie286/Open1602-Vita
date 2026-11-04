@@ -118,6 +118,9 @@ public:
     /// Droughts on islands where the player has a city (MELDUNG 3).
     [[nodiscard]] std::vector<Notice> island_events(const sim::World& world, sim::PlayerId local,
                                                     const std::vector<sim::IslandEvent>& events) const;
+    /// A mine of the player whose vein is exhausted (MELDUNG 0x2D, at the mine).
+    [[nodiscard]] std::vector<Notice> production_events(const sim::World& world, sim::PlayerId local,
+                                                        const std::vector<sim::ProductionEvent>& events) const;
     /// Volcanoes (MELDUNG 0x5E), for players who have discovered the island.
     [[nodiscard]] std::vector<Notice> volcano_events(const sim::World& world, sim::PlayerId local,
                                                      const std::vector<sim::VolcanoEvent>& events) const;

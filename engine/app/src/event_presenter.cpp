@@ -16,6 +16,8 @@ namespace {
 
 /// „Ihr konntet den Euch gestellten Auftrag erfüllen!“, in no player's colour.
 constexpr std::uint16_t kMessageMissionAccomplished = 0x54;
+/// A mine's ore vein is exhausted (MELDUNG 0x2D), with its video.
+constexpr std::uint16_t kMessageVeinExhausted = 0x2D;
 /// „Ein vergrabener Schatz wurde entdeckt!“ (MELDUNG 0x2E).
 constexpr std::uint16_t kMessageTreasure = 0x2E;
 /// „Ein Schiff steht zum Verkauf“ (MELDUNG 0x0A): its icon tells of a sold ship too.
@@ -348,6 +350,28 @@ std::vector<Notice> EventPresenter::disaster_events(const sim::World& world, sim
         } else if (e.kind == sim::DisasterEvent::Kind::BurnedDown) {
             std::fprintf(stderr, "%s: a building burned down (%u,%u)\n", name, e.x, e.y);
         }
+    }
+    return out;
+}
+
+std::vector<Notice> EventPresenter::production_events(const sim::World& world, sim::PlayerId local,
+                                                      const std::vector<sim::ProductionEvent>& events) const {
+    std::vector<Notice> out;
+    for (const sim::ProductionEvent& e : events) {
+        if (e.kind != sim::ProductionEvent::Kind::VeinExhausted || e.production >= world.productions().size()) {
+            continue;
+        }
+        const sim::Production& p = world.productions()[e.production];
+        if (!p.used || p.island >= world.islands().size()) {
+            continue;
+        }
+        const sim::WorldIsland& isl = world.islands()[p.island];
+        if (p.x >= isl.map.width() || p.y >= isl.map.height() || isl.map.top(p.x, p.y).owner != local) {
+            continue;
+        }
+        std::fprintf(stderr, "a mine's vein is exhausted (%u,%u)\n", p.x, p.y);
+        out.emplace_back(announce(kMessageVeinExhausted,
+                                  std::make_pair(static_cast<double>(isl.x + p.x), static_cast<double>(isl.y + p.y))));
     }
     return out;
 }

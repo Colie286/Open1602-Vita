@@ -112,3 +112,32 @@ TEST_CASE("fertility view: open ground and fields of the player and of nobody, g
     app::fertility_marks(world, buildings, 0, 5, kTobacco, marks);
     CHECK(marks.empty());
 }
+
+TEST_CASE("fertility view: nothing on an island the player has neither explored nor settled on") {
+    const assets::BuildingTable buildings = make_buildings();
+    sim::World world{100, 100};
+    std::vector<sim::Player> players(2);
+    world.set_players(players);
+    sim::IslandMap map(8, 2);
+    for (std::int32_t y = 0; y < 2; ++y) {
+        for (std::int32_t x = 0; x < 8; ++x) {
+            REQUIRE(map.place(*buildings.by_id(kGround), x, y, 0, 0).ok());
+        }
+    }
+    map.capture_ground();
+    assets::IslandHeader header;
+    header.fertility = 1U << (kTobacco - 45);
+    REQUIRE(world.add_island(sim::WorldIsland{header, std::move(map), 10, 10}).ok());
+
+    std::vector<render::TileMark> marks;
+    app::fertility_marks(world, buildings, 0, 0, kTobacco, marks);
+    CHECK(marks.empty());
+    // Explored by another player only: still unknown.
+    world.island(0).explore(1);
+    app::fertility_marks(world, buildings, 0, 0, kTobacco, marks);
+    CHECK(marks.empty());
+    // Explored by the player: every open tile.
+    world.island(0).explore(0);
+    app::fertility_marks(world, buildings, 0, 0, kTobacco, marks);
+    CHECK(marks.size() == 16);
+}

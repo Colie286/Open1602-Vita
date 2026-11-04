@@ -231,6 +231,13 @@ public:
         events.swap(m_disaster_events);
         return events;
     }
+    /// Mines (production entries) that found their vein exhausted since the last call; each mine
+    /// once, after Maxnorohst idle cycles, as in the original.
+    [[nodiscard]] std::vector<std::uint32_t> take_exhausted_mines() {
+        std::vector<std::uint32_t> mines;
+        mines.swap(m_exhausted_mines);
+        return mines;
+    }
     /// Game time per island epoch.
     static constexpr std::uint32_t kIslandEpochMs = 30'000;
 
@@ -332,6 +339,7 @@ private:
     PathFinder m_finder;
     LogisticsStats m_stats;
     std::vector<DisasterEvent> m_disaster_events;
+    std::vector<std::uint32_t> m_exhausted_mines;
     /// Ripe tiles a worker is on its way to (the original's grid bit 29), key: island, y, x.
     std::unordered_set<std::uint64_t> m_reserved_tiles;
     /// Deer that started grazing and call a hunter (handled after the figures moved).

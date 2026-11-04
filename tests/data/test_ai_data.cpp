@@ -463,3 +463,59 @@ TEST_CASE("data: no ship of the computers in game10 lies idle for long (America,
         CHECK(w.named);
     }
 }
+
+TEST_CASE("data: the units aboard at the start of the tutorial's land battle load, land and survive saving") {
+    const Setup s = setup_or_skip();
+    // „Landgefecht“ starts with the human's ship carrying a swordsman, two riders and a musketeer.
+    const auto path = s.game.resolve("Szenes/Einführungsspiel4.szs");
+    if (!path) {
+        SKIP("no tutorial scenario");
+    }
+    auto file = assets::ChunkFile::load(*path);
+    REQUIRE(file.ok());
+    auto world = sim::load_world(*file, s.buildings, s.game);
+    REQUIRE(world.ok());
+    const auto holds = [](const sim::World& w) {
+        std::vector<std::uint8_t> wares;
+        for (const sim::Ship& ship : w.ships()) {
+            for (const sim::CargoSlot& c : ship.cargo) {
+                if (ship.owner == 0 && c.ware != 0) {
+                    CHECK(c.amount == 50 * sim::kStockUnitsPerTon);
+                    wares.push_back(c.ware);
+                }
+            }
+        }
+        return wares;
+    };
+    // By family, whatever colour the file names: SOLDAT1, KAVALERIE1, MUSKETIER1.
+    const std::vector<std::uint8_t> expected{assets::unit_ware(1), assets::unit_ware(5), assets::unit_ware(5),
+                                             assets::unit_ware(9)};
+    CHECK(holds(*world) == expected);
+    {
+        auto gam = sim::write_savegame(*world, s.buildings, nullptr);
+        REQUIRE(gam.ok());
+        auto exported = assets::ChunkFile::from_bytes(*gam);
+        REQUIRE(exported.ok());
+        auto again = sim::load_world(*exported, s.buildings, s.game);
+        REQUIRE(again.ok());
+        CHECK(holds(*again) == expected);
+    }
+    // They land on the coast by the enemy's units.
+    sim::Simulation simulation(*world, s.buildings, s.figures, sim::Rules::original());
+    sim::Ship* ship = nullptr;
+    for (sim::Ship& sh : world->ships()) {
+        ship = sh.owner == 0 ? &sh : ship;
+    }
+    REQUIRE(ship != nullptr);
+    ship->place(235, 131);
+    sim::UnloadOrder unload;
+    unload.player = 0;
+    unload.ship = ship->id;
+    simulation.submit(unload);
+    simulation.advance(200);
+    std::size_t landed = 0;
+    for (const sim::Soldier& soldier : world->soldiers()) {
+        landed += soldier.owner == 0 && soldier.island == 0 ? 1U : 0U;
+    }
+    CHECK(landed == 4);
+}

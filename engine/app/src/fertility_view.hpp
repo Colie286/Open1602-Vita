@@ -27,7 +27,8 @@ inline constexpr assets::Rgba kInfertileTint{220, 40, 40, 110};
 
 /// Appends a mark for every tile of `island` where `crop` could be planted or grows already (open
 /// ground and fields) and that belongs to `player` or to nobody: green where it bears, red where
-/// it does not. A drought is left out: what it withers grows again after it.
+/// it does not. A drought is left out: what it withers grows again after it. Nothing on an island
+/// the player has neither explored nor settled on: its crops are still unknown to them.
 void fertility_marks(const sim::World& world, const assets::BuildingTable& buildings, sim::PlayerId player,
                      std::uint16_t island, std::uint8_t crop, std::vector<render::TileMark>& out);
 

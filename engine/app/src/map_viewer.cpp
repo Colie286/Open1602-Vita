@@ -1932,6 +1932,7 @@ void MapViewer::apply_production_events() {
         }
     }
     // Messages for the local player.
+    show_notices(m_events.production_events(m_state->world, m_local_player, production));
     show_notices(m_events.city_events(m_state->world, m_local_player, m_state->simulation.take_city_events()));
     const std::vector<sim::ShipEvent> ship_events = m_state->simulation.take_ship_events();
     m_sound->ships(m_state->world, m_figures, ship_events, m_local_player, m_state->world.time_ms());

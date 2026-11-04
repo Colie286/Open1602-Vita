@@ -138,7 +138,15 @@ TEST_CASE("messages: the original's messages at their MELDUNG numbers") {
     CHECK(plague->playback.video_base == 282);
     CHECK((plague->playback.flags & audio::kMessageNormalSpeed) != 0);
     CHECK(t.get(5)->icon == app::MessageIcon::Combat);  // pirates: kind 5
-    CHECK(t.text(1, "de").empty());                     // the status bar shows MELDUNG 1
+    // The icons as in the original: a rival's new city and ship the exclamation mark, treaties the
+    // scroll, a computer's answer to a founding the mouth, a landing the exclamation mark.
+    CHECK(t.get(0x0E)->icon == app::MessageIcon::Notice);
+    CHECK(t.get(0x0B)->icon == app::MessageIcon::Notice);
+    CHECK(t.get(0x10)->icon == app::MessageIcon::Notice);
+    CHECK(t.get(0x0F)->icon == app::MessageIcon::Combat);
+    CHECK(t.get(0x4D)->icon == app::MessageIcon::Scroll);
+    CHECK(t.get(0x49)->icon == app::MessageIcon::Player);
+    CHECK(t.text(1, "de").empty());  // the status bar shows MELDUNG 1
 }
 
 TEST_CASE("messages: a mod adds a message with text, icon, sound and video") {
