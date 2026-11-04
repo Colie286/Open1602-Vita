@@ -211,8 +211,13 @@ private:
     [[nodiscard]] bool free_sizes() const noexcept { return m_s.shapes == WorldSettings::Shapes::Own; }
     [[nodiscard]] Dims draw_dims();
     [[nodiscard]] Dims own_dims(std::int32_t side);
-    /// The same island a quarter smaller, nothing below the smallest side.
-    [[nodiscard]] std::optional<Dims> smaller(const Dims& d) const;
+    /// The same island a quarter smaller, nothing below the smallest side. `any_size`: islands of
+    /// their own shape down to the original's smallest island, below the landscape's sides.
+    [[nodiscard]] std::optional<Dims> smaller(const Dims& d, bool any_size = false) const;
+    /// The shortest side smaller() gives an island of its own shape as the landscape asks.
+    [[nodiscard]] std::int32_t least_side() const noexcept {
+        return std::max<std::int32_t>(shapes::kMinSide, m_s.landscape.min_side * 2 / 3);
+    }
     [[nodiscard]] std::int32_t gap() const noexcept;
     void place_starts();
     void place_homes();
@@ -223,7 +228,10 @@ private:
     void choose_volcanoes();
     bool place_near(const Point& start, Dims dims, std::uint32_t min_r, std::uint32_t max_r, bool home);
     void decide_climates();
-    bool place_for_climate(std::size_t start, std::uint8_t climate);
+    /// An island of `climate` within reach of the start, where the band allows the climate.
+    /// `last_resort`, when nothing else gives the start that climate: in any band and direction,
+    /// and islands of their own shape also smaller than the landscape's sides allow.
+    bool place_for_climate(std::size_t start, std::uint8_t climate, bool last_resort = false);
     void choose_templates();
     [[nodiscard]] std::vector<std::size_t> in_reach(std::size_t start) const;
     WorldPlan finish();
@@ -323,9 +331,9 @@ Dims Planner::draw_dims() {
     return own_dims(lo + span * u / 1000);
 }
 
-std::optional<Dims> Planner::smaller(const Dims& d) const {
-    const std::int32_t least = free_sizes() ? std::max<std::int32_t>(shapes::kMinSide, m_s.landscape.min_side * 2 / 3)
-                                            : static_cast<std::int32_t>(kClassWidth[0]);
+std::optional<Dims> Planner::smaller(const Dims& d, bool any_size) const {
+    const auto smallest = static_cast<std::int32_t>(kClassWidth[0]);
+    const std::int32_t least = !free_sizes() ? smallest : any_size ? std::min(smallest, least_side()) : least_side();
     if (!free_sizes()) {
         if (d.size == 0) {
             return std::nullopt;
@@ -729,7 +737,7 @@ std::vector<std::size_t> Planner::in_reach(std::size_t start) const {
     return out;
 }
 
-bool Planner::place_for_climate(std::size_t start, std::uint8_t climate) {
+bool Planner::place_for_climate(std::size_t start, std::uint8_t climate, bool last_resort) {
     // An island near the start whose centre lies in a band that allows the climate: directions
     // towards that band first (north up), from far to near, middle islands before small ones.
     const Point& st = m_starts[start];
@@ -739,18 +747,19 @@ bool Planner::place_for_climate(std::size_t start, std::uint8_t climate) {
             ? own_dims(std::clamp<std::int32_t>(50, std::max<std::int32_t>(shapes::kMinSide, m_s.landscape.min_side),
                                                 std::max<std::int32_t>(shapes::kMinSide, m_s.landscape.max_side)))
             : class_dims(2);
-    for (std::optional<Dims> dims = first; dims; dims = smaller(*dims)) {
+    for (std::optional<Dims> dims = first; dims; dims = smaller(*dims, last_resort)) {
         const std::int32_t cw = dims->w;
         const std::int32_t ch = dims->h;
         for (auto r = static_cast<std::int32_t>(m_reach * 95 / 100); r >= static_cast<std::int32_t>(m_reach * 25 / 100);
              r -= 3) {
-            for (std::int32_t step = 0; step <= 32; ++step) {
+            // The half towards the band; as a last resort all around.
+            for (std::int32_t step = 0; step <= (last_resort ? kAngles - 1 : 32); ++step) {
                 const std::int32_t a = toward + ((step % 2 == 0) ? step / 2 : -(step + 1) / 2);
                 const std::int32_t cx = st.x + r * cosine(a) / 10000;
                 const std::int32_t cy = st.y + r * sine(a) / 10000;
                 const Rect rect{cx - cw / 2, cy - ch / 2, cw, ch};
                 const std::uint8_t b = band(rect);
-                if ((b != kEither && b != climate) || !fits(rect)) {
+                if ((b != kEither && b != climate && !last_resort) || !fits(rect)) {
                     continue;
                 }
                 Planned p;
@@ -828,9 +837,14 @@ void Planner::decide_climates() {
                         m_islands[*any].climate = climate;
                         continue;
                     }
-                    warn("start " + std::to_string(s) + " has no island of the " +
-                         (climate == climate::kNorth ? "north" : "south") + " within reach");
-                    break;
+                    // On a large map the band may lie beyond reach, and large islands of their own
+                    // shape may leave no room near the start: a new island outside the band, a
+                    // smaller one if need be, rather than half the crops out of reach.
+                    if (place_for_climate(s, climate, true)) {
+                        free.push_back(band(m_islands.back().rect) == kEither);
+                        continue;
+                    }
+                    break;  // told below, unless an island for a later start gives it the climate
                 }
                 free.push_back(band(m_islands.back().rect) == kEither);
             }
@@ -845,6 +859,14 @@ void Planner::decide_climates() {
             if (free[i] && m_islands[i].climate == climate::kSouth && may_flip(i)) {
                 m_islands[i].climate = climate::kNorth;
                 break;
+            }
+        }
+    }
+    for (std::size_t s = 0; s < m_starts.size(); ++s) {
+        for (std::uint8_t climate = 0; climate < climate::kCount; ++climate) {
+            if (count(s, climate, std::nullopt) == 0) {
+                warn("start " + std::to_string(s) + " has no island of the " +
+                     (climate == climate::kNorth ? "north" : "south") + " within reach");
             }
         }
     }

@@ -499,6 +499,38 @@ TEST_CASE("world plan: islands of their own size: the same seed the same plan, f
     CHECK(giants * 4 <= a->own_islands.size());
 }
 
+TEST_CASE("world plan: large islands on a large map still leave every start both climates within reach") {
+    // Starts far from the band of a climate, and islands too large for room near the start: a
+    // smaller island of that climate goes near it, outside the band if need be.
+    for (const std::uint64_t seed : {2U, 3U, 4U, 6U, 7U}) {
+        sim::WorldSettings s = sim::settings_for_players(8);
+        s.width = 4000;
+        s.height = 4000;
+        s.shapes = sim::WorldSettings::Shapes::Own;
+        s.landscape.land = 30;
+        s.landscape.min_side = 200;
+        s.landscape.max_side = 1000;
+        s.seed = seed;
+        std::vector<std::string> warnings;
+        auto plan = sim::plan_world(s, templates(), &warnings);
+        REQUIRE(plan.ok());
+        CHECK(warnings.empty());
+        for (const sim::StartArea& st : plan->starts) {
+            std::array<int, 2> climates{};
+            for (const auto& i : plan->plan.islands) {
+                const Box r = own_box(*plan, i);
+                const std::int64_t dx = r.x + r.w / 2 - st.x;
+                const std::int64_t dy = r.y + r.h / 2 - st.y;
+                if (dx * dx + dy * dy <= std::int64_t{st.reach} * st.reach) {
+                    ++climates[i.climate];
+                }
+            }
+            CHECK(climates[0] >= 1);
+            CHECK(climates[1] >= 1);
+        }
+    }
+}
+
 TEST_CASE("world plan: the map grows for islands far larger than the original's") {
     sim::WorldSettings s;
     CHECK(sim::fit_landscape(s).width == 500);  // templates: as chosen
