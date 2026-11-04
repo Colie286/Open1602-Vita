@@ -205,6 +205,7 @@ steps it back. Each change is one step of undo.
 | Starting money | The gold the player starts with: 1000 a click, 10 000 above 50 000; the right button takes it off again. |
 | Monuments, Arches | How many monuments and triumphal arches the player may build (0 to 9). |
 | Name | A click on it renames the player; left empty, the game calls the player after its colour. |
+| Faction | Shown only when a content package brings factions of the settlers' behaviour ([factions.md](modding/factions.md)): the slot's faction, the settlers or one of the packages'. The scenario keeps it, as `slot.<n>` of a package's scenario does. |
 | Add, Remove | A computer player in the next slot (the fifth and those after it go behind the trader, the pirates and the natives), with the money of the first computer; the last slot taken away again, as long as it owns no city, ship or soldier. The first four slots stay. |
 
 A player without a city and a ship is out of the game (defeated) as soon as it starts: give a new player a ship or a Kontor on the
@@ -229,6 +230,26 @@ size, islands, players and buildings on or off.
 
 The introduction is the page shown before the scenario starts; the missions' own texts are set
 under Goals.
+
+**Packages** lists the content packages the scenario needs, with their versions and whether each is
+installed here: those turned on when the map was made or opened (a saved map keeps them, section
+`PACK`). A package that is missing is also a line of the check list. To make the scenario with
+other packages, turn them on or off under Mods in the main menu and open the map again.
+
+## Saving into a package
+
+**Save to a package** (menu File, or in the dialog Description) saves the scenario as one of a
+content package's own ([scenarios.md](modding/scenarios.md)): the map goes to
+`mods/<package>/maps/<name>.o1602`, and the table `[<name>]` of the package's `scenarios.toml` gets
+the map's file, the stars and the name and introduction in each language of the description. The
+rest of `scenarios.toml` stays as it was: its comments, its order and the table's other keys (goals,
+money, slots, a script). A `scenarios.toml` that cannot be read is not written over; the map is not
+saved then either. The name is made of lower case letters, digits and `_`; it makes the scenario's
+id `<package>:<name>`. Only a package that is a folder can be saved into, not a zip archive.
+
+After that, **Save** writes the map and its table there again. **Open** lists the maps in the
+packages' folders `maps` under their package's name; one opened from there is saved back into its
+package. The scenario list of the main menu shows the new scenario at once.
 
 ## Markers
 
@@ -390,4 +411,5 @@ opened from the main menu it offers the copy. A recovered map counts as not save
 ## Files
 
 The editor always saves Open1602's own format. It never writes a file of the original: a scenario of
-the game that was opened is saved as an own scenario. The game's installation is never written to.
+the game that was opened is saved as an own scenario. The game's installation is never written to;
+a package's folder only when the map is saved into it.

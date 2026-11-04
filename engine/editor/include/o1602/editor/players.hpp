@@ -33,6 +33,8 @@ struct PlayerValues {
     std::string name;  ///< Windows-1252; empty: the name of its colour
     std::uint16_t monuments_allowed = 0;
     std::uint16_t arches_allowed = 0;
+    /// Its faction (sim::World::factions()): the settlers' or a package's of the same behaviour.
+    sim::FactionId faction = sim::faction::kSettlers;
     friend bool operator==(const PlayerValues&, const PlayerValues&) = default;
 };
 
@@ -44,13 +46,17 @@ struct PlayerValues {
 /// colour screen offers them), in that order.
 [[nodiscard]] std::vector<sim::BannerId> player_banners();
 
+/// The factions a human's or computer's slot can belong to: those of the world that act as settlers
+/// (the base game's settlers and packages' factions of that behaviour), in the world's order.
+[[nodiscard]] std::vector<sim::FactionId> slot_factions(const sim::World& world);
+
 /// The values of `player`'s slot.
 [[nodiscard]] PlayerValues player_values(const sim::Player& player);
 
 /// The slot `player` with `values`. A banner another player has goes to it in exchange for the old
 /// one, as on the colour screen. Fails (NotFound) for no human or computer, (InvalidFormat) for a
-/// name a player could not give, a role that is neither, a banner no player can have or money out
-/// of range.
+/// name a player could not give, a role that is neither, a banner no player can have, money out
+/// of range or a faction not of slot_factions() (other than the one it has).
 [[nodiscard]] core::Result<std::unique_ptr<Operation>> set_player(const sim::World& world, sim::PlayerId player,
                                                                   const PlayerValues& values);
 

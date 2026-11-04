@@ -154,6 +154,7 @@ enum class EditorCommand : std::uint8_t {
     ExportImage,
     Find,
     Script,
+    SavePackage,
     Keys,
 };
 
@@ -237,7 +238,9 @@ struct EditorPlayer {
     std::int32_t money = 0;
     std::uint16_t monuments_allowed = 0;
     std::uint16_t arches_allowed = 0;
-    std::string colour;  ///< the banner's colour, Windows-1252
+    std::string colour;        ///< the banner's colour, Windows-1252
+    std::uint8_t faction = 0;  ///< sim::FactionId
+    std::string faction_name;  ///< as the page shows it, Windows-1252
     /// How it stands at the start with each slot of EditorModel::player_slots, in that order
     /// (its own entry unused).
     struct Standing {
@@ -316,6 +319,16 @@ struct EditorModel {
     std::string script_file;
     bool script_reload = false;
     std::string script_problem;
+    /// The content packages the scenario needs (World::packages()), as the dialog "Packages" lists
+    /// them: the package with its version, and whether it is installed so (Windows-1252).
+    std::vector<EditorRule> packages;
+    /// Saving as a package's scenario (the dialog "Save to a package"): the ids of the packages
+    /// that are folders (an archive is not written into), the one offered, the name offered and
+    /// the scenarios the packages have already ("<package>:<name>").
+    std::vector<std::string> package_folders;
+    std::size_t package_folder = 0;
+    std::string package_name;
+    std::vector<std::string> package_scenarios;
     /// The document is a savegame opened as such: Save writes it back, marked as changed.
     bool savegame = false;
     bool can_undo = false;
@@ -400,6 +413,8 @@ struct EditorModel {
     /// The humans' and computers' slots (the page "Players"), in the order of the slots; whether
     /// another can be added and the last taken away.
     std::vector<EditorPlayer> player_slots;
+    /// The factions a slot can belong to (editor::slot_factions), in their order; one: no choice.
+    std::vector<std::uint8_t> slot_factions;
     bool can_add_player = false;
     bool can_remove_player = false;
     /// The page "Rules": whether the scenario has settings of its own (else the player's apply),
@@ -509,6 +524,7 @@ struct EditorRequest {
         ScriptLoad,    ///< the script of file `index` of the model's list as the scenario's
         ScriptReload,  ///< the script read again from the file it was loaded from
         ScriptRemove,  ///< the scenario without a script
+        SavePackage,   ///< saved as the scenario `name` of package `index` (EditorModel::package_folders)
     };
     Kind kind = Kind::Close;
     std::size_t index = 0;
@@ -565,7 +581,9 @@ public:
         Markers,
         MarkerName,
         Script,
-        ScriptFiles
+        ScriptFiles,
+        Packages,
+        PackageSave
     };
 
     explicit EditorPanel(ui::FormStyle style = {}) : m_form(style) {}
@@ -607,7 +625,7 @@ public:
     [[nodiscard]] bool typing() const noexcept {
         return m_page == Page::SaveAs || m_page == Page::CityName || m_page == Page::PlayerName ||
                m_page == Page::GoalText || m_page == Page::ScenarioText || m_page == Page::Find ||
-               m_page == Page::MarkerName;
+               m_page == Page::MarkerName || m_page == Page::PackageSave;
     }
     /// The text typed on the page "Find" (Windows-1252); empty on another page.
     [[nodiscard]] const std::string& find_text() const noexcept {
@@ -687,6 +705,8 @@ private:
     void layout_markers(const EditorModel& model);
     void layout_marker_name(const EditorModel& model);
     void layout_script(const EditorModel& model);
+    void layout_packages(const EditorModel& model);
+    void layout_package_save(const EditorModel& model);
     /// The height of a line of the check list in a dialog `width` design units wide.
     [[nodiscard]] static std::int32_t check_line_h(const EditorCheckLine& line, std::int32_t width) noexcept;
     /// The notice (or the note `note_key`, `short_key` where it does not fit whole) from `y`
@@ -708,8 +728,9 @@ private:
     std::int32_t m_w = kWidth - 2 * kMargin;
     std::int32_t m_top = 0;
     std::int32_t m_height = 400;
-    std::string m_text;        ///< the name being typed
-    std::size_t m_marker = 0;  ///< the marker whose name is typed (the page MarkerName)
+    std::string m_text;         ///< the name being typed
+    std::size_t m_marker = 0;   ///< the marker whose name is typed (the page MarkerName)
+    std::size_t m_package = 0;  ///< the package chosen to save into (EditorModel::package_folders)
     EditorNewMap m_new;
     EditorNewIsland m_island;
     /// The size the page "Map size" offers.
@@ -729,6 +750,7 @@ private:
     std::vector<std::size_t> m_page_starts;  ///< where the pages before began (the check list, the stock)
     std::int32_t m_check_h = 580;            ///< the height the check list's dialog wants
     std::int32_t m_files_h = 0;              ///< the height the dialog of the scripts to load needs
+    std::int32_t m_packages_h = 0;           ///< the height the dialog of the packages needs
     bool m_previewing = false;               ///< the dice preview, as laid out last (its page is the column's)
 };
 

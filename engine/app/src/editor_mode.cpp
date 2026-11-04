@@ -214,6 +214,10 @@ core::Status MapViewer::enter_editor(sim::World world, const std::filesystem::pa
                                    {},
                                    {}});
     m_editor->slot = slot;
+    if (auto package = editor_package_of(file); package && !slot) {
+        m_editor->package = package->first;
+        m_editor->package_scenario = package->second;
+    }
     editor_find_script_file();
     m_input->set_editor(true);
     if (m_hud) {
@@ -367,34 +371,35 @@ void MapViewer::editor_save_game() {
                   "saved the game " + core::path_to_utf8(*target));
 }
 
-void MapViewer::editor_save(const std::filesystem::path& file) {
+bool MapViewer::editor_save(const std::filesystem::path& file) {
     if (!m_editor) {
-        return;
+        return false;
     }
     const auto target = prepare_save(file);
     if (!target) {
         editor_notice(ui::tr("editor.save_failed", {ui::error_text(target.error(), "editor")}), true,
                       target.error().message);
-        return;
+        return false;
     }
     editor_keep_script_file();
     auto bytes = m_editor->document.save(m_buildings);
     if (!bytes) {
         editor_notice(ui::tr("editor.save_failed", {ui::error_text(bytes.error(), "editor")}), true,
                       bytes.error().message);
-        return;
+        return false;
     }
     std::error_code ec;
     std::filesystem::create_directories(target->parent_path(), ec);
     if (auto written = core::write_file_atomic(*target, *bytes); !written) {
         editor_notice(ui::tr("editor.save_failed", {ui::error_text(written.error(), "editor")}), true,
                       written.error().message);
-        return;
+        return false;
     }
     m_editor->file = *target;
     m_editor->source_name = shown_name(*target);
     m_editor->slot.reset();  // a savegame saved as a scenario: Save writes the scenario now
     editor_notice(ui::tr("editor.saved", {shown_name(*target)}), false, "saved " + core::path_to_utf8(*target));
+    return true;
 }
 
 void MapViewer::leave_editor() {
@@ -643,6 +648,17 @@ void MapViewer::list_editor_files() {
             m_editor_file_rows.push_back(EditorFile{m_slots.names[slot], games});
         }
     }
+    // The maps of the packages that are folders (an archive's are not written back).
+    for (const assets::ModPackage& package : m_packages) {
+        if (!package.archive.empty()) {
+            continue;
+        }
+        const std::string group = ui::tr("editor.open.package", {core::utf8_to_cp1252(package.id)});
+        for (const std::filesystem::path& p : files_in(package.folder / "maps", {kScenarioEnding, ".szs", ".szm"})) {
+            m_editor_files.push_back(p);
+            m_editor_file_rows.push_back(EditorFile{core::utf8_to_cp1252(core::path_to_utf8(p.filename())), group});
+        }
+    }
     if (const auto folder = m_game.resolve("Szenes")) {
         const std::string original = ui::tr("editor.open.original");
         for (const std::filesystem::path& p : files_in(*folder, {".szs", ".szm"})) {
@@ -712,6 +728,7 @@ EditorModel MapViewer::editor_model() const {
     m.modified = doc.modified();
     m.savegame = m_editor->slot.has_value();
     editor_markers_model(m);
+    editor_packages_model(m);
     m.width = world.width();
     m.height = world.height();
     m.islands = world.islands().size();
@@ -868,6 +885,8 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         case Kind::Save:
             if (m_editor->slot) {
                 editor_save_game();
+            } else if (!m_editor->package.empty()) {
+                editor_save_to_package(m_editor->package, m_editor->package_scenario);
             } else if (m_editor->file.empty()) {
                 if (EditorPanel* panel = m_hud ? m_hud->editor_panel() : nullptr) {
                     panel->ask_name(m_editor->source_name);
@@ -878,9 +897,24 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
             break;
         case Kind::SaveAs: {
             const std::string name = EditorPanel::clean_name(request.name);
-            if (!name.empty()) {
+            if (!name.empty() &&
                 editor_save(own_scenario_folder() /
-                            core::path_from_utf8(core::cp1252_to_utf8(name) + std::string(kScenarioEnding)));
+                            core::path_from_utf8(core::cp1252_to_utf8(name) + std::string(kScenarioEnding)))) {
+                m_editor->package.clear();  // an own scenario now: Save writes it there
+                m_editor->package_scenario.clear();
+            }
+            break;
+        }
+        case Kind::SavePackage: {
+            // The packages as the dialog lists them: the folders (editor_packages_model).
+            std::vector<std::string> folders;
+            for (const assets::ModPackage& p : m_packages) {
+                if (p.archive.empty()) {
+                    folders.push_back(p.id);
+                }
+            }
+            if (request.index < folders.size()) {
+                editor_save_to_package(folders[request.index], request.name);
             }
             break;
         }
@@ -1649,6 +1683,17 @@ std::vector<EditorCheckLine> MapViewer::editor_check() const {
     for (const std::string& p : doc.check_scenario()) {
         lines.push_back(Line{ui::tr("editor.check.scenario", {core::utf8_to_cp1252(p)}), Line::Kind::Error,
                              Line::Target::Scenario});
+    }
+    // Packages the scenario needs that are not installed: what they bring is missing in the game.
+    if (const auto& needed = world.packages()) {
+        for (const assets::ContentPackage& p : *needed) {
+            if (std::none_of(m_packages.begin(), m_packages.end(),
+                             [&](const assets::ModPackage& q) { return q.id == p.id; })) {
+                lines.push_back(
+                    Line{ui::tr("editor.check.package_missing", {core::utf8_to_cp1252(assets::package_label(p))}),
+                         Line::Kind::Warning, Line::Target::Scenario});
+            }
+        }
     }
     if (lines.size() == first) {
         lines.push_back(Line{ui::tr("editor.check.fine"), Line::Kind::Fine});

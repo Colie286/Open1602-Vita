@@ -62,6 +62,16 @@ std::vector<sim::BannerId> player_banners() {
     return banners;
 }
 
+std::vector<sim::FactionId> slot_factions(const sim::World& world) {
+    std::vector<sim::FactionId> factions;
+    for (std::size_t f = 0; f < world.factions().size() && f < sim::kMaxFactions; ++f) {
+        if (world.factions()[f].behaviour == sim::FactionBehaviour::Settlers) {
+            factions.push_back(static_cast<sim::FactionId>(f));
+        }
+    }
+    return factions;
+}
+
 PlayerValues player_values(const sim::Player& player) {
     PlayerValues v;
     v.role = player.role;
@@ -70,6 +80,7 @@ PlayerValues player_values(const sim::Player& player) {
     v.name = player.name;
     v.monuments_allowed = player.monuments_allowed;
     v.arches_allowed = player.arches_allowed;
+    v.faction = player.faction;
     return v;
 }
 
@@ -93,6 +104,11 @@ core::Result<std::unique_ptr<Operation>> set_player(const sim::World& world, sim
         values.arches_allowed > kMaxAllowed) {
         return make_error(ErrorCode::InvalidFormat, "a value out of range");
     }
+    if (const auto factions = slot_factions(world);
+        values.faction != p->faction && std::find(factions.begin(), factions.end(), values.faction) == factions.end()) {
+        return make_error(ErrorCode::InvalidFormat,
+                          "no faction of the settlers' behaviour " + std::to_string(values.faction));
+    }
     sim::World after = world;
     (void)sim::take_banner(after, player, values.banner);
     sim::Player& q = *after.player(player);
@@ -101,6 +117,7 @@ core::Result<std::unique_ptr<Operation>> set_player(const sim::World& world, sim
     q.name = values.name;
     q.monuments_allowed = values.monuments_allowed;
     q.arches_allowed = values.arches_allowed;
+    q.faction = values.faction;
     return std::unique_ptr<Operation>(std::make_unique<WorldEdit>(std::move(after), "player_change"));
 }
 
@@ -137,6 +154,7 @@ core::Result<std::unique_ptr<Operation>> add_player(const sim::World& world) {
     fresh.name.clear();
     fresh.won = false;
     fresh.mission = sim::kNoMission;
+    fresh.faction = sim::faction::kSettlers;
     for (const sim::BannerId b : player_banners()) {
         const bool taken = std::any_of(slots.begin(), slots.end(),
                                        [&](sim::PlayerId s) { return s != slot && players[s].banner == b; });

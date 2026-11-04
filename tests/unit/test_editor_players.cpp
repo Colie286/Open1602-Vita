@@ -168,3 +168,36 @@ TEST_CASE("editor: a scenario's own settings are a step of undo") {
     op->revert(world);
     CHECK(!world.scenario_info().has_value());
 }
+
+TEST_CASE("editor players: a slot given a package's faction of the settlers' behaviour") {
+    sim::World world = seven_slots();
+    std::vector<sim::Faction> factions = sim::base_factions();
+    sim::Faction league;
+    league.id = "hansa:league";
+    factions.push_back(league);
+    sim::Faction corsairs;
+    corsairs.id = "hansa:corsairs";
+    corsairs.behaviour = sim::FactionBehaviour::Pirates;
+    factions.push_back(corsairs);
+    world.set_factions(factions);
+    const auto league_id = static_cast<sim::FactionId>(factions.size() - 2);
+    const auto corsairs_id = static_cast<sim::FactionId>(factions.size() - 1);
+    CHECK((editor::slot_factions(world) == std::vector<sim::FactionId>{sim::faction::kSettlers, league_id}));
+
+    editor::PlayerValues v = editor::player_values(world.players()[1]);
+    CHECK(v.faction == sim::faction::kSettlers);
+    v.faction = league_id;
+    auto op = editor::set_player(world, 1, v);
+    REQUIRE(op.ok());
+    (*op)->apply(world);
+    CHECK(world.players()[1].faction == league_id);
+    CHECK(world.faction(world.players()[1]).id == "hansa:league");
+    (*op)->revert(world);
+    CHECK(world.players()[1].faction == sim::faction::kSettlers);
+
+    // Refused: a faction of another behaviour, one the world does not have.
+    v.faction = corsairs_id;
+    CHECK(!editor::set_player(world, 1, v).ok());
+    v.faction = static_cast<sim::FactionId>(factions.size());
+    CHECK(!editor::set_player(world, 1, v).ok());
+}

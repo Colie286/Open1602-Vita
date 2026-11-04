@@ -6,6 +6,7 @@
 #include <cmath>
 
 #include "o1602/assets/game_data.hpp"
+#include "o1602/core/text.hpp"
 #include "o1602/sim/limits.hpp"
 #include "o1602/sim/scenario_data.hpp"
 #include "o1602/sim/simulation.hpp"
@@ -141,6 +142,11 @@ constexpr Id kScriptLoad = 263;                ///< the list of scripts to load
 constexpr Id kScriptReload = 264;              ///< the script read again from its file
 constexpr Id kScriptRemove = 265;              ///< the scenario without a script
 constexpr Id kScriptBack = 266;                ///< from the list of scripts back to the dialog
+constexpr Id kPlayerFaction = 267;             ///< the faction of the slot shown
+constexpr Id kPackagesPage = 268;              ///< the packages the scenario needs
+constexpr Id kPackageSavePage = 269;           ///< saving as a package's scenario
+constexpr Id kPackageChoice = 270;             ///< the package to save into
+constexpr Id kScenarioBack = 271;              ///< from the packages back to the scenario's dialog
 constexpr Id kCheckLine = 800;                 ///< + the line of the check list (a line that leads somewhere)
 constexpr Id kRecent = 190;                    ///< + the object placed lately (the page "Objects")
 constexpr Id kPlayerTable = 300;               ///< + 8 * the row + the column of the players' table
@@ -382,6 +388,8 @@ std::optional<EditorRequest> EditorPanel::command(EditorCommand command, const E
         case EditorCommand::Script:
             m_page = Page::Script;
             return std::nullopt;
+        case EditorCommand::SavePackage:
+            return press(kPackageSavePage, model, true);
         case EditorCommand::Keys:
             return EditorRequest{EditorRequest::Kind::ShowKeys};
     }
@@ -496,7 +504,7 @@ bool EditorPanel::dialog() const noexcept {
            (m_page == P::Players || m_page == P::PlayerName || m_page == P::Relations || m_page == P::Rules ||
             m_page == P::Random || m_page == P::WorldSize || m_page == P::Check || m_page == P::Goals ||
             m_page == P::GoalText || m_page == P::Scenario || m_page == P::ScenarioText || m_page == P::Script ||
-            m_page == P::ScriptFiles);
+            m_page == P::ScriptFiles || m_page == P::Packages || m_page == P::PackageSave);
 }
 
 ui::Rect EditorPanel::dialog_rect() const noexcept {
@@ -513,6 +521,8 @@ ui::Rect EditorPanel::dialog_rect() const noexcept {
                               : m_page == P::Scenario                              ? 470
                               : m_page == P::Script                                ? 400
                               : m_page == P::ScriptFiles                           ? m_files_h
+                              : m_page == P::Packages                              ? m_packages_h
+                              : m_page == P::PackageSave                           ? 360
                               : m_page == P::WorldSize                             ? 440
                               : m_page == P::Check                                 ? m_check_h
                               : wide                                               ? 620
@@ -550,6 +560,11 @@ void EditorPanel::layout(const EditorModel& model) {
         const std::size_t n = model.files.size();
         const auto rows = static_cast<std::int32_t>(std::min(n, kRows));
         m_files_h = 16 + 6 + 32 + (n == 0 ? 84 : kRowH + rows * kRowH + 4 + kButtonH + kGap) + kButtonH + 8;
+    }
+    if (m_page == Page::Packages) {
+        // The list of packages as tall as its lines, the button right below.
+        const auto rows = static_cast<std::int32_t>(std::min(model.packages.size(), kRows));
+        m_packages_h = 16 + 6 + 32 + 4 * 20 + 4 + std::max(1, rows) * kLine + kGap + kButtonH + 8;
     }
     if (dialog()) {
         // A page of the whole map: a dialog in the window's middle, laid out inside its frame.
@@ -658,6 +673,12 @@ void EditorPanel::layout_page(const EditorModel& model) {
             break;
         case Page::ScriptFiles:
             layout_open(model);
+            break;
+        case Page::Packages:
+            layout_packages(model);
+            break;
+        case Page::PackageSave:
+            layout_package_save(model);
             break;
     }
 }
@@ -1033,6 +1054,13 @@ void EditorPanel::layout_players(const EditorModel& model) {
     f.cycle_button(kPlayerMoney, Rect{m_x, y, m_w, kButtonH},
                    on ? ui::tr("editor.players.money_value", {std::to_string(p->money)}) : std::string("-"), on);
     y += kButtonH + 2;
+    if (model.slot_factions.size() > 1) {
+        // Packages' factions of the settlers' behaviour: only then is there a choice.
+        f.label(Rect{m_x, y, m_w, 18}, ui::tr("editor.players.faction"), Align::Left, tone);
+        y += 18;
+        f.cycle_button(kPlayerFaction, Rect{m_x, y, m_w, kButtonH}, on ? p->faction_name : std::string("-"), on);
+        y += kButtonH + 2;
+    }
     pair("editor.players.monuments", kPlayerMonuments, on ? count(p->monuments_allowed) : "-", "editor.players.arches",
          kPlayerArches, on ? count(p->arches_allowed) : "-");
     y += kGap - 2;
@@ -1565,17 +1593,21 @@ void EditorPanel::layout_players_table(const EditorModel& model) {
     y += kButtonH + kGap + 4;
     // Every slot in a row: its number, then a button for each of its values.
     constexpr std::int32_t kNumber = 40;
-    constexpr std::array<std::int32_t, 6> kShares = {30, 12, 16, 16, 13, 13};  // percent of the room
-    constexpr std::array<const char*, 6> kHeads = {"editor.players.name",      "editor.players.role",
-                                                   "editor.players.colour",    "editor.players.money",
-                                                   "editor.players.monuments", "editor.players.arches"};
-    const std::int32_t room = m_w - kNumber - 6 * kGap;
-    std::array<std::int32_t, 7> x{};
+    // With packages' factions to choose, a column of them takes room from the name and the colour.
+    const bool factions = model.slot_factions.size() > 1;
+    const std::array<std::int32_t, 7> shares = factions ? std::array<std::int32_t, 7>{28, 13, 11, 15, 13, 9, 11}
+                                                        : std::array<std::int32_t, 7>{30, 12, 16, 16, 13, 13, 0};
+    constexpr std::array<const char*, 7> kHeads = {
+        "editor.players.name",      "editor.players.role",   "editor.players.colour", "editor.players.money",
+        "editor.players.monuments", "editor.players.arches", "editor.players.faction"};
+    const std::size_t columns = factions ? 7 : 6;
+    const std::int32_t room = m_w - kNumber - static_cast<std::int32_t>(columns) * kGap;
+    std::array<std::int32_t, 8> x{};
     x[0] = m_x + kNumber + kGap;
-    for (std::size_t c = 0; c < kShares.size(); ++c) {
-        x[c + 1] = x[c] + room * kShares[c] / 100 + kGap;
+    for (std::size_t c = 0; c < columns; ++c) {
+        x[c + 1] = x[c] + room * shares[c] / 100 + kGap;
     }
-    for (std::size_t c = 0; c < kHeads.size(); ++c) {
+    for (std::size_t c = 0; c < columns; ++c) {
         f.label(Rect{x[c], y, x[c + 1] - x[c] - kGap, 18}, ui::tr(kHeads[c]), Align::Left, Tone::Dim);
     }
     y += 20;
@@ -1597,6 +1629,9 @@ void EditorPanel::layout_players_table(const EditorModel& model) {
         f.cycle_button(base + 3, cell(3), ui::tr("editor.players.money_value", {std::to_string(p.money)}));
         f.cycle_button(base + 4, cell(4), count(p.monuments_allowed));
         f.cycle_button(base + 5, cell(5), count(p.arches_allowed));
+        if (factions) {
+            f.cycle_button(base + 6, cell(6), p.faction_name);
+        }
         y += kRow;
     }
     // The notice or the note, then adding, taking away, the pages and the way back.
@@ -1880,7 +1915,70 @@ void EditorPanel::layout_scenario(const EditorModel& model) {
         f.paragraph(Rect{m_x, y + 4, m_w, std::min(room, 3 * 20)}, ui::tr("editor.scenario.note"), Tone::Dim, 20);
     }
     const std::int32_t quarter = (m_w - 3 * kGap) / 4;
+    f.button(kPackagesPage, Rect{m_x, foot, quarter, kButtonH},
+             ui::tr("editor.packages.button", {count(model.packages.size())}));
+    f.button(kPackageSavePage, Rect{m_x + quarter + kGap, foot, 2 * quarter + kGap, kButtonH},
+             ui::tr("editor.package_save.button"));
     f.button(kBack, Rect{m_x + m_w - quarter, foot, quarter, kButtonH}, ui::tr("editor.dialog.close"));
+}
+
+void EditorPanel::layout_packages(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.packages.title"), Align::Left, Tone::Heading);
+    y += 32;
+    f.paragraph(Rect{m_x, y, m_w, 4 * 20}, ui::tr("editor.packages.note"), Tone::Dim, 20);
+    y += 4 * 20 + 4;
+    if (model.packages.empty()) {
+        f.label(Rect{m_x, y, m_w, kLine}, ui::tr("editor.packages.none"), Align::Left, Tone::Dim);
+        y += kLine;
+    }
+    const std::int32_t label = m_w * 55 / 100;
+    for (std::size_t i = 0; i < model.packages.size() && i < kRows; ++i) {
+        const EditorRule& r = model.packages[i];
+        f.label(Rect{m_x, y, label - kGap, kLine}, r.label, Align::Left, Tone::Normal);
+        f.label(Rect{m_x + label, y, m_w - label, kLine}, r.value, Align::Left, r.enabled ? Tone::Dim : Tone::Warning);
+        y += kLine;
+    }
+    const std::int32_t foot = std::max(y + kGap, m_top + m_height - kButtonH - 4);
+    const std::int32_t quarter = (m_w - 3 * kGap) / 4;
+    f.button(kScenarioBack, Rect{m_x + m_w - quarter, foot, quarter, kButtonH}, ui::tr("editor.relations.back"));
+}
+
+void EditorPanel::layout_package_save(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 6;
+    f.label(Rect{m_x, y, m_w, 28}, ui::tr("editor.package_save.title"), Align::Left, Tone::Heading);
+    y += 34;
+    const std::size_t n = model.package_folders.size();
+    const std::int32_t half = (m_w - kGap) / 2;
+    if (n == 0) {
+        f.paragraph(Rect{m_x, y, m_w, 4 * 20}, ui::tr("editor.package_save.none"), Tone::Dim, 20);
+        y += 4 * 20 + kGap;
+        f.button(kScenarioBack, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
+        return;
+    }
+    m_package = std::min(m_package, n - 1);
+    const std::string& package = model.package_folders[m_package];
+    f.label(Rect{m_x, y, m_w, kLine}, ui::tr("editor.package_save.package"));
+    y += kLine;
+    f.cycle_button(kPackageChoice, Rect{m_x, y, m_w, kButtonH}, core::utf8_to_cp1252(package), n > 1);
+    y += kButtonH + kGap;
+    f.label(Rect{m_x, y, m_w, kLine}, ui::tr("editor.package_save.name"));
+    y += kLine;
+    f.field(kField, Rect{m_x, y, m_w, 32}, m_text);
+    y += 38;
+    const bool valid = sim::valid_marker_name(m_text);
+    const std::string id = package + ":" + m_text;
+    const bool taken = valid && std::find(model.package_scenarios.begin(), model.package_scenarios.end(), id) !=
+                                    model.package_scenarios.end();
+    const std::string note = !valid  ? ui::tr("editor.package_save.bad_name")
+                             : taken ? ui::tr("editor.package_save.taken", {core::utf8_to_cp1252(id)})
+                                     : ui::tr("editor.package_save.where", {core::utf8_to_cp1252(package), m_text});
+    f.paragraph(Rect{m_x, y, m_w, kNote}, note, valid ? Tone::Dim : Tone::Warning, 20);
+    y += kNote + 4;
+    f.button(kStore, Rect{m_x, y, half, kButtonH}, ui::tr(taken ? "editor.save.replace" : "editor.save"), valid);
+    f.button(kScenarioBack, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.cancel"));
 }
 
 void EditorPanel::layout_goal_text(const EditorModel& model) {
@@ -2033,6 +2131,16 @@ std::vector<ui::DrawItem> EditorPanel::draw(const EditorModel& model,
 }
 
 std::optional<EditorRequest> EditorPanel::commit_name() {
+    if (m_page == Page::PackageSave) {
+        if (!sim::valid_marker_name(m_text)) {
+            return std::nullopt;
+        }
+        m_page = Page::Scenario;
+        m_form.set_focus(std::nullopt);
+        EditorRequest r{EditorRequest::Kind::SavePackage, m_package};
+        r.name = m_text;
+        return r;
+    }
     if (m_page == Page::Find) {
         return m_text.empty() ? std::nullopt : std::optional{EditorRequest{EditorRequest::Kind::FindGo, 0}};
     }
@@ -2404,6 +2512,26 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
         }
         case kStore:
             return commit_name();
+        case kPackagesPage:
+            m_page = Page::Packages;
+            return std::nullopt;
+        case kPackageSavePage:
+            m_page = Page::PackageSave;
+            m_package = model.package_folder;
+            m_text = model.package_name;
+            m_form.set_focus(kField);
+            m_form.select_all();
+            return std::nullopt;
+        case kPackageChoice:
+            if (!model.package_folders.empty()) {
+                m_package =
+                    step(std::min(m_package, model.package_folders.size() - 1), model.package_folders.size(), forward);
+            }
+            return std::nullopt;
+        case kScenarioBack:
+            m_page = Page::Scenario;
+            m_form.set_focus(std::nullopt);
+            return std::nullopt;
         case kPlayersPage:
         case kTabPlayers:
             m_page = Page::Players;
@@ -2487,7 +2615,8 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
         case kPlayerColour:
         case kPlayerMoney:
         case kPlayerMonuments:
-        case kPlayerArches: {
+        case kPlayerArches:
+        case kPlayerFaction: {
             if (model.player_slots.empty()) {
                 return std::nullopt;
             }
@@ -2503,6 +2632,16 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
                 // 1000 a click, 10 000 above 50 000.
                 const std::int32_t stepped = p.money >= 50'000 || (!forward && p.money > 50'000) ? 10'000 : 1'000;
                 p.money = forward ? p.money + stepped : p.money - stepped;
+            } else if (*id == kPlayerFaction) {
+                // The next faction of the choice, or the one before.
+                const auto& all = model.slot_factions;
+                if (all.size() < 2) {
+                    return std::nullopt;
+                }
+                const auto it = std::find(all.begin(), all.end(), p.faction);
+                const std::size_t at = it == all.end() ? 0 : static_cast<std::size_t>(it - all.begin());
+                p.faction = all[step(at, all.size(), forward)];
+                r.index = 4;
             } else if (*id == kPlayerMonuments) {
                 p.monuments_allowed = static_cast<std::uint16_t>(step(p.monuments_allowed, 10, forward));
             } else {
@@ -2607,9 +2746,9 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
             return std::nullopt;
         }
         m_player = m_first + row;
-        constexpr std::array<Id, 6> kCells = {kPlayerNamePage, kPlayerRole,      kPlayerColour,
-                                              kPlayerMoney,    kPlayerMonuments, kPlayerArches};
-        return column < 6 ? press(kCells[static_cast<std::size_t>(column)], model, forward) : std::nullopt;
+        constexpr std::array<Id, 7> kCells = {kPlayerNamePage,  kPlayerRole,   kPlayerColour, kPlayerMoney,
+                                              kPlayerMonuments, kPlayerArches, kPlayerFaction};
+        return column < 7 ? press(kCells[static_cast<std::size_t>(column)], model, forward) : std::nullopt;
     }
     if (*id >= kRelationTable && *id < kRelationTable + static_cast<Id>(kTableSide * kTableSide)) {
         // A cell of the diplomacy table: war, peace, peace and trade, round (the right button back).
@@ -2845,7 +2984,7 @@ std::optional<EditorRequest> EditorPanel::key(int key) {
             } else if (m_page == Page::PlayerName) {
                 m_page = Page::Players;
                 m_form.set_focus(std::nullopt);
-            } else if (m_page == Page::GoalText || m_page == Page::ScenarioText) {
+            } else if (m_page == Page::GoalText || m_page == Page::ScenarioText || m_page == Page::PackageSave) {
                 m_page = m_page == Page::GoalText ? Page::Goals : Page::Scenario;
                 m_form.set_focus(std::nullopt);
             } else {

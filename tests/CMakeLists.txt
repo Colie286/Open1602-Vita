@@ -6,6 +6,7 @@ add_executable(o1602_tests
     unit/test_cod_parser.cpp
     unit/test_history_edition.cpp
     unit/test_data_fixes.cpp
+    unit/test_data_file_write.cpp
     unit/test_commands.cpp
     unit/test_island_render.cpp
     unit/test_world_render.cpp

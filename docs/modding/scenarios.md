@@ -44,6 +44,10 @@ goal.goods.tools = 50
 | `goal.…` | the goals, see below |
 | `slot.<n>` | the faction of the map's player slot `n` (from 1): a faction of the package by its name, another's by its id (`"anno1602:natives"`, [factions.md](factions.md#factions-of-a-packages-own)). A faction of the settlers' behaviour is steered by the computer unless a person plays the slot; one of another behaviour makes the slot neutral and never takes a person's |
 
+The game's editor writes a scenario into a package itself: its map to `maps/<name>.o1602` and its
+table here, with `file`, `stars`, `name.<language>` and `briefing.<language>`; the file's other
+tables, keys and comments stay as they are ([editor.md](../editor.md#saving-into-a-package)).
+
 A scenario whose map is missing or outside the package's folder, or with a value that cannot be
 read, is left out; the game's log names the file, the line and the key.
 

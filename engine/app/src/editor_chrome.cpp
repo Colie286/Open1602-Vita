@@ -211,6 +211,8 @@ const char* EditorChrome::command_text(EditorCommand command) noexcept {
             return "editor.find";
         case EditorCommand::Script:
             return "editor.script.edit";
+        case EditorCommand::SavePackage:
+            return "editor.package_save.menu";
         case EditorCommand::Keys:
             return "editor.menu.keys";
     }
@@ -233,6 +235,7 @@ std::vector<EditorChrome::MenuEntry> EditorChrome::entries(std::size_t menu, con
                     {EditorCommand::Open, true},
                     {EditorCommand::Save, true},
                     {EditorCommand::SaveAs, true},
+                    {EditorCommand::SavePackage, !model.savegame},
                     {EditorCommand::TestPlay, !model.previewing},
                     {EditorCommand::ExportImage, true},
                     {EditorCommand::Close, true}};

@@ -318,8 +318,18 @@ private:
     void editor_find_script_file();
     /// A new map in the editor.
     core::Status editor_new(const EditorNewMap& map);
-    /// Saves the document under `file`; what happened goes to the panel's notice.
-    void editor_save(const std::filesystem::path& file);
+    /// Saves the document under `file`; what happened goes to the panel's notice. False if it
+    /// could not be.
+    bool editor_save(const std::filesystem::path& file);
+    /// The dialogs "Packages" and "Save to a package" (editor_package.cpp).
+    void editor_packages_model(EditorModel& m) const;
+    /// Saves the document as the scenario `name` of the package `package` (a folder of mods):
+    /// the map to its folder maps/<name>.o1602, the scenario's table in its scenarios.toml.
+    void editor_save_to_package(const std::string& package, const std::string& name);
+    /// The package and the scenario's name of a map in a package's folder maps, as
+    /// editor_save_to_package writes it; nothing for another file.
+    [[nodiscard]] std::optional<std::pair<std::string, std::string>> editor_package_of(
+        const std::filesystem::path& file) const;
     /// Out of the editor, to the main menu.
     void leave_editor();
     /// A game of the editor's map as it is now, started as from its file; the editor waits aside
@@ -859,6 +869,10 @@ private:
         std::optional<std::pair<std::int64_t, std::int64_t>> marker_to{};
         /// The file the scenario's script was loaded from, for "Reload"; empty: none.
         std::filesystem::path script_file{};
+        /// The package and the scenario's name the document is a scenario of (saved there, or
+        /// opened from its folder maps): Save writes it there again. Empty: none.
+        std::string package{};
+        std::string package_scenario{};
     };
     std::optional<EditorSession> m_editor;
     /// The editor aside while a test game of its map runs: its world (view only), its document,

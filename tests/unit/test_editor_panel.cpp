@@ -1699,3 +1699,85 @@ TEST_CASE("editor panel: the dialog Script loads, reloads and removes the scenar
     CHECK(r->index == 0);
     CHECK(panel.page() == EditorPanel::Page::Script);
 }
+
+TEST_CASE("editor panel: a slot's faction goes round the packages' factions, in the column and the table") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(184, 564);
+    EditorModel m = four_players();
+    for (app::EditorPlayer& p : m.player_slots) {
+        p.faction_name = "Settlers";
+    }
+    CHECK(!panel.command(app::EditorCommand::Players, m).has_value());
+    (void)panel.draw(m, kNoFonts);
+    CHECK(!says(panel, "Faction"));  // the settlers alone: no choice
+    m.slot_factions = {0, 4, 5};
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Faction"));
+    auto r = click(panel, m, "Settlers");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::SetPlayer);
+    CHECK(r->index == 4);
+    CHECK(r->player.faction == 4);
+    r = click(panel, m, "Settlers", ui::MouseButton::Right);
+    REQUIRE(r.has_value());
+    CHECK(r->player.faction == 5);  // back round to the last
+
+    // The table has a column of them: the third row's cell.
+    panel.set_screen(1024, 768, 1024 - EditorPanel::kWidth);
+    (void)panel.draw(m, kNoFonts);
+    r = click_nth(panel, m, "Settlers", 2);
+    REQUIRE(r.has_value());
+    CHECK(r->index == 4);
+    CHECK(r->player.slot == 2);
+    CHECK(r->player.faction == 4);
+}
+
+TEST_CASE("editor panel: the scenario's packages listed, and the scenario saved into a package") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(184, 564);
+    EditorModel m = document();
+    m.packages = {{"hansa 1.2", "installed", true}, {"spice", "missing", false}};
+    CHECK(!panel.command(app::EditorCommand::Scenario, m).has_value());
+    CHECK(!click(panel, m, "Packages (2)").has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::Packages);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "hansa 1.2"));
+    CHECK(says(panel, "missing"));
+    CHECK(!click(panel, m, "Back").has_value());
+    CHECK(panel.page() == EditorPanel::Page::Scenario);
+
+    // No package as a folder: nothing to save into.
+    CHECK(!click(panel, m, "Save to a package \x85").has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::PackageSave);
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "No package is installed as a folder."));
+    CHECK(!click(panel, m, "Cancel").has_value());
+    CHECK(panel.page() == EditorPanel::Page::Scenario);
+
+    m.package_folders = {"hansa", "north"};
+    m.package_folder = 0;
+    m.package_name = "harbour";
+    m.package_scenarios = {"north:islands"};
+    CHECK(!panel.command(app::EditorCommand::SavePackage, m).has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::PackageSave);
+    CHECK(panel.typing());
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "hansa"));
+    CHECK(!click(panel, m, "hansa").has_value());  // the next package
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "north"));
+    panel.type("Islands!");
+    CHECK(!panel.key(13).has_value());  // not a scenario's name
+    (void)panel.key(1);
+    panel.type("islands");
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Replace"));  // the package has it already
+    auto r = panel.key(13);
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::SavePackage);
+    CHECK(r->index == 1);
+    CHECK(r->name == "islands");
+    CHECK(panel.page() == EditorPanel::Page::Scenario);
+}

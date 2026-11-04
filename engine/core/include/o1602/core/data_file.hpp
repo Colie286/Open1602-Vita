@@ -56,4 +56,25 @@ struct DataTable {
 /// ..."); a table or key given twice is one, as in TOML.
 [[nodiscard]] Result<std::vector<DataTable>> parse_data_file(std::string_view utf8);
 
+/// A line a program writes into a data file: the key (bare parts joined with '.', "name.de") and
+/// its value as TOML writes it (data_string, std::to_string, "true").
+struct DataLine {
+    std::string key;
+    std::string value;
+};
+
+/// A string value as a data file writes it: a basic string, `utf8` with \" \\ \n \t and the
+/// other control characters escaped.
+[[nodiscard]] std::string data_string(std::string_view utf8);
+
+/// The text of a data file `utf8` with its table `table` holding `lines`, the rest kept as it is:
+/// comments, the order and the other keys of the table. The table's lines of the keys of `lines`
+/// and of `removed` are taken out, and `lines` go where the first of them was, else after the
+/// table's last entry. A table the file has not is added at its end. Fails where `utf8` is no
+/// valid data file, so that a file a person broke is not written over, and where the result would
+/// be none.
+[[nodiscard]] Result<std::string> set_data_table(std::string_view utf8, std::string_view table,
+                                                 const std::vector<DataLine>& lines,
+                                                 const std::vector<std::string>& removed = {});
+
 }  // namespace o1602::core

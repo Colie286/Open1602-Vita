@@ -3382,6 +3382,19 @@ core::Status MapViewer::start_package_scenario(const std::string& id, const sim:
     if (!world) {
         return world.error();
     }
+    // A map saved into its package (the editor's "Save to a package") names the package as it was
+    // before the map was written into it: the package of the scenario is the one installed.
+    if (const auto& named = world->packages()) {
+        std::vector<assets::ContentPackage> packages = *named;
+        for (assets::ContentPackage& p : packages) {
+            const auto it = std::find_if(m_packages.begin(), m_packages.end(),
+                                         [&](const assets::ModPackage& m) { return m.id == p.id; });
+            if (p.id == scenario->package && it != m_packages.end()) {
+                p = it->content();
+            }
+        }
+        world->set_packages(std::move(packages));
+    }
     std::vector<std::string> warnings;
     sim::apply_package_scenario(*world, *scenario, ui::current_language(), &warnings);
     world->set_package_scenario(scenario->id);
