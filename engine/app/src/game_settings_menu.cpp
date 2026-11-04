@@ -151,8 +151,10 @@ std::string_view hint_key(SetupScope scope) {
 }  // namespace
 
 GameSettingsMenu::~GameSettingsMenu() {
-    // A preview being made still uses the maker: wait for it.
+    // A preview being made still uses the maker: stop it and wait for it, which takes at most
+    // the island being made.
     if (m_pending.valid()) {
+        m_stop->store(true);
         m_pending.wait();
     }
 }
@@ -174,22 +176,32 @@ void GameSettingsMenu::update_preview() {
             m_preview = std::move(made).value();
             m_preview_error.clear();
             picture(*m_preview);
+        } else if (made.error().code == core::ErrorCode::Cancelled) {
+            m_preview_key.clear();  // the last one shown stays until the next is made
         } else {
             m_preview.reset();
             m_preview_error = made.error().message;
         }
     }
-    if (!m_maker || m_page != Page::Islands || m_pending.valid()) {
-        return;  // the next one when this one is made
+    if (!m_maker || m_page != Page::Islands) {
+        return;
     }
     // The world follows from the world's settings, the seed and the level.
     const std::string key = write_setup(m_setup) + std::to_string(m_setup.world_seed) + "/" + std::to_string(m_level) +
                             (m_setup.own_world ? "/own" : "/original");
+    if (m_pending.valid()) {
+        // One of settings since changed stops soon; the next one when it has.
+        if (key != m_preview_key) {
+            m_stop->store(true);
+        }
+        return;
+    }
     if (key == m_preview_key) {
         return;
     }
     m_preview_key = key;
-    m_pending = std::async(std::launch::async, m_maker, m_setup, m_level);
+    m_stop = std::make_shared<std::atomic<bool>>(false);
+    m_pending = std::async(std::launch::async, m_maker, m_setup, m_level, m_stop);
 }
 
 void GameSettingsMenu::picture(const sim::WorldPreview& p) {

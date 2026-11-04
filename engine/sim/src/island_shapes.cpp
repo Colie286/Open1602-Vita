@@ -358,50 +358,147 @@ void close_corners(LandMap& blocks) {
     }
 }
 
+/// A rectangle of tiles: x0 <= x < x1, y0 <= y < y1.
+struct Area {
+    int x0 = 0;
+    int y0 = 0;
+    int x1 = 0;
+    int y1 = 0;
+
+    [[nodiscard]] bool empty() const noexcept { return x0 >= x1 || y0 >= y1; }
+    /// Grown by `by` tiles on every side, within the map.
+    [[nodiscard]] Area grown(int by, const LandMap& map) const noexcept {
+        return Area{std::max(0, x0 - by), std::max(0, y0 - by), std::min(map.width(), x1 + by),
+                    std::min(map.height(), y1 + by)};
+    }
+    void add(int x, int y) noexcept {
+        if (empty()) {
+            *this = Area{x, y, x + 1, y + 1};
+            return;
+        }
+        x0 = std::min(x0, x);
+        y0 = std::min(y0, y);
+        x1 = std::max(x1, x + 1);
+        y1 = std::max(y1, y + 1);
+    }
+};
+
+/// The tiles of a LandMap that changed: to undo them, and where they lie.
+struct Changes {
+    std::vector<std::pair<int, int>> tiles;  ///< each one changed: undone by turning it back
+    Area area;                               ///< around all of them
+
+    void set(LandMap& map, int x, int y, bool land) {
+        if (map.inside(x, y) && map.land(x, y) != land) {
+            map.set(x, y, land);
+            tiles.emplace_back(x, y);
+            area.add(x, y);
+        }
+    }
+    /// The map as before the first change.
+    void undo(LandMap& map) {
+        for (auto it = tiles.rbegin(); it != tiles.rend(); ++it) {
+            map.set(it->first, it->second, !map.land(it->first, it->second));
+        }
+        clear();
+    }
+    void clear() {
+        tiles.clear();
+        area = Area{};
+    }
+};
+
+/// What a round of smooth() changes about the tile at (x, y). It depends on the tile and its eight
+/// neighbours alone; `to_land` gets only sea tiles, `to_sea` only land tiles.
+void smooth_tile(const LandMap& map, int x, int y, std::vector<std::pair<int, int>>& to_land,
+                 std::vector<std::pair<int, int>>& to_sea) {
+    const bool land = map.land(x, y);
+    const bool edge = x < kMargin || y < kMargin || x >= map.width() - kMargin || y >= map.height() - kMargin;
+    if (land && edge) {
+        to_sea.emplace_back(x, y);
+        return;
+    }
+    const std::uint8_t n = map.neighbours(x, y);
+    if (coast_tile(land, n)) {
+        return;
+    }
+    if (!land) {
+        to_land.emplace_back(x, y);
+    } else if (has(n, 0) && has(n, 2) && has(n, 4) && has(n, 6)) {
+        for (int d = 1; d < 8; d += 2) {
+            if (!has(n, d)) {
+                to_land.emplace_back(x + kDirX[static_cast<std::size_t>(d)], y + kDirY[static_cast<std::size_t>(d)]);
+            }
+        }
+    } else {
+        to_sea.emplace_back(x, y);
+    }
+}
+
 /// Changes land and sea until every tile has a coast tile: water the templates have no tile for is
 /// filled, land too thin for the beach becomes sea, land touching land only at a corner is joined.
-bool smooth(LandMap& map) {
+///
+/// With `changes` the map was smooth already (smooth_everywhere) except where `changes` changed it:
+/// a round then only looks at the tiles next to those the last one changed, since the others' result
+/// cannot differ from the round before (smooth_tile), and records what it changes. The map comes
+/// out the same as when every round looks at the whole map, only much faster on large islands.
+bool smooth(LandMap& map, Changes* changes = nullptr) {
+    std::vector<std::pair<int, int>> to_land;
+    std::vector<std::pair<int, int>> to_sea;
+    Area area{0, 0, map.width(), map.height()};
+    if (changes != nullptr) {
+        area = changes->area.grown(1, map);
+    }
     for (std::uint32_t round = 0; round < kSmoothRounds; ++round) {
-        std::vector<std::pair<int, int>> to_land;
-        std::vector<std::pair<int, int>> to_sea;
-        for (int y = 0; y < map.height(); ++y) {
-            for (int x = 0; x < map.width(); ++x) {
-                const bool land = map.land(x, y);
-                const bool edge =
-                    x < kMargin || y < kMargin || x >= map.width() - kMargin || y >= map.height() - kMargin;
-                if (land && edge) {
-                    to_sea.emplace_back(x, y);
-                    continue;
-                }
-                const std::uint8_t n = map.neighbours(x, y);
-                if (coast_tile(land, n)) {
-                    continue;
-                }
-                if (!land) {
-                    to_land.emplace_back(x, y);
-                } else if (has(n, 0) && has(n, 2) && has(n, 4) && has(n, 6)) {
-                    for (int d = 1; d < 8; d += 2) {
-                        if (!has(n, d)) {
-                            to_land.emplace_back(x + kDirX[static_cast<std::size_t>(d)],
-                                                 y + kDirY[static_cast<std::size_t>(d)]);
-                        }
-                    }
-                } else {
-                    to_sea.emplace_back(x, y);
-                }
+        to_land.clear();
+        to_sea.clear();
+        for (int y = area.y0; y < area.y1; ++y) {
+            for (int x = area.x0; x < area.x1; ++x) {
+                smooth_tile(map, x, y, to_land, to_sea);
             }
         }
         if (to_land.empty() && to_sea.empty()) {
             return true;
         }
+        if (changes == nullptr) {
+            for (const auto& [x, y] : to_sea) {
+                map.set(x, y, false);
+            }
+            for (const auto& [x, y] : to_land) {
+                map.set(x, y, true);
+            }
+            continue;
+        }
+        // The two lists never hold the same tile, so the order of their changes does not matter.
+        Area changed;
         for (const auto& [x, y] : to_sea) {
-            map.set(x, y, false);
+            changes->set(map, x, y, false);
+            changed.add(x, y);
         }
         for (const auto& [x, y] : to_land) {
-            map.set(x, y, true);
+            if (map.inside(x, y)) {
+                changes->set(map, x, y, true);
+                changed.add(x, y);
+            }
         }
+        area = changed.grown(1, map);
     }
     return false;
+}
+
+/// Whether smooth() would change nothing: every tile has a coast tile, no land on the margin.
+bool smooth_everywhere(const LandMap& map) {
+    std::vector<std::pair<int, int>> to_land;
+    std::vector<std::pair<int, int>> to_sea;
+    for (int y = 0; y < map.height(); ++y) {
+        for (int x = 0; x < map.width(); ++x) {
+            smooth_tile(map, x, y, to_land, to_sea);
+            if (!to_land.empty() || !to_sea.empty()) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 /// A land mask that only needs coast tiles of the templates, or nothing.
@@ -471,21 +568,15 @@ std::vector<Lake> carve_lakes(LandMap& map, Random& random, std::uint8_t count) 
     const auto at = [w](int x, int y) {
         return static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x);
     };
-    for (std::uint8_t n = 0; n < count; ++n) {
-        // How far each land tile is from water (sea and the lakes so far).
-        std::vector<std::uint8_t> dry(static_cast<std::size_t>(w) * static_cast<std::size_t>(h), 0);
-        std::vector<std::pair<int, int>> wave;
-        for (int y = 0; y < h; ++y) {
-            for (int x = 0; x < w; ++x) {
-                if (map.land(x, y)) {
-                    dry[at(x, y)] = kFar;
-                } else {
-                    wave.emplace_back(x, y);
-                }
-            }
-        }
-        for (int d = 1; d < kFar && !wave.empty(); ++d) {
-            std::vector<std::pair<int, int>> next;
+    // A map that is smooth already is only looked at where a lake changes it (smooth()).
+    const bool local = smooth_everywhere(map);
+    // How far each land tile is from water (sea and the lakes so far), up to kFar.
+    std::vector<std::uint8_t> dry(static_cast<std::size_t>(w) * static_cast<std::size_t>(h), 0);
+    std::vector<std::pair<int, int>> wave;
+    std::vector<std::pair<int, int>> next;
+    const auto spread = [&](int from) {
+        for (int d = from; d < kFar && !wave.empty(); ++d) {
+            next.clear();
             for (const auto& [x, y] : wave) {
                 for (std::size_t k = 0; k < kDirX.size(); ++k) {
                     const int nx = x + kDirX[k];
@@ -496,8 +587,43 @@ std::vector<Lake> carve_lakes(LandMap& map, Random& random, std::uint8_t count) 
                     }
                 }
             }
-            wave = std::move(next);
+            std::swap(wave, next);
         }
+    };
+    const auto measure = [&] {
+        wave.clear();
+        for (int y = 0; y < h; ++y) {
+            for (int x = 0; x < w; ++x) {
+                if (map.land(x, y)) {
+                    dry[at(x, y)] = kFar;
+                } else {
+                    dry[at(x, y)] = 0;
+                    wave.emplace_back(x, y);
+                }
+            }
+        }
+        spread(1);
+    };
+    measure();
+    Changes changes;
+    for (std::uint8_t n = 0; n < count; ++n) {
+        if (n > 0) {
+            // Only new water: the distances only shrink, outwards from it. Water that became land
+            // can make them grow again: then all of them anew.
+            const auto& changed = changes.tiles;
+            if (local && std::all_of(changed.begin(), changed.end(),
+                                     [&](const auto& t) { return !map.land(t.first, t.second); })) {
+                wave.clear();
+                for (const auto& [x, y] : changed) {
+                    dry[at(x, y)] = 0;
+                    wave.emplace_back(x, y);
+                }
+                spread(1);
+            } else {
+                measure();
+            }
+        }
+        changes.clear();
         for (std::uint32_t t = 0; t < kTries; ++t) {
             // Half sides of 3..7 tiles, in blocks; at least 10 tiles of land to other water.
             const int rx = 3 + static_cast<int>(random.below(5));
@@ -507,7 +633,10 @@ std::vector<Lake> carve_lakes(LandMap& map, Random& random, std::uint8_t count) 
             if (!map.inside(cx, cy) || dry[at(cx, cy)] < std::max(rx, ry) + 10) {
                 continue;
             }
-            LandMap before = map;
+            std::optional<LandMap> before;
+            if (!local) {
+                before = map;
+            }
             for (int by = -ry / 2 - 1; by <= ry / 2 + 1; ++by) {
                 for (int bx = -rx / 2 - 1; bx <= rx / 2 + 1; ++bx) {
                     // The blocks within the ellipse, its rim frayed by chance.
@@ -519,25 +648,35 @@ std::vector<Lake> carve_lakes(LandMap& map, Random& random, std::uint8_t count) 
                     }
                     for (int dy = 0; dy < 2; ++dy) {
                         for (int dx = 0; dx < 2; ++dx) {
-                            map.set(cx + 2 * bx + dx, cy + 2 * by + dy, false);
+                            changes.set(map, cx + 2 * bx + dx, cy + 2 * by + dy, false);
                         }
                     }
                 }
             }
-            bool fits = smooth(map);
-            std::size_t water = 0;
-            for (int y = 0; y < h && fits; ++y) {
-                for (int x = 0; x < w; ++x) {
+            bool fits = local ? smooth(map, &changes) : smooth(map);
+            // Every tile keeps a coast tile: where nothing changed it still has the one it had.
+            const Area check = local ? changes.area.grown(1, map) : Area{0, 0, w, h};
+            for (int y = check.y0; y < check.y1 && fits; ++y) {
+                for (int x = check.x0; x < check.x1; ++x) {
                     if (!coast_tile(map.land(x, y), map.neighbours(x, y))) {
                         fits = false;
                         break;
                     }
-                    const bool near = std::abs(x - cx) <= rx + 2 && std::abs(y - cy) <= ry + 2;
-                    water += near && !map.land(x, y) ? 1U : 0U;
+                }
+            }
+            std::size_t water = 0;
+            for (int y = std::max(0, cy - ry - 2); y <= std::min(h - 1, cy + ry + 2) && fits; ++y) {
+                for (int x = std::max(0, cx - rx - 2); x <= std::min(w - 1, cx + rx + 2); ++x) {
+                    water += map.land(x, y) ? 0U : 1U;
                 }
             }
             if (!fits || water < 12) {
-                map = std::move(before);
+                if (local) {
+                    changes.undo(map);
+                } else {
+                    map = std::move(*before);
+                    changes.clear();
+                }
                 continue;
             }
             lakes.push_back(Lake{cx, cy});

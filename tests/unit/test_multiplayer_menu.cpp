@@ -948,7 +948,8 @@ struct PreviewAsked {
 };
 
 app::GameSettingsMenu::PreviewMaker recording_maker(const std::shared_ptr<PreviewAsked>& asked) {
-    return [asked](const app::EndlessSetup& setup, std::uint8_t level) -> core::Result<sim::WorldPreview> {
+    return [asked](const app::EndlessSetup& setup, std::uint8_t level,
+                   const app::GameSettingsMenu::PreviewStop& /*stop*/) -> core::Result<sim::WorldPreview> {
         {
             const std::lock_guard lock(asked->mutex);
             asked->worlds.emplace_back(setup.world_seed, level);

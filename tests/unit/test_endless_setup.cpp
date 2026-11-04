@@ -1106,7 +1106,8 @@ TEST_CASE("endless setup: the islands' presets and settings, and their lines in 
 namespace {
 
 /// A world for the preview without the game's files: one island, two starts.
-core::Result<sim::WorldPreview> fake_world(const EndlessSetup& setup, std::uint8_t /*level*/) {
+core::Result<sim::WorldPreview> fake_world(const EndlessSetup& setup, std::uint8_t /*level*/,
+                                           const app::GameSettingsMenu::PreviewStop& /*stop*/) {
     sim::WorldPreview p;
     p.width = 100;
     p.height = 70;

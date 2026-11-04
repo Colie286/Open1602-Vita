@@ -15,10 +15,12 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <functional>
 #include <future>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -42,9 +44,13 @@ public:
         View,   ///< the settings can only be looked at: no presets, no button but "Back"
     };
 
+    /// Set when the preview being made is no longer wanted (the settings changed, the menu closes).
+    using PreviewStop = std::shared_ptr<const std::atomic<bool>>;
     /// Makes the world of a setup for the preview, `level` the difficulty (0..3); called on a thread
-    /// of its own, one call at a time.
-    using PreviewMaker = std::function<core::Result<sim::WorldPreview>(const EndlessSetup& setup, std::uint8_t level)>;
+    /// of its own, one call at a time. Once `stop` is set it may give up with ErrorCode::Cancelled
+    /// (sim::WorldStart::stop).
+    using PreviewMaker =
+        std::function<core::Result<sim::WorldPreview>(const EndlessSetup& setup, std::uint8_t level, PreviewStop stop)>;
     /// Palette colours of the preview: one per sim::WorldPreview::Tile, then the ships' starts.
     using PreviewColours = std::array<std::uint8_t, sim::WorldPreview::kTiles + 1>;
 
@@ -160,6 +166,7 @@ private:
     bool m_reroll = true;
     std::string m_preview_key;  ///< the setup of the preview made or being made
     std::future<core::Result<sim::WorldPreview>> m_pending;
+    std::shared_ptr<std::atomic<bool>> m_stop;  ///< of the preview being made
     std::optional<sim::WorldPreview> m_preview;
     std::string m_preview_error;
     std::vector<Run> m_runs;  ///< the picture, design units relative to its top left

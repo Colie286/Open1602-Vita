@@ -20,6 +20,7 @@ enum class ErrorCode {
     Unsupported,    ///< Valid data, but a variant we do not handle (yet).
     PlatformError,  ///< Operating system or SDL call failed (window, renderer, ...).
     ScriptError,    ///< A mod script failed; the message names the script, the line and the cause.
+    Cancelled,      ///< Stopped on request before it was done (a preview no longer wanted).
 };
 
 // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.Assign): the analyser loses the field in std::variant

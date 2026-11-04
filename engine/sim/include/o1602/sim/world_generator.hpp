@@ -14,8 +14,10 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -59,6 +61,11 @@ struct WorldStart {
     /// world has no islands yet and holds the plan (World::planned_islands); roll_planned_islands()
     /// makes them when a game of it starts.
     bool keep_plan = false;
+    /// Set when the islands are no longer wanted (a preview of settings since changed): the
+    /// generator then gives up between islands with ErrorCode::Cancelled. None: never.
+    std::shared_ptr<const std::atomic<bool>> stop;
+
+    [[nodiscard]] bool stopped() const noexcept { return stop && stop->load(std::memory_order_relaxed); }
 };
 
 /// The plan of a world whose islands are made when its game starts (section PLAN, ADR 0013).

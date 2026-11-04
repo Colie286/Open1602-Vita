@@ -316,6 +316,9 @@ core::Result<World> start_new_game(const assets::GameDirectory& game, const asse
     if (!generated) {
         return generated.error();
     }
+    if (start.stopped()) {
+        return core::make_error(core::ErrorCode::Cancelled, "the world is no longer wanted");
+    }
     auto world = load_world(generated->file, buildings, game, warnings, start);
     if (!world) {
         return world.error();

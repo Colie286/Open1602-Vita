@@ -328,6 +328,7 @@ std::string error_text(const core::Error& error, std::string_view context) {
         case core::ErrorCode::ScriptError:
             return tr("error.script", {error.message});
         case core::ErrorCode::PlatformError:
+        case core::ErrorCode::Cancelled:
             break;
     }
     return tr("error.platform");

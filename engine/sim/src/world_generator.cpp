@@ -2,13 +2,17 @@
 #include "o1602/sim/world_generator.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
+#include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -193,6 +197,7 @@ struct Slot {
     std::array<std::uint32_t, 2> mountains{};  ///< big (Erzbergnr 0) and small ones among the first 40
     bool own_shape = false;                    ///< `base` is an island of its own shape, no template
     bool package = false;                      ///< `base` is an island of a package (package_islands.hpp)
+    bool shaped = false;                       ///< `base` made already (Generator::make_own_shapes)
     std::uint8_t climate = 0;                  ///< a climate of a package (WorldIsland::climate), 0: none
     /// An island of its own shape with a village: how far its native template's tiles and
     /// records were moved onto it.
@@ -248,18 +253,6 @@ std::vector<std::uint8_t> large_island(const Slot& slot) {
     return out;
 }
 
-std::shared_ptr<assets::ChunkFile> open(const assets::GameDirectory& game, const std::string& path) {
-    const auto resolved = game.resolve(path);
-    if (!resolved) {
-        return nullptr;
-    }
-    auto file = assets::ChunkFile::load(*resolved);
-    if (!file) {
-        return nullptr;
-    }
-    return std::make_shared<assets::ChunkFile>(std::move(file).value());
-}
-
 class Generator {
 public:
     Generator(ScenarioPlan plan, const assets::GameDirectory& game, const assets::BuildingTable& buildings,
@@ -286,6 +279,8 @@ public:
     void use_package_islands(std::span<const PackageIsland> islands) { m_package_islands = islands; }
     /// The packages' climates (Balance::climates), which take a share of the islands of an own world.
     void use_climates(std::span<const Climate> climates) { m_climates = climates; }
+    /// Gives up between islands with ErrorCode::Cancelled once this is set (WorldStart::stop).
+    void use_stop(std::shared_ptr<const std::atomic<bool>> stop) { m_stop = std::move(stop); }
 
 private:
     void warn(std::string text) {
@@ -302,6 +297,17 @@ private:
     /// An island of a package as the template: no village, its tiles kept in the world.
     bool load_package_island(Slot& slot, const PackageIsland& island);
     void count_mountains(Slot& slot) const;
+    [[nodiscard]] bool stopped() const noexcept { return m_stop && m_stop->load(std::memory_order_relaxed); }
+    /// A file of the game's (an island template), read once per world: the same templates are
+    /// looked for again and again, for every island and every village. None: no such file.
+    [[nodiscard]] std::shared_ptr<assets::ChunkFile> game_file(const std::string& path) const;
+    [[nodiscard]] bool has_file(const std::string& path) const;
+    /// The island of its own shape of `slot`; none when it takes the place of a template, whose
+    /// size and mountains it needs (Shapes::Mixed).
+    [[nodiscard]] std::optional<shapes::ShapeRequest> own_request(const Slot& slot) const;
+    /// The islands of their own size of the plan, made side by side on the processor's cores:
+    /// each depends on its request alone (shapes::make_island).
+    void make_own_shapes(std::vector<Slot>& slots) const;
     void give_own_shape(Slot& slot);
     void place_village(Slot& slot);
     void hand_out_crops();
@@ -372,7 +378,32 @@ private:
     std::uint32_t m_max_crops = 2;
     std::uint32_t m_lost = 0;
     std::uint32_t m_guaranteed = 0;
+    std::shared_ptr<const std::atomic<bool>> m_stop;
+    mutable std::unordered_map<std::string, std::optional<std::filesystem::path>> m_resolved;
+    mutable std::unordered_map<std::string, std::shared_ptr<assets::ChunkFile>> m_files;
 };
+
+bool Generator::has_file(const std::string& path) const {
+    auto it = m_resolved.find(path);
+    if (it == m_resolved.end()) {
+        it = m_resolved.emplace(path, m_game.resolve(path)).first;
+    }
+    return it->second.has_value();
+}
+
+std::shared_ptr<assets::ChunkFile> Generator::game_file(const std::string& path) const {
+    auto it = m_files.find(path);
+    if (it == m_files.end()) {
+        std::shared_ptr<assets::ChunkFile> loaded;
+        if (has_file(path)) {
+            if (auto f = assets::ChunkFile::load(*m_resolved.at(path))) {
+                loaded = std::make_shared<assets::ChunkFile>(std::move(f).value());
+            }
+        }
+        it = m_files.emplace(path, std::move(loaded)).first;
+    }
+    return it->second;
+}
 
 void Generator::choose_templates() {
     // Loop A: the climate of islands placed by position, then a template of their
@@ -419,7 +450,7 @@ void Generator::choose_templates() {
 bool Generator::village_fits(const ScenarioPlan::Island& e) const {
     // SuedNat/big15 is 30 x 30 on a 70 x 60 island (D-010); own worlds leave such villages out.
     const auto header_of = [&](bool natives) -> std::optional<std::pair<std::uint32_t, std::uint32_t>> {
-        const auto file = open(m_game, template_path(e.climate, e.size, e.template_number, natives));
+        const auto file = game_file(template_path(e.climate, e.size, e.template_number, natives));
         if (!file) {
             return std::nullopt;
         }
@@ -441,7 +472,7 @@ void Generator::choose_natives() {
         for (std::size_t i = 0; i < m_plan.islands.size(); ++i) {
             const ScenarioPlan::Island& e = m_plan.islands[i];
             if (e.climate == climate && (e.flags & (kPlanNoVillage | kPlanOwnShape)) == 0 &&
-                m_game.resolve(template_path(e.climate, e.size, e.template_number, true)).has_value() &&
+                has_file(template_path(e.climate, e.size, e.template_number, true)) &&
                 (m_starts.empty() || village_fits(e))) {
                 candidates.push_back(i);
             }
@@ -465,7 +496,7 @@ bool Generator::load(Slot& slot) {
         return load_package_island(slot, *p);
     }
     const std::string base_path = template_path(e.climate, e.size, e.template_number, false);
-    const auto base_file = open(m_game, base_path);
+    const auto base_file = game_file(base_path);
     if (!base_file) {
         warn("island template not found: " + base_path);
         return false;
@@ -478,7 +509,7 @@ bool Generator::load(Slot& slot) {
     slot.base = std::move(base->front());
     if ((e.flags & 1U) != 0) {
         const std::string path = template_path(e.climate, e.size, e.template_number, true);
-        slot.village_file = open(m_game, path);
+        slot.village_file = game_file(path);
         std::optional<assets::Island> village;
         if (slot.village_file) {
             if (auto loaded = assets::load_islands(*slot.village_file); loaded && !loaded->empty()) {
@@ -607,7 +638,12 @@ void Generator::count_mountains(Slot& slot) const {
     }
 }
 
-void Generator::give_own_shape(Slot& slot) {
+std::optional<shapes::ShapeRequest> Generator::own_request(const Slot& slot) const {
+    const auto own = std::find_if(m_own_islands.begin(), m_own_islands.end(),
+                                  [&](const WorldPlan::OwnIsland& o) { return o.number == slot.plan.number; });
+    if ((slot.plan.flags & kPlanOwnShape) == 0 || own == m_own_islands.end()) {
+        return std::nullopt;
+    }
     shapes::ShapeRequest r;
     r.climate = slot.plan.climate;
     if (slot.climate != 0) {
@@ -617,45 +653,94 @@ void Generator::give_own_shape(Slot& slot) {
     r.size = slot.plan.size;
     r.number = slot.plan.number;
     r.seed = m_shape_seed;
+    // Of its own size: ore mountains by its area, as the templates have them (a big template,
+    // 70 x 60, one big and two small ones), the home island at least one of each.
+    r.width = own->width;
+    r.height = own->height;
+    r.roughness = m_landscape.coast;
+    r.form = m_landscape.outline == WorldSettings::Landscape::Outline::Branched ? shapes::Form::Branched
+                                                                                : shapes::Form::Compact;
+    r.forest = m_landscape.forest;
+    r.land = m_landscape.fill();
+    constexpr std::array<std::uint32_t, 3> kPercent = {50, 100, 200};  // Little, Normal, Much
+    const std::uint32_t percent = kPercent[static_cast<std::size_t>(m_landscape.mountains)];
+    const std::uint32_t area = std::uint32_t{own->width} * own->height;
+    std::uint32_t big = area * percent / 100 / 3500;
+    std::uint32_t small = (area * percent / 100 + 1000) / 2000;
+    if ((slot.plan.flags & kPlanNoVillage) != 0) {  // a home island
+        big = std::max<std::uint32_t>(big, 1);
+        small = std::max<std::uint32_t>(small, 1);
+    }
+    r.big_mountains = static_cast<std::uint8_t>(std::min<std::uint32_t>(big, 255));
+    r.small_mountains = static_cast<std::uint8_t>(std::min<std::uint32_t>(small, 255));
+    r.volcano = own->volcano;
+    // Lakes inland on large islands, a river running into each: one for every kTilesPerLake.
+    if (std::min(own->width, own->height) >= kLakeSide) {
+        r.lakes = static_cast<std::uint8_t>(std::min<std::uint32_t>(area / kTilesPerLake, 255));
+    }
+    return r;
+}
+
+void Generator::make_own_shapes(std::vector<Slot>& slots) const {
+    std::vector<std::pair<Slot*, shapes::ShapeRequest>> work;
+    for (Slot& slot : slots) {
+        if (auto r = own_request(slot)) {
+            work.emplace_back(&slot, std::move(*r));
+        }
+    }
+    // The largest first, so that no core is left with a large one at the end.
+    std::stable_sort(work.begin(), work.end(), [](const auto& a, const auto& b) {
+        return std::uint32_t{a.second.width} * a.second.height > std::uint32_t{b.second.width} * b.second.height;
+    });
+    std::atomic<std::size_t> next{0};
+    const auto make = [&] {
+        for (std::size_t i = next++; i < work.size() && !stopped(); i = next++) {
+            work[i].first->base = shapes::make_island(work[i].second);
+            work[i].first->shaped = true;
+        }
+    };
+    // A few cores at most: every island being made needs memory of its own for its size.
+    constexpr unsigned kMostThreads = 8;
+    const unsigned threads = static_cast<unsigned>(
+        std::min<std::size_t>(std::clamp(std::thread::hardware_concurrency(), 1U, kMostThreads), work.size()));
+    std::vector<std::thread> helpers;
+    for (unsigned t = 1; t < threads; ++t) {
+        helpers.emplace_back(make);
+    }
+    make();
+    for (std::thread& t : helpers) {
+        t.join();
+    }
+}
+
+void Generator::give_own_shape(Slot& slot) {
+    if (!slot.shaped) {
+        shapes::ShapeRequest r;
+        if (auto own = own_request(slot)) {
+            r = std::move(*own);
+        } else {
+            // In the place of its template: as large, with as many ore mountains, the volcano one of
+            // the big ones.
+            r.climate = slot.plan.climate;
+            if (slot.climate != 0) {
+                r.trees = m_climates[slot.climate - 1U].forest;  // none: the climate's
+                r.ground = m_climates[slot.climate - 1U].ground;
+            }
+            r.size = slot.plan.size;
+            r.number = slot.plan.number;
+            r.seed = m_shape_seed;
+            r.width = slot.base.header.width;
+            r.height = slot.base.header.height;
+            r.volcano = !sim::find_craters(*slot.map, m_buildings).empty();
+            const std::uint32_t big = slot.mountains[0] - (r.volcano && slot.mountains[0] > 0 ? 1U : 0U);
+            r.big_mountains = static_cast<std::uint8_t>(std::min<std::uint32_t>(big, 255));
+            r.small_mountains = static_cast<std::uint8_t>(std::min<std::uint32_t>(slot.mountains[1], 255));
+        }
+        slot.base = shapes::make_island(r);
+        slot.shaped = true;
+    }
     const auto own = std::find_if(m_own_islands.begin(), m_own_islands.end(),
                                   [&](const WorldPlan::OwnIsland& o) { return o.number == slot.plan.number; });
-    if ((slot.plan.flags & kPlanOwnShape) != 0 && own != m_own_islands.end()) {
-        // Of its own size: ore mountains by its area, as the templates have them (a big template,
-        // 70 x 60, one big and two small ones), the home island at least one of each.
-        r.width = own->width;
-        r.height = own->height;
-        r.roughness = m_landscape.coast;
-        r.form = m_landscape.outline == WorldSettings::Landscape::Outline::Branched ? shapes::Form::Branched
-                                                                                    : shapes::Form::Compact;
-        r.forest = m_landscape.forest;
-        r.land = m_landscape.fill();
-        constexpr std::array<std::uint32_t, 3> kPercent = {50, 100, 200};  // Little, Normal, Much
-        const std::uint32_t percent = kPercent[static_cast<std::size_t>(m_landscape.mountains)];
-        const std::uint32_t area = std::uint32_t{own->width} * own->height;
-        std::uint32_t big = area * percent / 100 / 3500;
-        std::uint32_t small = (area * percent / 100 + 1000) / 2000;
-        if ((slot.plan.flags & kPlanNoVillage) != 0) {  // a home island
-            big = std::max<std::uint32_t>(big, 1);
-            small = std::max<std::uint32_t>(small, 1);
-        }
-        r.big_mountains = static_cast<std::uint8_t>(std::min<std::uint32_t>(big, 255));
-        r.small_mountains = static_cast<std::uint8_t>(std::min<std::uint32_t>(small, 255));
-        r.volcano = own->volcano;
-        // Lakes inland on large islands, a river running into each: one for every kTilesPerLake.
-        if (std::min(own->width, own->height) >= kLakeSide) {
-            r.lakes = static_cast<std::uint8_t>(std::min<std::uint32_t>(area / kTilesPerLake, 255));
-        }
-    } else {
-        // In the place of its template: as large, with as many ore mountains, the volcano one of
-        // the big ones.
-        r.width = slot.base.header.width;
-        r.height = slot.base.header.height;
-        r.volcano = !sim::find_craters(*slot.map, m_buildings).empty();
-        const std::uint32_t big = slot.mountains[0] - (r.volcano && slot.mountains[0] > 0 ? 1U : 0U);
-        r.big_mountains = static_cast<std::uint8_t>(std::min<std::uint32_t>(big, 255));
-        r.small_mountains = static_cast<std::uint8_t>(std::min<std::uint32_t>(slot.mountains[1], 255));
-    }
-    slot.base = shapes::make_island(r);
     seamless_sea(slot);
     slot.map = IslandMap::from_island(slot.base, m_buildings, m_warnings, nullptr);
     if ((slot.plan.flags & kPlanOwnShape) != 0 && own != m_own_islands.end() && own->village) {
@@ -710,7 +795,7 @@ void Generator::place_village(Slot& slot) {
     for (std::uint8_t size = 0; size < kTemplateCount[climate].size(); ++size) {
         for (std::uint16_t n = 0; n < kTemplateCount[climate][size]; ++n) {
             std::string path = template_path(climate, size, n, true);
-            if (m_game.resolve(path).has_value()) {
+            if (has_file(path)) {
                 paths.push_back(std::move(path));
             }
         }
@@ -739,7 +824,7 @@ void Generator::place_village(Slot& slot) {
         return sum_at(x + w, y + h) - sum_at(x, y + h) - sum_at(x + w, y) + sum_at(x, y) == w * h;
     };
     for (std::size_t k = 0; k < std::min(paths.size(), kTemplates); ++k) {
-        auto file = open(m_game, paths[k]);
+        auto file = game_file(paths[k]);
         if (!file) {
             continue;
         }
@@ -1794,12 +1879,20 @@ core::Result<GeneratedWorld> Generator::run(const assets::ChunkFile& scenario, b
     m_max_crops = m_plan.max_crops != 0 ? m_plan.max_crops : 2;
     choose_templates();
     choose_natives();
-    m_slots.reserve(m_plan.islands.size());
-    for (const ScenarioPlan::Island& e : m_plan.islands) {
-        Slot slot;
-        slot.plan = e;
-        slot.climate = own_climate(e);
-        slot.own_shape = wants_own_shape(e);
+    // The climates and shapes are draws of streams of their own: first those of every island, then
+    // the islands of their own size side by side, then each island in the order of the plan.
+    std::vector<Slot> slots(m_plan.islands.size());
+    for (std::size_t i = 0; i < slots.size(); ++i) {
+        slots[i].plan = m_plan.islands[i];
+        slots[i].climate = own_climate(m_plan.islands[i]);
+        slots[i].own_shape = wants_own_shape(m_plan.islands[i]);
+    }
+    make_own_shapes(slots);
+    m_slots.reserve(slots.size());
+    for (Slot& slot : slots) {
+        if (stopped()) {
+            return core::make_error(core::ErrorCode::Cancelled, "the islands are no longer wanted");
+        }
         if (load(slot)) {
             m_slots.push_back(std::move(slot));
         }
@@ -2028,6 +2121,7 @@ core::Result<GeneratedWorld> generate_islands(const assets::ChunkFile& scenario,
                         plan.seed, plan.own_islands, plan.landscape);
     generator.use_package_islands(start.package_islands);
     generator.use_climates(start.climates);
+    generator.use_stop(start.stop);
     return generator.run(scenario, start.guarantee_resources);
 }
 
@@ -2051,6 +2145,7 @@ core::Result<GeneratedWorld> generate_islands(const assets::ChunkFile& scenario,
     }
     Generator generator(std::move(**plan), game, buildings, *random, warnings);
     generator.use_package_islands(start.package_islands);
+    generator.use_stop(start.stop);
     return generator.run(scenario, start.guarantee_resources);
 }
 
