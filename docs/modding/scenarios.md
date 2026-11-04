@@ -88,7 +88,9 @@ buildings and goods are part of the map.
 A map made by `o1602-tool new-world <map.o1602> --without-original` (with `--island-shapes own` and
 `--villages none`) holds nothing of the original's files: islands of their own shape and no copy of
 the original's scenario it starts from (section `ORIG`). The example package's map
-(`data/mods/example/maps/harbour.o1602`) is made so.
+(`data/mods/example/maps/harbour.o1602`) is made so. Such a map is saved without packages: it names
+only the original's buildings, whose Ids the packages' buildings leave as they are, so it loads with
+any packages turned on and does not need saving anew when a package's buildings change.
 
 ## Own scenarios
 

@@ -106,7 +106,8 @@ the lists of older versions, are only read. The details of the sections from `RU
 [o1602-chunk.md](o1602-chunk.md).
 
 **Buildings** are stored as Id from `haeuser.cod` with sub-tile, never as image number. If the fingerprint
-of the building data does not match, Open1602 loads anyway and reports it; an Id that the data does not know
+of the building data does not match, neither that of all buildings nor that of `haeuser.cod` alone without
+the buildings the packages added (a map saved without packages), Open1602 loads anyway and reports it; an Id that the data does not know
 makes the savegame unreadable (instead of wrong buildings).
 
 ## Properties

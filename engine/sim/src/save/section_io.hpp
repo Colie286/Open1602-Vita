@@ -371,6 +371,9 @@ void write_tiles(Writer& out, const World& w, const assets::BuildingTable& build
                  std::span<const std::uint8_t> before);
 [[nodiscard]] std::vector<Decoded::TileOverride> read_tiles(Reader& in, const assets::BuildingTable& buildings);
 [[nodiscard]] std::uint64_t buildings_fingerprint(const assets::BuildingTable& buildings);
+/// The fingerprint of the buildings of haeuser.cod alone, without those the packages added: that of a
+/// map saved without packages, whose Ids the packages' buildings keep.
+[[nodiscard]] std::uint64_t original_buildings_fingerprint(const assets::BuildingTable& buildings);
 
 // world.cpp: RULE, WRLD, EPOC.
 void write_rules(Writer& out, const Rules& r);

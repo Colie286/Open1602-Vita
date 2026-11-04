@@ -339,6 +339,7 @@ core::Result<BuildingTable> BuildingTable::from_cod(const cod::Document& haeuser
             break;
         }
     }
+    table.m_original_count = table.m_types.size();
     return table;
 }
 

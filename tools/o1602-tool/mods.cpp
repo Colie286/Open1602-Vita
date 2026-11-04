@@ -30,6 +30,7 @@
 #include "o1602/render/banner.hpp"
 #include "o1602/script/game_scripts.hpp"
 #include "o1602/sim/package_islands.hpp"
+#include "o1602/sim/save_game.hpp"
 #include "o1602/sim/world.hpp"
 #include "o1602/ui/build_menu.hpp"
 #include "o1602/ui/package_icons.hpp"
@@ -102,6 +103,22 @@ int cmd_check_mod(const Args& args) {
     (void)ui::load_build_menu_mods(ui::original_build_menu(), packages, *buildings, problems, rules.own);
     const std::vector<assets::PackageScenario> scenarios = assets::load_package_scenarios(packages, problems);
     (void)assets::load_package_campaigns(packages, scenarios, problems);
+    // The scenarios' maps saved by Open1602, read as the game reads them: with the packages' buildings.
+    for (const assets::PackageScenario& scenario : scenarios) {
+        const auto bytes = core::read_file(scenario.file);
+        if (!bytes || !sim::is_open1602_save(*bytes)) {
+            continue;
+        }
+        const std::string where = scenario.id + " (" + core::path_to_utf8(scenario.file.filename()) + "): ";
+        std::vector<std::string> warnings;
+        const auto map = sim::read_game(*bytes, *buildings, &warnings, &*figures);
+        if (!map) {
+            problems.push_back(where + map.error().message);
+        }
+        for (const std::string& w : warnings) {
+            problems.push_back(where + w);
+        }
+    }
     // The scripts' top level, run for an empty world: what fails there fails in every game.
     std::vector<script::PackageScript> scripts = script::read_package_scripts(packages, problems);
     for (const assets::PackageScenario& scenario : scenarios) {

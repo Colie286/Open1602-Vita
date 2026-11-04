@@ -113,8 +113,10 @@ It needs the original's installation (`ANNO1602_DIR`), since a package builds on
 figures, and exits with 1 when there is a problem. The game writes the same lines to its log.
 Beyond what the game's readers report, it checks what needs the installation or the game's banners:
 a track that replaces a title `MUSIC8` has not, a coat of arms or flag of a banner no game has, an
-interface sprite the installation has not or of another size than its icon, and
-a line of a catalogue (`locale/<code>.lang`) with a key or a `{N}` Open1602 does not have.
+interface sprite the installation has not or of another size than its icon,
+a line of a catalogue (`locale/<code>.lang`) with a key or a `{N}` Open1602 does not have, and a
+scenario's map saved by Open1602 (`.o1602`) that does not load as the game loads it, or loads only
+with a warning, such as one saved with other buildings than the installation and the packages give.
 
 With `--json` it prints the packages and the problems as one JSON object instead, for a script or a
 CI job; a problem that names a file of a package carries it and its line:

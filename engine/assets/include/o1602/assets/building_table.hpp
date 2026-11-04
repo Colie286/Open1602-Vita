@@ -237,6 +237,8 @@ public:
     [[nodiscard]] std::optional<std::uint32_t> missing() const noexcept;
 
     [[nodiscard]] const std::vector<BuildingType>& types() const noexcept { return m_types; }
+    /// How many of types() come from haeuser.cod: they come first, the packages' own (add) after them.
+    [[nodiscard]] std::size_t original_count() const noexcept { return m_original_count; }
     [[nodiscard]] const BuildingType* by_id(std::uint32_t id) const noexcept;
     /// The same for corrections of the data after loading (data_fixes.hpp).
     [[nodiscard]] BuildingType* by_id(std::uint32_t id) noexcept {
@@ -299,6 +301,7 @@ public:
 
 private:
     std::vector<BuildingType> m_types;
+    std::size_t m_original_count = 0;
     std::vector<std::int32_t> m_by_id;      ///< index by (id - kIdOffset), -1 = none
     std::vector<std::int32_t> m_by_sprite;  ///< index by sprite, -1 = none
     std::vector<std::int32_t> m_by_record;  ///< index by Nummer, -1 = none

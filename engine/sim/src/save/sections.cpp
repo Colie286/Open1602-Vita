@@ -1199,7 +1199,10 @@ core::Result<World> world_from_sections(std::span<const std::uint8_t> sections, 
             in.u32();
             in.u64();
             const std::uint64_t fingerprint = in.u64();
-            meta_ok = in.ok() && fingerprint == buildings_fingerprint(buildings);
+            // A map saved without packages (a package's own map, made by o1602-tool) keeps the Ids
+            // of the original's buildings, which the packages' buildings leave as they are.
+            meta_ok = in.ok() && (fingerprint == buildings_fingerprint(buildings) ||
+                                  fingerprint == original_buildings_fingerprint(buildings));
         } else if (id == kMap && !world) {
             Reader reader(in);
             world = read_map(reader, buildings, version);

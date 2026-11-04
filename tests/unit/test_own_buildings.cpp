@@ -247,3 +247,28 @@ TEST_CASE("own buildings: a game keeps the ids of the buildings its packages add
     const auto plain = make_buildings();
     CHECK(!sim::read_game(*bytes, plain).ok());
 }
+
+TEST_CASE("own buildings: a map saved without packages loads with their buildings as made with the same data") {
+    const auto plain = make_buildings();
+    const sim::World world(60, 40);
+    const auto bytes = sim::write_game(world, plain);
+    REQUIRE(bytes.ok());
+    auto buildings = make_buildings();
+    std::vector<assets::OwnBuilding> own;
+    std::vector<std::string> warnings;
+    assets::apply_own_buildings_file(buildings, own, "lights", "[lighthouse]\nlike = \"anno1602:watchtower\"\n",
+                                     warnings);
+    REQUIRE(warnings.empty());
+    CHECK(buildings.original_count() == plain.types().size());
+    CHECK(buildings.types().size() == plain.types().size() + 1);
+    REQUIRE(sim::read_game(*bytes, buildings, &warnings).ok());
+    CHECK(warnings.empty());
+
+    // A game saved with the package's building is not one of the original's data alone.
+    sim::World with(60, 40);
+    with.set_own_buildings(own);
+    const auto saved = sim::write_game(with, buildings);
+    REQUIRE(saved.ok());
+    REQUIRE(sim::read_game(*saved, buildings, &warnings).ok());
+    CHECK(warnings.empty());
+}
