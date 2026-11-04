@@ -19,6 +19,7 @@
 #include "o1602/editor/original_check.hpp"
 #include "o1602/sim/save_game.hpp"
 #include "o1602/sim/scenario_data.hpp"
+#include "o1602/sim/score.hpp"
 #include "o1602/sim/world.hpp"
 
 using namespace o1602;
@@ -340,6 +341,62 @@ TEST_CASE("editor document: a world that is no scenario gets a description as on
     REQUIRE(head->meta.has_value());
     CHECK(!head->meta->scenario.has_value());
     CHECK(!sim::scenario_info_of(*plain, plain->size()));
+}
+
+TEST_CASE("editor document: a savegame is saved as a savegame, marked as changed") {
+    const auto buildings = make_buildings();
+    sim::World world = make_world(buildings);
+    const std::vector<std::uint8_t> state = {1, 2, 3, 4, 5};
+    world.set_simulation_state(state);  // a running game's state (not read without the figures)
+    auto before = sim::write_game(world, buildings);
+    REQUIRE(before.ok());
+    auto unchanged = sim::save_info(*before);
+    REQUIRE(unchanged.ok());
+    REQUIRE(unchanged->meta.has_value());
+    CHECK(!unchanged->meta->edited);
+
+    auto document = editor::Document::open(*before, buildings, nullptr);
+    REQUIRE(document.ok());
+    CHECK(!document->world().game_settings().edited);
+    sim::ScenarioInfo info;
+    info.names = {{"en", "Not yet"}};
+    document->perform(std::make_unique<editor::ScenarioInfoEdit>(std::nullopt, info));
+    CHECK(document->undo());  // a step and back: still the savegame, but saved by the editor
+    auto bytes = document->save_game(buildings);
+    REQUIRE(bytes.ok());
+    CHECK(!document->modified());
+    CHECK(document->history().undo_steps() == 0);  // the mark is no step
+    CHECK(!document->world().scenario_info());     // and no description is added
+
+    auto head = sim::save_info(*bytes);
+    REQUIRE(head.ok());
+    REQUIRE(head->meta.has_value());
+    CHECK(head->meta->edited);
+    CHECK(!head->meta->scenario.has_value());
+    auto back = sim::read_game(*bytes, buildings);
+    REQUIRE(back.ok());
+    CHECK(back->game_settings().edited);
+    CHECK(back->simulation_state() == state);  // the game goes on where it was
+    CHECK(sim::game_identity(*back).edited);
+    // Saved again (as the game saves it), it stays marked.
+    auto again = sim::write_game(*back, buildings);
+    REQUIRE(again.ok());
+    CHECK(*again == *bytes);
+
+    // A scenario's head after the mark is still read.
+    sim::World scenario = make_world(buildings);
+    scenario.set_scenario_info(info);
+    sim::World::GameSettings settings = scenario.game_settings();
+    settings.edited = true;
+    scenario.set_game_settings(settings);
+    auto marked = sim::write_game(scenario, buildings);
+    REQUIRE(marked.ok());
+    auto marked_head = sim::save_info(*marked);
+    REQUIRE(marked_head.ok());
+    REQUIRE(marked_head->meta.has_value());
+    CHECK(marked_head->meta->edited);
+    REQUIRE(marked_head->meta->scenario.has_value());
+    CHECK(marked_head->meta->scenario->names == info.names);
 }
 
 TEST_CASE("editor document: wrong scenario parts refuse the save and change nothing") {

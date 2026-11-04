@@ -8,6 +8,7 @@
 
 #include "../test_framework.hpp"
 #include "app_settings.hpp"
+#include "high_score_file.hpp"
 
 using namespace o1602;
 
@@ -140,6 +141,18 @@ TEST_CASE("app settings: what a savegame's META says, as a line of the lists") {
     CHECK(app::slot_details(slots)[20] == "Merlin, played 2:05 h, map 500 x 350");
     slots.meta[20]->player.clear();
     CHECK(app::save_details(*slots.meta[20]).starts_with("-, "));
+    // A game changed in the editor says so.
+    slots.meta[20]->edited = true;
+    CHECK(app::save_details(*slots.meta[20]).ends_with("map 500 x 350, edited"));
+}
+
+TEST_CASE("app settings: a game changed in the editor has no high score list") {
+    sim::GameIdentity game;
+    game.name = "Zwei K\xfcsten";
+    CHECK(app::high_score_file(game, {}, false) == std::filesystem::path(u8"Zwei K\u00fcsten.hss"));
+    game.edited = true;
+    CHECK(app::high_score_file(game, {}, false).empty());
+    CHECK(app::high_score_file(game, {}, true).empty());
 }
 
 TEST_CASE("app settings: the first slot is the last game, kept on leaving a game") {

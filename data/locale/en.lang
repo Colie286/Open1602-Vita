@@ -56,6 +56,7 @@ menu.endless_level_notes.3 = * very few ore deposits\n* frequent droughts\n* pir
 save.default_name = Savegame {1}
 # A savegame in the lists: {1} the player's name, {2} the time played, {3} x {4} the map's size
 save.details = {1}, played {2}, map {3} x {4}
+save.edited = , edited
 # {1} hours, {2} minutes (two digits)
 save.time = {1}:{2} h
 
@@ -1152,6 +1153,7 @@ editor.new.create = Create
 editor.open.title = Open a map
 editor.open.empty = There are no scenarios to open.
 editor.open.own = Own scenarios
+editor.open.games = Saved games
 editor.open.original = Scenarios of the game
 editor.save.title = Save as
 editor.save.name = Name of the scenario
@@ -1160,6 +1162,7 @@ editor.save.taken = This name exists already: saving replaces that scenario.
 editor.save.replace = Replace
 # {1}: the file's name
 editor.saved = Saved: {1}
+editor.saved_game = Game saved: {1} (edited)
 editor.save_failed = Not saved: {1}
 editor.open_failed = Could not be opened: {1}
 editor.new_failed = The map could not be made: {1}
@@ -1403,6 +1406,7 @@ editor.menu.keys = Keys
 editor.status.sea = Tile {1}, {2} · sea
 editor.status.island = Tile {1}, {2} · island {3}
 editor.document.hint = Pick a tool on the left, such as "Draw land" for islands of your own. File, map, players and rules are in the menu at the top. F1 shows all keys.
+editor.document.savegame = A saved game: once saved, it counts for no high score list.
 editor.document.hint_short = Tools on the left, menu at the top, F1 shows the keys.
 editor.tool.select = Select
 editor.tool.island = Island from a template or of its own shape

@@ -349,6 +349,17 @@ back too, also after another game was loaded meanwhile. The test game is not sav
 
 **Save map as picture** (menu File) writes the map as a PNG into the screenshots folder: two pixels a tile, in the colours of the new game's preview, with the players' starts as white squares.
 
+## Saved games
+
+**Open** also lists the saved games of the game's save list (**Saved games**; not the last game,
+which is never saved into by hand). A saved game opens with its running state: the cities, ships
+and soldiers, the time and the money as they were. It is changed with the same tools as a
+scenario, except what the running game holds fixed (the terrain, the map's size, islands that
+are in use). **Save** writes it back to its slot as a saved game; the game goes on from there
+when it is loaded. Saved by the editor, the game is marked as edited (section `EDTD`): the save
+lists say so, and the game enters no high score list, also after it is saved again in the game.
+A test game counts for no high score list either. **Save as** makes a scenario of it instead.
+
 ## Recovery
 
 A minute after a change, and before every test game, the editor keeps a copy of the map in the

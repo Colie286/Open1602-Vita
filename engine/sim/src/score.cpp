@@ -169,6 +169,7 @@ ScoreSheet score_sheet(const World& world, const assets::BuildingTable& building
 
 GameIdentity game_identity(const World& world) {
     GameIdentity id;
+    id.edited = world.game_settings().edited;
     const assets::ChunkFile* file = world.source().get();
     if (file == nullptr) {
         return id;

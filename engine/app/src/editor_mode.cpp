@@ -170,7 +170,8 @@ sim::World MapViewer::sea_world(std::uint32_t width, std::uint32_t height) const
     return world;
 }
 
-core::Status MapViewer::enter_editor(sim::World world, const std::filesystem::path& file) {
+core::Status MapViewer::enter_editor(sim::World world, const std::filesystem::path& file,
+                                     std::optional<std::size_t> slot) {
     if (m_session) {
         return core::make_error(core::ErrorCode::Unsupported, "no editor while a multiplayer game runs");
     }
@@ -196,22 +197,40 @@ core::Status MapViewer::enter_editor(sim::World world, const std::filesystem::pa
     m_editor_pending.reset();
     adopt_state(std::move(next), file);
     // What the editor saves is a scenario: one with a description from the start, so that saving
-    // a map that had none (a new one, a savegame) is not a step of its own to undo.
-    if (!m_state->world.scenario_info()) {
+    // a map that had none (a new one, a savegame) is not a step of its own to undo. A savegame
+    // opened as such stays one.
+    if (!m_state->world.scenario_info() && !slot) {
         m_state->world.set_scenario_info(sim::ScenarioInfo{});
     }
+    std::string name = file.empty() ? std::string() : shown_name(file);
+    if (slot && *slot < m_slots.size() && !m_slots.names[*slot].empty()) {
+        name = m_slots.names[*slot];
+    }
     m_editor.emplace(EditorSession{editor::Document::edit(m_state->world),
-                                   own_file(file) ? file : std::filesystem::path(),
-                                   file.empty() ? std::string() : shown_name(file),
+                                   own_file(file) && !slot ? file : std::filesystem::path(),
+                                   std::move(name),
                                    {},
                                    false,
                                    {},
                                    {}});
+    m_editor->slot = slot;
     m_input->set_editor(true);
     if (m_hud) {
         m_hud->close_menu();
         m_hud->set_editing(true);
         lay_out();  // the editor's frame: the map's room is another
+    }
+    if (slot) {
+        // A saved game opens where its player is (the editor has no player of its own).
+        const sim::World& w = m_state->world;
+        const sim::PlayerId human = sim::first_human_player(w);
+        for (const sim::City& c : w.cities()) {
+            if (c.owner == human && c.warehouse_x && c.warehouse_y && c.island < w.islands().size()) {
+                m_camera.center_on(render::TilePos{w.islands()[c.island].x + *c.warehouse_x,
+                                                   w.islands()[c.island].y + *c.warehouse_y});
+                break;
+            }
+        }
     }
     std::fprintf(stderr, "editor: %s, %ux%u, %zu islands\n",
                  file.empty() ? "new map" : core::path_to_utf8(file).c_str(), m_state->world.width(),
@@ -233,7 +252,7 @@ void MapViewer::start_editor() {
     }
 }
 
-core::Status MapViewer::editor_open(const std::filesystem::path& file) {
+core::Status MapViewer::editor_open(const std::filesystem::path& file, std::optional<std::size_t> slot) {
     auto bytes = core::read_file(file);
     if (!bytes) {
         return bytes.error();
@@ -249,7 +268,7 @@ core::Status MapViewer::editor_open(const std::filesystem::path& file) {
     for (const std::string& w : warnings) {
         std::fprintf(stderr, "warning: %s\n", w.c_str());
     }
-    auto entered = enter_editor(std::move(world).value(), file);
+    auto entered = enter_editor(std::move(world).value(), file, slot);
     if (entered && !warnings.empty()) {
         editor_notice(ui::tr("notice.load_problems", {std::to_string(warnings.size())}), false,
                       std::to_string(warnings.size()) + " warnings while opening");
@@ -301,6 +320,52 @@ void MapViewer::editor_notice(std::string text, bool error, std::string_view log
     }
 }
 
+std::optional<std::size_t> MapViewer::editor_slot_of(const std::filesystem::path& file) const {
+    if (file.empty()) {
+        return std::nullopt;
+    }
+    std::error_code ec;
+    for (std::size_t slot = 0; slot < m_slots.size(); ++slot) {
+        if (slot == kLastGameSlot || m_slots.names[slot].empty()) {
+            continue;  // the last game is never saved into by hand
+        }
+        if (std::filesystem::equivalent(slot_file(save_folder(), slot), file, ec)) {
+            return slot;
+        }
+    }
+    return std::nullopt;
+}
+
+void MapViewer::editor_save_game() {
+    if (!m_editor || !m_editor->slot) {
+        return;
+    }
+    const std::size_t slot = *m_editor->slot;
+    const auto target = prepare_save(slot_file(save_folder(), slot));
+    if (!target) {
+        editor_notice(ui::tr("editor.save_failed", {ui::error_text(target.error(), "editor")}), true,
+                      target.error().message);
+        return;
+    }
+    auto bytes = m_editor->document.save_game(m_buildings);
+    if (!bytes) {
+        editor_notice(ui::tr("editor.save_failed", {ui::error_text(bytes.error(), "editor")}), true,
+                      bytes.error().message);
+        return;
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(target->parent_path(), ec);
+    if (auto written = core::write_file_atomic(*target, *bytes); !written) {
+        editor_notice(ui::tr("editor.save_failed", {ui::error_text(written.error(), "editor")}), true,
+                      written.error().message);
+        return;
+    }
+    remember_slot(slot, m_editor->source_name, human_players());
+    drop_editor_recovery();
+    editor_notice(ui::tr("editor.saved_game", {m_editor->source_name}), false,
+                  "saved the game " + core::path_to_utf8(*target));
+}
+
 void MapViewer::editor_save(const std::filesystem::path& file) {
     if (!m_editor) {
         return;
@@ -326,6 +391,7 @@ void MapViewer::editor_save(const std::filesystem::path& file) {
     }
     m_editor->file = *target;
     m_editor->source_name = shown_name(*target);
+    m_editor->slot.reset();  // a savegame saved as a scenario: Save writes the scenario now
     editor_notice(ui::tr("editor.saved", {shown_name(*target)}), false, "saved " + core::path_to_utf8(*target));
 }
 
@@ -427,7 +493,9 @@ void MapViewer::editor_keep_recovery(bool now_or_never) {
     const std::filesystem::path file = editor_recovery_file();
     std::error_code ec;
     std::filesystem::create_directories(file.parent_path(), ec);
-    const std::string note = core::path_to_utf8(m_editor->file) + "\n" + m_editor->source_name + "\n";
+    // The file it came from: a savegame's, so that it is recovered as that savegame.
+    const std::filesystem::path from = m_editor->slot ? slot_file(save_folder(), *m_editor->slot) : m_editor->file;
+    const std::string note = core::path_to_utf8(from) + "\n" + m_editor->source_name + "\n";
     const auto* data = reinterpret_cast<const std::uint8_t*>(note.data());
     if (auto written = core::write_file_atomic(file, *bytes); !written) {
         std::fprintf(stderr, "editor: no recovery: %s\n", written.error().message.c_str());
@@ -451,13 +519,14 @@ void MapViewer::editor_offer_recovery() {
 void MapViewer::editor_recover() {
     const std::filesystem::path file = editor_recovery_file();
     const auto [path, name] = read_recovery_note(file);
-    if (auto opened = editor_open(file); !opened) {
+    const std::filesystem::path source = core::path_from_utf8(path);
+    const std::optional<std::size_t> slot = editor_slot_of(source);
+    if (auto opened = editor_open(file, slot); !opened) {
         editor_notice(ui::tr("editor.open_failed", {ui::error_text(opened.error(), "editor")}), true,
                       opened.error().message);
         return;
     }
-    const std::filesystem::path source = core::path_from_utf8(path);
-    m_editor->file = own_file(source) ? source : std::filesystem::path();
+    m_editor->file = own_file(source) && !slot ? source : std::filesystem::path();
     m_editor->source_name = name;
     m_editor->document.set_unsaved();
     m_editor_recovery_written = true;  // it stays until the map is saved or discarded
@@ -562,6 +631,16 @@ void MapViewer::list_editor_files() {
         m_editor_files.push_back(p);
         m_editor_file_rows.push_back(EditorFile{shown_name(p), own});
     }
+    // The savegames as the panel DISK names them (not the last game: it is never saved into by hand).
+    const std::string games = ui::tr("editor.open.games");
+    for (std::size_t slot = 0; slot < m_slots.size(); ++slot) {
+        std::error_code ec;
+        const std::filesystem::path p = slot_file(save_folder(), slot);
+        if (slot != kLastGameSlot && !m_slots.names[slot].empty() && std::filesystem::is_regular_file(p, ec)) {
+            m_editor_files.push_back(p);
+            m_editor_file_rows.push_back(EditorFile{m_slots.names[slot], games});
+        }
+    }
     if (const auto folder = m_game.resolve("Szenes")) {
         const std::string original = ui::tr("editor.open.original");
         for (const std::filesystem::path& p : files_in(*folder, {".szs", ".szm"})) {
@@ -629,6 +708,7 @@ EditorModel MapViewer::editor_model() const {
     }
     m.file = m_editor->file.empty() ? m_editor->source_name : shown_name(m_editor->file);
     m.modified = doc.modified();
+    m.savegame = m_editor->slot.has_value();
     m.width = world.width();
     m.height = world.height();
     m.islands = world.islands().size();
@@ -776,14 +856,16 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         case Kind::Open:
             if (request.index < m_editor_files.size()) {
                 const std::filesystem::path file = m_editor_files[request.index];
-                if (auto opened = editor_open(file); !opened) {
+                if (auto opened = editor_open(file, editor_slot_of(file)); !opened) {
                     editor_notice(ui::tr("editor.open_failed", {ui::error_text(opened.error(), "editor")}), true,
                                   opened.error().message);
                 }
             }
             break;
         case Kind::Save:
-            if (m_editor->file.empty()) {
+            if (m_editor->slot) {
+                editor_save_game();
+            } else if (m_editor->file.empty()) {
                 if (EditorPanel* panel = m_hud ? m_hud->editor_panel() : nullptr) {
                     panel->ask_name(m_editor->source_name);
                 }

@@ -79,6 +79,9 @@ constexpr std::uint32_t kQueues = tag("QUEU");
 constexpr std::uint32_t kStances = tag("STNC");
 /// The tutorial flag of the world (TIMERS +0xA5), only written when set.
 constexpr std::uint32_t kTutorial = tag("TUTR");
+/// A running game changed in the editor (World::GameSettings::edited), only written when it is;
+/// right after META, so that the lists of savegames find it in the head of the file.
+constexpr std::uint32_t kEdited = tag("EDTD");
 /// The ships that gave up their way to each Kontor, only written when one did.
 constexpr std::uint32_t kGiveUps = tag("CGUP");
 /// The goods statistics of the cities (City::ledger), only written when one has any.
@@ -224,6 +227,7 @@ constexpr std::array kKnownSections = {kRules,
                                        kMaterialClocks,
                                        kPopulationMarks,
                                        kTutorial,
+                                       kEdited,
                                        kGiveUps,
                                        kFactions,
                                        kLedgers,
@@ -595,6 +599,9 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
                 o.string(p != nullptr ? p->name : std::string());
             },
             Need::Optional);
+        if (world.game_settings().edited) {
+            section(out, kEdited, [&](Writer& o) { o.u8(1); }, Need::Optional);
+        }
         if (const auto& info = world.scenario_info(); info && info->rules) {
             section(out, kScenarioRules, [&](Writer& o) { write_rules(o, *info->rules); }, Need::Optional);
         }
@@ -1111,11 +1118,20 @@ std::optional<SaveMeta> read_meta(std::span<const std::uint8_t> sections) {
         return std::nullopt;
     }
     // A scenario's SCNI follows META, its settings (SRUL) between them. The head may end inside
-    // SCNI: the names come before the long texts, and what is cut off is left out.
+    // SCNI: the names come before the long texts, and what is cut off is left out. The mark of a
+    // game changed in the editor (EDTD) comes first.
     auto next = reader.u32();
-    const auto next_version = reader.u16();
+    auto next_version = reader.u16();
     (void)reader.u16();  // flags
     auto next_size = reader.u32();
+    if (next && *next == kEdited && next_size) {
+        const auto mark = reader.bytes(*next_size);
+        meta.edited = mark && !mark->empty() && (*mark)[0] != 0;
+        next = reader.u32();
+        next_version = reader.u16();
+        (void)reader.u16();  // flags
+        next_size = reader.u32();
+    }
     std::optional<Rules> rules;
     if (next && *next == kScenarioRules && next_size) {
         const auto rules_body = reader.bytes(*next_size);
@@ -1227,6 +1243,12 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                 std::uint8_t on = 0;
                 in.u8(on);
                 d.tutorial = on != 0;
+                break;
+            }
+            case kEdited: {
+                std::uint8_t on = 0;
+                in.u8(on);
+                d.edited = on != 0;
                 break;
             }
             case kIslands:

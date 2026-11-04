@@ -95,4 +95,20 @@ core::Result<core::Bytes> Document::save(const assets::BuildingTable& buildings)
     return bytes;
 }
 
+core::Result<core::Bytes> Document::save_game(const assets::BuildingTable& buildings) {
+    if (auto valid = sim::validate(*m_world); !valid) {
+        return valid.error();
+    }
+    // The mark is no step of the history: once saved changed, the game stays changed.
+    sim::World::GameSettings settings = m_world->game_settings();
+    settings.edited = true;
+    m_world->set_game_settings(settings);
+    auto bytes = sim::write_game(*m_world, buildings);
+    if (!bytes) {
+        return bytes;
+    }
+    m_saved_state = m_history.state();
+    return bytes;
+}
+
 }  // namespace o1602::editor

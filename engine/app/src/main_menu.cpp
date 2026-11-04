@@ -529,7 +529,8 @@ void MainMenu::refresh_host() {
             // Open1602 adds the time played from the savegame's META (the full line in the settings).
             std::string text = m_slots.names[i].empty() ? std::string("-") : m_slots.names[i];
             if (!m_slots.names[i].empty() && i < m_slots.meta.size() && m_slots.meta[i]) {
-                text += "  (" + save_time(m_slots.meta[i]->time_ms) + ")";
+                text += "  (" + save_time(m_slots.meta[i]->time_ms) +
+                        (m_slots.meta[i]->edited ? ui::tr("save.edited") : std::string()) + ")";
             }
             p.set_text(kRowText + k, text);
         }

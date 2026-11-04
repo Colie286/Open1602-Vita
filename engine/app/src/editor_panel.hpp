@@ -297,6 +297,8 @@ struct EditorModel {
     /// Islands the world plan makes when a game starts (ADR 0013), 0 for a world without a plan.
     std::size_t planned_islands = 0;
     std::size_t players = 0;  ///< humans and computers
+    /// The document is a savegame opened as such: Save writes it back, marked as changed.
+    bool savegame = false;
     bool can_undo = false;
     bool can_redo = false;
     /// The last thing that happened (saved, an error), Windows-1252.

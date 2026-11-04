@@ -674,6 +674,11 @@ void EditorPanel::layout_document(const EditorModel& model) {
     y += kLine;
     f.entry(Rect{m_x, y, m_w, kLine}, ui::tr("editor.players"), count(model.players), Tone::Dim);
     y += kLine + 4;
+    if (model.savegame) {
+        // Saved, the game is marked as changed: it enters no list of best results.
+        f.paragraph(Rect{m_x, y, m_w, 4 * 20}, ui::tr("editor.document.savegame"), Tone::Normal, 20);
+        y += 4 * 20 + 4;
+    }
     // What the files, the pages of the whole map and the tools are: the menu bar above the map and
     // the tool bar left of it (EditorChrome) have them, and each its key.
     const std::int32_t bottom = m_top + m_height - 4;

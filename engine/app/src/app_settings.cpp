@@ -399,8 +399,13 @@ std::string save_time(std::uint64_t ms) {
 }
 
 std::string save_details(const sim::SaveMeta& meta) {
-    return ui::tr("save.details", {meta.player.empty() ? std::string("-") : meta.player, save_time(meta.time_ms),
-                                   std::to_string(meta.width), std::to_string(meta.height)});
+    std::string details =
+        ui::tr("save.details", {meta.player.empty() ? std::string("-") : meta.player, save_time(meta.time_ms),
+                                std::to_string(meta.width), std::to_string(meta.height)});
+    if (meta.edited) {
+        details += ui::tr("save.edited");
+    }
+    return details;
 }
 
 }  // namespace o1602::app

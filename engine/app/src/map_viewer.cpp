@@ -4520,6 +4520,8 @@ sim::GameIdentity MapViewer::game_identity() const {
         game.campaign = m_campaign_part->campaign;
         game.ranking = m_campaign_part->part;
     }
+    // A test game of the editor counts for no list either.
+    game.edited = game.edited || m_test_play.has_value();
     return game;
 }
 

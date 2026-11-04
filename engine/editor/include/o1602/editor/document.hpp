@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The document of the editor (ADR 0013): the world being edited with its undo history. It opens
-// Open1602's own files and the original's scenarios and savegames, and is always saved as an
-// Open1602 scenario (.o1602 with the section SCNI). The simulation never runs on it.
+// Open1602's own files and the original's scenarios and savegames, and is saved as an Open1602
+// scenario (.o1602 with the section SCNI) or, a savegame of Open1602 opened as such, as a savegame
+// marked as changed. The simulation never runs on it.
 #pragma once
 
 #include <cstdint>
@@ -70,6 +71,12 @@ public:
     /// changed, while the world does not hold together (sim::validate) or its description or
     /// markers are wrong. Saving makes the document unmodified.
     [[nodiscard]] core::Result<core::Bytes> save(const assets::BuildingTable& buildings);
+
+    /// The file of the document as an Open1602 savegame: the running game it was opened as (its
+    /// state kept), marked as changed in the editor (World::GameSettings::edited), so that it
+    /// enters no list of best results. Refused while the world does not hold together. Saving
+    /// makes the document unmodified.
+    [[nodiscard]] core::Result<core::Bytes> save_game(const assets::BuildingTable& buildings);
 
     /// What is wrong with the scenario's own parts (description, markers, script), one line each.
     [[nodiscard]] std::vector<std::string> check_scenario() const;

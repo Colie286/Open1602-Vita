@@ -295,11 +295,17 @@ private:
     // ---- The editor (editor_mode.cpp, ADR 0013) ----
     /// Shows `world` in the editor, as a new document of `file` (empty: a new map). The game that
     /// ran goes; out of memory leaves everything as it was.
-    core::Status enter_editor(sim::World world, const std::filesystem::path& file);
+    /// With a `slot` the world is that savegame, edited as a savegame (EditorSession::slot).
+    core::Status enter_editor(sim::World world, const std::filesystem::path& file,
+                              std::optional<std::size_t> slot = std::nullopt);
     /// The editor with the file of the command line (--editor), or a new map.
     void start_editor();
     /// Opens `file` in the editor (a file of Open1602 or of the original).
-    core::Status editor_open(const std::filesystem::path& file);
+    core::Status editor_open(const std::filesystem::path& file, std::optional<std::size_t> slot = std::nullopt);
+    /// The slot of the savegame list whose file `file` is (named, not the last game), if any.
+    [[nodiscard]] std::optional<std::size_t> editor_slot_of(const std::filesystem::path& file) const;
+    /// Writes the savegame of the document back to its slot, marked as changed.
+    void editor_save_game();
     /// A new map in the editor.
     core::Status editor_new(const EditorNewMap& map);
     /// Saves the document under `file`; what happened goes to the panel's notice.
@@ -831,6 +837,9 @@ private:
         std::uint32_t preview_rolls = 0;
         /// The views kept with Ctrl and a digit, for this session.
         std::array<std::optional<render::Camera>, 10> bookmarks{};  ///< the keys 1..9, 0
+        /// A savegame opened as such (from the list of savegames): its slot, which Save writes
+        /// back as a savegame marked as changed. Nothing for a scenario or a new map.
+        std::optional<std::size_t> slot{};
     };
     std::optional<EditorSession> m_editor;
     /// The editor aside while a test game of its map runs: its world (view only), its document,

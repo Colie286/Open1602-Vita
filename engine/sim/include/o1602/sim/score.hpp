@@ -72,6 +72,8 @@ struct GameIdentity {
     std::uint32_t ranking = 0;
     std::uint32_t mission_number = kNone;  ///< SZENE_MISSNR, else TIMERS +0xA7
     std::uint32_t campaign = kNone;        ///< SZENE_KAMPAGNE
+    /// A game changed in the editor (World::GameSettings::edited): it enters no list of best results.
+    bool edited = false;
 };
 [[nodiscard]] GameIdentity game_identity(const World& world);
 

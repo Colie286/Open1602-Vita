@@ -47,6 +47,7 @@ struct SaveMeta {
     /// version and briefings where the head read holds them whole, else empty. Nothing for a
     /// savegame.
     std::optional<ScenarioInfo> scenario;
+    bool edited = false;  ///< a running game changed in the editor (section EDTD)
 };
 
 /// What the header of a savegame says, for a list of savegames.

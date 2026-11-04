@@ -719,6 +719,8 @@ public:
         /// TIMERS +0xA5: the tutorial; set only in Einführungsspiel0-4. Its computer
         /// opponents keep their towns as they are and do not recruit, buy peace or order ships.
         bool tutorial = false;
+        /// A running game changed in the editor (section EDTD): it enters no list of best results.
+        bool edited = false;
     };
     [[nodiscard]] const GameSettings& game_settings() const noexcept { return m_game_settings; }
     void set_game_settings(const GameSettings& s) noexcept { m_game_settings = s; }
