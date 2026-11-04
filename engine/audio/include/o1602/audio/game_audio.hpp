@@ -129,22 +129,34 @@ private:
     std::vector<std::shared_ptr<const Pcm>> m_replaced;
 };
 
-/// The widest view the original hears its scenery in (birds and surf): its game view at 1024 x 768
-/// (768 x 734) at the small zoom level, in pixels of the large level (four each).
-inline constexpr double kWidestViewWidth = 768.0 * 4;
-inline constexpr double kWidestViewHeight = 734.0 * 4;
+/// The original's game view at 1024 x 768 (768 x 734 pixels): it hears its scenery (birds and
+/// surf) only there, at each of its zoom levels (one, two and four pixels of the large level per
+/// screen pixel).
+inline constexpr double kOriginalViewWidth = 768.0;
+inline constexpr double kOriginalViewHeight = 734.0;
+/// The original's closest and farthest zoom: screen pixels per pixel of the large level.
+inline constexpr double kOriginalNearMagnification = 1.0;
+inline constexpr double kOriginalFarMagnification = 0.25;
+/// The widest view the original hears its scenery in: its game view at the small zoom level, in
+/// pixels of the large level (four each).
+inline constexpr double kWidestViewWidth = kOriginalViewWidth / kOriginalFarMagnification;
+inline constexpr double kWidestViewHeight = kOriginalViewHeight / kOriginalFarMagnification;
 
-/// How far the scenery is heard, in view half sizes: the whole view up to the original's widest
-/// one, beyond that (the free zoom shows more) only the middle that the widest view covers. More
-/// trees and beaches on screen thus never sound more often than in the original.
+/// How far the scenery is heard, in view half sizes: the whole view up to the part of the world
+/// the original's game view shows at the same magnification, beyond that (a larger screen or the
+/// free zoom shows more) only the middle that view covers. A wood fills a large screen with many
+/// more trees than the original's view, and every 25th of them calls; so more trees on screen
+/// never sound more often than in the original at that zoom.
 struct SceneryReach {
     float x = 1.0F;
     float y = 1.0F;
 };
-/// The reach for a view of `width` x `height` pixels of the large zoom level.
-[[nodiscard]] SceneryReach scenery_reach(double width, double height) noexcept;
+/// The reach for a view of `width` x `height` pixels of the large zoom level, shown at
+/// `magnification` screen pixels per pixel of the large level. The original's view at that
+/// magnification (between its closest and farthest zoom) is 768 x 734 screen pixels.
+[[nodiscard]] SceneryReach scenery_reach(double width, double height, double magnification) noexcept;
 /// Where a scenery sound at (x, y) of the view (Effects::request) plays: within the reach it is
-/// placed as in the original's widest view, so it pans and softens as there; nothing outside.
+/// placed as in the original's view, so it pans and softens as there; nothing outside.
 [[nodiscard]] std::optional<std::pair<float, float>> scenery_place(const SceneryReach& reach, float x,
                                                                    float y) noexcept;
 

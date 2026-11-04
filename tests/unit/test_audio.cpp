@@ -439,23 +439,41 @@ TEST_CASE("audio: music by name, battle music near shots, back after 25 s with a
     CHECK(music.playing() == "b Song");
 }
 
-TEST_CASE("audio: scenery is heard no farther than in the original's widest view") {
-    // Up to the original's widest view the whole view hears, unchanged.
-    const audio::SceneryReach close = audio::scenery_reach(1024.0, 768.0);
-    CHECK(close.x == 1.0F);
-    CHECK(close.y == 1.0F);
-    const audio::SceneryReach widest = audio::scenery_reach(audio::kWidestViewWidth, audio::kWidestViewHeight);
+TEST_CASE("audio: scenery is heard no farther than in the original's view at that zoom") {
+    // The original's view at its farthest zoom: the whole view hears, unchanged.
+    const audio::SceneryReach widest =
+        audio::scenery_reach(audio::kWidestViewWidth, audio::kWidestViewHeight, audio::kOriginalFarMagnification);
     CHECK(widest.x == 1.0F);
     CHECK(widest.y == 1.0F);
+    // A smaller view than the original's at the closest zoom: unchanged too.
+    const audio::SceneryReach close = audio::scenery_reach(700.0, 600.0, 1.0);
+    CHECK(close.x == 1.0F);
+    CHECK(close.y == 1.0F);
     const auto same = audio::scenery_place(close, 0.5F, -0.25F);
     REQUIRE(same);
     CHECK(same->first == 0.5F);
     CHECK(same->second == -0.25F);
     CHECK(!audio::scenery_place(close, 1.0F, 0.0F));
 
+    // A large screen at the closest zoom (2560 x 1440 at one screen pixel per large pixel) shows
+    // far more of a wood than the original's 768 x 734: only that middle hears.
+    const audio::SceneryReach big = audio::scenery_reach(2560.0, 1440.0, 1.0);
+    CHECK(std::fabs(big.x - 768.0F / 2560.0F) < 1e-6F);
+    CHECK(std::fabs(big.y - 734.0F / 1440.0F) < 1e-6F);
+    // The same screen at the middle zoom: twice as far, as in the original's middle zoom.
+    const audio::SceneryReach middle = audio::scenery_reach(5120.0, 2880.0, 0.5);
+    CHECK(std::fabs(middle.x - 1536.0F / 5120.0F) < 1e-6F);
+    CHECK(std::fabs(middle.y - 1468.0F / 2880.0F) < 1e-6F);
+    // Magnified beyond the closest zoom (a high-density screen drawing every pixel twice): the
+    // original's closest view in world pixels, no less.
+    const audio::SceneryReach sharp = audio::scenery_reach(1280.0, 720.0, 2.0);
+    CHECK(std::fabs(sharp.x - 768.0F / 1280.0F) < 1e-6F);
+    CHECK(sharp.y == 1.0F);
+
     // Zoomed out to four times the original's widest view (the free zoom's 0.2x on a large
     // screen): only the middle quarter hears, a sixteenth of the area, and as loud as there.
-    const audio::SceneryReach far = audio::scenery_reach(4 * audio::kWidestViewWidth, 4 * audio::kWidestViewHeight);
+    const audio::SceneryReach far =
+        audio::scenery_reach(4 * audio::kWidestViewWidth, 4 * audio::kWidestViewHeight, 0.0625);
     CHECK(std::fabs(far.x - 0.25F) < 1e-6F);
     CHECK(std::fabs(far.y - 0.25F) < 1e-6F);
     CHECK(!audio::scenery_place(far, 0.3F, 0.0F));
@@ -464,7 +482,7 @@ TEST_CASE("audio: scenery is heard no farther than in the original's widest view
     REQUIRE(edge);
     CHECK(std::fabs(edge->first - 0.8F) < 1e-5F);
     CHECK(std::fabs(edge->second + 0.4F) < 1e-5F);
-    // Placed there it pans and softens like the same spot of the original's widest view.
+    // Placed there it pans and softens like the same spot of the original's view.
     const auto heard = audio::Effects::placement(edge->first, edge->second);
     const auto original = audio::Effects::placement(0.8F, -0.4F);
     REQUIRE(heard);
@@ -472,9 +490,13 @@ TEST_CASE("audio: scenery is heard no farther than in the original's widest view
     CHECK(std::fabs(heard->first - original->first) < 1e-5F);
 
     // A wide but short view: only the width is cut.
-    const audio::SceneryReach wide = audio::scenery_reach(2 * audio::kWidestViewWidth, 1000.0);
+    const audio::SceneryReach wide =
+        audio::scenery_reach(2 * audio::kWidestViewWidth, 1000.0, audio::kOriginalFarMagnification);
     CHECK(std::fabs(wide.x - 0.5F) < 1e-6F);
     CHECK(wide.y == 1.0F);
+    // Without a usable magnification the widest view applies.
+    const audio::SceneryReach unknown = audio::scenery_reach(audio::kWidestViewWidth, 100.0, 0.0);
+    CHECK(unknown.x == 1.0F);
 }
 
 namespace {

@@ -248,11 +248,15 @@ void Effects::flush() {
     m_queue.clear();
 }
 
-SceneryReach scenery_reach(double width, double height) noexcept {
-    const auto share = [](double widest, double view) {
-        return view > widest ? static_cast<float>(widest / view) : 1.0F;
+SceneryReach scenery_reach(double width, double height, double magnification) noexcept {
+    // The part of the world the original's view shows at this magnification, in large pixels.
+    const double m = std::isfinite(magnification) && magnification > 0.0
+                         ? std::clamp(magnification, kOriginalFarMagnification, kOriginalNearMagnification)
+                         : kOriginalFarMagnification;
+    const auto share = [](double original, double view) {
+        return view > original ? static_cast<float>(original / view) : 1.0F;
     };
-    return SceneryReach{share(kWidestViewWidth, width), share(kWidestViewHeight, height)};
+    return SceneryReach{share(kOriginalViewWidth / m, width), share(kOriginalViewHeight / m, height)};
 }
 
 std::optional<std::pair<float, float>> scenery_place(const SceneryReach& reach, float x, float y) noexcept {

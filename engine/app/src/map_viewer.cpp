@@ -2061,8 +2061,8 @@ void MapViewer::place_listener() {
             return std::make_pair(static_cast<float>((px - cx) / hw), static_cast<float>((py - cy) / hh));
         },
         static_cast<float>(v.width), static_cast<float>(v.height),
-        // The view in pixels of the large zoom level.
-        audio::scenery_reach(v.width * large_per_pixel, v.height * large_per_pixel));
+        // The view in pixels of the large zoom level, and how large it is drawn.
+        audio::scenery_reach(v.width * large_per_pixel, v.height * large_per_pixel, m_camera.magnification()));
 }
 
 void MapViewer::show_notices(const std::vector<Notice>& notices) {
