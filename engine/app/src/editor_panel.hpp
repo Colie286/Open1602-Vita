@@ -755,14 +755,15 @@ private:
     /// The size the page "Map size" offers.
     std::uint32_t m_size_width = 0;
     std::uint32_t m_size_height = 0;
-    std::size_t m_first = 0;         ///< the first file shown on the page "Open", the first line on "Check"
-    std::size_t m_page_rows = 1;     ///< lines of the check list on its page as laid out last
-    std::size_t m_player = 0;        ///< the slot the page "Players" shows
-    std::size_t m_mission = 0;       ///< the mission the page "Goals" shows
-    std::size_t m_scenario_row = 0;  ///< the row of the page "Scenario" being typed
-    std::size_t m_partner = 0;       ///< the other slot the page "Relations" shows
-    std::size_t m_first_column = 0;  ///< the first slot of the diplomacy table's columns
-    std::int32_t m_screen_w = 0;     ///< the window, design units (0: no dialogs)
+    std::size_t m_first = 0;                    ///< the first file shown on the page "Open", the first line on "Check"
+    std::size_t m_page_rows = 1;                ///< lines of the check list on its page as laid out last
+    std::size_t m_player = 0;                   ///< the slot the page "Players" shows
+    std::size_t m_mission = 0;                  ///< the mission the page "Goals" shows
+    std::size_t m_scenario_row = 0;             ///< the row of the page "Scenario" being typed
+    std::size_t m_partner = 0;                  ///< the other slot the page "Relations" shows
+    std::optional<std::size_t> m_shown_marker;  ///< the marker chosen when the page Markers was laid out last
+    std::size_t m_first_column = 0;             ///< the first slot of the diplomacy table's columns
+    std::int32_t m_screen_w = 0;                ///< the window, design units (0: no dialogs)
     std::int32_t m_screen_h = 0;
     std::int32_t m_column_x = 0;             ///< where the column begins in the window
     Page m_laid_page = Page::Document;       ///< the page laid out last

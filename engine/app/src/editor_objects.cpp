@@ -221,7 +221,7 @@ void MapViewer::editor_object_model(EditorModel& m) const {
     m.object_owners = owners.size();
     if (!owners.empty()) {
         const sim::Player* p = m_editor->document.world().player(owners[m_editor->objects.owner % owners.size()]);
-        m.object_owner = p != nullptr ? player_name(*p) : std::string("-");
+        m.object_owner = p != nullptr ? editor_player_label(*p) : std::string("-");
     }
 }
 
@@ -248,7 +248,7 @@ void MapViewer::editor_city_model(EditorModel& m) const {
     EditorCity city;
     city.name = c->name;
     const sim::Player* owner = world.player(c->owner);
-    city.owner = owner != nullptr ? player_name(*owner) : std::string("-");
+    city.owner = owner != nullptr ? editor_player_label(*owner) : std::string("-");
     const auto* panel = m_hud ? m_hud->editor_panel() : nullptr;
     if (panel != nullptr && panel->page() != EditorPanel::Page::CityGoods &&
         panel->page() != EditorPanel::Page::Selection) {
@@ -309,8 +309,9 @@ void MapViewer::editor_city_request(const EditorRequest& request) {
                 m_editor->document.perform(std::move(op).value());
                 editor_islands_changed();
                 const sim::Player* p = m_editor->document.world().player(owners[i]);
-                editor_notice(ui::tr("editor.city.owner_changed", {p != nullptr ? player_name(*p) : std::string()}),
-                              false, "city owner changed");
+                editor_notice(
+                    ui::tr("editor.city.owner_changed", {p != nullptr ? editor_player_label(*p) : std::string()}),
+                    false, "city owner changed");
                 return;
             }
         }

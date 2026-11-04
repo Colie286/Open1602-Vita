@@ -122,7 +122,7 @@ std::string building_name(const assets::BuildingType& b, const assets::BuildingT
 /// The name of the player `owner` (Windows-1252), a dash for nobody.
 std::string owner_name(const sim::World& world, sim::PlayerId owner) {
     const sim::Player* p = world.player(owner);
-    return p != nullptr ? player_name(*p) : std::string("-");
+    return p != nullptr ? MapViewer::editor_player_label(*p) : std::string("-");
 }
 
 /// The check list's line of a problem with the original's limits, in the player's language.
@@ -937,16 +937,20 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         }
         case Kind::Undo: {
             const std::string what = ui::tr("editor.step." + std::string(m_editor->document.history().next_undo()));
+            const std::vector<sim::ScenarioMarker> markers = m_editor->document.world().markers();
             if (m_editor->document.undo()) {
                 editor_islands_changed();
+                editor_markers_stepped(markers);
                 editor_notice(ui::tr("editor.undone", {what}), false, "undo");
             }
             break;
         }
         case Kind::Redo: {
             const std::string what = ui::tr("editor.step." + std::string(m_editor->document.history().next_redo()));
+            const std::vector<sim::ScenarioMarker> markers = m_editor->document.world().markers();
             if (m_editor->document.redo()) {
                 editor_islands_changed();
+                editor_markers_stepped(markers);
                 editor_notice(ui::tr("editor.redone", {what}), false, "redo");
             }
             break;

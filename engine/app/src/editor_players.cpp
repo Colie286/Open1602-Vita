@@ -43,7 +43,7 @@ void MapViewer::editor_players_model(EditorModel& m) const {
         const sim::Player& p = world.players()[slot];
         EditorPlayer e;
         e.slot = slot;
-        e.name = player_name(p);
+        e.name = editor_player_label(p);
         e.own_name = p.name;
         e.human = p.role == sim::PlayerRole::Human;
         e.banner = p.banner;

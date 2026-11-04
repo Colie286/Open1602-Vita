@@ -540,6 +540,7 @@ error.limit = more than the game holds: {1}
 error.unsupported = the file needs a newer Open1602 or other game data
 error.script = a mod script failed: {1}
 error.scenario_script = the scenario's script failed: {1}
+error.script_message = a script names the message "{1}", which does not exist (messages.toml)
 error.platform = the system refused
 
 # Start dialog of the endless game (ADR 0008)

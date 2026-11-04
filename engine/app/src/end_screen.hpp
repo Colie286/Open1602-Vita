@@ -85,6 +85,8 @@ private:
     void update_strip();
     /// The rank texts the strip and the name get (the panel has no gadgets for them).
     void draw_ranks(std::vector<ui::DrawItem>& out) const;
+    /// Where the hint of the way back into a won game ends (the panel's pixels).
+    [[nodiscard]] std::int32_t hint_bottom() const;
 
     std::optional<ui::Panel> m_panel;
     double m_scale = 1.0;

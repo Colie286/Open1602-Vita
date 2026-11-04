@@ -317,6 +317,8 @@ private:
     bool editor_marker_stroke(std::optional<render::TilePos> tile, Stroke phase);
     void editor_markers_model(EditorModel& m) const;
     void editor_markers_request(const EditorRequest& request);
+    /// The marker chosen again after a step undone or done again changed the markers (`before`).
+    void editor_markers_stepped(const std::vector<sim::ScenarioMarker>& before);
     /// The scenario's script from `file` (a step of undo); false with a notice if it cannot be.
     bool editor_load_script(const std::filesystem::path& file);
     /// The file the script was loaded from, kept in the editor's state (section EDIT) of the

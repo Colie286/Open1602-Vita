@@ -100,6 +100,29 @@ void MapViewer::editor_markers_model(EditorModel& m) const {
     }
 }
 
+void MapViewer::editor_markers_stepped(const std::vector<sim::ScenarioMarker>& before) {
+    const std::vector<sim::ScenarioMarker>& after = m_editor->document.world().markers();
+    const auto named = [](const std::vector<sim::ScenarioMarker>& list, const std::string& name) {
+        return std::find_if(list.begin(), list.end(), [&](const sim::ScenarioMarker& m) { return m.name == name; });
+    };
+    // A marker back (a removal undone, a placing done again): that one chosen.
+    for (std::size_t i = 0; i < after.size(); ++i) {
+        if (named(before, after[i].name) == before.end() && after.size() >= before.size()) {
+            m_editor->marker = i;
+            return;
+        }
+    }
+    // Else the one chosen before, where it is now (or none, where it is gone).
+    if (m_editor->marker && *m_editor->marker < before.size()) {
+        const auto it = named(after, before[*m_editor->marker].name);
+        if (it == after.end()) {
+            m_editor->marker.reset();
+        } else {
+            m_editor->marker = static_cast<std::size_t>(it - after.begin());
+        }
+    }
+}
+
 void MapViewer::editor_markers_request(const EditorRequest& request) {
     using Kind = EditorRequest::Kind;
     const sim::World& world = m_editor->document.world();

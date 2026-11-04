@@ -2763,6 +2763,9 @@ void MapViewer::apply_script_output() {
         if (!announce(message.id, args, std::nullopt,
                       message.about != sim::kNoPlayer ? std::optional<sim::PlayerId>(message.about) : std::nullopt)) {
             std::fprintf(stderr, "script: no message \"%s\" (messages.toml)\n", message.id.c_str());
+            // On the screen too: a script's maker finds the typing error where it shows.
+            m_events.notify(ui::tr("error.script_message", {core::utf8_to_cp1252(message.id)}),
+                            "error.script_message " + message.id, platform::ticks_ms());
         }
     }
 }

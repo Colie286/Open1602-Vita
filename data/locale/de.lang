@@ -512,6 +512,7 @@ error.limit = mehr, als das Spiel fasst: {1}
 error.unsupported = die Datei braucht ein neueres Open1602 oder andere Spieldaten
 error.script = ein Skript eines Mods ist fehlgeschlagen: {1}
 error.scenario_script = das Skript des Szenarios ist fehlgeschlagen: {1}
+error.script_message = ein Skript nennt die Meldung "{1}", die es nicht gibt (messages.toml)
 error.platform = das System hat abgelehnt
 
 # Startdialog des Endlosspiels (ADR 0008)

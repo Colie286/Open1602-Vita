@@ -55,7 +55,7 @@ std::string MapViewer::editor_goal_text(const sim::Mission& m, std::size_t field
     const auto off = [] { return ui::tr("editor.goals.off"); };
     const auto who = [&](std::int64_t slot_plus_one) {
         const sim::Player* p = world.player(static_cast<sim::PlayerId>(slot_plus_one - 1));
-        return p != nullptr ? player_name(*p) : ui::tr("editor.goals.nobody");
+        return p != nullptr ? editor_player_label(*p) : ui::tr("editor.goals.nobody");
     };
     switch (f) {
         case GoalField::Balance:
