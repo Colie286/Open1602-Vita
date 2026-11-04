@@ -8,6 +8,10 @@
 #   (the manual run creates the tag on the commit it was started on).
 # - A manual run without a tag, and a pull request that changes this file, only build the packages
 #   and keep them as workflow artifacts.
+# - macOS runners are often not available for a long time. A manual run with the platforms
+#   "without-macos" publishes the release with Linux and Windows only; a later run with the same
+#   tag and "macos-only" adds the macOS package to that release. Pull requests build no macOS
+#   package, as in ci.yml.
 #
 # SDL 3 is linked statically, and on Windows the C++ runtime too, so that every package runs on its
 # own: Linux needs only the system's C library and zlib, Windows and macOS nothing besides the system.
@@ -28,6 +32,11 @@ on:
         description: 'Mark the release as a pre-release'
         type: boolean
         default: false
+      platforms:
+        description: 'Packages to build: all, without-macos (publish now, add macOS later) or macos-only (add it to an existing release)'
+        type: choice
+        options: [all, without-macos, macos-only]
+        default: all
 
 # Actions are pinned to commit SHAs (the tag in the comment), as in ci.yml.
 permissions:
@@ -50,6 +59,7 @@ jobs:
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       name: ${{ steps.version.outputs.name }}
+      platforms: ${{ steps.platforms.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -80,6 +90,25 @@ jobs:
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "Packages are named Open1602-$name-<platform>${tag:+, published as $tag}"
 
+      # The platforms this run builds (see the top). Built on Ubuntu 24.04, the Linux package needs
+      # glibc 2.39 (Ubuntu 24.04, Debian 13, Fedora 40 and newer, Arch).
+      - name: Choose the platforms
+        id: platforms
+        shell: bash
+        env:
+          CHOICE: ${{ github.event_name == 'pull_request' && 'without-macos' || inputs.platforms || 'all' }}
+        run: |
+          linux='{"name":"Linux","os":"ubuntu-24.04","platform":"linux-x64"}'
+          windows='{"name":"Windows","os":"windows-2025","platform":"windows-x64"}'
+          macos='{"name":"macOS","os":"macos-15","platform":"macos-universal"}'
+          case "$CHOICE" in
+            without-macos) matrix="[$linux,$windows]" ;;
+            macos-only)    matrix="[$macos]" ;;
+            *)             matrix="[$linux,$windows,$macos]" ;;
+          esac
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Platforms ($CHOICE): $matrix"
+
   package:
     name: Package (${{ matrix.name }})
     needs: version
@@ -87,12 +116,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Built on Ubuntu 24.04: the package needs glibc 2.39 (Ubuntu 24.04, Debian 13, Fedora 40
-          # and newer, Arch).
-          - { name: Linux,   os: ubuntu-24.04, platform: linux-x64 }
-          - { name: Windows, os: windows-2025, platform: windows-x64 }
-          - { name: macOS,   os: macos-15,     platform: macos-universal }
+        include: ${{ fromJSON(needs.version.outputs.platforms) }}
     env:
       PACKAGE: Open1602-${{ needs.version.outputs.name }}-${{ matrix.platform }}
     steps:
@@ -305,13 +329,33 @@ jobs:
         working-directory: dist
         run: sha256sum Open1602-* | tee SHA256SUMS.txt
 
+      # A run with "macos-only" adds its package to the release published before without macOS:
+      # the checksums are merged, and the note that macOS follows is taken out of the notes.
+      - name: Add the macOS package to the release
+        if: inputs.platforms == 'macos-only'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          gh release download "$TAG" --pattern SHA256SUMS.txt --dir old
+          grep -v -F -f <(awk '{print $2}' dist/SHA256SUMS.txt) old/SHA256SUMS.txt > sums.txt || true
+          cat dist/SHA256SUMS.txt >> sums.txt
+          sort -k2 sums.txt > dist/SHA256SUMS.txt
+          cat dist/SHA256SUMS.txt
+          gh release upload "$TAG" dist/* --clobber
+          gh release view "$TAG" --json body --jq .body | grep -v '^_The macOS package follows' > notes.md
+          gh release edit "$TAG" --notes-file notes.md
+
       # gh creates the tag on this commit when it does not exist yet (manual run).
       - name: Create the release
+        if: inputs.platforms != 'macos-only'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.version.outputs.tag }}
           PRERELEASE: ${{ inputs.prerelease && '--prerelease' || '' }}
+          PLATFORMS: ${{ inputs.platforms }}
         run: |
           # What changed, written by hand for players in docs/releases/<tag>.md. No generated list
           # of pull requests: the notes say only what the hand-written file says.
@@ -340,5 +384,8 @@ jobs:
 
           SHA-256 checksums are in \`SHA256SUMS.txt\`.
           EOF
+          if [[ "$PLATFORMS" == without-macos ]]; then
+            printf '\n_The macOS package follows: it is added to this release once it is built._\n' >> notes.md
+          fi
           gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "Open1602 ${TAG#v}" \
              --notes-file notes.md $PRERELEASE
