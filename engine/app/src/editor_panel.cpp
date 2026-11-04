@@ -133,6 +133,7 @@ constexpr Id kMissionTab = 210;                ///< + the mission (the tabs of t
 constexpr Id kMissionHolder = 230;             ///< + the player slot holding the mission shown
 constexpr std::size_t kMissionTabs = 16;       ///< the most missions (editor::kMaxMissions)
 constexpr std::size_t kMaxMissionText = 1000;  ///< the longest text of a mission, as the editor's
+constexpr Id kCheckLine = 800;                 ///< + the line of the check list (a line that leads somewhere)
 constexpr Id kRecent = 190;                    ///< + the object placed lately (the page "Objects")
 constexpr Id kPlayerTable = 300;               ///< + 8 * the row + the column of the players' table
 constexpr std::size_t kTableRows = 16;
@@ -359,6 +360,16 @@ std::optional<EditorRequest> EditorPanel::command(EditorCommand command, const E
             return press(kScenarioPage, model, true);
         case EditorCommand::Check:
             return press(kCheck, model, true);
+        case EditorCommand::TestPlay:
+            return EditorRequest{EditorRequest::Kind::TestPlay};
+        case EditorCommand::ExportImage:
+            return EditorRequest{EditorRequest::Kind::ExportImage};
+        case EditorCommand::Find:
+            m_page = Page::Find;
+            m_first = 0;
+            m_text.clear();
+            m_form.set_focus(kField);
+            return std::nullopt;
         case EditorCommand::Keys:
             return EditorRequest{EditorRequest::Kind::ShowKeys};
     }
@@ -506,8 +517,9 @@ void EditorPanel::layout(const EditorModel& model) {
     if (m_page == Page::Check) {
         // The check list's dialog as tall as its lines (up to its room; then it has pages).
         std::int32_t h = 16 + 6 + 32 + (kButtonH + kGap) + 6 + 8;
+        const std::int32_t text_w = dialog_rect().w - 36 - 8;
         for (const EditorCheckLine& line : model.check) {
-            h += line.kind == EditorCheckLine::Kind::Heading ? 2 * 20 + 2 : 3 * 20;
+            h += check_line_h(line, text_w);
         }
         m_check_h = h;
     }
@@ -604,7 +616,39 @@ void EditorPanel::layout_page(const EditorModel& model) {
         case Page::Scenario:
             layout_scenario(model);
             break;
+        case Page::Find:
+            layout_find(model);
+            break;
     }
+}
+
+void EditorPanel::layout_find(const EditorModel& model) {
+    ui::Form& f = m_form;
+    std::int32_t y = m_top + 4;
+    f.label(Rect{m_x, y, m_w, 24}, ui::tr("editor.find.title"), Align::Left, Tone::Heading);
+    y += 28;
+    f.field(kField, Rect{m_x, y, m_w, 28}, m_text);
+    y += 34;
+    const std::int32_t bottom = m_top + m_height - kButtonH - 8;
+    if (m_text.empty()) {
+        f.paragraph(Rect{m_x, y, m_w, bottom - y}, ui::tr("editor.find.note"), Tone::Dim, 20);
+    } else if (model.found.empty()) {
+        f.paragraph(Rect{m_x, y, m_w, bottom - y}, ui::tr("editor.find.none"), Tone::Dim, 20);
+    }
+    constexpr std::int32_t kRow = kButtonH + 2;
+    const auto fit = static_cast<std::size_t>(std::max(0, (bottom - y) / kRow));
+    // What does not fit: a line that says how much more there is (typing more narrows it).
+    const std::size_t shown =
+        std::min<std::size_t>(model.found.size() > fit ? (fit > 0 ? fit - 1 : 0) : model.found.size(), 20);
+    for (std::size_t i = 0; i < shown; ++i) {
+        f.button(kFirstRow + static_cast<Id>(i), Rect{m_x, y, m_w, kButtonH}, model.found[i]);
+        y += kRow;
+    }
+    if (shown < model.found.size()) {
+        f.label(Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.find.more", {std::to_string(model.found.size() - shown)}),
+                Align::Left, Tone::Dim);
+    }
+    f.button(kBack, Rect{m_x, bottom + 4, m_w, kButtonH}, ui::tr("editor.back"));
 }
 
 void EditorPanel::layout_document(const EditorModel& model) {
@@ -1764,6 +1808,16 @@ void EditorPanel::layout_view(const EditorModel& model) {
     f.button(kBack, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.back"));
 }
 
+std::int32_t EditorPanel::check_line_h(const EditorCheckLine& line, std::int32_t width) noexcept {
+    if (line.kind == EditorCheckLine::Kind::Heading) {
+        return 2 * 20 + 2;
+    }
+    // As many lines as the text needs, about 8 design units a letter; three at least.
+    const auto per_line = static_cast<std::size_t>(std::max(20, width / 8));
+    const auto lines = static_cast<std::int32_t>((line.text.size() + per_line - 1) / per_line);
+    return std::clamp(lines + 1, 3, 6) * 20;
+}
+
 void EditorPanel::layout_check(const EditorModel& model) {
     ui::Form& f = m_form;
     std::int32_t y = m_top + 6;
@@ -1771,24 +1825,26 @@ void EditorPanel::layout_check(const EditorModel& model) {
     y += 32;
     // Each line gets three lines of text, a heading two; as many as the room holds above the
     // buttons, the rest on the next pages.
-    constexpr std::int32_t kItem = 3 * 20;
     constexpr std::int32_t kHeading = 2 * 20 + 2;
+    const std::int32_t text_w = m_w - 8;
     const std::size_t n = model.check.size();
     m_first = std::min(m_first, n == 0 ? 0 : n - 1);
     using Kind = EditorCheckLine::Kind;
     // Room for the pages' buttons only where the lines left do not fit without them.
     std::int32_t rest = 0;
     for (std::size_t k = m_first; k < n; ++k) {
-        rest += model.check[k].kind == Kind::Heading ? kHeading : kItem;
+        rest += check_line_h(model.check[k], text_w);
     }
     const std::int32_t one_row = m_top + m_height - (kButtonH + kGap) - 6;
-    const std::int32_t bottom = m_first == 0 && y + rest <= one_row ? one_row : one_row - (kButtonH + kGap);
+    const bool paged = m_first > 0 || y + rest > one_row;
+    const std::int32_t bottom = paged ? one_row - (kButtonH + kGap) : one_row;
     std::size_t i = m_first;
     for (; i < n; ++i) {
         const EditorCheckLine& line = model.check[i];
-        const std::int32_t h = line.kind == Kind::Heading ? kHeading : kItem;
+        const std::int32_t h = check_line_h(line, text_w);
         // A heading goes to the next page with its first line.
-        const std::int32_t needs = line.kind == Kind::Heading && i + 1 < n ? h + kItem : h;
+        const std::int32_t needs =
+            line.kind == Kind::Heading && i + 1 < n ? h + check_line_h(model.check[i + 1], text_w) : h;
         if (y + needs > bottom && i > m_first) {
             break;
         }
@@ -1798,17 +1854,21 @@ void EditorPanel::layout_check(const EditorModel& model) {
             const Tone tone = line.kind == Kind::Error || line.kind == Kind::Warning ? Tone::Warning
                               : line.kind == Kind::Fine                              ? Tone::Normal
                                                                                      : Tone::Dim;
-            f.paragraph(Rect{m_x + 8, y, m_w - 8, kItem}, line.text, tone, 20);
+            if (line.target != EditorCheckLine::Target::None) {
+                f.row(kCheckLine + static_cast<Id>(i), Rect{m_x, y, m_w, h - 4}, false);
+            }
+            f.paragraph(Rect{m_x + 8, y, m_w - 8, h}, line.text, tone, 20);
         }
         y += h;
     }
     m_page_rows = std::max<std::size_t>(1, i - m_first);
-    y += 4;
-    if (m_first > 0 || i < n) {
+    // The buttons at the foot, at the same place on every page.
+    y = one_row + 4;
+    if (paged) {
         const std::int32_t half = (m_w - kGap) / 2;
-        f.button(kPrevious, Rect{m_x, y, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
-        f.button(kNext, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.next"), i < n);
-        y += kButtonH + kGap;
+        const std::int32_t row = y - (kButtonH + kGap);
+        f.button(kPrevious, Rect{m_x, row, half, kButtonH}, ui::tr("editor.previous"), m_first > 0);
+        f.button(kNext, Rect{m_x + half + kGap, row, half, kButtonH}, ui::tr("editor.next"), i < n);
     }
     f.button(kBack, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.back"));
 }
@@ -1820,6 +1880,9 @@ std::vector<ui::DrawItem> EditorPanel::draw(const EditorModel& model,
 }
 
 std::optional<EditorRequest> EditorPanel::commit_name() {
+    if (m_page == Page::Find) {
+        return m_text.empty() ? std::nullopt : std::optional{EditorRequest{EditorRequest::Kind::FindGo, 0}};
+    }
     if (m_page == Page::ScenarioText) {
         m_page = Page::Scenario;
         m_form.set_focus(std::nullopt);
@@ -2306,12 +2369,26 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
             return r;
         }
         case kPrevious: {
-            // The check list and the stock go back by the lines their page shows.
+            // The check list and the stock go back to where the page before began.
+            while (!m_page_starts.empty() && m_page_starts.back() >= m_first) {
+                m_page_starts.pop_back();  // of another list
+            }
+            if (paged_by_rows(m_page) && !m_page_starts.empty()) {
+                m_first = m_page_starts.back();
+                m_page_starts.pop_back();
+                return std::nullopt;
+            }
             const std::size_t rows = paged_by_rows(m_page) ? m_page_rows : kRows;
             m_first = m_first > rows ? m_first - rows : 0;
             return std::nullopt;
         }
         case kNext:
+            if (paged_by_rows(m_page)) {
+                while (!m_page_starts.empty() && m_page_starts.back() >= m_first) {
+                    m_page_starts.pop_back();
+                }
+                m_page_starts.push_back(m_first);
+            }
             m_first += paged_by_rows(m_page) ? m_page_rows : kRows;
             return std::nullopt;
         default:
@@ -2412,6 +2489,35 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
         EditorRequest r{EditorRequest::Kind::MissionHolder, m_mission};
         r.amount = static_cast<std::uint32_t>(*id - kMissionHolder);
         return r;
+    }
+    if (*id >= kCheckLine && *id < kCheckLine + static_cast<Id>(model.check.size()) && m_page == Page::Check) {
+        const EditorCheckLine& line = model.check[static_cast<std::size_t>(*id - kCheckLine)];
+        using Target = EditorCheckLine::Target;
+        switch (line.target) {
+            case Target::None:
+                return std::nullopt;
+            case Target::Island:
+                return EditorRequest{EditorRequest::Kind::ShowIsland, line.index};
+            case Target::Goals:
+                m_mission = line.index;
+                m_page = Page::Goals;
+                m_first = 0;
+                return std::nullopt;
+            case Target::Scenario:
+                return press(kScenarioPage, model, true);
+            case Target::Players:
+                return press(kPlayersPage, model, true);
+            case Target::WorldSize:
+                return press(kWorldSizePage, model, true);
+        }
+        return std::nullopt;
+    }
+    if (*id >= kFirstRow && *id < kFirstRow + 20 && m_page == Page::Find) {
+        const auto row = static_cast<std::size_t>(*id - kFirstRow);
+        if (row < model.found.size()) {
+            return EditorRequest{EditorRequest::Kind::FindGo, row};
+        }
+        return std::nullopt;
     }
     if (*id >= kFirstRow && *id < kFirstRow + static_cast<Id>(kEditorScenarioRows) && m_page == Page::Scenario) {
         const auto row = static_cast<std::size_t>(*id - kFirstRow);

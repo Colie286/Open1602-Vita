@@ -61,6 +61,9 @@ public:
 
     /// Whether the world differs from what was opened or saved last (undo back to it: not modified).
     [[nodiscard]] bool modified() const noexcept { return m_history.state() != m_saved_state; }
+    /// Modified until saved, whatever is undone: a document whose world was not saved where it is
+    /// opened from (the editor's recovery after a crash).
+    void set_unsaved() noexcept { m_saved_state = ~std::uint64_t{0}; }
 
     /// The file of the document as an Open1602 scenario: a world that is no scenario yet gets an
     /// empty description (ScenarioInfo) first, as one step of the history. Refused, with nothing

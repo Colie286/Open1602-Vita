@@ -714,7 +714,9 @@ core::Status MapViewer::install_graphics(render::Zoom zoom, render::PreparedGrap
 }
 
 void MapViewer::quit() {
-    if (m_editor && m_editor->document.modified() && m_hud && !m_hud->asking()) {
+    const bool changed =
+        (m_editor && m_editor->document.modified()) || (m_test_play && m_test_play->editor.document.modified());
+    if (changed && m_hud && !m_hud->asking()) {
         // The editor's changes are not kept anywhere else: ask first.
         EditorRequest request{EditorRequest::Kind::Close};
         request.name = "quit";
@@ -1133,7 +1135,8 @@ void MapViewer::autosave_if_due() {
     // one can go on from it.
     const bool playing = m_hud && !m_hud->menu_active() && !m_pending_load &&
                          !(m_session && (m_session->ended() || m_session->waiting()));
-    if (!playing || !m_autosave.due(m_state->simulation.game_time_ms(), m_app_settings.display.autosave_minutes)) {
+    if (!playing || (m_test_play && m_test_play->running) ||
+        !m_autosave.due(m_state->simulation.game_time_ms(), m_app_settings.display.autosave_minutes)) {
         return;
     }
     // In the frame only what has to see the game as it is now: its sections, unpacked. Packing
@@ -2620,9 +2623,13 @@ void MapViewer::apply_hud(const Hud::Action& action) {
             if (auto pending = std::exchange(m_editor_pending, std::nullopt)) {
                 // "Discard the changes?" of the editor.
                 if (action.step == 0) {
+                    if (pending->kind == EditorRequest::Kind::Recover) {
+                        drop_editor_recovery();  // not wanted
+                    }
                     break;
                 }
                 if (pending->kind == EditorRequest::Kind::Close && pending->name == "quit") {
+                    drop_editor_recovery();
                     std::fprintf(stderr, "quit: the key for quitting (Ctrl+Q), the editor's changes discarded\n");
                     m_running = false;
                     break;
@@ -2637,6 +2644,10 @@ void MapViewer::apply_hud(const Hud::Action& action) {
                 if (m_hud && m_hud->menu_active()) {
                     std::fprintf(stderr, "quit: \"Beenden\" in the main menu\n");
                     m_running = false;
+                    break;
+                }
+                if (m_test_play && m_test_play->running) {
+                    editor_end_test_play();  // a test game is not kept: back to the editor
                     break;
                 }
                 // "Ende": the game is kept as lastgame, then back to the main menu
@@ -3212,7 +3223,8 @@ void MapViewer::apply_options() {
                 // The original leaves at once (M1 in the report); Open1602 asks first.
                 if (m_options.confirm) {
                     m_quit_pending = true;
-                    m_hud->ask(ui::tr("dialog.quit_game"));
+                    m_hud->ask(
+                        ui::tr(m_test_play && m_test_play->running ? "dialog.quit_test_game" : "dialog.quit_game"));
                 } else {
                     m_quit_pending = true;
                     Hud::Action yes{Hud::Action::Kind::Answer};
@@ -3748,6 +3760,11 @@ core::Status MapViewer::replace_world(sim::World world, const std::filesystem::p
 }
 
 void MapViewer::adopt_state(std::unique_ptr<GameState> next, const std::filesystem::path& source) {
+    // Another game than the test game: the editor still waits (the menu's "Editor" leads back to
+    // it), the key of the test game no longer leads there.
+    if (m_test_play) {
+        m_test_play->running = false;
+    }
     if (m_editor && !next->view_only) {
         // A game takes the editor's place: its document edits the world that goes now.
         m_editor.reset();
@@ -4017,10 +4034,15 @@ void MapViewer::apply_menu() {
                 continue;
             }
             case MenuEvent::Kind::Editor:
+                if (m_test_play) {
+                    editor_end_test_play();  // the editor that waits for its test game
+                    return;
+                }
                 started = enter_editor(sea_world(sim::World::kOriginalWidth, sim::World::kOriginalHeight), {});
                 if (!started) {
                     break;
                 }
+                editor_offer_recovery();
                 return;  // the editor took the menu's place
             case MenuEvent::Kind::NameEntered:
                 // "Unter welcher Flagge wollt Ihr segeln?" and four more, one at random (Speech8
@@ -4107,6 +4129,10 @@ void MapViewer::present() {
 }
 
 void MapViewer::quick_save() {
+    if (m_test_play && m_test_play->running) {
+        editor_end_test_play();  // a test game of the editor's map: its key leads back
+        return;
+    }
     const std::filesystem::path path = save_folder() / ("quicksave" + std::string(sim::kSaveExtension));
     const auto status = save_game(path);
     const std::string file = core::path_to_utf8(path.filename());

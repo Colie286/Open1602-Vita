@@ -276,6 +276,17 @@ TEST_CASE("editor document: a scenario is saved, opened and keeps its own parts"
     auto opened = editor::Document::open(*bytes, buildings, nullptr);
     REQUIRE(opened.ok());
     CHECK(!opened->modified());
+    // A recovered document stays modified until it is saved.
+    {
+        auto recovered = editor::Document::open(*bytes, buildings, nullptr);
+        REQUIRE(recovered.ok());
+        recovered->set_unsaved();
+        CHECK(recovered->modified());
+        CHECK(!recovered->undo());
+        CHECK(recovered->modified());
+        REQUIRE(recovered->save(buildings).ok());
+        CHECK(!recovered->modified());
+    }
     CHECK(opened->world().scenario_info() == info);
     CHECK(opened->world().markers() == markers);
     CHECK(opened->world().scenario_script() == "function on_start() end\n");

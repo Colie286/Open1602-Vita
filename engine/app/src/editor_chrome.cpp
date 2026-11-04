@@ -199,6 +199,12 @@ const char* EditorChrome::command_text(EditorCommand command) noexcept {
             return "editor.scenario.edit";
         case EditorCommand::Check:
             return "editor.check";
+        case EditorCommand::TestPlay:
+            return "editor.test_play";
+        case EditorCommand::ExportImage:
+            return "editor.export_image";
+        case EditorCommand::Find:
+            return "editor.find";
         case EditorCommand::Keys:
             return "editor.menu.keys";
     }
@@ -221,9 +227,13 @@ std::vector<EditorChrome::MenuEntry> EditorChrome::entries(std::size_t menu, con
                     {EditorCommand::Open, true},
                     {EditorCommand::Save, true},
                     {EditorCommand::SaveAs, true},
+                    {EditorCommand::TestPlay, !model.previewing},
+                    {EditorCommand::ExportImage, true},
                     {EditorCommand::Close, true}};
         case 1:
-            return {{EditorCommand::Undo, model.can_undo}, {EditorCommand::Redo, model.can_redo}};
+            return {{EditorCommand::Undo, model.can_undo},
+                    {EditorCommand::Redo, model.can_redo},
+                    {EditorCommand::Find, !model.previewing}};
         case 2:
             return {{EditorCommand::View, true}};
         case 3:

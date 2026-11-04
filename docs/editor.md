@@ -17,8 +17,8 @@ passes. Only the pictures go on as they do (water, flags).
 
 The editor has a frame of its own around the map instead of the game's panel:
 
-- **The menu bar** above the map: **File** (new map, open, save, save as, leave the editor), **Edit**
-  (undo, redo), **View** (the overlays), **Map** (islands, map size, random elements, dice preview),
+- **The menu bar** above the map: **File** (new map, open, save, save as, test play, save the map as a picture, leave the editor), **Edit**
+  (undo, redo, find), **View** (the overlays), **Map** (islands, map size, random elements, dice preview),
   **Players**, **Scenario** (description, rules, goals), **Check** and **Help** (the keys). The menus name each command's key. At
   its right end it shows the map's name, with `*` while it has changes that are not saved.
 - **The tool bar** down the map's left edge: a symbol for each tool, in groups: select; island and
@@ -55,7 +55,7 @@ the original. The menu bar's commands and the tools:
 | Object tools | Buildings, templates, ships, land units, resources, remove (below). |
 | Change map size | Makes the map larger or smaller in steps of 50 tiles, or fits it to its content with some sea around. It grows or is cut at the right and the bottom, so everything keeps its place, and it cannot be cut below the islands, ships, land units and markers. |
 | Overlays | What the map shows over the world: the players' land in their colours, the numbers of the islands, the coordinates of the tile under the mouse. |
-| Check | The check list: what keeps the scenario from being saved (the world must hold together, its description and markers be right), and what the original cannot have (its map size, more islands, cities, ships, land units, towers or players with a start than it holds, larger islands, more ore deposits, content of a package, a script). The second group is a fault only for a scenario that is to keep to the original's limits. |
+| Check | The check list: what keeps the scenario from being saved (the world must hold together, its description and markers be right), and what the original cannot have (its map size, more islands, cities, ships, land units, towers or players with a start than it holds, larger islands, more ore deposits, content of a package, a script). With two starts or more, the start areas: for each player, the islands up to 60 tiles around its start (its first warehouse, else its first ship), their land, the crops they are fertile for, their ore and gold, and how far the nearest rival starts; a warning where a start has much less land than the richest (below 70 percent), or lacks a crop, ore or gold that others have. The original's limits are a fault only for a scenario that is to keep to them. A click on a line leads to what it is about: the island on the map, or the dialog of the description, the goals (on the mission), the players or the map size. |
 | Leave the editor | Back to the main menu. |
 
 New map, Open and Leave the editor ask before changes that are not saved are lost.
@@ -322,12 +322,39 @@ there are, a target player who starts without the cities the loss conditions ask
 | Right button dragged | Land, Water, the brush and Random fill draw the other way (water for land) |
 | Right click | Puts back what is in hand (an island being placed, an object) |
 | Shift and Build dragged | Places along a straight row |
+| F5 | Test play; in the test game F5 leads back |
+| Ctrl+F | Find an island, a city or a ship |
+| Ctrl+1 to Ctrl+0 | Keeps the view as a bookmark (for this session) |
+| 1 to 0 | Goes to the bookmark |
 | F1 | The keys |
 | Escape | Closes a menu, or goes back from a page of the column |
 
 The view's keys are those of the game (WASD and the arrows, Q and E, Page Up and Page Down, F12 for a
 screenshot, F11 for the full screen). F1 shows the keys the editor knows. All of them can be changed
 in `keys.cfg`; the editor's are in the context `editor`.
+
+## Find
+
+**Find** (menu Edit, Ctrl+F) lists, while a name is typed, the islands (by their number), the
+cities and the ships whose names hold it. A click on one, or Enter for the first, moves the view
+there and selects it.
+
+## Test play
+
+**Test play** (menu File, F5) starts a game of the map as it is now, as the scenario list would
+start it from its file: with the scenario's rules, its random elements rolled, the missions held
+as set. Nothing has to be saved first. In the test game F5 (the quick save's key) leads back to
+the editor as it was: the same map, its undo and the same view. The main menu's **Editor** leads
+back too, also after another game was loaded meanwhile. The test game is not saved automatically, and ending it in the game's menu leads back to the editor without keeping it as `lastgame`. Test play needs a human player.
+
+**Save map as picture** (menu File) writes the map as a PNG into the screenshots folder: two pixels a tile, in the colours of the new game's preview, with the players' starts as white squares.
+
+## Recovery
+
+A minute after a change, and before every test game, the editor keeps a copy of the map in the
+user's data folder (`editor-recovery.o1602`). It goes once the map is saved or its changes are
+discarded. If the editor ended without either (a crash, a power cut), the next time the editor is
+opened from the main menu it offers the copy. A recovered map counts as not saved until it is.
 
 ## Files
 

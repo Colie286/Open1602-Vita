@@ -102,6 +102,10 @@ enum class KeyAction : std::uint16_t {
     EditorRotate,        ///< the piece or object in hand a quarter on
     EditorBrushBigger,   ///< the terrain brush one size larger
     EditorBrushSmaller,  ///< and smaller
+    EditorTestPlay,      ///< a game of the map as it is, and back (ADR 0013)
+    EditorBookmarkSet,   ///< the view kept as bookmark `param` (0..8 for the keys 1..9)
+    EditorBookmarkGo,    ///< the view of bookmark `param`
+    EditorFind,          ///< the page "Find": islands, cities and ships by name
     /// The tools of the tool bar, in its order (app::EditorTool): EditorToolSelect + the tool.
     EditorToolSelect,
     EditorToolIsland,

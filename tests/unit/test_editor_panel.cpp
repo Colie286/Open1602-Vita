@@ -316,7 +316,8 @@ TEST_CASE("editor panel: the overlays go on and off, the check list goes through
     m.check.push_back(Line{"All right.", Line::Kind::Fine});
     m.check.push_back(Line{"The original's limits (not asked for)", Line::Kind::Heading});
     for (int i = 0; i < 10; ++i) {
-        m.check.push_back(Line{"Island " + std::to_string(i + 1) + " has 3 ore deposits", Line::Kind::Note});
+        m.check.push_back(Line{"Island " + std::to_string(i + 1) + " has 3 ore deposits", Line::Kind::Note,
+                               Line::Target::Island, static_cast<std::size_t>(i)});
     }
     (void)panel.draw(m, kNoFonts);
     CHECK(says(panel, "All right."));
@@ -327,6 +328,27 @@ TEST_CASE("editor panel: the overlays go on and off, the check list goes through
     for (const ui::Form::Widget& w : panel.form().widgets()) {
         CHECK(w.rect.y + w.rect.h <= 760);
     }
+    // Back leads to the first page as it was, the heading on top.
+    CHECK(!click(panel, m, "Back").has_value());
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "For saving"));
+    CHECK(!find_enabled(panel, m, "Back"));
+    CHECK(!click(panel, m, "More").has_value());
+    (void)panel.draw(m, kNoFonts);
+    // A line that leads somewhere: the island on the map, the mission in the goals dialog.
+    r = click(panel, m, "Island 10 has 3 ore deposits");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::ShowIsland);
+    CHECK(r->index == 9);
+    m.check.push_back(Line{"Mission 2 has no goal", Line::Kind::Warning, Line::Target::Goals, 1});
+    (void)panel.draw(m, kNoFonts);
+    CHECK(!click(panel, m, "Mission 2 has no goal").has_value());
+    CHECK(panel.page() == EditorPanel::Page::Goals);
+    CHECK(panel.back());
+    (void)click(panel, m, "Check");
+    (void)panel.draw(m, kNoFonts);
+    CHECK(!click(panel, m, "All right.").has_value());  // leads nowhere
+    CHECK(panel.page() == EditorPanel::Page::Check);
     CHECK(!click(panel, m, "Back to the map").has_value());
     CHECK(panel.page() == EditorPanel::Page::Document);
 }
@@ -1575,4 +1597,31 @@ TEST_CASE("editor panel: the description dialog steps the stars and types the te
     REQUIRE(r.has_value());
     CHECK(r->kind == EditorRequest::Kind::ScenarioText);
     CHECK(r->name == "Two Coasts");
+}
+
+TEST_CASE("editor panel: the page Find lists what holds the text and goes there") {
+    ui::set_language("en");
+    EditorPanel panel;
+    panel.set_room(184, 564);
+    EditorModel m = document();
+    CHECK(!panel.command(app::EditorCommand::Find, m).has_value());
+    REQUIRE(panel.page() == EditorPanel::Page::Find);
+    CHECK(panel.typing());
+    (void)panel.draw(m, kNoFonts);
+    CHECK(says(panel, "Type the name"));
+    CHECK(!panel.key(13).has_value());  // nothing typed: nowhere to go
+    panel.type("Hav");
+    CHECK(panel.find_text() == "Hav");
+    m.found = {"City Havn (island 3)", "Ship Havfrue"};
+    (void)panel.draw(m, kNoFonts);
+    auto r = click(panel, m, "Ship Havfrue");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == EditorRequest::Kind::FindGo);
+    CHECK(r->index == 1);
+    r = panel.key(13);
+    REQUIRE(r.has_value());
+    CHECK(r->index == 0);
+    CHECK(!panel.key(27).has_value());
+    CHECK(panel.page() == EditorPanel::Page::Document);
+    CHECK(panel.find_text().empty());
 }

@@ -96,6 +96,8 @@ public:
 
     /// The user's data folder of Open1602 (settings; the savegames in "saves" below it).
     [[nodiscard]] static std::filesystem::path data_folder();
+    /// A player as the editor's lists name it (Windows-1252): its own name, else its colour.
+    [[nodiscard]] static std::string editor_player_label(const sim::Player& p);
     /// The player's own scenarios (<data folder>/scenarios), listed after the game folder's;
     /// made if it is missing.
     [[nodiscard]] static std::filesystem::path own_scenario_folder();
@@ -138,7 +140,7 @@ private:
     void toggle_pause_video() override;
     void save_template() override;
     void notify(std::string text, std::string_view log) override;
-    void editor_key(ui::KeyAction action) override;
+    void editor_key(ui::KeyAction action, std::uint8_t param = 0) override;
     void editor_pick(const EditorPick& pick) override;
     bool editor_place(const render::TilePos& tile) override;
     bool editor_cancel_place() override;
@@ -304,6 +306,33 @@ private:
     void editor_save(const std::filesystem::path& file);
     /// Out of the editor, to the main menu.
     void leave_editor();
+    /// A game of the editor's map as it is now, started as from its file; the editor waits aside
+    /// with its document, its undo and its view until editor_end_test_play().
+    void editor_test_play();
+    /// Out of the test game, back into the editor as it was.
+    void editor_end_test_play();
+    /// The editor's recovery (a copy of the changed document, written a minute after a change,
+    /// gone once it is saved or its changes discarded) and the file beside it with its file's path
+    /// and name; editor_keep_recovery() every frame of the editor.
+    [[nodiscard]] static std::filesystem::path editor_recovery_file();
+    /// `now_or_never`: written at once if it is due at all (before a test game).
+    void editor_keep_recovery(bool now_or_never = false);
+    void drop_editor_recovery();
+    /// After the editor opened from the menu: the recovery of a session that ended without saving
+    /// is offered.
+    void editor_offer_recovery();
+    void editor_recover();
+    /// What the editor's page "Find" lists for `text`: islands, cities and ships, where the view
+    /// goes and what is selected there.
+    struct Found {
+        std::string label;  ///< Windows-1252
+        EditorPick pick;
+        render::TilePos tile;
+    };
+    [[nodiscard]] std::vector<Found> editor_find(const std::string& text) const;
+
+    /// The building, class, infrastructure and figure values of `world` in the tables.
+    void apply_world_values(const sim::World& world);
     /// Every frame of the editor: what its panel asked for, and the panel's model.
     void apply_editor();
     /// What the panel or a key asked for; a request that would lose changes asks first.
@@ -800,8 +829,23 @@ private:
         /// the map shows a roll of it, and the rolls made since the preview began.
         std::optional<sim::World> preview_plan{};
         std::uint32_t preview_rolls = 0;
+        /// The views kept with Ctrl and a digit, for this session.
+        std::array<std::optional<render::Camera>, 10> bookmarks{};  ///< the keys 1..9, 0
     };
     std::optional<EditorSession> m_editor;
+    /// The editor aside while a test game of its map runs: its world (view only), its document,
+    /// the view and the source the editor had.
+    struct TestPlay {
+        std::unique_ptr<GameState> state;
+        EditorSession editor;
+        render::Camera camera;
+        std::filesystem::path source;
+        bool running = true;  ///< the game is the test game (not one loaded since)
+    };
+    std::optional<TestPlay> m_test_play;
+    std::uint64_t m_editor_recovery_ms = 0;     ///< real time of the last recovery written; 0: none yet
+    std::uint64_t m_editor_recovery_state = 0;  ///< the history's state it holds
+    bool m_editor_recovery_written = false;     ///< written for the document open now
     /// A request of the editor waiting for the answer to "discard the changes?".
     std::optional<EditorRequest> m_editor_pending;
     /// The files of the page "Open", in the order of the panel's list.

@@ -18,9 +18,12 @@
 
 #include "o1602/assets/text_table.hpp"
 #include "o1602/core/file.hpp"
+#include "o1602/core/png_writer.hpp"
 #include "o1602/core/text.hpp"
+#include "o1602/editor/fairness.hpp"
 #include "o1602/editor/goals.hpp"
 #include "o1602/editor/islands.hpp"
+#include "o1602/editor/map_image.hpp"
 #include "o1602/editor/objects.hpp"
 #include "o1602/editor/original_check.hpp"
 #include "o1602/editor/resources.hpp"
@@ -185,8 +188,11 @@ core::Status MapViewer::enter_editor(sim::World world, const std::filesystem::pa
         return core::make_error(core::ErrorCode::PlatformError, "not enough memory for the map");
     }
     finish_autosave();  // the old game's, before its world goes
-    // The old document edits the old world: it goes first.
+    // The old document edits the old world: it goes first, and an editor waiting for its test game.
     m_editor.reset();
+    m_test_play.reset();
+    m_editor_recovery_written = false;
+    m_editor_recovery_ms = 0;
     m_editor_pending.reset();
     adopt_state(std::move(next), file);
     // What the editor saves is a scenario: one with a description from the start, so that saving
@@ -327,6 +333,7 @@ void MapViewer::leave_editor() {
     if (m_editor && m_editor->preview_plan) {
         editor_end_preview();
     }
+    drop_editor_recovery();  // saved, or its changes discarded on the way out
     m_editor.reset();
     m_editor_pending.reset();
     m_input->set_editor(false);
@@ -338,6 +345,213 @@ void MapViewer::leave_editor() {
         m_running = false;
     }
     std::fprintf(stderr, "editor: left\n");
+}
+
+namespace {
+
+/// How long after a change the editor's recovery is written (real time).
+constexpr std::uint64_t kRecoveryMs = 60'000;
+
+std::filesystem::path recovery_note(const std::filesystem::path& file) {
+    std::filesystem::path note = file;
+    note.replace_extension(".txt");
+    return note;
+}
+
+/// The path (UTF-8) and the name (Windows-1252) of the document the recovery holds, one a line.
+std::pair<std::string, std::string> read_recovery_note(const std::filesystem::path& file) {
+    auto bytes = core::read_file(recovery_note(file));
+    if (!bytes) {
+        return {};
+    }
+    const std::string text(bytes->begin(), bytes->end());
+    const std::size_t line = text.find('\n');
+    if (line == std::string::npos) {
+        return {text, {}};
+    }
+    std::string name = text.substr(line + 1);
+    if (!name.empty() && name.back() == '\n') {
+        name.pop_back();
+    }
+    return {text.substr(0, line), name};
+}
+
+}  // namespace
+
+std::filesystem::path MapViewer::editor_recovery_file() {
+    return data_folder() / "editor-recovery.o1602";
+}
+
+void MapViewer::drop_editor_recovery() {
+    std::error_code ec;
+    const std::filesystem::path file = editor_recovery_file();
+    if (std::filesystem::remove(file, ec)) {
+        std::fprintf(stderr, "editor: recovery removed\n");
+    }
+    std::filesystem::remove(recovery_note(file), ec);
+    m_editor_recovery_written = false;
+}
+
+void MapViewer::editor_keep_recovery(bool now_or_never) {
+    const editor::Document& doc = m_editor->document;
+    if (!doc.modified()) {
+        if (m_editor_recovery_written) {
+            drop_editor_recovery();  // saved, or undone back to the file
+        }
+        m_editor_recovery_ms = 0;
+        return;
+    }
+    if (m_editor_recovery_written && doc.history().state() == m_editor_recovery_state) {
+        return;
+    }
+    const std::uint64_t now = platform::real_ticks_ms();
+    if (m_editor->stroke || m_editor->preview_plan) {
+        return;  // not while a stroke is drawn or the map shows a roll of the dice
+    }
+    if (!now_or_never) {
+        if (m_editor_recovery_ms == 0) {
+            m_editor_recovery_ms = now;  // the first change: a minute from now
+            return;
+        }
+        if (now - m_editor_recovery_ms < kRecoveryMs) {
+            return;
+        }
+    }
+    m_editor_recovery_ms = now;
+    m_editor_recovery_state = doc.history().state();
+    auto bytes = sim::write_game(m_state->world, m_buildings);
+    if (!bytes) {
+        std::fprintf(stderr, "editor: no recovery: %s\n", bytes.error().message.c_str());
+        return;
+    }
+    const std::filesystem::path file = editor_recovery_file();
+    std::error_code ec;
+    std::filesystem::create_directories(file.parent_path(), ec);
+    const std::string note = core::path_to_utf8(m_editor->file) + "\n" + m_editor->source_name + "\n";
+    const auto* data = reinterpret_cast<const std::uint8_t*>(note.data());
+    if (auto written = core::write_file_atomic(file, *bytes); !written) {
+        std::fprintf(stderr, "editor: no recovery: %s\n", written.error().message.c_str());
+        return;
+    }
+    (void)core::write_file_atomic(recovery_note(file), std::span<const std::uint8_t>(data, note.size()));
+    m_editor_recovery_written = true;
+}
+
+void MapViewer::editor_offer_recovery() {
+    std::error_code ec;
+    const std::filesystem::path file = editor_recovery_file();
+    if (!m_editor || !m_hud || !std::filesystem::exists(file, ec)) {
+        return;
+    }
+    const auto [path, name] = read_recovery_note(file);
+    m_editor_pending = EditorRequest{EditorRequest::Kind::Recover};
+    m_hud->ask(ui::tr("editor.recover.ask", {name.empty() ? ui::tr("editor.recover.new_map") : name}));
+}
+
+void MapViewer::editor_recover() {
+    const std::filesystem::path file = editor_recovery_file();
+    const auto [path, name] = read_recovery_note(file);
+    if (auto opened = editor_open(file); !opened) {
+        editor_notice(ui::tr("editor.open_failed", {ui::error_text(opened.error(), "editor")}), true,
+                      opened.error().message);
+        return;
+    }
+    const std::filesystem::path source = core::path_from_utf8(path);
+    m_editor->file = own_file(source) ? source : std::filesystem::path();
+    m_editor->source_name = name;
+    m_editor->document.set_unsaved();
+    m_editor_recovery_written = true;  // it stays until the map is saved or discarded
+    editor_notice(ui::tr("editor.recover.done"), false,
+                  "recovered " + (path.empty() ? std::string("a new map") : path));
+}
+
+void MapViewer::apply_world_values(const sim::World& world) {
+    sim::apply_building_values(m_buildings, m_original_buildings, world.balance());
+    sim::apply_resident_classes(m_buildings, m_original_buildings, world.resident_classes());
+    sim::apply_infra_levels(m_buildings, m_original_buildings, world.infra_levels());
+    sim::apply_figure_values(m_figures, m_original_figures, world.balance());
+}
+
+void MapViewer::editor_test_play() {
+    if (!m_editor || !m_state || m_session) {
+        return;
+    }
+    if (sim::first_human_player(m_state->world) == sim::kNoPlayer) {
+        editor_notice(ui::tr("editor.test_play.no_human"), true, "no human player to test with");
+        return;
+    }
+    // The game starts from the bytes a save would write, as the scenario list would start it:
+    // what the test shows is what the file gives.
+    const auto failed = [&](const core::Error& e) {
+        editor_notice(ui::tr("editor.test_play.failed", {ui::error_text(e, "editor")}), true, e.message);
+    };
+    auto bytes = sim::write_game(m_state->world, m_buildings);
+    if (!bytes) {
+        failed(bytes.error());
+        return;
+    }
+    std::vector<std::string> warnings;
+    auto world = sim::read_game(*bytes, m_buildings, &warnings, &m_figures);
+    if (world && world->planned_islands()) {
+        world = sim::roll_planned_islands(*world, m_game, m_buildings, m_options.world, &warnings);
+    }
+    if (!world) {
+        failed(world.error());
+        return;
+    }
+    for (const std::string& w : warnings) {
+        std::fprintf(stderr, "warning: %s\n", w.c_str());
+    }
+    // A test game is a game: what it does is not the editor's, but should it end the program, the
+    // changes are kept.
+    editor_keep_recovery(true);
+    const auto& info = m_state->world.scenario_info();
+    const sim::Rules rules = info && info->rules ? *info->rules : m_options.rules;
+    // The editor aside: its world stays where its document edits it.
+    TestPlay parked{std::move(m_state), std::move(*m_editor), m_camera, m_options.scenario};
+    m_editor.reset();
+    m_editor_pending.reset();
+    if (auto started = replace_world(std::move(world).value(), {}, &rules); !started) {
+        m_state = std::move(parked.state);
+        m_editor.emplace(std::move(parked.editor));
+        apply_world_values(m_state->world);
+        failed(started.error());
+        return;
+    }
+    m_test_play.emplace(std::move(parked));
+    m_test_play->running = true;
+    m_input->set_editor(false);
+    if (m_hud) {
+        m_hud->set_editing(false);
+        lay_out();
+    }
+    const std::string key = m_input->key_of(ui::KeyAction::QuickSave);
+    m_events.notify(ui::tr("notice.test_play", {key.empty() ? std::string("F5") : key}), "notice.test_play",
+                    platform::ticks_ms());
+    std::fprintf(stderr, "editor: test game started\n");
+}
+
+void MapViewer::editor_end_test_play() {
+    if (!m_test_play) {
+        return;
+    }
+    TestPlay parked = std::move(*m_test_play);
+    m_test_play.reset();
+    finish_autosave();
+    apply_world_values(parked.state->world);
+    adopt_state(std::move(parked.state), parked.source);
+    m_editor.emplace(std::move(parked.editor));
+    m_input->set_editor(true);
+    if (m_hud) {
+        m_hud->close_menu();
+        m_hud->set_editing(true);
+    }
+    m_camera = parked.camera;
+    if (m_hud) {
+        lay_out();
+    }
+    editor_islands_changed();
+    editor_notice(ui::tr("editor.test_play.back"), false, "back from the test game");
 }
 
 void MapViewer::list_editor_files() {
@@ -357,6 +571,50 @@ void MapViewer::list_editor_files() {
     }
 }
 
+std::vector<MapViewer::Found> MapViewer::editor_find(const std::string& text) const {
+    std::vector<Found> out;
+    if (!m_editor || text.empty()) {
+        return out;
+    }
+    const auto low = [](std::string s) {
+        for (char& c : s) {
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+        return s;
+    };
+    const std::string wanted = low(text);
+    const auto holds = [&](const std::string& name) { return low(name).find(wanted) != std::string::npos; };
+    const sim::World& world = m_editor->document.world();
+    for (std::size_t i = 0; i < world.islands().size(); ++i) {
+        const std::string name = ui::tr("editor.find.island", {number(i + 1)});
+        if (number(i + 1).find(text) != std::string::npos) {  // by the number only: the word would match every island
+            const sim::WorldIsland& island = world.islands()[i];
+            out.push_back(
+                Found{name, EditorPick{EditorPick::Kind::Island, static_cast<std::uint16_t>(i), island.x, island.y},
+                      render::TilePos{island.x + island.map.width() / 2, island.y + island.map.height() / 2}});
+        }
+    }
+    for (const sim::City& c : world.cities()) {
+        if (!holds(c.name) || c.island >= world.islands().size() || !c.warehouse_x || !c.warehouse_y) {
+            continue;
+        }
+        const sim::WorldIsland& island = world.islands()[c.island];
+        const std::uint32_t x = island.x + *c.warehouse_x;
+        const std::uint32_t y = island.y + *c.warehouse_y;
+        out.push_back(Found{ui::tr("editor.find.city", {c.name}), EditorPick{EditorPick::Kind::Island, c.island, x, y},
+                            render::TilePos{x, y}});
+    }
+    for (const sim::Ship& s : world.ships()) {
+        if (holds(s.name)) {
+            const sim::Player* owner = world.player(s.owner);
+            out.push_back(Found{
+                ui::tr("editor.find.ship", {s.name, owner != nullptr ? editor_player_label(*owner) : std::string("-")}),
+                EditorPick{EditorPick::Kind::Ship, 0, s.x, s.y, s.id}, render::TilePos{s.x, s.y}});
+        }
+    }
+    return out;
+}
+
 EditorModel MapViewer::editor_model() const {
     EditorModel m;
     if (!m_editor) {
@@ -364,6 +622,11 @@ EditorModel MapViewer::editor_model() const {
     }
     const editor::Document& doc = m_editor->document;
     const sim::World& world = doc.world();
+    if (m_hud && m_hud->editor_panel() != nullptr) {
+        for (const Found& f : editor_find(m_hud->editor_panel()->find_text())) {
+            m.found.push_back(f.label);
+        }
+    }
     m.file = m_editor->file.empty() ? m_editor->source_name : shown_name(m_editor->file);
     m.modified = doc.modified();
     m.width = world.width();
@@ -497,6 +760,9 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         m_editor_pending = request;
         m_hud->ask(ui::tr("editor.discard"));
         return;
+    }
+    if (loses && m_editor->document.modified()) {
+        drop_editor_recovery();  // its changes discarded
     }
     switch (request.kind) {
         case Kind::New: {
@@ -644,6 +910,47 @@ void MapViewer::editor_request(const EditorRequest& request, bool confirmed) {
         case Kind::ShowKeys:
             if (m_input) {
                 m_input->show_key_help();
+            }
+            break;
+        case Kind::TestPlay:
+            editor_test_play();
+            return;  // the editor stands aside: nothing of it to do now
+        case Kind::Recover:
+            editor_recover();
+            break;
+        case Kind::ExportImage: {
+            const editor::MapImage image = editor::map_image(m_editor->document.world(), m_buildings);
+            std::filesystem::path path = next_screenshot_path();
+            path.replace_filename("map" + core::path_to_utf8(path.filename()).substr(std::string("open1602").size()));
+            std::error_code ec;
+            std::filesystem::create_directories(path.parent_path(), ec);
+            if (auto written = core::write_png_rgba(path, image.width, image.height, image.rgba); !written) {
+                editor_notice(ui::tr("editor.export_image.failed", {ui::error_text(written.error(), "editor")}), true,
+                              written.error().message);
+            } else {
+                editor_notice(
+                    ui::tr("editor.export_image.done", {core::utf8_to_cp1252(core::path_to_utf8(path.filename()))}),
+                    false, "map picture " + core::path_to_utf8(path));
+            }
+            break;
+        }
+        case Kind::FindGo: {
+            const auto found = editor_find(
+                m_hud && m_hud->editor_panel() != nullptr ? m_hud->editor_panel()->find_text() : std::string());
+            if (request.index < found.size()) {
+                m_camera.center_on(found[request.index].tile);
+                editor_pick(found[request.index].pick);
+            }
+            break;
+        }
+        case Kind::ShowIsland:
+            if (request.index < m_editor->document.world().islands().size()) {
+                const sim::WorldIsland& island = m_editor->document.world().islands()[request.index];
+                m_camera.center_on(
+                    render::TilePos{island.x + island.map.width() / 2, island.y + island.map.height() / 2});
+                EditorPick pick{EditorPick::Kind::Island, static_cast<std::uint16_t>(request.index), island.x,
+                                island.y};
+                editor_pick(pick);
             }
             break;
         case Kind::ListIslandFiles:
@@ -1206,8 +1513,8 @@ std::string goal_problem_text(const sim::World& world, const editor::GoalProblem
     using Kind = editor::GoalProblem::Kind;
     const std::string mission = std::to_string(p.mission + 1);
     const sim::Player* player = world.player(p.player);
-    const std::string who =
-        player != nullptr ? player_name(*player) : ui::tr("editor.goals.slot", {std::to_string(p.player + 1)});
+    const std::string who = player != nullptr ? MapViewer::editor_player_label(*player)
+                                              : ui::tr("editor.goals.slot", {std::to_string(p.player + 1)});
     switch (p.kind) {
         case Kind::NobodyHolds:
             return ui::tr("editor.check.goal.nobody_holds", {mission});
@@ -1246,7 +1553,8 @@ std::vector<EditorCheckLine> MapViewer::editor_check() const {
             Line{ui::tr("editor.check.world", {core::utf8_to_cp1252(valid.error().message)}), Line::Kind::Error});
     }
     for (const std::string& p : doc.check_scenario()) {
-        lines.push_back(Line{ui::tr("editor.check.scenario", {core::utf8_to_cp1252(p)}), Line::Kind::Error});
+        lines.push_back(Line{ui::tr("editor.check.scenario", {core::utf8_to_cp1252(p)}), Line::Kind::Error,
+                             Line::Target::Scenario});
     }
     if (lines.size() == first) {
         lines.push_back(Line{ui::tr("editor.check.fine"), Line::Kind::Fine});
@@ -1255,11 +1563,49 @@ std::vector<EditorCheckLine> MapViewer::editor_check() const {
     lines.push_back(Line{ui::tr("editor.check.goals"), Line::Kind::Heading});
     const auto goal_problems = editor::goal_problems(world);
     for (const editor::GoalProblem& p : goal_problems) {
-        lines.push_back(Line{goal_problem_text(world, p), Line::Kind::Warning});
+        lines.push_back(Line{goal_problem_text(world, p), Line::Kind::Warning, Line::Target::Goals, p.mission});
     }
     if (goal_problems.empty()) {
         lines.push_back(Line{ui::tr(world.missions().empty() ? "editor.check.no_missions" : "editor.check.goals_fine"),
                              Line::Kind::Fine});
+    }
+    // What each player finds around its start, and what is uneven between them.
+    const auto areas = editor::start_areas(world, m_buildings);
+    if (areas.size() >= 2) {
+        lines.push_back(Line{ui::tr("editor.check.starts"), Line::Kind::Heading});
+        static constexpr std::array<const char*, editor::kStartCrops> kCrops = {
+            "editor.crop.tobacco", "editor.crop.spices", "editor.crop.sugar",
+            "editor.crop.cotton",  "editor.crop.wine",   "editor.crop.cocoa"};
+        const auto who = [&](sim::PlayerId id) {
+            const sim::Player* p = world.player(id);
+            return p != nullptr ? editor_player_label(*p) : ui::tr("editor.goals.slot", {number(id + 1U)});
+        };
+        for (const editor::StartArea& a : areas) {
+            std::string crops;
+            for (std::size_t c = 0; c < editor::kStartCrops; ++c) {
+                if (a.crops[c] != 0) {
+                    crops += (crops.empty() ? "" : ", ") + ui::tr(kCrops[c]);
+                }
+            }
+            lines.push_back(
+                Line{ui::tr("editor.check.start", {who(a.player), number(a.islands), number(a.land),
+                                                   crops.empty() ? ui::tr("editor.check.start_no_crops") : crops,
+                                                   number(a.ore), number(a.gold), number(a.rival)}),
+                     Line::Kind::Note});
+        }
+        const auto uneven = editor::unfairness(areas);
+        for (const editor::Unfairness& u : uneven) {
+            using UK = editor::Unfairness::Kind;
+            const std::string text = u.kind == UK::Land  ? ui::tr("editor.check.unfair.land", {who(u.player)})
+                                     : u.kind == UK::Ore ? ui::tr("editor.check.unfair.ore", {who(u.player)})
+                                     : u.kind == UK::Gold
+                                         ? ui::tr("editor.check.unfair.gold", {who(u.player)})
+                                         : ui::tr("editor.check.unfair.crop", {who(u.player), ui::tr(kCrops[u.crop])});
+            lines.push_back(Line{text, Line::Kind::Warning});
+        }
+        if (uneven.empty()) {
+            lines.push_back(Line{ui::tr("editor.check.fair"), Line::Kind::Fine});
+        }
     }
     // What the original cannot have: a fault only while the scenario is to keep to its limits.
     const auto& info = world.scenario_info();
@@ -1267,7 +1613,12 @@ std::vector<EditorCheckLine> MapViewer::editor_check() const {
     lines.push_back(Line{ui::tr(keep ? "editor.check.limits_kept" : "editor.check.limits"), Line::Kind::Heading});
     const auto problems = editor::original_limit_problems(world);
     for (const editor::LimitProblem& p : problems) {
-        lines.push_back(Line{limit_text(p), keep ? Line::Kind::Warning : Line::Kind::Note});
+        using LK = editor::LimitProblem::Kind;
+        const Line::Target target = p.kind == LK::IslandSize || p.kind == LK::Deposits ? Line::Target::Island
+                                    : p.kind == LK::MapSize                            ? Line::Target::WorldSize
+                                    : p.kind == LK::Players                            ? Line::Target::Players
+                                                                                       : Line::Target::None;
+        lines.push_back(Line{limit_text(p), keep ? Line::Kind::Warning : Line::Kind::Note, target, p.island});
     }
     if (problems.empty()) {
         lines.push_back(Line{ui::tr("editor.check.fits"), Line::Kind::Fine});
@@ -1607,6 +1958,7 @@ void MapViewer::apply_editor() {
         (m_hud->editor_panel() == nullptr || m_hud->editor_panel()->page() != m_editor->placing->page)) {
         m_editor->placing.reset();
     }
+    editor_keep_recovery();
     m_hud->set_editor_model(editor_model());
     m_hud->set_editor_chrome(editor_chrome());
 }
@@ -1627,6 +1979,8 @@ EditorChromeModel MapViewer::editor_chrome() const {
         key(EditorCommand::SaveAs, ui::KeyAction::EditorSaveAs);
         key(EditorCommand::Undo, ui::KeyAction::EditorUndo);
         key(EditorCommand::Redo, ui::KeyAction::EditorRedo);
+        key(EditorCommand::TestPlay, ui::KeyAction::EditorTestPlay);
+        key(EditorCommand::Find, ui::KeyAction::EditorFind);
         c.command_keys[static_cast<std::size_t>(EditorCommand::Keys)] = "F1";
         // Where the mouse is: the world tile, and the island's number and its own tile there.
         const auto mx = static_cast<std::int32_t>(m_input->mouse_x());
@@ -2261,7 +2615,7 @@ void MapViewer::editor_rotate_tool() {
     }
 }
 
-void MapViewer::editor_key(ui::KeyAction action) {
+void MapViewer::editor_key(ui::KeyAction action, std::uint8_t param) {
     switch (action) {
         case ui::KeyAction::EditorUndo:
             editor_request(EditorRequest{EditorRequest::Kind::Undo});
@@ -2289,6 +2643,30 @@ void MapViewer::editor_key(ui::KeyAction action) {
             break;
         case ui::KeyAction::EditorRotate:
             editor_rotate_tool();
+            break;
+        case ui::KeyAction::EditorTestPlay:
+            editor_request(EditorRequest{EditorRequest::Kind::TestPlay});
+            break;
+        case ui::KeyAction::EditorFind:
+            if (m_hud) {
+                m_hud->editor_command(EditorCommand::Find);
+            }
+            break;
+        case ui::KeyAction::EditorBookmarkSet:
+            if (param < m_editor->bookmarks.size()) {
+                m_editor->bookmarks[param] = m_camera;
+                editor_notice(ui::tr("editor.bookmark.set", {number((param + 1U) % 10U)}), false, "bookmark kept");
+            }
+            break;
+        case ui::KeyAction::EditorBookmarkGo:
+            if (param < m_editor->bookmarks.size()) {
+                if (const auto& mark = m_editor->bookmarks[param]) {
+                    m_camera = *mark;
+                    lay_out();  // the window may have another size since
+                } else {
+                    editor_notice(ui::tr("editor.bookmark.none", {number((param + 1U) % 10U)}), true, "no bookmark");
+                }
+            }
             break;
         case ui::KeyAction::EditorBrushBigger:
         case ui::KeyAction::EditorBrushSmaller: {

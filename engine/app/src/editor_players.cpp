@@ -32,6 +32,11 @@ std::string colour_name(sim::BannerId banner) {
 
 }  // namespace
 
+std::string MapViewer::editor_player_label(const sim::Player& p) {
+    // "Nameless", the name given to whoever named none, tells the players apart no better.
+    return p.name.empty() || p.name == ui::tr("menu.default_name") ? colour_name(p.banner) : p.name;
+}
+
 void MapViewer::editor_players_model(EditorModel& m) const {
     const sim::World& world = m_editor->document.world();
     for (const sim::PlayerId slot : editor::player_slots(world)) {
