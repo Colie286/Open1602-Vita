@@ -369,6 +369,7 @@ core::Result<std::unique_ptr<MapViewer>> MapViewer::create(const assets::GameDir
     viewer->m_levels = std::move(rules.levels);
     viewer->m_package_images = std::move(rules.images);
     viewer->m_sprite_redirects = std::move(rules.redirects);
+    viewer->m_package_flags = std::move(rules.flags);
     viewer->m_figure_looks = std::move(rules.looks);
     assets::apply_figure_looks(viewer->m_figures, viewer->m_original_figures, viewer->m_figure_looks);
     viewer->m_packages = std::move(packages);
@@ -637,6 +638,7 @@ void MapViewer::start_preloading() {
     options.dither = m_app_settings.display.classic_graphics;
     options.package_images = m_package_images;
     options.sprite_redirects = m_sprite_redirects;
+    options.package_flags = m_package_flags;
     options.template_sprites = assets::tint_template_sprites(m_own_units, m_figures, m_own_ships);
     // The thread works on its own copies: nothing it reads changes under it.
     m_preloader = std::make_unique<render::GraphicsPreloader>(
@@ -1373,6 +1375,7 @@ render::WorldLayers MapViewer::world_layers(const ZoomGraphics& graphics) const 
     layers.template_tint = &graphics.graphics.template_tint;
     layers.banners = &m_banners;
     layers.banner_flags = &graphics.graphics.banner_flags;
+    layers.package_flags = &graphics.graphics.package_flags;
     layers.owner_tint = m_show_owners;
     layers.building_figures = &m_building_figures;
     layers.local_player = m_local_player;
@@ -3614,10 +3617,11 @@ void MapViewer::reload_mods() {
     m_figures = m_original_figures;
     sim::apply_figure_values(m_figures, m_original_figures, m_state->world.balance());
     assets::apply_figure_looks(m_figures, m_original_figures, m_figure_looks);
-    if (rules.images != m_package_images || rules.redirects != m_sprite_redirects) {
+    if (rules.images != m_package_images || rules.redirects != m_sprite_redirects || rules.flags != m_package_flags) {
         // Other pictures: the zoom levels are made again with them.
         m_package_images = std::move(rules.images);
         m_sprite_redirects = std::move(rules.redirects);
+        m_package_flags = std::move(rules.flags);
         start_preloading();
         reload_graphics();
     }

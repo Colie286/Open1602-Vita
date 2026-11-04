@@ -100,8 +100,9 @@ int usage() {
         "                          images instead of the tinted generic flag; --original-data: without the\n"
         "                          corrections of the original's data, D-001 ...; --mods: with the pictures of\n"
         "                          the packages of that folder)\n"
-        "  o1602-tool check-mod <mods folder>  (reads its packages as the game does and lists every\n"
-        "                       problem; exit code 1 if there is one; needs ANNO1602_DIR)\n"
+        "  o1602-tool check-mod <mods folder> [--json]  (reads its packages as the game does and lists\n"
+        "                       every problem; exit code 1 if there is one; needs ANNO1602_DIR; --json:\n"
+        "                       packages and problems as one JSON object, with file and line)\n"
         "  o1602-tool export-island <in.gam|.szs> <island number> <out.scp>  (an island of its own shape\n"
         "                       with all its tiles as an island file of a package, islands.toml)\n",
         stderr);

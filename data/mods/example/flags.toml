@@ -1,0 +1,5 @@
+# Flags of this package (flags.md): the blue player's ships and buildings fly a pennant, its grey
+# cloth tinted blue, the gold stripe as drawn.
+["anno1602:blue"]
+image = "example:pennant"
+tint = true

@@ -47,7 +47,8 @@ level, it is made from the next larger one at half size, as the engine does for 
 missing sheets.
 
 A sprite stands on its bottom row: the bottom of the cell is the bottom of the tile it is drawn on,
-the transparent rows above the picture are left out. A pixel with less than half alpha is
+the transparent rows above the picture are left out (not so for a flag of `flags.toml`, which hangs
+from its top row, [flags.md](flags.md#flags-of-a-package)). A pixel with less than half alpha is
 transparent, any other is opaque: the original's sprites have no partial transparency either. The
 PNG may have any colour type and bit depth, but no interlacing.
 

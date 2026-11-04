@@ -17,6 +17,7 @@
 #include "o1602/assets/own_buildings.hpp"
 #include "o1602/assets/own_figures.hpp"
 #include "o1602/assets/package_arms.hpp"
+#include "o1602/assets/package_flags.hpp"
 #include "o1602/assets/package_graphics.hpp"
 #include "o1602/assets/package_sounds.hpp"
 #include "o1602/assets/resident_classes.hpp"
@@ -54,6 +55,8 @@ struct ModRules {
     std::vector<assets::FigureLook> looks;
     /// The original's buildings the packages draw with their images (building_images.toml).
     std::vector<assets::SpriteRedirect> redirects;
+    /// The flags the packages give banners (flags.toml).
+    std::vector<assets::PackageFlag> flags;
     /// The music of the packages (music.toml).
     std::vector<audio::MusicTrack> music;
     /// The sounds of the packages with their sound numbers (sounds.toml).

@@ -33,7 +33,7 @@ std::vector<std::uint8_t> cut(const core::PngImage& png, std::uint32_t i, std::u
 
 }  // namespace
 
-PackageImageSource::PackageImageSource(const assets::PackageImage& image, std::size_t zoom) {
+PackageImageSource::PackageImageSource(const assets::PackageImage& image, std::size_t zoom, bool whole) {
     m_sprites.resize(image.count);
     // The level with a file of its own, this one or the next larger one that has one.
     std::size_t from = std::min(zoom, assets::kPackageZoomLevels - 1);
@@ -65,6 +65,9 @@ PackageImageSource::PackageImageSource(const assets::PackageImage& image, std::s
             std::vector<std::uint8_t> half;
             halve_rgba(s.rgba, s.width, s.height, half, s.width, s.height);
             s.rgba = std::move(half);
+        }
+        if (whole) {
+            continue;
         }
         // Leave out the transparent rows at the top; a sprite with none opaque is empty.
         std::uint32_t first = 0;

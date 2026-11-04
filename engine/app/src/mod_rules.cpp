@@ -109,6 +109,10 @@ ModRules load_mod_rules(std::span<const assets::ModPackage> packages, assets::Bu
             const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
             assets::apply_building_images_file(rules.redirects, package.id, text, rules.images, buildings, problems);
         }
+        if (const auto bytes = core::read_file(package.folder / assets::kFlagsFile)) {
+            const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
+            assets::apply_flags_file(rules.flags, package.id, text, rules.images, problems);
+        }
         if (const auto bytes = core::read_file(package.folder / audio::kMusicFile)) {
             const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
             audio::apply_music_file(rules.music, package.id, package.folder, text, problems);

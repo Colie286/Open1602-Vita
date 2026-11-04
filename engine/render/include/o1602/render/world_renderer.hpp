@@ -388,6 +388,8 @@ struct WorldLayers {
     const BannerTable* banners = nullptr;
     /// Atlas index of each banner's tinted flag (WorldGraphics::banner_flags).
     const std::vector<std::optional<std::uint32_t>>* banner_flags = nullptr;
+    /// Which of them are a package's flag (WorldGraphics::package_flags).
+    const std::vector<bool>* package_flags = nullptr;
     /// Ownership view: tiles owned by a player get a diamond in the colour of the owner's banner.
     bool owner_tint = false;
     /// Single marked tiles, drawn on top of everything.

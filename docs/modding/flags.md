@@ -10,8 +10,8 @@ the white original flag (`render::BannerTable`), custom images per banner (`Flag
 the skull), units in player colour (`render/unit_tint.hpp`) and the interface's coats of arms and message
 icons in player colour (`render/variant_tint.hpp`, [below](#interface-art-in-player-colour)) and the flag menu of the
 endless game with the twelve presets ([below](#the-flag-menu)) and coats of arms of packages
-(`arms.toml`, [below](#coats-of-arms-of-a-package)). Still open: the free RGB colour (interface) and custom
-flags as PNG of packages.
+(`arms.toml`, [below](#coats-of-arms-of-a-package)) and flags of packages as PNG (`flags.toml`,
+[below](#flags-of-a-package)). Still open: the free RGB colour (interface).
 
 ## How tinting works
 
@@ -132,6 +132,46 @@ smaller where it is larger, so draw it the size of the largest (the end screen's
 banners. The message icons in the status bar stay the original's. If two packages give the same
 banner arms, the one loaded later wins; a banner no game has is passed over silently. Only the
 picture changes: a game keeps nothing of it.
+
+## Flags of a package
+
+```
+<user data folder>/mods/<package>/flags.toml
+```
+
+A package gives a banner a flag of its own, drawn as a PNG: an image of `graphics.toml`
+([graphics.md](graphics.md#the-file)) with the eight phases of waving side by side, the way
+[Drawing your own flag](#drawing-your-own-flag) describes them (89 × 30 pixels at the largest zoom,
+the cloth hanging from column 46, row 6). The flag waves on the banner's ships, warehouses, castles
+and markets in place of the tinted generic flag, or in place of the pirates' skull. Each table
+names the banner by its id, as `arms.toml` does ([above](#coats-of-arms-of-a-package)).
+
+```toml
+# mods/heraldry/graphics.toml
+[pennant]
+image = "flags/pennant.png"   # eight frames of 89 x 30 side by side
+width = 89
+height = 30
+count = 8
+
+# mods/heraldry/flags.toml
+["anno1602:red"]
+image = "heraldry:pennant"
+
+["open1602:orange"]
+image = "heraldry:pennant"
+tint = true
+```
+
+| Field | Limits | Meaning |
+|---|---|---|
+| `image` | an image of a package, `<package>:<name>`, with at least 8 sprites | the eight phases of waving (required) |
+| `tint` | `true` or `false`, default `false` | the image is a template: its pure grey pixels take on the banner's colour ([How tinting works](#how-tinting-works)) |
+
+The frames are drawn whole, transparent top rows included, so that the flag hangs from the same
+point as the original's. With `tint = true` one image serves several banners. If two packages give
+the same banner a flag, the one loaded later wins; `o1602-tool check-mod` names a banner no game
+has. Only the picture changes: a game keeps nothing of it.
 
 ## The flag menu
 

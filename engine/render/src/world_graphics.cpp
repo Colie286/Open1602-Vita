@@ -126,6 +126,34 @@ core::Result<WorldGraphics> load_world_graphics(const assets::GameDirectory& gam
             pointers.push_back(sources.back().get());
         }
     }
+    // The packages' flags (flags.toml): a source of their own per banner that has one, its frames
+    // whole (a flag hangs from its top row), tinted in the banner's colour if it is a template.
+    std::vector<std::pair<std::size_t, std::size_t>> package_flag_at;  // banner, source
+    if (banners != nullptr) {
+        for (std::size_t b = 0; b < banners->size(); ++b) {
+            const Banner* banner = banners->get(static_cast<sim::BannerId>(b));
+            const assets::PackageFlag* flag =
+                banner != nullptr ? assets::find_package_flag(options.package_flags, banner->id) : nullptr;
+            if (flag == nullptr) {
+                continue;
+            }
+            auto image = std::make_unique<PackageImageSource>(flag->image, static_cast<std::size_t>(zoom), true);
+            if (!image->error().empty()) {
+                std::fprintf(stderr, "mods: %s: %s\n", flag->image.id.c_str(), image->error().c_str());
+            }
+            const SpriteSource* frames = image.get();
+            sources.push_back(std::move(image));
+            if (flag->tint) {
+                sources.push_back(std::make_unique<TintedFlagSource>(*frames, 0, assets::kFlagFrames,
+                                                                     std::vector{banner->colour}, false));
+            } else {
+                sources.push_back(std::make_unique<PlacedSources>());
+                static_cast<PlacedSources&>(*sources.back()).place(0, *frames);
+            }
+            package_flag_at.emplace_back(b, pointers.size());
+            pointers.push_back(sources.back().get());
+        }
+    }
     // Tinted units after that: one block per banner whose units have no drawn variant.
     std::vector<std::optional<std::uint32_t>> unit_slot;
     std::size_t unit_source = pointers.size();
@@ -283,7 +311,7 @@ core::Result<WorldGraphics> load_world_graphics(const assets::GameDirectory& gam
     if (!atlas) {
         return atlas.error();
     }
-    WorldGraphics g{std::move(atlas).value(), {}, {}, {}, {}, {}, {}, {}};
+    WorldGraphics g{std::move(atlas).value(), {}, {}, {}, {}, {}, {}, {}, {}};
     for (std::size_t i = 0; i < loaded.size(); ++i) {
         const auto k = static_cast<std::size_t>(loaded[i].id);
         g.base[k] = g.atlas.sheet_base(i);
@@ -294,6 +322,14 @@ core::Result<WorldGraphics> load_world_graphics(const assets::GameDirectory& gam
         const std::uint32_t frames = banners->flag_template()->frames;
         for (const auto& slot : flag_slot) {
             g.banner_flags.push_back(slot ? std::optional<std::uint32_t>(base + *slot * frames) : std::nullopt);
+        }
+    }
+    if (!package_flag_at.empty()) {
+        g.banner_flags.resize(banners->size());
+        g.package_flags.resize(banners->size());
+        for (const auto& [banner, source] : package_flag_at) {
+            g.banner_flags[banner] = g.atlas.sheet_base(source);
+            g.package_flags[banner] = true;
         }
     }
     if (unit_source < pointers.size()) {

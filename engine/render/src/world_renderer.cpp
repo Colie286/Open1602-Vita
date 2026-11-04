@@ -9,6 +9,7 @@
 
 #include "o1602/assets/figure_looks.hpp"
 #include "o1602/assets/game_data.hpp"
+#include "o1602/assets/package_flags.hpp"
 #include "o1602/sim/disasters.hpp"
 #include "o1602/sim/houses.hpp"
 #include "o1602/sim/ships.hpp"
@@ -123,11 +124,14 @@ std::optional<std::uint32_t> flag_sprite(const WorldLayers& layers, sim::BannerI
         return std::nullopt;
     }
     // The tinted flag has as many images as its template, of which the atlas holds one block per
-    // banner; own sprites as many as the banner says (FB-33).
-    if (banner->flag == FlagStyle::Tinted && layers.banner_flags != nullptr && id < layers.banner_flags->size() &&
-        (*layers.banner_flags)[id] && layers.banners->flag_template() && layers.banners->flag_template()->frames > 0) {
-        return *(*layers.banner_flags)[id] +
-               static_cast<std::uint32_t>(frame % layers.banners->flag_template()->frames);
+    // banner, a package's flag (flags.toml) kFlagFrames, for any banner; own sprites as many as the
+    // banner says (FB-33).
+    if (layers.banner_flags != nullptr && id < layers.banner_flags->size() && (*layers.banner_flags)[id]) {
+        const auto& t = layers.banners->flag_template();
+        const bool own =
+            layers.package_flags != nullptr && id < layers.package_flags->size() && (*layers.package_flags)[id];
+        const std::uint32_t frames = !own && t && t->frames > 0 ? t->frames : assets::kFlagFrames;
+        return *(*layers.banner_flags)[id] + static_cast<std::uint32_t>(frame % frames);
     }
     if (banner->flag == FlagStyle::Sprites && banner->flag_frames > 0) {
         return layers.ship_base + banner->flag_gfx + static_cast<std::uint32_t>(frame % banner->flag_frames);

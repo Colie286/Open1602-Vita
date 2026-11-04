@@ -63,7 +63,7 @@ TEST_CASE("the example package has every file a package can have") {
           "goods.toml",     "classes.toml",    "levels.toml",     "script.lua",         "scenarios.toml",
           "campaigns.toml", "graphics.toml",   "icons.toml",      "figure_images.toml", "music.toml",
           "sounds.toml",    "landscapes.toml", "climates.toml",   "slots.toml",         "building_images.toml",
-          "arms.toml"}) {
+          "arms.toml",      "flags.toml"}) {
         if (!fs::is_regular_file(kMods / "example" / name)) {
             std::fprintf(stderr, "missing: %s\n", name);
             CHECK(false);
@@ -141,6 +141,9 @@ TEST_CASE("data: the example package loads without a warning") {
     CHECK(rules.own.size() == 3);
     REQUIRE(rules.redirects.size() == 1);  // the watchtower drawn as the lighthouse
     CHECK(rules.redirects[0].count <= 4);
+    REQUIRE(rules.flags.size() == 1);  // the blue player's pennant
+    CHECK(rules.flags[0].banner == "anno1602:blue");
+    CHECK(rules.flags[0].tint);
     const sim::ComputerSlot* court = sim::find_computer_slot(rules.balance.computer_slots, "court");
     REQUIRE(court != nullptr);
     CHECK(court->kind == sim::ComputerSlot::Kind::Public);

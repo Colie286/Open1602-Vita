@@ -174,7 +174,7 @@ int cmd_render_world(const Args& args) {
         (void)assets::fixes::fix_figures(*figures);
     }
     // --mods FOLDER: the packages' pictures, of their own and in place of the original's
-    // (graphics.toml, figure_images.toml, building_images.toml).
+    // (graphics.toml, figure_images.toml, building_images.toml, flags.toml).
     render::GraphicsOptions graphics_options;
     if (const auto it = args.options.find("--mods"); it != args.options.end()) {
         std::vector<std::string> problems;
@@ -184,6 +184,7 @@ int cmd_render_world(const Args& args) {
         assets::apply_figure_looks(*figures, original_figures, rules.looks);
         graphics_options.package_images = std::move(rules.images);
         graphics_options.sprite_redirects = std::move(rules.redirects);
+        graphics_options.package_flags = std::move(rules.flags);
         for (const std::string& p : problems) {
             std::fprintf(stderr, "mods: %s\n", p.c_str());
         }
@@ -340,6 +341,7 @@ int cmd_render_world(const Args& args) {
     layers.sheet_base = graphics->base;
     layers.banners = &banners;
     layers.banner_flags = &graphics->banner_flags;
+    layers.package_flags = &graphics->package_flags;
     layers.owner_tint = args.flag("--owners");
     const auto building_figures = render::collect_building_figures(*world, *buildings, *figures);
     layers.building_figures = &building_figures;

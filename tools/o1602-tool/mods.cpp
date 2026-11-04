@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "message_table.hpp"
+#include "mod_check.hpp"
 #include "mod_rules.hpp"
 #include "tool.hpp"
 
@@ -24,7 +25,9 @@
 #include "o1602/assets/game_directory.hpp"
 #include "o1602/assets/island.hpp"
 #include "o1602/assets/package_scenarios.hpp"
+#include "o1602/audio/game_audio.hpp"
 #include "o1602/core/file.hpp"
+#include "o1602/render/banner.hpp"
 #include "o1602/script/game_scripts.hpp"
 #include "o1602/sim/package_islands.hpp"
 #include "o1602/sim/world.hpp"
@@ -67,14 +70,29 @@ int cmd_check_mod(const Args& args) {
     // The packages, then their files in the order the game reads them.
     std::vector<std::string> problems;
     const std::vector<assets::ModPackage> packages = assets::load_mod_packages(mods, problems);
+    const bool json = args.flag("--json");
     for (const assets::ModPackage& p : packages) {
-        std::printf("package %s\n", assets::package_label(p.content()).c_str());
+        if (!json) {
+            std::printf("package %s\n", assets::package_label(p.content()).c_str());
+        }
     }
-    // The icons first, as the game sets them: the messages and the build menu may name them.
-    ui::set_package_icons(app::load_package_icons(packages, problems));
+    // The icons first, as the game sets them: the messages, the build menu and the coats of arms
+    // may name them.
+    std::vector<assets::PackageIcon> icons = app::load_package_icons(packages, problems);
+    auto banners = render::BannerTable::original();
+    banners.add_more_players();
+    app::check_arms_banners(app::load_package_arms(packages, icons, problems), banners, problems);
+    ui::set_package_icons(std::move(icons));
     (void)app::load_package_landscapes(packages, problems);
     (void)sim::load_package_islands(packages, problems);
     const app::ModRules rules = app::load_mod_rules(packages, *buildings, *figures, problems);
+    app::check_flag_banners(rules.flags, banners, problems);
+    {
+        std::vector<std::string> tracks;
+        std::vector<std::string> fights;
+        audio::Music::scan(*game, tracks, fights);
+        app::check_music_replacements(rules.music, tracks, fights, problems);
+    }
     app::MessageTable messages;
     messages.load_mods(packages, problems);
     (void)ui::load_build_menu_mods(ui::original_build_menu(), packages, *buildings, problems, rules.own);
@@ -93,6 +111,10 @@ int cmd_check_mod(const Args& args) {
         if (note.error) {
             problems.push_back(note.package + ": " + note.text);
         }
+    }
+    if (json) {
+        std::printf("%s\n", app::problems_json(packages, problems).c_str());
+        return problems.empty() ? 0 : 1;
     }
     for (const std::string& p : problems) {
         std::printf("problem: %s\n", p.c_str());

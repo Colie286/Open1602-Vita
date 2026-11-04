@@ -20,3 +20,8 @@ image = "gfx/pepper_farm.png" # 16 sprites of 64 x 64 pixels: the plantation's f
 width = 64
 height = 64
 count = 16
+
+[pennant]
+image = "gfx/pennant.png"     # 8 sprites of 89 x 30 pixels: a flag's phases of waving, its cloth in greys
+width = 89
+height = 30

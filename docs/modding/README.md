@@ -13,7 +13,7 @@ merchants need and the computers build (a public building of a kind of its own),
 music, a WebM video for a message, a script, a scenario with a campaign, a kind of island world and an
 island template, and changes a few values of the original. It also replaces some of the original's
 art: the small merchant ship is drawn as a cog, the watchtower as the lighthouse, and the red
-player's coat of arms is a lighthouse in red. Copy it, rename the folder and change it, or read it next to the guides below.
+player's coat of arms is a lighthouse in red. The blue player flies a pennant of its own. Copy it, rename the folder and change it, or read it next to the guides below.
 The tests load it with and without the original's data and expect no warning, so it always works
 with the version of Open1602 it comes with.
 
@@ -63,6 +63,7 @@ Each file does one thing; a package has only the files it needs.
 | messages of the status bar | `messages.toml` | [messages.md](messages.md) |
 | images of buildings, figures and ships, also in place of the original's; icons | `graphics.toml`, `figure_images.toml`, `building_images.toml`, `icons.toml` | [graphics.md](graphics.md) |
 | coats of arms of the players | `arms.toml` | [flags.md](flags.md#coats-of-arms-of-a-package) |
+| flags of the players as PNG | `flags.toml` | [flags.md](flags.md#flags-of-a-package) |
 | music and sounds, also in place of the original's | `music.toml`, `sounds.toml` | [sounds.md](sounds.md) |
 | numbers of the game: trader, disasters, computers' gifts | `balance.toml` | [balance.md](balance.md) |
 | what the computer players build | `computers.toml`, `slots.toml` | [computer-players.md](computer-players.md) |
@@ -107,6 +108,15 @@ problem: lighthouse/figure_images.toml line 2: [anno1602:small_merchant_ship]: i
 
 It needs the original's installation (`ANNO1602_DIR`), since a package builds on its buildings and
 figures, and exits with 1 when there is a problem. The game writes the same lines to its log.
+Beyond what the game's readers report, it checks what needs the installation or the game's banners:
+a track that replaces a title `MUSIC8` has not, and a coat of arms of a banner no game has.
+
+With `--json` it prints the packages and the problems as one JSON object instead, for a script or a
+CI job; a problem that names a file of a package carries it and its line:
+
+```
+{"packages":[{"id":"lighthouse","version":"1.0"}],"problems":[{"text":"lighthouse/figure_images.toml line 2: ...","package":"lighthouse","file":"figure_images.toml","line":2}]}
+```
 
 To see the package's pictures on a map without starting the game, render it:
 `o1602-tool render-world <savegame> out.png --zoom 0 --mods ~/.local/share/Open1602/mods`.

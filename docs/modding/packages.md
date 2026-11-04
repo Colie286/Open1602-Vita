@@ -37,6 +37,7 @@ package's own is in [open-work.md](open-work.md).
     figure_images.toml figures and ships drawn with the package's images (graphics.md)
     building_images.toml the original's buildings drawn with the package's images (graphics.md)
     arms.toml          coats of arms of banners, icons of the package (flags.md)
+    flags.toml         flags of banners, images of the package (flags.md)
     music.toml         music of the package's own, or in place of the original's (sounds.md)
     sounds.toml        sounds of the package's own, or in place of the original's (sounds.md)
     landscapes.toml    kinds of island world for new games (landscapes.md)

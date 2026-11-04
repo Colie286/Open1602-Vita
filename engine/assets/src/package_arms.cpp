@@ -13,7 +13,8 @@ std::string line_of(const std::string& where, std::size_t line) {
     return where + " line " + std::to_string(line) + ": ";
 }
 
-/// A banner's id: "<origin>:<name>", each of lower case letters, digits and '_'.
+}  // namespace
+
 bool is_banner_id(std::string_view id) noexcept {
     const std::size_t colon = id.find(':');
     const auto is_part = [](std::string_view s) {
@@ -23,8 +24,6 @@ bool is_banner_id(std::string_view id) noexcept {
     };
     return colon != std::string_view::npos && is_part(id.substr(0, colon)) && is_part(id.substr(colon + 1));
 }
-
-}  // namespace
 
 const PackageArms* find_package_arms(std::span<const PackageArms> arms, std::string_view banner) noexcept {
     const auto it = std::find_if(arms.begin(), arms.end(), [&](const PackageArms& a) { return a.banner == banner; });

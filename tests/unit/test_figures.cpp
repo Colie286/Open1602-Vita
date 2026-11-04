@@ -454,6 +454,12 @@ TEST_CASE("flags: one tinted block per banner in the atlas and in the draw list"
     // is image 1 of the banner's block, not the first of the next (FB-33).
     REQUIRE(render::ship_sprites(sim::make_ship("A", 10, 20, 21, 1, 0), world, render::WorldView{}, layers, 450, s));
     CHECK(s.flag.sprite == atlas->sheet_base(1) + 4 + 1);
+    // A package's flag (flags.toml) waves in its own eight images, whatever the template has.
+    const std::vector<bool> package_flags = {false, true};
+    layers.package_flags = &package_flags;
+    REQUIRE(render::ship_sprites(sim::make_ship("A", 10, 20, 21, 1, 0), world, render::WorldView{}, layers, 450, s));
+    CHECK(s.flag.sprite == atlas->sheet_base(1) + 4 + 5);
+    layers.package_flags = nullptr;
     // Without the atlas block (e.g. graphics loaded without banners) there is no flag.
     layers.banner_flags = nullptr;
     REQUIRE(render::ship_sprites(sim::make_ship("A", 10, 20, 21, 1, 0), world, render::WorldView{}, layers, 0, s));

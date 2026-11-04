@@ -31,6 +31,10 @@ struct PackageArms {
 void apply_arms_file(std::vector<PackageArms>& arms, std::string_view package, std::string_view utf8,
                      std::span<const PackageIcon> icons, std::vector<std::string>& warnings);
 
+/// Whether `id` is written as a banner's id: "<origin>:<name>", each of lower case letters, digits
+/// and '_'.
+[[nodiscard]] bool is_banner_id(std::string_view id) noexcept;
+
 /// The arms of banner `banner`, nullptr if no package gives it any.
 [[nodiscard]] const PackageArms* find_package_arms(std::span<const PackageArms> arms, std::string_view banner) noexcept;
 

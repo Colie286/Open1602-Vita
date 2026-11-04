@@ -25,9 +25,9 @@ State on 2026-11-04. The details of each item follow under [Open items](#open-it
 
 ### Still open
 
-Every item of the list is done (the last, videos in WebM, on 2026-11-04). Left from ADR 0007's
-section 4: a package's own waving flag as PNG for a banner ([flags.md](flags.md); its coat of arms is
-done, `arms.toml`).
+Every item of the list is done (the last, videos in WebM, on 2026-11-04), and so is ADR 0007's
+section 4: a package's own waving flag as PNG for a banner (`flags.toml`,
+[flags.md](flags.md#flags-of-a-package), 2026-11-04).
 
 ### Smaller adjustments
 

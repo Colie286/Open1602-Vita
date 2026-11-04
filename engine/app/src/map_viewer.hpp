@@ -40,6 +40,7 @@
 #include "o1602/assets/figure_table.hpp"
 #include "o1602/assets/game_content.hpp"
 #include "o1602/assets/game_directory.hpp"
+#include "o1602/assets/package_flags.hpp"
 #include "o1602/assets/package_graphics.hpp"
 #include "o1602/assets/package_scenarios.hpp"
 #include "o1602/assets/palette.hpp"
@@ -705,6 +706,8 @@ private:
     std::vector<assets::FigureLook> m_figure_looks;
     /// The original's buildings the packages draw with their images (building_images.toml).
     std::vector<assets::SpriteRedirect> m_sprite_redirects;
+    /// The flags the packages give banners (flags.toml).
+    std::vector<assets::PackageFlag> m_package_flags;
     /// The content packages installed in <data folder>/mods, in their load order (docs/modding/packages.md).
     std::vector<assets::ModPackage> m_packages;
     /// Packages received from hosts, in <data folder>/mods-cache: used only by games that name them.

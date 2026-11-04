@@ -1,7 +1,7 @@
 # Implementation status
 
-Status: 2026-11-04 (latest steps: packages replace the original's buildings, figures, ships, coats of
-arms, music, sounds and message voices; videos of packages in WebM; ship route search two and a half
+Status: 2026-11-04 (latest steps: flags of packages as PNG; packages replace the original's buildings,
+figures, ships, coats of arms, music, sounds and message voices; videos of packages in WebM; ship route search two and a half
 times faster; the editor saves scenarios into packages, with markers, a script and factions per
 slot). This page is the overview
 and the single place for the status of the project. The details are in the linked documents, each in
@@ -161,6 +161,7 @@ are listed in 2.1.
 | **Figures of a package's own** (2026-11-01): `mods/<package>/own_figures.toml` adds figures that copy one of the original (`like`), drawn with an image of a package; `figures.toml` changes their values, a building of a package names them as its carriers or workers (`figure`), and the savegame keeps their numbers (section `OWNF`) | [own-figures.md](modding/own-figures.md) |
 | **Goods of a package's own** (2026-10-26): `mods/<package>/goods.toml` adds trade goods with ware numbers from 59 (price, icon of a good of the original, names by language); buildings of a package make and use them, Kontors, ships and the free trader handle them, the Kontor gets a second page, and the savegame keeps them (section `GOOD`) | [goods.md](modding/goods.md) |
 | **Classes of inhabitants as data** (2026-10-26): `mods/<package>/classes.toml` changes the original's classes (tax, share, room, needs of any good, also a package's) and adds classes after them, up to eight; a house of a package belongs to a class (`class`), the house and goods windows name them, and the savegame keeps them (section `CLAS`) | [classes.md](modding/classes.md) |
+| **Flags of packages as PNG and a stricter check-mod** (2026-11-04): `mods/<package>/flags.toml` gives a banner a waving flag of eight frames from `graphics.toml`, tinted in its colour with `tint = true`, on its ships and buildings in place of the generic flag; `o1602-tool check-mod` also names music that replaces a title `MUSIC8` has not and coats of arms and flags of banners no game has, and prints the problems as JSON with `--json` | [flags.md](modding/flags.md#flags-of-a-package), [README.md](modding/README.md#5-check-it) |
 | **The original's art and sound replaced by a package's** (2026-11-04): `mods/<package>/building_images.toml` draws an original building with an image of `graphics.toml`, `arms.toml` gives a banner a coat of arms from `icons.toml` (in its colour with `tint = true`) wherever the interface shows it, and `replaces` in `music.toml` and `sounds.toml` plays a file in place of a track of `MUSIC8` or a sound of `SAMPLES`; a game keeps nothing of it | [graphics.md](modding/graphics.md#buildings-of-the-original), [flags.md](modding/flags.md#coats-of-arms-of-a-package), [sounds.md](modding/sounds.md) |
 | **Figures and ships with a package's images** (2026-10-27): `mods/<package>/figure_images.toml` draws an original figure or ship (a unit in all four colours by its name) with an image of `graphics.toml`, with or without its shadow; the image must hold every sprite the figure draws | [graphics.md](modding/graphics.md#figures-and-ships) |
 | **Icons of a package's own** (2026-10-27): `mods/<package>/icons.toml` names PNG icons; a building of the build menu, a good (`picture`, kept in the savegame) and a message of the status bar show one, an icon too large for its place is made smaller | [graphics.md](modding/graphics.md#icons) |
@@ -183,7 +184,6 @@ are listed in 2.1.
 | What | Dependency | Source |
 |---|---|---|
 | Flag menu with free RGB colour as in Anno 1503 | Interface | [ADR 0007](architecture/0007-extensibility-and-modding.md) |
-| Flags of packages as PNG (a banner's own waving flag; its coat of arms is done, `arms.toml`) | – | [flags.md](modding/flags.md) |
 | Replays from the session's frames | M6 | [ADR 0011](architecture/0011-multiplayer-lockstep.md) |
 | Ideas: full refund shortly after building; own road pathfinding alongside that of the original; pirate distance of the difficulty level as a setting (S-068) | open, decision needed | – |
 

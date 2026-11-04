@@ -21,10 +21,11 @@ namespace o1602::render {
 /// The sprites of one image at one zoom level (0 = largest), decoded once: from its PNG for that
 /// level, else from the next larger level's at half size. A pixel of less than half alpha is
 /// transparent, any other opaque. Transparent rows above a sprite are left out: sprites stand on
-/// their bottom row. An image that cannot be read gives empty sprites and an error().
+/// their bottom row; with `whole`, a sprite keeps every row of its cell (a flag, which hangs from
+/// its top). An image that cannot be read gives empty sprites and an error().
 class PackageImageSource final : public SpriteSource {
 public:
-    PackageImageSource(const assets::PackageImage& image, std::size_t zoom);
+    PackageImageSource(const assets::PackageImage& image, std::size_t zoom, bool whole = false);
     [[nodiscard]] std::uint32_t count() const override { return static_cast<std::uint32_t>(m_sprites.size()); }
     void size(std::uint32_t i, std::uint32_t& width, std::uint32_t& height) const override;
     bool pixels(std::uint32_t i, std::vector<std::uint8_t>& rgba) const override;
