@@ -1,0 +1,22 @@
+# Example only: create this unprivileged user and install the binary first.
+[Unit]
+Description=Open1602 public lobby and UDP relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=open1602
+Group=open1602
+ExecStart=/opt/open1602-master/open1602-master --port 16022
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_UNIX
+LimitNOFILE=256
+
+[Install]
+WantedBy=multi-user.target
