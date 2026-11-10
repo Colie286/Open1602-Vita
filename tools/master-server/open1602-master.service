@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Example only: create this unprivileged user and install the binary first.
 [Unit]
 Description=Open1602 public lobby and UDP relay

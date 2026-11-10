@@ -9,3 +9,28 @@ No original game assets, game simulation or Vita SDK are included.
 ENet 1.3.18: Copyright (c) 2002-2024 Lee Salzman.
 MIT license: third_party/enet/LICENSE.
 ENet contains the port's conditional Vita compatibility changes.
+
+Modifications and source provenance (2026-11-10)
+
+This is a modified, standalone server distribution prepared by Colie286 from
+Open1602 Vita. It is not an unmodified release of the upstream Open1602 project.
+The original Open1602 base is commit
+3fde8d11ca85cc783428c96839f3fd80d4827adb (version 0.3.1):
+https://github.com/x4rd4s/open1602/tree/3fde8d11ca85cc783428c96839f3fd80d4827adb
+
+The Vita port adds the master lobby/relay protocol, service and executable,
+transport queue limits and compatibility changes in shared transport/core code.
+This distribution supplies a standalone CMake build and a systemd service example.
+ENet's unix.c contains conditional Vita socket/header adaptations; the remaining
+ENet C sources, headers and LICENSE match the official v1.3.18 distribution.
+The ENet CMake build file is supplied by Open1602 and adapted for this export.
+https://github.com/lsalzman/enet/tree/v1.3.18
+
+The combined server is distributed under GPL-3.0-or-later. ENet retains its MIT
+license and copyright notice. Existing notices in individual files remain in force.
+There is no warranty; see LICENSE and third_party/enet/LICENSE.
+
+When distributing server executables, also provide the complete corresponding
+source for that exact version, including the build scripts and ENet sources,
+under the terms of GPLv3 section 6. The source in this branch builds the server
+without game assets, SDL, VitaSDK or the Open1602 simulation.
