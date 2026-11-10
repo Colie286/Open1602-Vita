@@ -1,0 +1,277 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "o1602/render/world_graphics.hpp"
+
+#include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+#include "o1602/core/byte_writer.hpp"
+#include "o1602/core/hash.hpp"
+
+#include "o1602/render/dither.hpp"
+#include "o1602/render/flag_tint.hpp"
+#include "o1602/render/package_sprites.hpp"
+#include "o1602/render/unit_tint.hpp"
+
+namespace o1602::render {
+
+std::string sheet_path(assets::FigureSheet sheet, Zoom zoom) {
+    constexpr const char* kDirs[] = {"gfx/", "mgfx/", "sgfx/"};
+    return std::string(kDirs[static_cast<int>(zoom) % 3]) + assets::figure_sheet_file(sheet);
+}
+
+core::Result<WorldGraphics> load_world_graphics(const assets::GameDirectory& game, const assets::Palette& palette,
+                                                Zoom zoom, std::span<const assets::FigureSheet> figure_sheets,
+                                                const GraphicsOptions& options, const BannerTable* banners,
+                                                const assets::FigureTable* figures) {
+    struct Loaded {
+        assets::FigureSheet id;
+        assets::SpriteSheet sheet;
+        bool derived;
+    };
+    std::vector<Loaded> loaded;
+    const auto load = [&](assets::FigureSheet id, Zoom z) -> std::optional<assets::SpriteSheet> {
+        const auto path = game.resolve(sheet_path(id, z));
+        if (!path) {
+            return std::nullopt;
+        }
+        auto sheet = assets::SpriteSheet::load(*path);
+        if (!sheet) {
+            return std::nullopt;
+        }
+        return std::move(sheet).value();
+    };
+
+    if(options.progress)options.progress->set(GraphicsPhase::Reading,0,figure_sheets.size()+1);
+    auto terrain = load(assets::FigureSheet::Stadtfld, zoom);
+    if (!terrain) {
+        return core::make_error(core::ErrorCode::NotFound,
+                                sheet_path(assets::FigureSheet::Stadtfld, zoom) + " not found or invalid");
+    }
+    loaded.push_back(Loaded{assets::FigureSheet::Stadtfld, std::move(*terrain), false});
+    unsigned sheets_done=1;
+    for (const assets::FigureSheet id : figure_sheets) {
+        if(options.cancel&&options.cancel->load(std::memory_order_relaxed))return core::make_error(core::ErrorCode::Unsupported,"cancelled");
+        if(options.progress)options.progress->set(GraphicsPhase::Reading,sheets_done++,figure_sheets.size()+1);
+        if (id == assets::FigureSheet::Stadtfld) {
+            continue;
+        }
+        if (auto sheet = load(id, zoom)) {
+            loaded.push_back(Loaded{id, std::move(*sheet), false});
+        } else if (options.derive_missing_sheets && zoom != Zoom::Large) {
+            const auto larger = static_cast<Zoom>(static_cast<int>(zoom) - 1);
+            if (auto big = load(id, larger)) {
+                loaded.push_back(Loaded{id, std::move(*big), true});
+            }
+        }
+    }
+
+    // Sources refer to the loaded sheets, which must not move from here on.
+    std::vector<std::unique_ptr<SpriteSource>> sources;
+    std::vector<const SpriteSource*> pointers;
+    for (const Loaded& l : loaded) {
+        if (l.derived) {
+            sources.push_back(std::make_unique<HalfSizeSource>(l.sheet, palette));
+        } else {
+            sources.push_back(std::make_unique<SheetSource>(l.sheet, palette));
+        }
+        pointers.push_back(sources.back().get());
+    }
+    // The packages' images join the terrain at their sprite numbers, after STADTFLD's.
+    std::vector<std::unique_ptr<PackageImageSource>> package_sources;
+    PlacedSources terrain_with_packages;
+    if (!options.package_images.empty() && pointers.front()->count() <= assets::kFirstPackageSprite) {
+        terrain_with_packages.place(0, *pointers.front());
+        for (const assets::PackageImage& image : options.package_images) {
+            package_sources.push_back(std::make_unique<PackageImageSource>(image, static_cast<std::size_t>(zoom)));
+            if (!package_sources.back()->error().empty()) {
+                std::fprintf(stderr, "mods: %s: %s\n", image.id.c_str(), package_sources.back()->error().c_str());
+            }
+            terrain_with_packages.place(image.first, *package_sources.back());
+        }
+        pointers.front() = &terrain_with_packages;
+    }
+    // Tinted player flags after all sheets: one block of frames per banner with a tinted flag.
+    std::vector<std::optional<std::uint32_t>> flag_slot;  // block index per banner
+    std::size_t flag_source = pointers.size();
+    if (banners != nullptr && banners->flag_template()) {
+        const SpriteSource* ship = nullptr;
+        for (std::size_t i = 0; i < loaded.size(); ++i) {
+            if (loaded[i].id == assets::FigureSheet::Ship) {
+                ship = sources[i].get();
+            }
+        }
+        std::vector<assets::Rgba> colours;
+        for (const Banner& b : banners->banners()) {
+            if (b.flag == FlagStyle::Tinted && ship != nullptr) {
+                flag_slot.emplace_back(static_cast<std::uint32_t>(colours.size()));
+                colours.push_back(b.colour);
+            } else {
+                flag_slot.emplace_back(std::nullopt);
+            }
+        }
+        if (!colours.empty()) {
+            const FlagTemplate& t = *banners->flag_template();
+            // A bad mod would throw out_of_range while the atlas is built (HI-13): say which.
+            if (std::uint64_t{t.gfx} + t.frames > ship->count()) {
+                return core::make_error(core::ErrorCode::InvalidFormat,
+                                        "the flag sprites " + std::to_string(t.gfx) + " + " + std::to_string(t.frames) +
+                                            " lie beyond the " + std::to_string(ship->count()) + " ship sprites");
+            }
+            sources.push_back(std::make_unique<TintedFlagSource>(*ship, t.gfx, t.frames, colours, t.from_original));
+            pointers.push_back(sources.back().get());
+        }
+    }
+    // Tinted units after that: one block per banner whose units have no drawn variant.
+    std::vector<std::optional<std::uint32_t>> unit_slot;
+    std::size_t unit_source = pointers.size();
+    std::vector<UnitImageGroup> unit_groups;
+    if (banners != nullptr && figures != nullptr) {
+        const SpriteSource* soldat = nullptr;
+        for (std::size_t i = 0; i < loaded.size(); ++i) {
+            if (loaded[i].id == assets::FigureSheet::Soldat) {
+                soldat = sources[i].get();
+            }
+        }
+        for (const std::uint32_t family : assets::FigureTable::kUnitFamilies) {
+            const assets::FigureType* first = figures->get(family);
+            const assets::FigureType* second = figures->get(family + 1);
+            if (first == nullptr || second == nullptr || second->gfx <= first->gfx) {
+                continue;
+            }
+            constexpr std::int32_t kFigtypKavalerie = 2;  // figuren.cod Kind FIGTYP_KAVALERIE
+            UnitImageGroup g;
+            g.first = first->gfx;
+            g.stride = second->gfx - first->gfx;
+            g.variants = assets::FigureTable::kUnitVariants;
+            g.base = assets::FigureTable::kUnitVariants - 1;  // white
+            g.mounted = first->kind == kFigtypKavalerie;
+            g.family = family;
+            unit_groups.push_back(g);
+        }
+        std::vector<UnitTintColour> colours;
+        for (const Banner& b : banners->banners()) {
+            if (soldat != nullptr && !unit_groups.empty() && !b.unit_variant && b.flag == FlagStyle::Tinted) {
+                unit_slot.emplace_back(static_cast<std::uint32_t>(colours.size()));
+                colours.push_back(UnitTintColour{b.colour, b.unit_mount});
+            } else {
+                unit_slot.emplace_back(std::nullopt);
+            }
+        }
+        if (!colours.empty()) {
+            // A bad mod would throw out_of_range while the atlas is built (HI-13): say which figure.
+            for (const UnitImageGroup& g : unit_groups) {
+                if (std::uint64_t{g.first} + std::uint64_t{g.stride} * g.variants > soldat->count()) {
+                    return core::make_error(core::ErrorCode::InvalidFormat,
+                                            "figure " + std::to_string(g.family) + ": its " +
+                                                std::to_string(g.variants) + " colours from sprite " +
+                                                std::to_string(g.first) + " lie beyond the " +
+                                                std::to_string(soldat->count()) + " soldier sprites");
+                }
+            }
+            // Player colours of the drawn variants: the original red, blue, yellow and white.
+            std::vector<assets::Rgba> variant_colours(
+                BannerTable::kDefaultColours.begin(),
+                BannerTable::kDefaultColours.begin() + assets::FigureTable::kUnitVariants);
+            auto source = std::make_unique<TintedUnitSource>(*soldat, unit_groups, variant_colours, colours);
+            std::uint32_t offset = 0;
+            for (UnitImageGroup& g : unit_groups) {  // same layout as in the source
+                g.offset = offset;
+                offset += g.stride;
+            }
+            sources.push_back(std::move(source));
+            pointers.push_back(sources.back().get());
+        }
+    }
+    // Dithered shadows and smoke last (classic graphics): two blocks per sheet.
+    std::vector<std::pair<std::size_t, std::size_t>> dithered;  // loaded sheet, source
+    for (std::size_t i = 0; i < loaded.size() && options.dither; ++i) {
+        if (loaded[i].id == assets::FigureSheet::Schatten || loaded[i].id == assets::FigureSheet::Effekte) {
+            dithered.emplace_back(i, pointers.size());
+            sources.push_back(std::make_unique<DitheredSource>(*sources[i]));
+            pointers.push_back(sources.back().get());
+        }
+    }
+    // Only complete original-source sets use persistence; mod package pixels
+    // keep the temporary path until their own dependency fingerprint is defined.
+    std::string slot;
+    std::uint64_t cache_key=0;
+    if(!options.backing_directory.empty()&&options.package_images.empty()){
+        core::ByteWriter key;key.string("open1602-prepared-0005-v1");key.string(options.cache_identity_root.empty()?game.root().generic_string():options.cache_identity_root);key.string(options.cache_identity_localized.empty()?game.localized_root().generic_string():options.cache_identity_localized);
+        key.u32(options.page_size);key.u32(static_cast<std::uint32_t>(zoom));key.boolean(options.derive_missing_sheets);key.boolean(options.dither);
+        for(const auto& c:palette.colours()){key.u8(c.r);key.u8(c.g);key.u8(c.b);key.u8(c.a);}
+        for(const auto& l:loaded){key.u32(static_cast<std::uint32_t>(l.id));key.boolean(l.derived);key.u64(l.sheet.content_hash());}
+        if(banners){for(const auto& b:banners->banners()){key.string(b.id);key.u8(b.colour.r);key.u8(b.colour.g);key.u8(b.colour.b);key.u8(b.colour.a);
+            key.u8(static_cast<std::uint8_t>(b.flag));key.u32(b.flag_gfx);key.u32(b.flag_frames);key.u8(b.unit_variant.value_or(255));key.u8(b.unit_mount);}
+            if(const auto& t=banners->flag_template()){key.u32(t->gfx);key.u32(t->frames);key.boolean(t->from_original);}}
+        for(const auto& g:unit_groups){key.u32(g.first);key.u32(g.stride);key.u8(g.variants);key.u8(g.base);key.u32(g.offset);key.boolean(g.mounted);key.u32(g.family);}
+        cache_key=core::xxh64(key.data());slot="prepared-v1-"+std::to_string(static_cast<unsigned>(zoom))+(options.dither?"-classic":"");
+    }
+    auto atlas = SpriteAtlas::build(std::span<const SpriteSource* const>(pointers), options.page_size, options.cancel, options.backing_directory,slot,cache_key,options.progress.get());
+    if (!atlas) {
+        return atlas.error();
+    }
+    WorldGraphics g{std::move(atlas).value(), {}, {}, {}, {}, {}};
+    for (std::size_t i = 0; i < loaded.size(); ++i) {
+        const auto k = static_cast<std::size_t>(loaded[i].id);
+        g.base[k] = g.atlas.sheet_base(i);
+        g.derived[k] = loaded[i].derived;
+    }
+    if (flag_source < pointers.size()) {
+        const std::uint32_t base = g.atlas.sheet_base(flag_source);
+        const std::uint32_t frames = banners->flag_template()->frames;
+        for (const auto& slot : flag_slot) {
+            g.banner_flags.push_back(slot ? std::optional<std::uint32_t>(base + *slot * frames) : std::nullopt);
+        }
+    }
+    if (unit_source < pointers.size()) {
+        const std::uint32_t base = g.atlas.sheet_base(unit_source);
+        g.unit_tint.groups = unit_groups;
+        for (const UnitImageGroup& group : unit_groups) {
+            g.unit_tint.block_size += group.stride;
+        }
+        for (const auto& slot : unit_slot) {
+            g.unit_tint.banner_base.push_back(slot ? std::optional<std::uint32_t>(base + *slot * g.unit_tint.block_size)
+                                                   : std::nullopt);
+        }
+    }
+    for (const auto& [sheet, source] : dithered) {
+        g.dither.sheets.push_back(
+            DitheredSheet{g.atlas.sheet_base(sheet), pointers[sheet]->count(), g.atlas.sheet_base(source)});
+    }
+    return g;
+}
+
+core::Result<PreparedGraphics> prepare_world_graphics(const assets::GameDirectory& game, const assets::Palette& palette,
+                                                      Zoom zoom, std::span<const assets::FigureSheet> figure_sheets,
+                                                      const GraphicsOptions& options, const BannerTable* banners,
+                                                      const assets::FigureTable* figures) {
+    const auto start = std::chrono::steady_clock::now();
+    auto graphics = load_world_graphics(game, palette, zoom, figure_sheets, options, banners, figures);
+    if (!graphics) {
+        return graphics.error();
+    }
+    PreparedGraphics p{std::move(graphics).value(), {}, 0};
+    if (options.cancel != nullptr && options.cancel->load(std::memory_order_relaxed)) {
+        return core::make_error(core::ErrorCode::Unsupported, "cancelled");
+    }
+    // Buildings and units are picked by their visible pixels: every sprite keeps a mask, the
+    // terrain sheet's (buildings, also those of mods) as the figures'.
+    if(options.progress)options.progress->set(GraphicsPhase::Masks,0,1);
+    p.hit_mask = SpriteHitMask::build(p.graphics.atlas, 0,options.progress.get());
+    if(p.graphics.atlas.paged())std::fprintf(stderr,"PREPARED_CACHE zoom=%u hit=%d bytes=%llu\n",unsigned(zoom),p.graphics.atlas.prepared_cache_hit(),static_cast<unsigned long long>(p.graphics.atlas.backing_bytes()));
+    p.graphics.atlas.drop_alpha();
+#ifdef O1602_EXPERIMENTAL_VITA
+    const bool resident=p.graphics.atlas.warm_read_cache();
+    std::fprintf(stderr,"SPRITE_READ_CACHE zoom=%u resident=%d bound=16777216\n",unsigned(zoom),resident);
+#endif
+    if(options.progress)options.progress->set(GraphicsPhase::Ready,1,1);
+    p.ms = static_cast<std::uint32_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count());
+    return p;
+}
+
+}  // namespace o1602::render

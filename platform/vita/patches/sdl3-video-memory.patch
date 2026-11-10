@@ -1,0 +1,142 @@
+--- a/src/render/vitagxm/SDL_render_vita_gxm_tools.c
++++ b/src/render/vitagxm/SDL_render_vita_gxm_tools.c
+@@ -1002,6 +1002,8 @@
+ void free_gxm_texture(VITA_GXM_RenderData *data, gxm_texture *texture)
+ {
+     if (texture) {
++        if (texture->small_direct) data->smallTextureSpillBytes -= texture->alloc_bytes;
++        if (texture->report) SDL_LogInfo(SDL_LOG_CATEGORY_RENDER, "GXM_TEXTURE_FREE bytes=%u domain=%u spill_cdram_bytes=%u role=%s", texture->alloc_bytes, texture->domain, data->smallTextureSpillBytes, texture->role);
+         if (texture->gxm_rendertarget) {
+             sceGxmDestroyRenderTarget(texture->gxm_rendertarget);
+         }
+@@ -1048,13 +1050,13 @@
+     }
+ }
+ 
+-gxm_texture *create_gxm_texture(VITA_GXM_RenderData *data, unsigned int w, unsigned int h, SceGxmTextureFormat format, unsigned int isRenderTarget, unsigned int *return_w, unsigned int *return_h, unsigned int *return_pitch, float *return_wscale)
++gxm_texture *create_gxm_texture(VITA_GXM_RenderData *data, unsigned int w, unsigned int h, SceGxmTextureFormat format, unsigned int force_main_ram, const char *role, unsigned int isRenderTarget, unsigned int *return_w, unsigned int *return_h, unsigned int *return_pitch, float *return_wscale)
+ {
+     gxm_texture *texture = SDL_calloc(1, sizeof(gxm_texture));
+     int aligned_w = ALIGN(w, 8);
+     int texture_w = w;
+     int tex_size = aligned_w * h * tex_format_to_bytespp(format);
+-    void *texture_data;
++    void *texture_data = NULL;
+     int ret;
+ 
+     *return_wscale = 1.0f;
+@@ -1077,31 +1079,58 @@
+     *return_h = h;
+     *return_pitch = aligned_w * tex_format_to_bytespp(format);
+ 
+-    SDL_LogInfo(SDL_LOG_CATEGORY_RENDER, "GXM texture request w=%d h=%d bytes=%d", w, h, tex_size);
++    SDL_strlcpy(texture->role, role, sizeof(texture->role));
++    texture->report = force_main_ram || isRenderTarget || SDL_strcmp(role, "video") == 0 || tex_size >= 4 * 1024 * 1024;
+ 
+     // Open1602 hardware patch: large pages must not share an mspace with
+     // tiny UI textures. Separate memblocks avoid permanent pool fragmentation
+     // across zoom changes, and their UID frees the complete page at eviction.
+-    if (tex_size >= 4 * 1024 * 1024) {
++    if (!force_main_ram && tex_size >= 4 * 1024 * 1024) {
+         texture_data = vita_mem_alloc(
+             SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, tex_size,
+             SCE_GXM_TEXTURE_ALIGNMENT,
+             SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE,
+             &texture->data_UID);
+         texture->cdram = 0; // individually owned UID, freed by vita_mem_free
+-    } else {
++    } else if (!force_main_ram) {
+         texture_data = vita_gpu_mem_alloc(data, tex_size);
+         texture->cdram = 1; // owned by the small-texture mspace
+     }
++    texture->alloc_bytes = texture->cdram ? tex_size : ALIGN(tex_size, 256 * 1024);
++    texture->domain = texture->cdram ? 1 : 2;
++    // A fragmented/full 16 MiB mspace does not mean all CDRAM is exhausted.
++    // Larger small textures (not tiny glyphs) may use at most 4 MiB of individually
++    // owned spill blocks. The counter includes 256 KiB physical alignment.
++    if (!texture_data && !force_main_ram && tex_size < 4 * 1024 * 1024 && tex_size >= 256 * 1024 &&
++        data->smallTextureSpillBytes + ALIGN(tex_size, 256 * 1024) <= 4 * 1024 * 1024) {
++        texture_data = vita_mem_alloc(SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, tex_size,
++            SCE_GXM_TEXTURE_ALIGNMENT, SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE,
++            &texture->data_UID);
++        if (texture_data) {
++            texture->cdram = 0;
++            texture->small_direct = true;
++            texture->report = true;
++            texture->alloc_bytes = ALIGN(tex_size, 256 * 1024);
++            texture->domain = 2;
++            data->smallTextureSpillBytes += texture->alloc_bytes;
++        }
++    }
+     // Keep the existing main-RAM fallback, subject to the caller's actual budget.
+     if (!texture_data) {
+-        SDL_LogWarn(SDL_LOG_CATEGORY_RENDER, "CDRAM texture allocation failed: bytes=%d", tex_size);
++        texture->report = true;
++        if (force_main_ram) SDL_LogInfo(SDL_LOG_CATEGORY_RENDER, "GXM_TEXTURE_QA force_main_ram=1 bytes=%d", tex_size);
++        else SDL_LogWarn(SDL_LOG_CATEGORY_RENDER, "CDRAM texture allocation failed: bytes=%d", tex_size);
+         texture_data = vita_mem_alloc(
+             SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, tex_size,
+             SCE_GXM_TEXTURE_ALIGNMENT,
+             SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE,
+             &texture->data_UID);
+         texture->cdram = 0;
++        texture->alloc_bytes = ALIGN(tex_size, 4096);
++        texture->domain = 3;
++        SceKernelFreeMemorySizeInfo info = {0}; info.size = sizeof(info);
++        int mem_rc = sceKernelGetFreeMemorySize(&info);
++        SDL_LogInfo(SDL_LOG_CATEGORY_RENDER, "GXM_TEXTURE_FALLBACK success=%d bytes=%d domain=main_ram free_cdram=%u free_user=%u memory_rc=%d role=%s", texture_data != NULL, tex_size, info.size_cdram, info.size_user, mem_rc, texture->role);
+     }
+ 
+     if (!texture_data) {
+@@ -1109,6 +1138,7 @@
+         return NULL;
+     }
+ 
++    if (texture->report) SDL_LogInfo(SDL_LOG_CATEGORY_RENDER, "GXM_TEXTURE_ALLOC bytes=%u domain=%u spill_cdram_bytes=%u role=%s w=%u h=%u", texture->alloc_bytes, texture->domain, data->smallTextureSpillBytes, texture->role, w, h);
+     // Clear the texture
+     SDL_memset(texture_data, 0, tex_size);
+ 
+--- a/src/render/vitagxm/SDL_render_vita_gxm_types.h
++++ b/src/render/vitagxm/SDL_render_vita_gxm_types.h
+@@ -84,6 +84,11 @@
+     SceGxmDepthStencilSurface gxm_depthstencil;
+     SceUID depth_UID;
+     bool cdram;
++    bool report;
++    char role[24];
++    bool small_direct; // Open1602: individually owned, bounded pool spill
++    unsigned int alloc_bytes;
++    unsigned int domain; // 1 pool, 2 direct CDRAM, 3 mapped main RAM
+ } gxm_texture;
+ 
+ typedef struct fragment_programs
+@@ -194,6 +199,7 @@
+     gxm_drawstate_cache drawstate;
+     SceClibMspace texturePool;
+     SceUID texturePoolUID;
++    unsigned int smallTextureSpillBytes;
+ } VITA_GXM_RenderData;
+ 
+ typedef struct
+--- a/src/render/vitagxm/SDL_render_vita_gxm_tools.h
++++ b/src/render/vitagxm/SDL_render_vita_gxm_tools.h
+@@ -46,7 +46,7 @@
+ int gxm_init(SDL_Renderer *renderer);
+ void gxm_finish(SDL_Renderer *renderer);
+ 
+-gxm_texture *create_gxm_texture(VITA_GXM_RenderData *data, unsigned int w, unsigned int h, SceGxmTextureFormat format, unsigned int isRenderTarget, unsigned int *return_w, unsigned int *return_h, unsigned int *return_pitch, float *return_wscale);
++gxm_texture *create_gxm_texture(VITA_GXM_RenderData *data, unsigned int w, unsigned int h, SceGxmTextureFormat format, unsigned int force_main_ram, const char *role, unsigned int isRenderTarget, unsigned int *return_w, unsigned int *return_h, unsigned int *return_pitch, float *return_wscale);
+ void free_gxm_texture(VITA_GXM_RenderData *data, gxm_texture *texture);
+ 
+ void gxm_texture_set_address_mode(gxm_texture *texture, SceGxmTextureAddrMode u_mode, SceGxmTextureAddrMode v_mode);
+--- a/src/render/vitagxm/SDL_render_vita_gxm.c
++++ b/src/render/vitagxm/SDL_render_vita_gxm.c
+@@ -283,6 +283,8 @@
+         texture->w,
+         texture->h,
+         PixelFormatToVITAFMT(texture->format),
++        SDL_GetBooleanProperty(create_props, "open1602.qa.force_main_ram", false),
++        SDL_GetStringProperty(create_props, "open1602.texture.role", "engine"),
+         (texture->access == SDL_TEXTUREACCESS_TARGET),
+         &(vita_texture->w),
+         &(vita_texture->h),

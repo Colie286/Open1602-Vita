@@ -1,0 +1,7 @@
+Open1602 window icons
+
+The two BMP files are the original Open1602 project icons, not commercial game
+artwork. They are dedicated to the public domain under CC0 1.0, as stated in
+the original project's data/icons/README.md:
+https://github.com/x4rd4s/open1602/tree/3fde8d11ca85cc783428c96839f3fd80d4827adb/data/icons
+https://creativecommons.org/publicdomain/zero/1.0/

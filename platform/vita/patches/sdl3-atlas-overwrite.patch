@@ -1,0 +1,21 @@
+--- a/src/render/vitagxm/SDL_render_vita_gxm.c
++++ b/src/render/vitagxm/SDL_render_vita_gxm.c
+@@ -569,9 +569,16 @@
+         (void *)((Uint8 *)gxm_texture_get_datap(vita_texture->tex) + (rect->y * vita_texture->pitch) + rect->x * SDL_BYTESPERPIXEL(texture->format));
+     *pitch = vita_texture->pitch;
+ 
+-    // make sure that rendering is finished on render target textures
+-    if (vita_texture->tex->gxm_rendertarget) {
++    // Repacking the bounded world atlas overwrites texels still referenced by
++    // an earlier queued frame. Flush once before the first overwrite, never for
++    // every sprite uploaded into previously unused space.
++    const SDL_PropertiesID props = SDL_GetTextureProperties(texture);
++    const bool overwrite = SDL_GetBooleanProperty(props, "open1602.texture.overwrite_pending", false);
++    if (vita_texture->tex->gxm_rendertarget || overwrite) {
+         sceGxmFinish(data->gxm_context);
++        if (overwrite) {
++            SDL_ClearProperty(props, "open1602.texture.overwrite_pending");
++        }
+     }
+ 
+     return true;

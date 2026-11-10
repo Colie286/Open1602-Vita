@@ -1,0 +1,973 @@
+# Open1602's own texts in English: menus, questions and messages the original game does not have.
+# The original's texts come from its data files. Every key needs a line here; other languages fall
+# back to this file for keys they lack. Format: docs/modding/languages.md.
+
+language.name = English
+# A line of [PLAYCOL] in Text.cod that only an installation in this language has (several: a|b).
+language.detect = Red Player|Red player
+
+# Questions
+dialog.yes = Yes
+dialog.no = No
+dialog.quit_game = Quit the game?\nIt is saved as “lastgame”.
+dialog.quit_anno = Quit Open1602?
+# {1}: the cost in gold
+dialog.disband_unit = Disband the unit?\nThis costs {1} gold.
+# {1}: the other player's name
+dialog.break_peace = Break the peace treaty with {1}?\nThis means war.
+# {1}: the other player's name
+dialog.declare_war = An attack means war with {1}.\nDeclare war?
+# {1}: the ship's name
+dialog.scuttle_ship = Scuttle the ship “{1}”?\nIts cargo is lost.
+# {1}: houses, {2}: other buildings that lose their land
+dialog.demolish_land = Demolish it?\n{1} houses and {2} other buildings lose their land\nand fall to ruins.
+
+# Notes in the status line
+# {1}: the file's name
+notice.game_saved = Game saved: {1}
+notice.game_loaded = Game loaded: {1}
+notice.screenshot_saved = Screenshot saved: {1}
+# {1}: what went wrong
+notice.save_failed = Saving failed: {1}
+notice.load_failed = Loading failed: {1}
+# {1}: how many problems
+notice.load_problems = Loaded with {1} problem(s): parts of the game could not be used. The log has the details.
+notice.packages = This game uses mods that are missing here or differ: {1}. The log has the details.
+notice.screenshot_failed = Screenshot failed: {1}
+notice.gates_closed = City gates closed: foreign soldiers cannot pass.
+notice.gates_opened = City gates open.
+
+# Menus and savegames
+# {1}: the number of the scenario's variant
+menu.part = Part {1}
+menu.default_name = Nameless
+menu.start_failed = The game could not be started: {1}
+# The endless game's levels below its briefing, one "* " line each (as the History Edition)
+menu.endless_level_notes.0 = * numerous ore deposits\n* many fertile islands\n* no pirates
+menu.endless_level_notes.1 = * enough fertile islands\n* occasional pirate sightings
+menu.endless_level_notes.2 = * limited number of ore deposits\n* pirates threaten sea travel
+menu.endless_level_notes.3 = * very few ore deposits\n* frequent droughts\n* pirates threaten sea travel
+# {1}: the number of the slot
+save.default_name = Savegame {1}
+# A savegame in the lists: {1} the player's name, {2} the time played, {3} x {4} the map's size
+save.details = {1}, played {2}, map {3} x {4}
+# {1} hours, {2} minutes (two digits)
+save.time = {1}:{2} h
+
+# Key overview (F1)
+keys.title = Keys
+keys.footer = Tab or left / right arrow: change page; click outside or F1 closes
+keys.page.map_game = Map & game
+keys.page.windows = Windows
+keys.page.building = Building
+keys.page.units = Units & ships
+keys.page.view = View
+keys.heading.map = Map
+keys.heading.game = Game
+keys.heading.windows = Windows and menus
+keys.heading.building = While building
+keys.heading.groups = Groups and selection
+keys.heading.units = Ships and units selected
+keys.heading.view = Display
+# Clicks with a modifier in windows (F1, units and ships)
+keys.click = click
+keys.click.castle_all = Castle, send-out arrow: all trained units
+keys.click.cannons = Cannons in a ship's hold: mount as many as fit
+keys.click.twice = double click
+keys.click.catchments = Own building with a catchment area: the areas of all buildings of its type on the island
+# Replaces the digit of a group key ("Ctrl+1" becomes "Ctrl+1 .. 0")
+keys.group_digits = 1 .. 0
+keys.modifier.ctrl = Ctrl+
+keys.modifier.shift = Shift+
+keys.modifier.alt = Alt+
+keys.name.space = Space
+keys.name.delete = Del
+keys.name.escape = Esc
+keys.name.page_up = PgUp
+keys.name.page_down = PgDn
+keys.name.home = Home
+keys.name.up = Up
+keys.name.down = Down
+keys.name.left = Left
+keys.name.right = Right
+keys.name.return = Enter
+keys.name.print_screen = Print
+keys.name.keypad_plus = Num +
+keys.name.keypad_minus = Num -
+keys.name.keypad_enter = Num Enter
+keys.name.tab = Tab
+keys.name.pause = Pause
+
+# What each action of keys.cfg does (keys.action.<name in keys.cfg>)
+keys.action.scroll_up = Map up
+keys.action.scroll_down = Map down
+keys.action.scroll_left = Map left
+keys.action.scroll_right = Map right
+keys.action.rotate_view_left = Rotate view left
+keys.action.rotate_view_right = Rotate view right
+keys.action.zoom_in = Zoom in
+keys.action.zoom_out = Zoom out
+keys.action.jump_to_message = To the last message
+keys.action.centre_on_selection = To the selection / the warehouse
+keys.action.next_city = To the next city
+keys.action.pause = Pause
+keys.action.pause_video = Pause with video
+keys.action.speed_up = Faster
+keys.action.speed_down = Slower
+keys.action.quick_save = Quick save
+keys.action.quick_load = Quick load
+keys.action.game_menu = Game menu
+keys.action.screenshot = Screenshot
+keys.action.help = This overview
+keys.action.cancel = Cancel, back
+keys.action.mode_build = Build
+keys.action.mode_military = Military
+keys.action.mode_info = Status
+keys.action.mode_options = Options
+keys.action.ship_list = Ship list
+keys.action.city_list = City list
+keys.action.diplomacy = Diplomacy
+keys.action.goods_statistics = Goods balance
+keys.action.chat = Chat (multiplayer)
+keys.action.rotate_building = Rotate building
+keys.action.rotate_building_back = Rotate building the other way
+keys.action.pick_building = Pick the building under the mouse
+keys.action.demolish_tool = Demolish
+keys.action.next_building = Next building
+keys.action.plant_fields = Plant all farm fields
+keys.action.toggle_gates = Open/close all city gates
+keys.action.group_store = Store group
+keys.action.group_add = Add to group
+keys.action.group_recall = Select group (twice: go there)
+keys.action.next_idle_ship = Next idle ship
+keys.action.next_idle_unit = Next idle unit
+keys.action.next_kind_in_selection = Next kind in the selection
+keys.action.select_infantry = Select all swordsmen
+keys.action.select_musketeers = Select all musketeers
+keys.action.select_cavalry = Select all cavalry
+keys.action.select_cannoneers = Select all cannons
+keys.action.attack_move = Attack (click target/field)
+keys.action.stop = Stop
+keys.action.hold_position = Hold position
+keys.action.patrol = Patrol (click a target)
+keys.action.formation = Formation
+keys.action.scatter = Scatter
+keys.action.white_flag = White flag
+keys.action.explore = Explore island
+keys.action.trade = Trade / transfer
+keys.action.edit_route = Trade route
+keys.action.delete = Disband / scuttle
+keys.action.pixel_scale_up = Larger pixels
+keys.action.pixel_scale_down = Smaller pixels
+keys.action.show_owners = Show ownership
+keys.action.show_fertility = Fertility for the crop of the selected farm or field
+keys.action.show_fps = Show frame rate
+keys.action.show_coordinates = Show coordinates
+keys.action.show_unit_arms = Unit identification (coat of arms over own units)
+keys.action.fullscreen = Window or full screen
+keys.action.quit = Quit
+
+# The multiplayer menu and messages (net.*). {1}: a name, a number or a reason, as noted.
+net.multiplayer = Multiplayer
+net.your_name = Your name
+net.games = Games
+net.col_game = Game
+net.col_host = Host
+net.col_players = Players
+net.col_state = State
+net.col_ping = Ping
+net.state_lobby = Lobby
+net.state_running = running
+net.state_running_join = running, join
+net.state_running_watch = running, watch
+net.state_other_version = other version
+net.no_games_found = No games found yet.
+net.search_hint = Games on the local network appear by themselves.
+net.connect_directly = Connect directly
+net.host_address = Address of the host
+net.password = Password
+net.connect = Connect
+net.create_game = Create game
+net.host_hint = Direct-IP internet games: open UDP port {1} at the host.
+net.back = Back
+net.refresh = Refresh
+net.join = Join
+net.create_title = Create game
+net.new_endless = New endless game
+net.scenario = Scenario
+net.savegame = Savegame
+net.level = Level
+net.world_number = World no.
+net.roll = Roll
+net.players = Players
+net.player_count = {1} players
+net.endless_hint = The same number makes the same world. From five players on, the world is made for them, with room for everyone.
+net.scenario_hint = The others do not need the file: the game comes from the host.
+net.savegame_hint = Whoever comes back takes a free slot of the game.
+net.no_savegames = No savegames.
+net.session = Session
+net.game_title = Name of the game
+net.password_optional = Password (empty: anyone)
+net.show_on_lan = Show on the local network
+net.allow_join_running = Joining the running game
+net.allow_spectators = Spectators
+net.computer_takes_over = Computer takes over
+net.host_pauses_only = Only the host pauses
+net.host_only = Host without a player
+net.port = UDP port
+net.open_lobby = Open lobby
+net.default_title = {1}'s game
+net.endless_game = Endless game
+net.level_n = level {1}
+net.watchers = Watching: {1}
+net.nobody = nobody
+net.seat_open = Open
+net.seat_computer = Computer
+net.seat_blocked = Blocked
+net.ready = Ready
+net.choosing = choosing
+net.free = free
+net.take = Take
+net.kick = Remove
+net.you = (you)
+net.host = (host)
+net.chat = Chat
+net.chat_hint = Message to all (Enter sends)
+net.leave = Leave
+net.start = Start game
+net.start_hint = Start once every player is ready.
+net.wait_host_start = The host starts once everyone is ready.
+net.watch = Watch
+net.yes = yes
+net.no = no
+net.connecting = Connecting to {1} ...
+net.player_joined = {1} joined.
+net.player_left = {1} left.
+net.computer_took_over = The computer plays on for {1}.
+net.lagging = {1} lags behind; the game goes on.
+net.desync = {1} diverged and gets the game anew.
+net.dropped = {1} of your orders were not carried out: too many at once.
+net.reconnecting = The connection to the host broke; trying to get back in.
+net.pause_refused = Only the host can pause and resume this game.
+net.allow_spectator_chat = Spectators may chat
+net.chat_all = All
+net.chat_close = Close
+net.chat_to_label = To:
+net.chat_to_you = to you
+net.chat_to_you_and = to you, {1}
+net.chat_to = to {1}
+net.chat_hint_all = Message to all (Enter sends, Esc closes)
+net.chat_hint_private = Private to {1} (Enter sends, Esc closes)
+net.chat_read_only = Spectators only read the chat in this game.
+net.chat_missed = Not delivered to {1}: nobody plays there right now.
+net.package_kept = Mod received: {1}.
+net.game_waiting = The host is preparing the game for you ...
+net.game_receiving = Receiving the game ...
+net.game_bytes = {1} of {2} MB
+net.game_loading = Loading the game ...
+net.size_kb = {1} KB
+net.size_mb = {1}.{2} MB
+net.fetch_question = This game needs mods this computer does not have: {1} ({2}). Download them from the host?
+net.waiting = Waiting for the other players ...
+net.host_port = Hosting on UDP port {1}
+net.cannot_host = Cannot host: {1}
+net.cannot_connect = Cannot connect: {1}
+net.start_failed = The game cannot start: {1}
+net.end.connect_failed = The host cannot be reached.
+net.end.host_left = The connection to the host ended.
+net.end.refused = The host refused.
+net.end.protocol_error = A message from the network made no sense.
+net.end.load_failed = The host's game could not be loaded.
+net.end.desync = This computer keeps diverging from the host.
+net.host_left_saved = The host left. The game was saved as {1}, to play on alone or to host again as a savegame.
+net.host_moving = The host left; the game moves on to {1} ...
+net.host_moved = {1} hosts the game now.
+net.host_moved_you = The host left; you host the game now.
+net.choose_banner = Choose a banner
+net.colour.red = Red
+net.colour.blue = Blue
+net.colour.yellow = Yellow
+net.colour.white = White
+net.colour.orange = Orange
+net.colour.green = Green
+net.colour.teal = Teal
+net.colour.pink = Pink
+net.colour.magenta = Magenta
+net.colour.grey = Grey
+net.colour.purple = Purple
+net.colour.brown = Brown
+net.refused.version = The host has another version of Open1602.
+net.refused.content = The host has other game data.
+net.refused.full = No free slot.
+net.refused.closed = The host takes nobody into the running game.
+net.refused.desync = This computer keeps diverging from the host.
+net.refused.invalid = This computer sent what makes no sense.
+net.refused.password = Wrong password.
+net.refused.kicked = The host sent you away.
+net.refused.taken = Your slot is still being played from another computer.
+net.refused.packages = The game needs mods this computer does not have, or has in another version: {1}.
+
+# Players five to twelve of a new world, named after their colours
+player.colour.red = Red player
+player.colour.blue = Blue player
+player.colour.yellow = Yellow player
+player.colour.white = White player
+player.default = Player {1}
+city.default = City {2} on island {1}
+ship.default = Ship {1}
+# A hold of cannons in an own ship's window ({1}: the goods, as "10t Cannons")
+ship.cannon_hold = {1} (click: mount one, Shift+click: as many as fit)
+# The castle's send-out arrow ({1}: its help line from the game's texts)
+castle.release = {1} (Shift+click: all trained units, lined up around the spot)
+player.colour.orange = Orange player
+player.colour.purple = Purple player
+player.colour.teal = Teal player
+player.colour.pink = Pink player
+player.colour.magenta = Magenta player
+player.colour.green = Green player
+player.colour.grey = Grey player
+player.colour.brown = Brown player
+
+# End screen (ENDE.GAD shows the original's own texts; these are Open1602's additions)
+# {1}: the number of the player's slot, for a player without a name
+end.player = Player {1}
+end.continue_hint = Esc: keep playing
+# With more players than coats of arms: the shown player's rank by points ({1}) of all ({2}),
+# and the rank under each coat of arms of the strip ({1})
+end.rank = Rank {1} of {2}
+end.place = #{1}
+
+# Diplomacy window with more than three partners: the coat of arms of a partner in the strip ({1}: the
+# name), and an offer not answered yet in the status bar
+diplomacy.partner = {1}: treaties and tribute
+diplomacy.offer.trade = {1} offers you a trade treaty
+diplomacy.offer.peace = {1} offers you a peace treaty
+diplomacy.offer.both = {1} offers you a trade treaty and a peace treaty
+diplomacy.wars = {1} is at war with {2}
+diplomacy.no_wars = {1} is at peace with everyone
+
+# Trade route editor: the row below the stops (copy a route, show the stops {1} as 1-4 or 5-8),
+# and the help line of the stop the ship sails to now ({1}: the original's help line)
+route.copy = Copy route
+route.copy_help = Take the stops of another of your ships: click on it on the map
+route.show_stops = Show the stops {1}
+route.current_stop = {1} (the ship sails here now)
+route.stop_wares = Show all {1} wares of this stop
+route.show_stop = Show stop {1}
+route.back = To the route
+route.back_to_ship = Back to the ship, where the route is started (also right click)
+route.no_hold = No hold free on this ship: the ware stays in the route for larger ships
+
+# Window title
+title.paused = paused
+# {1}: the game speed, as 2, 4 or 8
+title.speed = speed x{1}
+# {1}: the speed this computer reaches, as 1.4
+title.too_slow = too slow: x{1}
+# {1}: the number of players
+title.multiplayer = multiplayer: {1} players
+title.multiplayer_ended = game over
+title.multiplayer_waiting = waiting for players
+
+# Status line while building. {1}: the cost in gold
+build.cost = {1} gold
+# Why a building cannot be placed
+build.refusal.ok = can be built
+build.refusal.unknown = unknown building
+build.refusal.outside_island = outside the island
+build.refusal.terrain = cannot be built on this ground
+build.refusal.territory = outside your city
+build.refusal.territory.original = outside your city (allowed at the edge with the original setting “Widening the territory”)
+build.refusal.foreign_city = another player's city
+build.refusal.city_limit = no further city on this island
+build.refusal.second_kontor = the city already has a warehouse
+build.refusal.no_coast = needs the coast
+build.refusal.no_deposit = no ore here
+build.refusal.no_rock = needs a rock face
+build.refusal.no_river = needs a river
+build.refusal.unit_in_the_way = a unit is in the way
+build.refusal.locked = not available yet
+build.refusal.limit = no more of these allowed
+build.refusal.infertile = does not grow here
+build.refusal.infertile.original = does not grow here (the original setting “Fields on poor ground” plants it withered)
+build.refusal.overlap = overlaps
+build.refusal.money = not enough gold
+build.refusal.tools = not enough tools
+build.refusal.wood = not enough wood
+build.refusal.bricks = not enough bricks
+build.refusal.cannons = not enough cannons
+build.refusal.ship_too_far = the ship is too far away
+
+# Why a file could not be loaded or saved (the details go to the log)
+error.io = the file could not be read or written
+error.not_found = the file does not exist
+error.damaged = the file is damaged or no savegame
+error.limit = more than the game holds: {1}
+error.unsupported = the file needs a newer Open1602 or other game data
+error.script = a mod script failed: {1}
+error.platform = the system refused
+
+# Start dialog of the endless game (ADR 0008)
+setup.title = New endless game: settings
+setup.group.economy = Economy
+setup.group.limits = Limits
+setup.group.disasters = Disasters
+setup.group.world = World
+setup.refund = Refund on demolition
+setup.refund.none = None
+# {1}: the share of the costs in percent
+setup.refund.partial = {1} %
+setup.refund.full = Full costs
+setup.trader = Trader's prices
+setup.trader.original = As usual
+setup.trader.market = By the market
+setup.trader_reach = Trader's ports
+setup.trader_reach.original = As the original
+setup.trader_reach.per4 = As with 4 players
+setup.ore_veins = Large iron veins
+setup.ore_veins.game = As in the game file
+setup.ore_veins.finite = Finite (240 t)
+setup.ore_veins.endless = Endless
+setup.bread = Bread production
+setup.bread.original = As the original
+setup.bread.revised = Revised
+setup.ships = Ships per player
+setup.units = Units per player
+setup.unlimited = Unlimited
+setup.value.own = {1} (own value)
+setup.victory.next = {1}; {2}
+setup.victory.part = {1}: {2}
+setup.speed = Highest game speed
+# {1}: the factor
+setup.speed.value = {1} ×
+setup.droughts = Droughts
+setup.droughts.game = As the level
+setup.droughts.rare = Rare
+setup.droughts.normal = Normal
+setup.droughts.frequent = Frequent
+setup.volcanoes = Volcanoes
+setup.volcanoes.game = As the map
+setup.on = On
+setup.off = Off
+setup.map = Map
+setup.map.original = The original's
+setup.map.own = A world of its own
+setup.size = Size
+# {1}: width, {2}: height in tiles
+setup.size.value = {1} × {2}
+setup.size.auto = Auto ({1} × {2})
+setup.players = Players
+setup.islands = Islands
+setup.island_sizes = Island sizes
+setup.island_sizes.small = Small
+setup.island_sizes.mixed = Mixed
+setup.island_sizes.large = Large
+setup.villages = Native villages
+setup.volcano_islands = Volcano islands
+setup.gold_islands = Gold islands
+setup.gold_islands.auto = Auto
+setup.amount.none = None
+setup.amount.few = Few
+setup.amount.normal = Normal
+setup.amount.many = Many
+setup.starts = Starting places
+setup.starts.spread = Apart
+setup.starts.together = Together
+setup.resources = Every raw material
+setup.group.opponents = Opponents
+setup.computers = Computers active
+setup.computers.game = As in the game file
+setup.ship_purchases = Computers buy ships
+setup.pirates = Pirates
+setup.pirates.game = As the level
+setup.pirate_nests = Pirate nests
+setup.pirate_nests.one = One (original)
+setup.pirate_nests.per4 = One per 4 players
+setup.reveal = Known from the start
+setup.reveal.none = Nothing
+setup.reveal.original = As in the original
+setup.reveal.all = All settlements
+setup.original = Original rules
+setup.defaults = Open1602 defaults
+setup.back = Back
+setup.start = Start game
+setup.hint = Click: next value, right click: previous. The settings stay with the game and its savegames. A world of its own has the players chosen, the original's maps four.
+setup.title.multiplayer = Multiplayer game: settings
+setup.title.scenario = New scenario: settings
+setup.title.savegame = Saved game: settings
+setup.hint.multiplayer = Click: next value, right click: previous. Everyone in the lobby sees the settings, every computer plays by them. More than four always play on a world of their own.
+setup.hint.scenario = Click: next value, right click: previous. The scenario's map stays as it is; the rules apply to it and stay with its savegames.
+setup.hint.savegame = A saved game keeps the settings it was started with.
+setup.apply = Apply
+setup.custom = Custom settings
+# {1}: Open1602 defaults, original rules or custom settings
+setup.summary = Rules: {1}
+setup.change = Game settings ...
+setup.view = Show game settings
+
+# Victory conditions of the endless game (a page of the start dialog)
+setup.group.more = More
+setup.victory = Victory conditions
+setup.victory.open = {1} ...
+setup.victory.none = None (endless)
+setup.victory.one = 1 condition
+setup.victory.many = {1} conditions
+setup.victory.off = All off
+setup.title.victory = Victory conditions
+setup.hint.victory = Who first meets the conditions wins the game; a click on a value chooses the next. Without conditions the endless game never ends, as in the original. With a time limit the player with the most points wins when the time is up. Computers are measured by the same conditions.
+setup.hint.victory.view = Who first meets the conditions wins the game. With a time limit the player with the most points wins when the time is up. Computers are measured by the same conditions.
+setup.group.population = Population
+setup.group.wealth = Wealth
+setup.group.power = Power
+setup.group.end = End of the game
+setup.win.inhabitants = Inhabitants
+setup.win.class = Population level
+setup.win.class.settlers = Settlers
+setup.win.class.citizens = Citizens
+setup.win.class.merchants = Merchants
+setup.win.class.aristocrats = Aristocrats
+setup.win.class_inhabitants = From that level up
+setup.win.money = Treasury
+setup.win.balance = Balance per minute
+setup.win.balance.value = +{1}
+setup.win.islands = Settled islands
+setup.win.eliminate = Defeat all opponents
+setup.win.score = Score
+setup.win.monument = Prestige buildings
+setup.win.monument.castle = Castle
+setup.win.monument.cathedral = Cathedral
+setup.win.monument.both = Castle and cathedral
+setup.win.time = Time limit
+# A number and its unit are joined by a no-break space (U+00A0), so that the mission window keeps them on one line.
+setup.win.hours = {1} h
+setup.win.all = Win by
+setup.win.all.every = All conditions
+setup.win.all.any = Any condition
+setup.win.computers = Computers can win
+setup.win.number = {1}
+setup.win.gold = {1} gold
+setup.win.percent = {1} %
+setup.win.class.text = {1} {2} or higher
+setup.win.minutes = {1} min
+setup.victory.text = Victory conditions: {1}.
+setup.thousands = ,
+
+# Bugs of the original a game can bring back (a page of the start dialog, "Original settings")
+setup.bugs = Original settings
+setup.bugs.open = {1} ...
+setup.bugs.none = Open1602 fixes
+setup.bugs.one = 1 as original
+setup.bugs.many = {1} as original
+setup.bugs.all_original = All as the original
+setup.bugs.all_fixed = All fixed
+setup.title.bugs = Original settings
+setup.hint.bugs = Bugs and exploits of the original that Open1602 fixes can be brought back here one by one; by default Open1602's fixes apply. "All as the original" plays the game as players know it, tricks included. In a multiplayer game the host decides for everyone, and the settings stay with the game and its savegames.
+setup.hint.bugs.view = Which bugs and exploits of the original this game brings back. A saved game keeps them as it was started.
+setup.bug.fire_risk = Fire risk
+setup.bug.fire_risk.fixed = Wood burns sooner
+setup.bug.fire_risk.original = Brick burns sooner
+setup.bug.gallows = Gallows
+setup.bug.gallows.fixed = 3 in 4 kept away
+setup.bug.gallows.original = 2 in 5 kept away
+setup.group.construction = Construction
+setup.group.ships = Ships and trade
+setup.bug.robber_victims = Robbers' victims
+setup.bug.robber_victims.fixed = Every carrier
+setup.bug.robber_victims.original = By rotation
+setup.bug.robber_flight = Fleeing robber
+setup.bug.robber_flight.fixed = Reaches the house
+setup.bug.robber_flight.original = Gone after 12 tiles
+setup.bug.goldsheep = Gold sheep trick
+setup.bug.goldsheep.fixed = Off
+setup.bug.goldsheep.original = On
+setup.bug.building_radius = Widening the territory
+setup.bug.building_radius.fixed = Off
+setup.bug.building_radius.original = On
+setup.bug.infertile_fields = Fields on poor ground
+setup.bug.infertile_fields.fixed = Refused
+setup.bug.infertile_fields.original = Planted withered
+setup.bug.remote_trade = Trading from afar
+setup.bug.remote_trade.fixed = Off
+setup.bug.remote_trade.original = On
+setup.bug.remote_repair = Repair on the way
+setup.bug.remote_repair.fixed = Off
+setup.bug.remote_repair.original = On
+setup.bug.small_yard_warships = Small shipyard
+setup.bug.small_yard_warships.fixed = Small ships
+setup.bug.small_yard_warships.original = All ships
+setup.bug.native_land = Land of razed villages
+setup.bug.native_land.fixed = Becomes free
+setup.bug.native_land.original = Stays taken
+setup.bug.classic_ai = Computer players
+setup.bug.classic_ai.fixed = Improved
+setup.bug.classic_ai.original = As the original
+
+# The settings' display rows and the window "Display" (display_menu.cpp)
+options.window = Window
+options.fullscreen = Full screen
+options.display = Display ...
+options.slot.humans = {1} ({2} players)
+options.slot.empty = Empty
+# The voice message switch Open1602 adds below the original's kinds ("Check your trade routes!")
+options.speech.routes = Trade routes
+display.title = Display
+display.mode = Show the game in
+display.window = a window
+display.fullscreen = full screen
+display.size = Window size
+# {1} x {2}: width and height in pixels
+display.size_value = {1} × {2}
+display.size_desktop = the screen's
+display.ui_scale = Interface size
+display.ui_auto = as large as fits
+# {1}: a number
+display.percent = {1} %
+display.zoom = Zoom
+display.zoom_free = free
+display.zoom_steps = three levels (original)
+display.zoom_drawing = Between levels
+display.zoom_smooth = sharp and smooth
+display.zoom_pixels = plain pixels
+display.vsync = V-Sync
+display.edge_scroll = Scroll at the screen's edge
+display.edge_speed = Speed at the edge
+display.grab_mouse = Keep the mouse in the window
+display.goods_trend = Goods trend at the Kontor
+display.rival_wars = Wars between others
+display.plant_fields = Plant fields automatically
+display.graphics = Graphics
+display.graphics_classic = as in the original
+display.graphics_modern = modern
+display.on = on
+display.off = off
+display.hint = Any size: drag the window's edge. Full screen: F11 or Alt+Enter. Zoom: the mouse wheel, twice or half the size with Ctrl+Plus and Ctrl+Minus.
+display.close = Close
+
+# The window "Goods balance" (goods_window.cpp, docs/architecture/0012-goods-statistics.md) and the
+# line of the player status that opens it
+stats.open = Goods balance
+stats.open_help = Goods balance: what your cities produce, buy, use and sell (F2)
+stats.title = Goods balance
+# {1}: how many islands the player has cities on
+stats.all_islands = All islands ({1})
+stats.all_goods = All goods
+stats.group.consumer = Consumer goods
+stats.group.building = Building materials
+stats.group.raw = Raw materials and intermediates
+stats.group.weapons = Weapons
+stats.group.other = Further goods
+stats.col.good = Good
+stats.col.stock = Stock t
+stats.col.produced = Produced
+stats.col.imported = Imported
+stats.col.consumed = Used
+stats.col.exported = Exported
+stats.col.balance = Balance
+stats.col.lasts = Lasts
+stats.col.trend = 60 min
+stats.empty = No city of yours has goods yet.
+# Between the whole tons and the tenths of a figure
+stats.decimal_point = .
+# How long a stock lasts: {1} game minutes, {1} game hours
+stats.minutes = {1} min
+stats.under_minute = < 1 min
+stats.hours = {1} h
+# In "Lasts": nothing left in store while more goes out than comes in
+stats.gone = empty
+# {1}: the minutes chosen
+stats.hint = Tons per minute, average of the last {1} game minutes. Click a good for its details.
+# {1}: the minutes recorded so far (a game just begun or loaded), {2}: the minutes chosen
+stats.hint_short = Tons per minute over the {1} game minutes recorded so far (of {2}).
+# {1}: tons in store, {2}: room for the good in the warehouses
+stats.stock = In store: {1} t of {2} t
+stats.supply = Supply of the inhabitants
+stats.producers = Producers
+stats.inflow = Coming in
+stats.outflow = Going out
+stats.flow.produced = Produced
+stats.flow.bought = Bought at the Kontor
+stats.flow.shipped_in = Unloaded by own ships
+stats.flow.returned = Returned
+stats.flow.residents = Inhabitants
+stats.flow.workshops = Workshops and shipyards
+stats.flow.military = Soldiers
+stats.flow.construction = Building
+stats.flow.sold = Sold at the Kontor
+stats.flow.shipped_out = Loaded by own ships
+stats.flow.lost = Lost (warehouse full)
+stats.chart_60min = 60 min
+stats.chart_12h = 12 h
+stats.axis_now = now
+stats.no_data = Nothing recorded yet
+# The window's parchment style: the time chosen, the way back from a good, tons and tons a minute
+stats.period = Period
+stats.overview = Overview
+stats.tons = {1} t
+stats.per_minute = t/min
+# How long the stock lasts ({1}: "12 min"), when the store is full at the balance ({1}: "3 h")
+stats.lasts = lasts {1}
+stats.full_in = Store full in about {1}
+stats.full = The store is full
+# A kind of building making the good: {1} its name, {2} how many
+stats.producer = {1} ({2})
+stats.history = History
+# The chart's time axis: {1} minutes or hours ago
+stats.axis_minutes = -{1} min
+stats.axis_hours = -{1} h
+stats.legend_in = Coming in (t/min)
+stats.legend_out = Going out (t/min)
+stats.legend_stock = Stock (t)
+# {1}: percent of what the inhabitants asked for that they got, {2}: what they asked for in tons a minute
+stats.supply_value = {1} % (demand {2} t/min)
+# The buildings making the good: {1} of {2} at work, {1} waiting for raw material, {1} switched off
+stats.working = {1} of {2} working
+stats.short_of_raw = {1} without raw material
+stats.switched_off = {1} switched off
+# The help of a good in a Kontor's stock: {1} the trend in tons a minute, {2} the minutes it is averaged over
+stats.kontor_help = {1} t/min over the last {2} min, click for the goods balance
+# The tabs of the window
+stats.tab.goods = Goods
+stats.tab.producers = Producers
+stats.tab.population = Population
+stats.tab.trade = Trade
+stats.tab.finances = Finances
+# {1}: a whole number of percent
+stats.percent = {1} %
+# The tab "Producers": every kind of production building of the cities
+stats.prod.building = Building
+stats.prod.count = Number
+stats.prod.utilisation = Utilisation
+stats.prod.working = Working
+stats.prod.short = No raw material
+stats.prod.off = Off
+stats.prod.costs = Costs
+stats.prod.empty = None of your cities has production buildings yet.
+# {1}: the buildings, {2}: their running costs
+stats.prod.hint = {1} buildings, running costs {2}. Utilisation as in each building's window. Click a row for its good.
+# The tab "Population"
+stats.pop.class = Class
+stats.pop.inhabitants = Inhabitants
+stats.pop.satisfaction = Satisfaction
+stats.pop.tax = Tax
+stats.pop.total = All inhabitants
+# {1}: how many more (or fewer) than {2} game minutes ago
+stats.pop.growth = {1} in the last {2} min
+stats.pop.supply = Supply of the needs
+# {1}: the minutes chosen
+stats.pop.hint = Satisfaction and taxes now; the supply over the last {1} game minutes. The total includes the workers of the buildings, as in the player status.
+# The tab "Trade": what the Kontors bought and sold in the time chosen
+stats.trade.bought = Bought t
+stats.trade.paid = Paid
+stats.trade.price = Avg. price
+stats.trade.sold = Sold t
+stats.trade.earned = Earned
+stats.trade.partner = Trading partner
+stats.trade.balance = Balance
+stats.trade.trader = Free trader
+stats.trade.players = Ships of other players
+stats.trade.total = Total
+stats.trade.empty = No trade at your Kontors in this time.
+# {1}: the minutes chosen
+stats.trade.hint = Tons and gold of the last {1} game minutes at your Kontors. Click a good for its details.
+# The tab "Finances": gold per minute as in the city window
+stats.fin.now = Now
+# {1}: the minutes chosen
+stats.fin.average = Avg. {1} min
+stats.fin.taxes = Tax income
+stats.fin.costs = Running costs
+stats.fin.military = Military costs
+stats.fin.sales = Sales
+stats.fin.purchases = Purchases
+stats.fin.balance = Balance
+stats.fin.balance_short = Balance
+stats.fin.hint = Gold per minute as in the city window. Military costs belong to all islands together and have no history.
+
+# The early warning of a shortage, in the status bar (in the voice of "Es fehlt an ..."): {1} the
+# good (from Text.cod), {2} the city, {3} game minutes the stock lasts at the current balance
+message.running_low = {1} is running short in {2}: about {3} min left
+
+# A further colour's victory in a race, in the status bar (the original speaks only its four)
+message.won = {1} has fulfilled their task!
+message.won.orange = The orange player has fulfilled their task!
+message.won.green = The green player has fulfilled their task!
+message.won.teal = The teal player has fulfilled their task!
+message.won.pink = The pink player has fulfilled their task!
+message.won.magenta = The magenta player has fulfilled their task!
+message.won.grey = The grey player has fulfilled their task!
+message.won.purple = The purple player has fulfilled their task!
+message.won.brown = The brown player has fulfilled their task!
+message.rival_war = War: {1} against {2}
+message.rival_peace = Peace: {1} and {2}
+
+# The game's folder, asked for at the start when none is found (in the system's dialogs, which may
+# lack letters beyond Latin-1: no typographic quotes or ellipsis)
+game_folder.none_found = Open1602 needs an original game installation (for example the GOG Königsedition), but found none in the usual folders.
+# {1}: why (game_folder.missing or game_folder.not_installation)
+game_folder.saved_invalid = The game folder chosen last time can no longer be used.\n{1}
+game_folder.missing = This folder does not exist (any more):\n{1}
+# {1}: the folder, {2}: a file of the game
+game_folder.not_installation = This folder does not contain valid original game data for Open1602. The file {2} is missing:\n{1}
+# {1}: the folder, {2}: the installations in it, one per line, each after a line break
+game_folder.several = This folder holds several compatible game installations. Please choose one of them:\n{1}{2}
+game_folder.choose_prompt = Please choose the folder with your original game data for Open1602 (the one with 1602.exe in it). Open1602 remembers it.
+game_folder.choose = Choose folder
+game_folder.quit = Quit
+game_folder.dialog_title = Choose game data for Open1602
+# The ship and city lists ordered by a click on the heading: {1} the list, {2} its rows, {3} the order
+list.heading.ordered = {3}
+list.order.name = By name
+list.order.idle = Idle first
+list.order.damaged = Damaged first
+list.order.help.ships = Click: order the ships by name, idle or damaged first, or as the original
+list.order.help.cities = Click: order the cities by name or as the original
+
+# The screen "Mods" of the main menu (mods_menu.cpp)
+menu.mods = Mods
+mods.title = Mods
+mods.hint = New games use the mods turned on here; a savegame keeps its own. Mods received from a host serve only the games that need them.
+mods.col_name = Mod
+mods.col_version = Version
+mods.col_state = State
+mods.state_on = On
+mods.state_off = Off
+mods.state_broken = Not loaded (see the log)
+mods.state_received = Received from a host
+mods.none = There are no mods yet. A mod is a folder in the folder "mods" of Open1602's user data folder.
+mods.adopt = Add to my mods
+mods.back = Back
+mods.adopted = {1} is in your mods folder now and turned on.
+mods.adopt_failed = {1} could not be copied: {2}
+# The frame rate and the coordinates in the corner of the map (Ctrl+F, Ctrl+K, History Edition)
+overlay.fps = {1} fps
+overlay.coordinates = {1}, {2}
+overlay.fertility_none = Select a farm or pick a field to build to see where its crop grows
+overlay.coordinates_island = {1}, {2} (island {3}: {4}, {5})
+
+# Vita interface. Early boot entries use ASCII for the pre-heap diagnostic font.
+vita.quick.title = OPEN1602 - QUICK ACTIONS
+vita.help.title = OPEN1602 - CONTROLS
+vita.quick.save = Quick Save
+vita.quick.load = Quick Load
+vita.quick.rotate_left = Rotate view left
+vita.quick.rotate_right = Rotate view right
+vita.quick.faster = Increase game speed
+vita.quick.slower = Decrease game speed
+vita.quick.pause = Pause / resume
+vita.quick.ship = Next idle ship
+vita.quick.ships = Ship list
+vita.quick.cities = City list
+vita.quick.diplomacy = Diplomacy
+vita.quick.demolish = Demolish
+vita.quick.cursor = Free cursor / automatic
+vita.quick.help = Controls help
+vita.quick.footer = Stick/D-pad: Select  X: OK  Circle: Back
+vita.help.left = Left stick: Cursor / building grid
+vita.help.right = Right stick: Camera   L/R: Zoom
+vita.help.confirm = X: Select / build
+vita.help.road = Road: X start, stick, X finish
+vita.help.rotate = Square: Rotate / right click
+vita.help.cancel = Triangle: Build menu  Circle: Cancel
+vita.help.menu = START: Options SELECT: Quick actions
+vita.help.touch = Touch: Use the original HUD directly
+vita.loading.title = Preparing graphics
+vita.loading.graphics = Original graphics: {1}
+vita.loading.cache = Valid graphics data is reused.
+vita.loading.error = Could not prepare graphics:
+vita.boot.ready = READY - X: START CLIENT  CIRCLE: EXIT
+vita.boot.log_error = LOG WRITE FAILED - CHECK FREE UX0 SPACE
+vita.boot.failed = START FAILED - CLIENT STOPPED SAFELY
+vita.boot.memblock = LAST FAILED MEMBLOCK:
+vita.boot.send_logs = SEND STARTUP.LOG AND LOGS/STDERR.LOG
+vita.boot.exit = CIRCLE: EXIT
+vita.boot.sdl_ready = Open1602 Vita 00.08 - Loading original UI...
+
+vita.graphics.worker_error = Graphics worker unavailable. Please restart.
+vita.graphics.error = Graphics: {1}
+vita.graphics.zoom_error = Zoom: {1}
+
+vita.audit.running = Checking installation (read only)...
+vita.audit.done = Installation report written.
+
+# Native Vita connectivity, using the original multiplayer forms
+vita.net.title = WLAN / Ad-hoc
+vita.net.wlan = Over WLAN / network
+vita.net.adhoc = Direct Ad-hoc
+vita.net.own = Own Ad-hoc IP: {1}
+vita.net.peers = Address candidates: {1} (games must answer the search)
+vita.net.resources = Sockets: {1}   Sent: {2} B   Received: {3} B
+vita.net.help = Open Ad-hoc on both Vitas first. One creates the lobby, the other searches. If no game answers, explicitly enter the host IP in the search screen. No router required.
+vita.net.host = Create Ad-hoc game
+vita.net.search = Find / join Ad-hoc games
+vita.net.leave = Leave Ad-hoc / back
+vita.net.dialog = Native connection dialog open. Circle cancels.
+vita.net.ready = Ad-hoc ready. Game search verifies the peers.
+vita.net.manual_hint = Ad-hoc ready; peer format unclear. Manual host IP is available.
+vita.net.not_connected = No valid Ad-hoc connection. Open it again on both devices.
+vita.net.peer_invalid = Invalid peer IP. Use the other Vita's current 169.254 address.
+vita.net.busy = Network resources still active. Leave the session, then retry.
+vita.net.cleanup_failed = Network not released yet. Retry cancel.
+vita.net.init_failed = Network initialization failed.
+vita.net.dialog_failed = Ad-hoc system dialog failed.
+vita.net.cancelled = Ad-hoc connection cancelled.
+vita.net.port_busy = Network port already in use. Leave the session and retry.
+vita.net.socket_failed = Network operation failed. Error code below.
+vita.net.emulator = Internal emulator test: loopback, no radio proof.
+vita.net.info = Connection information
+vita.net.session = Role: {1}   Connection: {2}
+vita.net.ended = ended
+vita.net.playing = game started
+vita.net.lobby = lobby active
+vita.net.role_host = Host
+vita.net.role_guest = Guest
+
+vita.loading.read = Reading game data.
+vita.loading.build = Building graphics pages.
+vita.loading.load = Loading graphics data.
+vita.loading.save = Saving cache.
+vita.loading.masks = Preparing selection masks.
+vita.loading.ready = Graphics are ready.
+
+vita.display.hint = Vita: 960x544. Zoom with L/R. SELECT: quick menu during gameplay.
+
+vita.video.loading = Preparing video ...
+vita.video.audio = Reading audio
+vita.video.cancel = Circle: skip video
+vita.video.error = Video playback failed. See the startup log for details.
+vita.video.loading.short = Loading ...
+vita.video.cancel.short = Circle: cancel
+
+vita.display.cpu = CPU profile
+vita.display.system = System (unchanged)
+vita.display.cpu_hint = Higher CPU clocks can increase battery use and heat. The reached clock is checked.
+vita.display.cpu_failed = CPU profile not verified; see client.log for details.
+
+vita.loading.warmup = Graphics cache ({1}/3)
+
+vita.loading.welcome = Preparing your world
+vita.loading.once = This takes a little longer the first time.
+vita.loading.continue = Please wait a moment.
+vita.loading.logs = Details are available in the startup log.
+
+vita.video.cd_missing = CD intro missing: Copy your 58.smk to ux0:data/open1602/original/VideoSmk/.
+
+# Optional public lobby/relay
+master.public = Public Internet game
+master.row_prefix = [Internet]
+master.host_hint = Connects through the Internet service. No port forwarding required.
+master.not_configured = Internet list not configured. LAN and Direct-IP are available.
+master.wlan_only = Public games need an Internet connection over Wi-Fi.
+master.unavailable = Internet service unavailable. LAN and Direct-IP remain available.
+master.connected = Internet list connected
+master.connecting = Connecting to Internet service …
+master.disconnected = Connection to Internet service lost.
+master.invalid_response = Incompatible or invalid Internet service response.
+master.queue_full = Internet connection overloaded. Please rejoin.
+master.full = The Internet service or room is full.
+master.room_missing = This public game is no longer available.
+master.refused = The Internet service refused the request.
+master.timeout = Internet service timed out. LAN and Direct-IP remain available.
+
+vita.display.chat_button = In-game chat button
+
+vita.display.left_stick = Left stick
+vita.display.right_stick = Right stick

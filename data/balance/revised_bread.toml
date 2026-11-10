@@ -1,0 +1,15 @@
+# The building values of the rule "Bread production: revised" (Rules::revised_bread,
+# docs/modding/balance.md). A package's balance.toml that changes the same values wins.
+#
+# Measured in Open1602 with the original's data: the original's chain (4 grain farms with 20
+# fields, 2 mills, 1 bakery) gives 1.5 t of bread a minute; this one 6.3 t with 3 farms and 21
+# fields, at 6.3 gold of running costs per ton, as much as meat.
+
+# Grain farm: two tons of grain from each field harvested.
+["anno1602:21503"]
+produce = 2
+
+# Bakery: two tons of bread from two tons of flour, at a higher running cost.
+["anno1602:20503"]
+produce = 2
+running_cost = 15

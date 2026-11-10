@@ -1,0 +1,27 @@
+# Vita distribution notices
+
+The VPK includes the project GPL-3.0 text, ENet and Lua MIT notices, SDL3 and
+zlib notices, and `ThirdParty.txt` for the remaining linked components.
+Original file headers and upstream attribution must remain in source releases.
+
+`ThirdParty.txt` preserves the notices from stb_vorbis and dr_flac, the LGPL-2.1
+text for the FFmpeg-derived video/audio code, the GCC runtime exception, and the
+installed SDK components listed below. Newlib's collection contains notices for
+many targets; including the collection does not mean every target is linked.
+
+| Component | Source revision | Notice source |
+|---|---|---|
+| SDL3 | `a8589a84226a6202831a3d49ff4edda4acab9acd` | [SDL](https://github.com/libsdl-org/SDL/tree/a8589a84226a6202831a3d49ff4edda4acab9acd); patches in `../patches/` |
+| zlib | `51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf` | [zlib](https://github.com/madler/zlib/tree/51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf) |
+| Newlib | `64aa7aa33d4f380451a1f100d19589226cdad334` | [COPYING.NEWLIB](https://github.com/vitasdk/newlib/blob/64aa7aa33d4f380451a1f100d19589226cdad334/COPYING.NEWLIB) |
+| pthread-embedded | `11d2e5722d98c86f33c908fc47b2cf6e55205db5` | [COPYING](https://github.com/vitasdk/pthread-embedded/blob/11d2e5722d98c86f33c908fc47b2cf6e55205db5/COPYING), [COPYING.LIB](https://github.com/vitasdk/pthread-embedded/blob/11d2e5722d98c86f33c908fc47b2cf6e55205db5/COPYING.LIB) |
+| Vita headers/stubs | `ebc8f4f7ac8313fe4f74ca95724116b224bad184` | [LICENSE.md](https://github.com/vitasdk/vita-headers/blob/ebc8f4f7ac8313fe4f74ca95724116b224bad184/LICENSE.md) |
+| GCC runtimes | 15.2.0 | [COPYING.RUNTIME](https://github.com/gcc-mirror/gcc/blob/releases/gcc-15.2.0/COPYING.RUNTIME) |
+
+SDK revisions are taken from the installed `version_info.txt`, built 2026-08-25.
+Publishing the notices alone does not replace source-distribution obligations.
+A binary release needs the matching port sources and build scripts, the SDL3
+patches, and access to the corresponding library sources. The statically linked
+LGPL components, including pthread-embedded, also require a relinkable source
+arrangement. Keep the pinned sources available alongside the release; do not
+rely solely on an old or private source repository or a moving upstream branch.

@@ -1,0 +1,22 @@
+diff --git a/src/video/vita/SDL_vitavideo.c b/src/video/vita/SDL_vitavideo.c
+index 3455dba..5514800 100644
+--- a/src/video/vita/SDL_vitavideo.c
++++ b/src/video/vita/SDL_vitavideo.c
+@@ -575,12 +575,13 @@ void VITA_PumpEvents(SDL_VideoDevice *_this)
+             // Convert UTF16 to UTF8
+             utf16_to_utf8(videodata->ime_buffer, utf8_buffer);
+ 
+-            // Send SDL event
+-            SDL_SendKeyboardText((const char *)utf8_buffer);
+-
+-            // Send enter key only on enter
++            // Commit text only on confirmation. A cancelled dialog must also
++            // release the application's text focus rather than leaving it stuck.
+             if (result.button == SCE_IME_DIALOG_BUTTON_ENTER) {
++                SDL_SendKeyboardText((const char *)utf8_buffer);
+                 SDL_SendKeyboardKeyAutoRelease(0, SDL_SCANCODE_RETURN);
++            } else {
++                SDL_SendKeyboardKeyAutoRelease(0, SDL_SCANCODE_ESCAPE);
+             }
+ 
+             sceImeDialogTerm();
