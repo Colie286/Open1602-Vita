@@ -18,6 +18,9 @@ std::filesystem::path file_name_of(std::string_view cp1252) {
 
 std::filesystem::path high_score_file(const sim::GameIdentity& game, const std::vector<std::string>& labels,
                                       bool multiplayer) {
+    if (game.edited) {
+        return {};  // a game changed in the editor counts for no list
+    }
     std::string name = game.name;
     if (game.campaign != sim::GameIdentity::kNone) {
         const std::size_t line = std::size_t{5} * game.campaign + game.ranking;

@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "game_settings_menu.hpp"
+#include "app_settings.hpp"
+#include "o1602/core/workers.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <random>
 #include <span>
 #include <string>
 #include <string_view>
@@ -18,16 +23,23 @@ using Tone = ui::Form::Tone;
 using ui::Align;
 using ui::Rect;
 
-constexpr Id kItem = 1;  // + SetupItem
 constexpr Id kOriginal = 50;
 constexpr Id kDefaults = 51;
 constexpr Id kBack = 52;
 constexpr Id kStart = 53;
-constexpr Id kVictory = 54;       // the page of the victory conditions
-constexpr Id kVictoryOff = 55;    // all of them off
-constexpr Id kBugs = 56;          // the page of the original's bugs
-constexpr Id kBugsOriginal = 57;  // all of them as in the original
-constexpr Id kBugsFixed = 58;     // all of them fixed
+constexpr Id kVictory = 54;            // the page of the victory conditions
+constexpr Id kVictoryOff = 55;         // all of them off
+constexpr Id kBugs = 56;               // the page of the original's bugs
+constexpr Id kBugsOriginal = 57;       // all of them as in the original
+constexpr Id kBugsFixed = 58;          // all of them fixed
+constexpr Id kIslands = 59;            // the page of the islands
+constexpr Id kReroll = 60;             // another world for the preview
+constexpr Id kDisasters = 61;          // the page of the disasters
+constexpr Id kDisastersOriginal = 62;  // all of them as in the original
+constexpr Id kBalance = 63;            // the page of Open1602's balance changes
+constexpr Id kBalanceOriginal = 64;    // all of them off, as in the original
+constexpr Id kBalanceAll = 65;         // all of them on
+constexpr Id kItem = 100;              // + SetupItem
 
 // The frame and the bottom row, as the multiplayer menu's.
 constexpr Rect kScreen{16, 16, 992, 736};
@@ -56,11 +68,13 @@ struct Group {
 constexpr std::int32_t kLeft = 40;
 constexpr std::int32_t kRight = kLeft + kGroupW + 16;
 
-// Economy, limits and disasters on the left, the world and the opponents on the right.
+// Economy, limits and nature on the left, the world and the opponents on the right; the disasters
+// have a page of their own, its way below the nature, and so have the balance changes, their way
+// below the economy.
 constexpr Group kGroups[] = {
-    {"setup.group.economy", SetupItem::Refund, SetupItem::BreadChain, kLeft},
+    {"setup.group.economy", SetupItem::Refund, SetupItem::TradeCarts, kLeft},
     {"setup.group.limits", SetupItem::Ships, SetupItem::GameSpeed, kLeft},
-    {"setup.group.disasters", SetupItem::Droughts, SetupItem::Volcanoes, kLeft},
+    {"setup.group.nature", SetupItem::FertileFields, SetupItem::FertileFields, kLeft},
     {"setup.group.world", SetupItem::Map, SetupItem::Resources, kRight},
     {"setup.group.opponents", SetupItem::ComputerPlayers, SetupItem::Reveal, kRight},
 };
@@ -81,7 +95,32 @@ constexpr Group kBugGroups[] = {
     {"setup.group.construction", SetupItem::BugGoldsheep, SetupItem::BugInfertileFields, kLeft},
     {"setup.group.ships", SetupItem::BugRemoteTrade, SetupItem::BugSmallYardWarships, kRight},
     {"setup.group.opponents", SetupItem::BugNativeLand, SetupItem::BugNativeLand, kRight},
+    // Not a bug, but a trick of the original: its cheats (with the code, from the start, or never).
+    {"setup.group.cheats", SetupItem::Cheats, SetupItem::Cheats, kRight},
 };
+
+// Open1602's changes to the balance, each on its own.
+constexpr Group kBalanceGroups[] = {
+    {"setup.group.balance", SetupItem::BalanceBread, SetupItem::BalanceShips, kLeft},
+};
+
+// The disasters and how often they come.
+constexpr Group kDisasterGroups[] = {
+    {"setup.group.disasters", SetupItem::Droughts, SetupItem::Fires, kLeft},
+};
+
+// The islands: what kind of world, the land and its sizes, and what is on the islands; the
+// preview on the right.
+constexpr Group kIslandGroups[] = {
+    {"setup.group.island_shapes", SetupItem::IslandPreset, SetupItem::Outline, kLeft},
+    {"setup.group.island_sizes", SetupItem::LandShare, SetupItem::IslandGap, kLeft},
+    {"setup.group.island_nature", SetupItem::Forest, SetupItem::RevealResources, kLeft},
+};
+
+// The preview: its frame in the right column, the picture inside it at most this large.
+constexpr std::int32_t kPreviewW = kGroupW - 24;
+constexpr std::int32_t kPreviewH = 330;
+constexpr std::int32_t kCell = 2;  ///< design units of one cell of the picture
 
 std::string_view title_key(SetupScope scope) {
     switch (scope) {
@@ -113,6 +152,177 @@ std::string_view hint_key(SetupScope scope) {
 
 }  // namespace
 
+GameSettingsMenu::~GameSettingsMenu() {
+    // A preview being made still uses the maker: stop it and wait for it, which takes at most
+    // the island being made.
+    if (m_pending.valid()) {
+        m_stop->store(true);
+        m_pending.wait();
+    }
+}
+
+void GameSettingsMenu::wait_preview() {
+    // The preview being made may be of settings since changed: then the next one starts when it
+    // is done. Wait until the preview is of the settings as they are.
+    update_preview();
+    while (m_pending.valid()) {
+        m_pending.wait();
+        update_preview();
+    }
+}
+
+void GameSettingsMenu::update_preview() {
+    if (m_pending.valid() && m_pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        auto made = m_pending.get();
+        if (made) {
+            m_preview = std::move(made).value();
+            m_preview_error.clear();
+            picture(*m_preview);
+        } else if (made.error().code == core::ErrorCode::Cancelled) {
+            m_preview_key.clear();  // the last one shown stays until the next is made
+        } else {
+            m_preview.reset();
+            m_preview_error = made.error().message;
+        }
+    }
+    if (!m_maker || m_page != Page::Islands) {
+        return;
+    }
+    // The world follows from the world's settings, the seed and the level.
+    const std::string key = write_setup(m_setup) + std::to_string(m_setup.world_seed) + "/" + std::to_string(m_level) +
+                            (m_setup.own_world ? "/own" : "/original");
+    if (m_pending.valid()) {
+        // One of settings since changed stops soon; the next one when it has.
+        if (key != m_preview_key) {
+            m_stop->store(true);
+        }
+        return;
+    }
+    if (key == m_preview_key) {
+        return;
+    }
+    m_preview_key = key;
+    m_stop = std::make_shared<std::atomic<bool>>(false);
+    m_pending = std::async(std::launch::async,
+        [maker=m_maker, setup=m_setup, level=m_level, stop=m_stop] {
+            core::worker_enter("world_preview");
+            return maker(setup, level, stop);
+        });
+}
+
+void GameSettingsMenu::picture(const sim::WorldPreview& p) {
+    m_runs.clear();
+    m_picture_w = 0;
+    m_picture_h = 0;
+    if (p.width == 0 || p.height == 0) {
+        return;
+    }
+    // As large as fits, the map's shape kept; in cells of kCell units.
+    const double scale = std::min(static_cast<double>(kPreviewW) / p.width, static_cast<double>(kPreviewH) / p.height);
+    const auto cols = std::max<std::int32_t>(1, static_cast<std::int32_t>(p.width * scale) / kCell);
+    const auto rows = std::max<std::int32_t>(1, static_cast<std::int32_t>(p.height * scale) / kCell);
+    m_picture_w = cols * kCell;
+    m_picture_h = rows * kCell;
+    // A cell shows the most telling of its tiles, so that a small island or a village stays in sight.
+    using Tile = sim::WorldPreview::Tile;
+    constexpr std::array<std::uint8_t, sim::WorldPreview::kTiles> kWeight = {0, 1, 3, 2, 4, 5, 6};
+    for (std::int32_t r = 0; r < rows; ++r) {
+        const auto y0 = static_cast<std::uint32_t>(std::int64_t{r} * p.height / rows);
+        const auto y1 = std::max(y0 + 1, static_cast<std::uint32_t>(std::int64_t{r + 1} * p.height / rows));
+        Run run;
+        run.y = r * kCell;
+        for (std::int32_t c = 0; c < cols; ++c) {
+            const auto x0 = static_cast<std::uint32_t>(std::int64_t{c} * p.width / cols);
+            const auto x1 = std::max(x0 + 1, static_cast<std::uint32_t>(std::int64_t{c + 1} * p.width / cols));
+            Tile best = Tile::Sea;
+            for (std::uint32_t y = y0; y < y1 && y < p.height; ++y) {
+                for (std::uint32_t x = x0; x < x1 && x < p.width; ++x) {
+                    const Tile t = p.at(x, y);
+                    if (kWeight[static_cast<std::size_t>(t)] > kWeight[static_cast<std::size_t>(best)]) {
+                        best = t;
+                    }
+                }
+            }
+            const std::uint8_t colour = m_colours[static_cast<std::size_t>(best)];
+            if (run.w > 0 && run.colour == colour) {
+                run.w += kCell;
+            } else {
+                if (run.w > 0) {
+                    m_runs.push_back(run);
+                }
+                run.x = c * kCell;
+                run.w = kCell;
+                run.colour = colour;
+            }
+        }
+        m_runs.push_back(run);
+    }
+    // The starts as small squares.
+    for (const auto& st : p.starts) {
+        const auto x = static_cast<std::int32_t>(std::int64_t{st.x} * m_picture_w / p.width);
+        const auto y = static_cast<std::int32_t>(std::int64_t{st.y} * m_picture_h / p.height);
+        for (std::int32_t dy = -3; dy <= 3; ++dy) {
+            const std::int32_t yy = y + dy;
+            if (yy >= 0 && yy < m_picture_h) {
+                m_runs.push_back(Run{std::max(0, x - 3), yy, std::min(7, m_picture_w - std::max(0, x - 3)),
+                                     m_colours[sim::WorldPreview::kTiles]});
+            }
+        }
+    }
+}
+
+void GameSettingsMenu::layout_preview(std::int32_t x, std::int32_t y) {
+    ui::Form& f = m_form;
+    const std::int32_t h = 12 + kPreviewH + 8 + 26 + 8 + 44 + 12;
+    f.panel(Rect{x, y, kGroupW, h});
+    const Rect area{x + 12, y + 12, kPreviewW, kPreviewH};
+    update_preview();
+    if (m_preview && m_picture_w > 0) {
+        const std::int32_t left = area.x + (area.w - m_picture_w) / 2;
+        const std::int32_t top = area.y + (area.h - m_picture_h) / 2;
+        for (const Run& r : m_runs) {
+            f.swatch(Rect{left + r.x, top + r.y, r.w, r.y + kCell <= m_picture_h ? kCell : 1}, r.colour);
+        }
+    }
+    const std::int32_t text_y = area.y + area.h + 8;
+    std::string status;
+    if (!m_maker) {
+        status.clear();
+    } else if (m_pending.valid()) {
+        status = ui::tr("setup.preview.busy");
+    } else if (!m_preview_error.empty()) {
+        status = ui::tr("setup.preview.failed", {m_preview_error});
+    } else if (m_preview) {
+        const std::uint64_t area_tiles = std::uint64_t{m_preview->width} * m_preview->height;
+        status = ui::tr("setup.preview.stats",
+                        {std::to_string(m_preview->islands), std::to_string((m_preview->land * 100 + area_tiles / 2) /
+                                                                            std::max<std::uint64_t>(area_tiles, 1))});
+    }
+    f.label(Rect{x + 12, text_y, kPreviewW, 26}, status, Align::Left,
+            m_preview_error.empty() ? Tone::Normal : Tone::Warning);
+    const std::int32_t button_y = text_y + 34;
+    // A multiplayer game's world number as its "world number" field shows it.
+    char seed[24];
+    std::snprintf(seed, sizeof(seed), m_scope == SetupScope::MultiplayerEndless ? "%llu" : "%llX",
+                  static_cast<unsigned long long>(m_setup.world_seed));
+    f.label(Rect{x + 12, button_y, kPreviewW - 200, 44}, ui::tr("setup.preview.seed", {seed}), Align::Left, Tone::Dim);
+    m_tips.push_back(Tip{Rect{x + kGroupW - 12 - 190, button_y, 190, 44}, "setup.preview.reroll"});
+    f.button(kReroll, Rect{x + kGroupW - 12 - 190, button_y, 190, 44}, ui::tr("setup.preview.reroll"),
+             m_mode != Mode::View && m_reroll);
+}
+
+std::uint64_t GameSettingsMenu::new_seed() const {
+#ifdef O1602_EXPERIMENTAL_VITA
+    const auto device = [] { return static_cast<std::uint32_t>(new_player_id()); };
+#else
+    std::random_device device;
+#endif
+    if (m_scope == SetupScope::MultiplayerEndless) {
+        return device() % kMultiplayerSeeds;
+    }
+    return (std::uint64_t{device()} << 32U) | device();
+}
+
 bool GameSettingsMenu::back() noexcept {
     if (m_page != Page::Settings) {
         m_page = Page::Settings;
@@ -126,11 +336,41 @@ std::vector<ui::DrawItem> GameSettingsMenu::draw(const std::array<const ui::Font
                        ? fonts[static_cast<std::size_t>(m_font)]
                        : nullptr;
     layout();
+    layout_tooltip();
     return m_form.draw(fonts);
+}
+
+void GameSettingsMenu::layout_tooltip() {
+    m_tip_shown.clear();
+    const Tip* under = nullptr;
+    if (m_mouse) {
+        for (const Tip& t : m_tips) {
+            if (t.area.contains(m_mouse->first, m_mouse->second)) {
+                under = &t;
+            }
+        }
+    }
+    const auto now = std::chrono::steady_clock::now();
+    const std::string key = under != nullptr ? under->key : std::string{};
+    if (key != m_tip_key) {
+        m_tip_key = key;
+        m_tip_since = now;
+        m_tip_dismissed = false;
+    }
+    if (under == nullptr || m_tip_dismissed || now - m_tip_since < m_tip_delay) {
+        return;
+    }
+    m_tip_shown = under->key + ".tip";
+    m_form.tooltip(under->area, ui::tr(m_tip_shown));
 }
 
 GameSettingsMenu::Result GameSettingsMenu::mouse(std::int32_t x, std::int32_t y, bool down, ui::MouseButton button) {
     layout();
+    const double scale = m_form.scale() > 0.0 ? m_form.scale() : 1.0;
+    m_mouse.emplace(static_cast<std::int32_t>(x / scale), static_cast<std::int32_t>(y / scale));
+    if (down) {
+        m_tip_dismissed = true;  // a click is not reading: the explanation goes away
+    }
     const auto id = m_form.mouse(x, y, down, button);
     if (!id) {
         return Result::None;
@@ -151,6 +391,25 @@ GameSettingsMenu::Result GameSettingsMenu::mouse(std::int32_t x, std::int32_t y,
         m_setup.rules.victory = {};
     } else if (*id == kBugs) {
         m_page = Page::Bugs;
+    } else if (*id == kDisasters) {
+        m_page = Page::Disasters;
+    } else if (*id == kDisastersOriginal && editable) {
+        m_setup.rules = original_disasters(m_setup.rules);
+    } else if (*id == kBalance) {
+        m_page = Page::Balance;
+    } else if (*id == kBalanceOriginal && editable) {
+        m_setup.rules = original_balance(m_setup.rules);
+    } else if (*id == kBalanceAll && editable) {
+        m_setup.rules = open1602_balance(m_setup.rules);
+    } else if (*id == kIslands) {
+        m_page = Page::Islands;
+        if (m_setup.world_seed == 0 && editable && m_scope != SetupScope::MultiplayerEndless) {
+            // The preview's world is the game's: a number for it now. A multiplayer game has its
+            // number already (0 is one of them).
+            m_setup.world_seed = new_seed();
+        }
+    } else if (*id == kReroll && editable && m_reroll) {
+        m_setup.world_seed = new_seed();
     } else if (*id == kBugsOriginal && editable) {
         m_setup.rules.bugs = sim::OriginalBugs::all();
     } else if (*id == kBugsFixed && editable) {
@@ -181,20 +440,31 @@ EndlessSetup GameSettingsMenu::keep_decided(EndlessSetup preset) const {
 void GameSettingsMenu::layout() {
     ui::Form& f = m_form;
     f.clear();
+    m_tips.clear();
+    const auto tip = [&](Rect area, std::string_view key) { m_tips.push_back(Tip{area, std::string(key)}); };
     f.panel(kScreen);
     const bool victory = m_page == Page::Victory;
     const bool bugs = m_page == Page::Bugs;
+    const bool islands = m_page == Page::Islands;
+    const bool disasters = m_page == Page::Disasters;
+    const bool balance = m_page == Page::Balance;
     f.label(kHeading,
-            ui::tr(victory ? "setup.title.victory"
-                   : bugs  ? "setup.title.bugs"
-                           : title_key(m_scope)),
+            ui::tr(victory     ? "setup.title.victory"
+                   : bugs      ? "setup.title.bugs"
+                   : islands   ? "setup.title.islands"
+                   : disasters ? "setup.title.disasters"
+                   : balance   ? "setup.title.balance"
+                               : title_key(m_scope)),
             Align::Left, Tone::Heading);
     const bool editable = m_mode != Mode::View;
     std::int32_t left_y = kTop;
     std::int32_t right_y = kTop;
-    const std::span<const Group> groups = victory ? std::span<const Group>(kVictoryGroups)
-                                          : bugs  ? std::span<const Group>(kBugGroups)
-                                                  : std::span<const Group>(kGroups);
+    const std::span<const Group> groups = victory     ? std::span<const Group>(kVictoryGroups)
+                                          : bugs      ? std::span<const Group>(kBugGroups)
+                                          : islands   ? std::span<const Group>(kIslandGroups)
+                                          : disasters ? std::span<const Group>(kDisasterGroups)
+                                          : balance   ? std::span<const Group>(kBalanceGroups)
+                                                      : std::span<const Group>(kGroups);
     const auto offered = [&](const Group& g) {
         std::vector<SetupItem> items;
         for (auto i = static_cast<std::int32_t>(g.first); i <= static_cast<std::int32_t>(g.last); ++i) {
@@ -207,6 +477,12 @@ void GameSettingsMenu::layout() {
     // The labels' column as wide as the longest label of the page (all languages and packages),
     // the values the rest; without a font as wide as nine units a byte, as ui::Form counts then.
     const bool victory_row = m_page == Page::Settings && victory_offered(m_scope);
+    // The way to the islands' page, below the world's items.
+    const bool islands_row = m_page == Page::Settings && setup_item_offered(m_scope, SetupItem::IslandPreset);
+    // The way to the disasters' page, below the nature's items.
+    const bool disasters_row = m_page == Page::Settings && setup_item_offered(m_scope, SetupItem::Plagues);
+    // The way to the page of the balance changes, below the economy's items.
+    const bool balance_row = m_page == Page::Settings && setup_item_offered(m_scope, SetupItem::BalanceBread);
     double longest = 0.0;
     const auto measure = [&](const std::string& label) {
         const double w = m_label_font != nullptr ? m_label_font->width(label) / m_label_font->design_scale()
@@ -223,17 +499,30 @@ void GameSettingsMenu::layout() {
         if (victory_row) {
             measure(ui::tr("setup.victory"));
         }
+        if (islands_row) {
+            measure(ui::tr("setup.island_page"));
+        }
+        if (disasters_row) {
+            measure(ui::tr("setup.disasters"));
+        }
+        if (balance_row) {
+            measure(ui::tr("setup.balance"));
+        }
     }
     const std::int32_t label_w = std::clamp(static_cast<std::int32_t>(std::ceil(longest)) + 2 * kTextPadding,
                                             kMinLabelW, kRowW - 4 - kMinValueW);
     const std::int32_t value_w = kRowW - 4 - label_w;
     // A group's frame and heading; the top of its first row.
+    // Without a heading (the ways to the other pages) the frame holds just the rows.
     const auto group = [&](std::string_view heading, std::int32_t rows, std::int32_t x) {
         std::int32_t& y0 = x < kScreen.x + kScreen.w / 2 ? left_y : right_y;
-        f.panel(Rect{x, y0, kGroupW, 44 + rows * kRowH});
-        f.label(Rect{x + 12, y0 + 6, kRowW, 32}, ui::tr(heading), Align::Left, Tone::Heading);
-        const std::int32_t first = y0 + 40;
-        y0 += 44 + rows * kRowH + kGap;
+        const std::int32_t head = heading.empty() ? 8 : 44;
+        f.panel(Rect{x, y0, kGroupW, head + rows * kRowH});
+        if (!heading.empty()) {
+            f.label(Rect{x + 12, y0 + 6, kRowW, 32}, ui::tr(heading), Align::Left, Tone::Heading);
+        }
+        const std::int32_t first = y0 + head - 4;
+        y0 += head + rows * kRowH + kGap;
         return first;
     };
     // A row's label; the place of its value.
@@ -246,11 +535,30 @@ void GameSettingsMenu::layout() {
         if (items.empty()) {
             continue;
         }
-        const std::int32_t top = group(g.heading, static_cast<std::int32_t>(items.size()), g.x);
+        const bool world = g.first == SetupItem::Map && islands_row;
+        const bool nature = g.first == SetupItem::FertileFields && disasters_row;
+        const bool economy = g.first == SetupItem::Refund && balance_row;
+        const std::int32_t extra = world || nature || economy ? 1 : 0;
+        const std::int32_t top = group(g.heading, static_cast<std::int32_t>(items.size()) + extra, g.x);
+        const std::int32_t extra_y = top + static_cast<std::int32_t>(items.size()) * kRowH;
+        if (world) {
+            tip(Rect{g.x + 12, extra_y, kRowW, kRowH - 4}, "setup.island_page");
+            const Rect value = row(g.x, extra_y, ui::tr("setup.island_page"), m_setup.own_world);
+            f.button(kIslands, value, ui::tr("setup.island_page.open", {islands_summary(m_setup)}));
+        } else if (nature) {
+            tip(Rect{g.x + 12, extra_y, kRowW, kRowH - 4}, "setup.disasters");
+            const Rect value = row(g.x, extra_y, ui::tr("setup.disasters"), true);
+            f.button(kDisasters, value, ui::tr("setup.disasters.open", {disasters_summary(m_setup.rules)}));
+        } else if (economy) {
+            tip(Rect{g.x + 12, extra_y, kRowW, kRowH - 4}, "setup.balance");
+            const Rect value = row(g.x, extra_y, ui::tr("setup.balance"), true);
+            f.button(kBalance, value, ui::tr("setup.balance.open", {balance_summary(m_setup.rules)}));
+        }
         for (std::size_t i = 0; i < items.size(); ++i) {
             const SetupItem item = items[i];
             const bool used = setup_item_used(m_setup, item);
             const std::int32_t y = top + static_cast<std::int32_t>(i) * kRowH;
+            tip(Rect{g.x + 12, y, kRowW, kRowH - 4}, setup_label_key(item));
             if (editable) {
                 f.cycle_button(kItem + static_cast<Id>(item), row(g.x, y, setup_label(item), used),
                                setup_value(m_setup, item), setup_item_open(m_setup, m_scope, item));
@@ -262,16 +570,22 @@ void GameSettingsMenu::layout() {
         }
     }
     if (m_page == Page::Settings) {
-        // Below the disasters: the ways to the pages of the victory conditions and of the original's
+        // Below the nature: the ways to the pages of the victory conditions and of the original's
         // bugs, each with what is chosen (to look at too, for a game that is only shown).
-        std::int32_t top = group("setup.group.more", victory_row ? 2 : 1, kLeft);
+        std::int32_t top = group({}, victory_row ? 2 : 1, kLeft);
         if (victory_row) {
+            tip(Rect{kLeft + 12, top, kRowW, kRowH - 4}, "setup.victory");
             const Rect value = row(kLeft, top, ui::tr("setup.victory"), m_setup.rules.victory.active());
             f.button(kVictory, value, ui::tr("setup.victory.open", {victory_summary(m_setup.rules.victory)}));
             top += kRowH;
         }
+        tip(Rect{kLeft + 12, top, kRowW, kRowH - 4}, "setup.bugs");
         const Rect value = row(kLeft, top, ui::tr("setup.bugs"), page_bugs(m_setup.rules.bugs).count() != 0);
         f.button(kBugs, value, ui::tr("setup.bugs.open", {bugs_summary(m_setup.rules.bugs)}));
+    }
+    if (islands) {
+        layout_preview(kRight, kTop);
+        right_y = kTop + 12 + kPreviewH + 8 + 26 + 8 + 44 + 12 + kGap;
     }
     // The hint below the lower column; three lines of it fit above the buttons.
     const std::int32_t hint_y = std::max({kHintY, left_y, right_y});
@@ -279,26 +593,49 @@ void GameSettingsMenu::layout() {
         f.paragraph(Rect{40, hint_y, 944, kBottomY - 4 - hint_y}, m_error, Tone::Warning);
     } else {
         f.paragraph(Rect{40, hint_y, 944, kBottomY - 4 - hint_y},
-                    ui::tr(victory ? (editable ? "setup.hint.victory" : "setup.hint.victory.view")
-                           : bugs  ? (editable ? "setup.hint.bugs" : "setup.hint.bugs.view")
-                                   : hint_key(m_scope)),
+                    ui::tr(victory     ? (editable ? "setup.hint.victory" : "setup.hint.victory.view")
+                           : bugs      ? (editable ? "setup.hint.bugs" : "setup.hint.bugs.view")
+                           : islands   ? (!m_setup.own_world ? "setup.hint.islands.original"
+                                          : editable         ? "setup.hint.islands"
+                                                             : "setup.hint.islands.view")
+                           : disasters ? (editable ? "setup.hint.disasters" : "setup.hint.disasters.view")
+                           : balance   ? (editable ? "setup.hint.balance" : "setup.hint.balance.view")
+                                       : hint_key(m_scope)),
                     Tone::Dim);
     }
     f.button(kBack, Rect{40, kBottomY, 180, 44}, ui::tr("setup.back"));
     if (!editable) {
         return;
     }
-    if (victory) {
+    if (islands) {
+        // The kinds of world are the page's first item.
+    } else if (victory) {
+        tip(Rect{520, kBottomY, 240, 44}, "setup.victory.off");
         f.button(kVictoryOff, Rect{520, kBottomY, 240, 44}, ui::tr("setup.victory.off"), true,
                  !m_setup.rules.victory.active());
+    } else if (disasters) {
+        tip(Rect{520, kBottomY, 240, 44}, "setup.disasters.all_original");
+        f.button(kDisastersOriginal, Rect{520, kBottomY, 240, 44}, ui::tr("setup.disasters.all_original"), true,
+                 original_disasters(m_setup.rules) == m_setup.rules);
+    } else if (balance) {
+        tip(Rect{260, kBottomY, 240, 44}, "setup.balance.all_original");
+        f.button(kBalanceOriginal, Rect{260, kBottomY, 240, 44}, ui::tr("setup.balance.all_original"), true,
+                 original_balance(m_setup.rules) == m_setup.rules);
+        tip(Rect{520, kBottomY, 240, 44}, "setup.balance.all_on");
+        f.button(kBalanceAll, Rect{520, kBottomY, 240, 44}, ui::tr("setup.balance.all_on"), true,
+                 open1602_balance(m_setup.rules) == m_setup.rules);
     } else if (bugs) {
+        tip(Rect{260, kBottomY, 240, 44}, "setup.bugs.all_original");
         f.button(kBugsOriginal, Rect{260, kBottomY, 240, 44}, ui::tr("setup.bugs.all_original"), true,
                  page_bugs(m_setup.rules.bugs) == page_bugs(sim::OriginalBugs::all()));
+        tip(Rect{520, kBottomY, 240, 44}, "setup.bugs.all_fixed");
         f.button(kBugsFixed, Rect{520, kBottomY, 240, 44}, ui::tr("setup.bugs.all_fixed"), true,
                  page_bugs(m_setup.rules.bugs) == sim::OriginalBugs{});
     } else {
+        tip(Rect{260, kBottomY, 240, 44}, "setup.original");
         f.button(kOriginal, Rect{260, kBottomY, 240, 44}, ui::tr("setup.original"), true,
                  same_setup(m_setup, keep_decided(EndlessSetup::original(m_scope)), m_scope));
+        tip(Rect{520, kBottomY, 240, 44}, "setup.defaults");
         f.button(kDefaults, Rect{520, kBottomY, 240, 44}, ui::tr("setup.defaults"), true,
                  same_setup(m_setup, keep_decided(EndlessSetup::defaults(m_scope)), m_scope));
     }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The diplomacy window (VERTRAG.GAD with its tribute page TRIBUT.GAD; Diplo_Refresh 0x00433C00,
-// Tribut_Refresh 0x00433E70, clicks in 0x0043CE00; docs/re/ui.md): opened from the player status or
+// The diplomacy window (VERTRAG.GAD with its tribute page TRIBUT.GAD,
+// Clicks: opened from the player status or
 // with V. One row per other human or computer player: trade and peace treaty (offer, withdraw,
 // accept, break) and, for computers, a hand that shows the mood; the hand opens the tribute page.
 //
@@ -27,7 +27,7 @@ namespace {
 constexpr std::uint32_t kMaxTribute = sim::DiplomacyOrder::kMaxTribute;
 constexpr std::uint32_t kTributeStep = 100;
 
-/// The next value of a treaty button (0x0043FC83): none -> offer, offered or signed -> none
+/// The next value of a treaty button: none -> offer, offered or signed -> none
 /// (withdraw, break), received -> accept.
 sim::Treaty next_step(sim::Treaty now) {
     switch (now) {
@@ -58,7 +58,7 @@ class DiplomacyPanel final : public SelectionPanel {
 public:
     DiplomacyPanel(assets::GadgetLayout vertrag, assets::GadgetLayout tribut)
         : m_vertrag(std::move(vertrag), 1.0), m_tribut(tribut, 1.0), m_strip(strip_layout(std::move(tribut)), 1.0) {
-        // The code adds the state to the sprites the layout gives (0x0042C2D5).
+        // The code adds the state to the sprites the layout gives.
         const assets::GadgetLayout& l = m_vertrag.layout();
         const auto gfx = [&](std::int32_t id, std::int32_t fallback) {
             const auto i = l.index_of(id);
@@ -95,7 +95,7 @@ public:
     }
     bool back() override {
         if (m_tribute && !m_strip_shown) {
-            m_tribute = false;  // right mouse / Escape: back to the treaties (0x0040A0D6)
+            m_tribute = false;  // right mouse / Escape: back to the treaties
             return true;
         }
         return false;
@@ -267,9 +267,10 @@ private:
     static constexpr std::int32_t kLess = 64022;
     static constexpr std::int32_t kMore = 64023;
     static constexpr std::int32_t kSlider = 64024;
-    // The strip (Open1602), added to a copy of TRIBUT: + place 0..10
+    // The strip (Open1602), added to a copy of TRIBUT: + place 0..kMaxPartners - 1
     static constexpr std::int32_t kStripArms = 64101;
-    static constexpr std::int32_t kStripFrame = 64121;
+    static constexpr std::int32_t kStripFrame = kStripArms + 256;
+    static_assert(diplomacy::kMaxPartners <= 256);
     /// PIRATORD.GAD's frame to choose a player (GFXPIRAT + 11), golden 4 further on.
     static constexpr std::int32_t kFrameOffset = 11;
     static constexpr std::int32_t kFramePress = 4;
@@ -283,7 +284,7 @@ private:
         const std::int32_t arms_gfx = shield != nullptr ? shield->gfx : 548;
         for (assets::Gadget& g : layout.gadgets) {
             if (g.id >= kTributeBoard && g.id <= kTributeHand) {
-                g.pos[1] += diplomacy::kTreatiesShift;
+                g.pos[1] += diplomacy::treaties_shift(diplomacy::kMaxPartners);
             }
         }
         for (std::size_t k = 0; k < diplomacy::kMaxPartners; ++k) {
@@ -309,7 +310,7 @@ private:
         return layout;
     }
 
-    /// The other humans and computers, by player number (0x00433C1C).
+    /// The other humans and computers, by player number.
     static std::vector<sim::PlayerId> partners_of(const PanelContext& c) {
         return diplomacy::partners(c.world(), c.local);
     }
@@ -331,7 +332,7 @@ private:
         }
         const std::vector<diplomacy::Offer> offers = diplomacy::open_offers(c.world(), c.local);
         const bool flash = (c.now_ms / kOfferBlinkMs) % 2 == 0;
-        const render::BannerArt arms = render::BannerArt::at(m_shield);
+        const render::BannerArt arms = render::BannerArt::arms_at(m_shield);
         for (std::size_t k = 0; k < diplomacy::kMaxPartners; ++k) {
             const auto slot = static_cast<std::int32_t>(k);
             const bool shown = k < partners.size();
@@ -369,7 +370,7 @@ private:
             return;
         }
         p.set_text(name + row, player_name(*player));
-        const render::BannerArt arms = render::BannerArt::at(m_shield);
+        const render::BannerArt arms = render::BannerArt::arms_at(m_shield);
         set_banner_graphic(p, shield + row, arms, c.banner(b));
         set_banner_graphic(p, shadow + row, arms, c.banner(b));
         const sim::Diplomacy& d = c.world().diplomacy();

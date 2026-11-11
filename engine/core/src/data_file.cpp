@@ -309,4 +309,95 @@ Result<std::vector<DataTable>> parse_data_file(std::string_view utf8) {
     return tables;
 }
 
+std::string data_string(std::string_view utf8) {
+    static constexpr char kHex[] = "0123456789ABCDEF";
+    std::string out = "\"";
+    for (const char c : utf8) {
+        const auto u = static_cast<unsigned char>(c);
+        if (c == '"' || c == '\\') {
+            out.push_back('\\');
+            out.push_back(c);
+        } else if (c == '\n') {
+            out += "\\n";
+        } else if (c == '\t') {
+            out += "\\t";
+        } else if (u < 0x20 || u == 0x7F) {
+            out += "\\u00";
+            out.push_back(kHex[u >> 4]);
+            out.push_back(kHex[u & 0x0F]);
+        } else {
+            out.push_back(c);
+        }
+    }
+    out.push_back('"');
+    return out;
+}
+
+Result<std::string> set_data_table(std::string_view utf8, std::string_view table, const std::vector<DataLine>& lines,
+                                   const std::vector<std::string>& removed) {
+    auto tables = parse_data_file(utf8);
+    if (!tables) {
+        return tables.error();
+    }
+    // The file's lines as they are, each with its own ending; the new ones end as the file's do.
+    const std::string_view ending = utf8.find("\r\n") != std::string_view::npos ? "\r\n" : "\n";
+    std::vector<std::string_view> text;
+    for (std::size_t at = 0; at < utf8.size();) {
+        const std::size_t end = utf8.find('\n', at);
+        const std::size_t next = end == std::string_view::npos ? utf8.size() : end + 1;
+        text.push_back(utf8.substr(at, next - at));
+        at = next;
+    }
+    std::string written;
+    for (const DataLine& l : lines) {
+        written += l.key + " = " + l.value + std::string(ending);
+    }
+    const auto it = std::find_if(tables->begin(), tables->end(),
+                                 [&](const DataTable& t) { return t.line != 0 && t.name == table; });
+    std::string out;
+    if (it == tables->end()) {
+        out.assign(utf8);
+        if (!out.empty() && out.back() != '\n') {
+            out += ending;
+        }
+        if (!out.empty()) {
+            out += ending;
+        }
+        const bool bare = !table.empty() && std::all_of(table.begin(), table.end(), is_bare);
+        out += "[" + (bare ? std::string(table) : data_string(table)) + "]" + std::string(ending) + written;
+    } else {
+        std::unordered_set<std::size_t> dropped;
+        std::size_t insert = 0;  // 1-based: before this line
+        std::size_t last = it->line;
+        for (const DataEntry& e : it->entries) {
+            last = std::max(last, e.value.line);
+            const bool replaced =
+                std::any_of(lines.begin(), lines.end(), [&](const DataLine& l) { return l.key == e.key; }) ||
+                std::find(removed.begin(), removed.end(), e.key) != removed.end();
+            if (replaced) {
+                dropped.insert(e.value.line);
+                insert = insert == 0 ? e.value.line : std::min(insert, e.value.line);
+            }
+        }
+        if (insert == 0) {
+            insert = last + 1;
+        }
+        for (std::size_t n = 1; n <= text.size() + 1; ++n) {
+            if (n == insert) {
+                if (!out.empty() && out.back() != '\n') {
+                    out += ending;  // the last line of the file had no ending
+                }
+                out += written;
+            }
+            if (n <= text.size() && dropped.count(n) == 0) {
+                out += text[n - 1];
+            }
+        }
+    }
+    if (auto check = parse_data_file(out); !check) {
+        return check.error();
+    }
+    return out;
+}
+
 }  // namespace o1602::core

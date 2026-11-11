@@ -22,14 +22,14 @@ constexpr std::int64_t kHalfGravity10 = 321'126;  // 4.9 * 65536: g/2 of the thr
 constexpr std::int64_t kGroundPerPixel = 1835;    // 0.028 * 65536: Posoffs to height
 constexpr std::uint8_t kLastStep = kLavaThrows - 1;
 
-/// Earliest next eruption by the craters in the world (0x004692F0, time in 1/10 s): linear from
+/// Earliest next eruption by the craters in the world (time in 1/10 s): linear from
 /// 35 minutes at one crater to 12 at four, 8 at eight and 6 at twenty.
 constexpr std::array<std::uint32_t, kMaxCraterCount + 1> kInterval = {
     21000, 21000, 16400, 11800, 7200, 6600, 6000, 5400, 4800, 4700, 4600,
     4500,  4400,  4300,  4200,  4100, 4000, 3900, 3800, 3700, 3600,
 };
 
-/// Pause after each lava throw (0x0062BD40, 33 values in seconds, here in microseconds): five
+/// Pause after each lava throw (33 values in seconds, here in microseconds): five
 /// linear pieces; each piece's first value overwrites the last of the piece before.
 constexpr std::array<std::uint32_t, 33> make_steps() {
     struct Piece {
@@ -163,14 +163,14 @@ Ground ground_at(const World& world, const assets::BuildingTable& buildings, std
     return g;
 }
 
-/// Whether lava sets the building on fire (0x00479FE0): HAUS_PRODTYP Kind 1..7 (workshops to
+/// Whether lava sets the building on fire: HAUS_PRODTYP Kind 1..7 (workshops to
 /// markets), 13 (houses) and 14 (shipyards).
 bool catches_fire(const assets::BuildingType& b) noexcept {
     return (b.prod_kind >= prod::kWorkshop && b.prod_kind <= prod::kMarket) || b.prod_kind == prod::kHouse ||
            b.prod_kind == prod::kShipyard;
 }
 
-/// Whether lava destroys the building (0x00464A80): by its Kind.
+/// Whether lava destroys the building: by its Kind.
 bool destroyed_by_lava(const assets::BuildingType& b) noexcept {
     switch (b.kind) {
         case 1:   // STRASSE
@@ -194,7 +194,7 @@ bool destroyed_by_lava(const assets::BuildingType& b) noexcept {
     }
 }
 
-/// What a lump does where it lands (0x00446ED0). In the original a fire starts on every computer
+/// What a lump does where it lands. In the original a fire starts on every computer
 /// by itself, a destruction is a command of the owner or the host; here both happen on every
 /// computer alike.
 void land(World& world, const assets::BuildingTable& buildings, const Ground& g, std::vector<VolcanoEvent>* events,
@@ -220,7 +220,7 @@ void land(World& world, const assets::BuildingTable& buildings, const Ground& g,
     }
 }
 
-/// A lava throw (0x004471D0) from the mountain centre at game time `at_us`.
+/// A lava throw from the mountain centre at game time `at_us`.
 LavaLump throw_lava(const World& world, const Eruption& e, std::uint32_t speed, std::uint64_t at_us) {
     const WorldIsland& island = world.islands()[e.crater.island];
     const std::uint32_t n = 3U * e.step;
@@ -243,7 +243,7 @@ LavaLump throw_lava(const World& world, const Eruption& e, std::uint32_t speed, 
     return p;
 }
 
-/// End of a leg of a lump (0x00446ED0): aims the next leg, or lands. False when the lump is gone.
+/// End of a leg of a lump: aims the next leg, or lands. False when the lump is gone.
 bool lava_step(World& world, const assets::BuildingTable& buildings, LavaLump& p, std::vector<VolcanoEvent>* events,
                std::vector<DisasterEvent>* disasters, std::vector<ConstructionEvent>* construction) {
     const std::uint64_t now = p.leg_end_us;
@@ -313,11 +313,16 @@ std::uint32_t crater_count(const World& world) noexcept {
     for (const WorldIsland& island : world.islands()) {
         n += static_cast<std::uint32_t>(island.craters.size());
     }
-    return std::min(n, kMaxCraterCount);
+    return n;
 }
 
 std::uint64_t eruption_interval_ms(std::uint32_t craters) noexcept {
-    return std::uint64_t{kInterval[std::min(craters, kMaxCraterCount)]} * kTenthMs;
+    if (craters > kMaxCraterCount) {
+        // More craters than the original's world holds (more than twelve players): as much more
+        // often as there are more craters, so that each of them erupts as often as with twenty.
+        return std::uint64_t{kInterval[kMaxCraterCount]} * kTenthMs * kMaxCraterCount / craters;
+    }
+    return std::uint64_t{kInterval[craters]} * kTenthMs;
 }
 
 std::uint64_t first_eruption_ms(Random& random) {
@@ -341,6 +346,7 @@ bool volcanoes_enabled(const World& world, const Rules& rules) noexcept {
         case Volcanoes::On:
             return true;
         case Volcanoes::Game:
+        case Volcanoes::Rare:
             break;
     }
     return (world.game_settings().flags & World::GameSettings::kNoVolcanoes) == 0;
@@ -369,7 +375,9 @@ void roll_eruptions(World& world, const Rules& rules, std::vector<VolcanoEvent>*
         erupt(world, ref, seed, true, events);
         const std::uint64_t minutes = random.below(16);
         const std::uint64_t seconds = random.below(32);
-        v.next_ms = world.time_ms() + eruption_interval_ms(crater_count(world)) + (60 * minutes + seconds) * 1000;
+        // Rare eruptions wait twice as long for the next one.
+        const std::uint64_t wait = eruption_interval_ms(crater_count(world)) + (60 * minutes + seconds) * 1000;
+        v.next_ms = world.time_ms() + (rules.volcanoes == Volcanoes::Rare ? 2 * wait : wait);
         v.last.reset();
     }
 }
@@ -382,7 +390,7 @@ bool erupt(World& world, CraterRef crater, std::uint16_t seed, bool message, std
     WorldIsland& island = world.island(crater.island);
     island.volcano_erupted = true;
     c->steps_left = kLastStep;
-    // The ore deposit registered for this very mountain goes (0x0046BDD0; Auf zu neuen Ufern has
+    // The ore deposit registered for this very mountain goes (Auf zu neuen Ufern has
     // some, and the endless generator may put a big iron vein into a volcano): the last one takes
     // its place, as in the original.
     auto& deposits = island.header.deposits;
@@ -408,7 +416,7 @@ void advance_volcanoes(World& world, const assets::BuildingTable& buildings, std
         return;
     }
     const std::uint64_t now = world.time_ms() * kUsPerMs;
-    // Eruption steps (0x00447350): a throw each, then the end.
+    // Eruption steps: a throw each, then the end.
     for (std::size_t i = 0; i < v.eruptions.size();) {
         Eruption& e = v.eruptions[i];
         bool over = false;

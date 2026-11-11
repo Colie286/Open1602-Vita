@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The settings of the side panel (mode 30014; OptionsPanel_Refresh 0x00439630, clicks at the end of
-// 0x0043CE00; docs/re/ui.md): OPTION.GAD with its pages DISK (savegames, leaving the game), MUSIK
+// The settings of the side panel (mode 30014): OPTION.GAD with its pages DISK (savegames, leaving the game), MUSIK
 // (music and effects) and ANNO (voice messages and videos). The panel only shows and edits an
 // OptionsModel; what has to happen beyond that comes back as OptionsEvents.
 #pragma once
@@ -69,7 +68,7 @@ public:
     [[nodiscard]] ui::Panel& panel();
     /// Back to the first page when the mode is entered.
     void opened() noexcept;
-    /// Escape: from a page back to the first (0x0040A0BA); false on the first page.
+    /// Escape: from a page back to the first; false on the first page.
     bool back();
 
     void refresh(const OptionsModel& model);
@@ -81,7 +80,7 @@ public:
     /// False on a page without a list.
     bool wheel(std::int32_t notches, const OptionsModel& model);
 
-    /// A savegame's name is being typed (clicking a slot starts it, 0x00409910 mode 3).
+    /// A savegame's name is being typed (clicking a slot starts it, mode 3).
     [[nodiscard]] bool editing() const noexcept { return m_editing; }
     /// Typed text (Windows-1252); Backspace, Enter and Escape as `key` 8, 13 and 27. Enter on a
     /// free slot saves the new game at once; Escape drops the name typed.

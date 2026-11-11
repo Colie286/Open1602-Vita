@@ -31,7 +31,7 @@ struct Knot {
     std::int32_t v;
 };
 
-/// Byte tables of the scorer (Table_InterpByte 0x00403370, built in 0x00442A90): linear between the
+/// Byte tables of the scorer: linear between the
 /// knots, the last value beyond them, the first below.
 std::int32_t table(std::initializer_list<Knot> knots, std::int32_t x) noexcept {
     const Knot* prev = nullptr;

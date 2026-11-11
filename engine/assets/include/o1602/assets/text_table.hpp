@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Texts of Text.cod: sections in brackets ([STAEDTE], [MELDUNG], ...) with one text per line up to
-// [END] (docs/formats/cod.md). The original loads them at 0x0048F94D.
+// [END] (docs/formats/cod.md). The original loads them.
 #pragma once
 
 #include <map>

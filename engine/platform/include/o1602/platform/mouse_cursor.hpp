@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The mouse cursor of the window: the original's arrow and target (docs/re/ui.md "Mouse
-// cursors"), made from RGBA images, or the system's own where an image is missing.
+// The mouse cursor of the window: the original's arrow and target,
+// made from RGBA images, or the system's own where an image is missing.
 #pragma once
 
 #include <array>

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <algorithm>
+#include <chrono>
+#include <exception>
 #include <iterator>
 #include <utility>
 
@@ -27,6 +29,7 @@ ClientSession::ClientSession(const ClientSession& old, Connect connect)
     : Session(connect(), old.m_config),
       m_hello(old.m_hello),
       m_load(old.m_load),
+      m_prepare(old.m_prepare),
       m_keep_package(old.m_keep_package),
       m_connect(connect),
       m_reconnect(std::move(connect)) {
@@ -99,11 +102,10 @@ void ClientSession::submit(sim::Command command) {
         event(std::move(e));
         return;
     }
-    if (const auto* speed = std::get_if<sim::GameSpeedOrder>(&command);
-        speed != nullptr && speed->op != sim::GameSpeedOrder::Op::SetSpeed && !may_pause()) {
+    if (std::holds_alternative<sim::GameSpeedOrder>(command) && !may_change_speed()) {
         // The host would not carry it out (MS-20); the player is told why nothing happens.
         SessionEvent e;
-        e.kind = SessionEvent::Kind::PauseRefused;
+        e.kind = SessionEvent::Kind::SpeedRefused;
         e.seat = m_seat;
         event(std::move(e));
         return;
@@ -142,16 +144,20 @@ void ClientSession::update(std::uint32_t real_ms, const sim::Simulation::BeforeT
     if (!m_transport) {
         return;
     }
-    if (!m_whole.empty()) {
+    if (m_pending && !finish_pending()) {
+        return;
+    }
+    if (!m_whole.empty() && !m_ended) {
         const std::vector<std::uint8_t> whole = std::exchange(m_whole, {});
         receive(whole);
     }
-    // The events held back behind a whole message first, then those that came since.
+    // The events held back behind a whole message (or a game being prepared) first, then those
+    // that came since.
     for (bool polled = false;;) {
-        while (m_next < m_incoming.size() && m_whole.empty() && !m_ended && m_transport) {
+        while (m_next < m_incoming.size() && m_whole.empty() && !m_pending && !m_ended && m_transport) {
             handle(m_incoming[m_next++]);
         }
-        if (polled || m_next < m_incoming.size() || !m_whole.empty() || m_ended || !m_transport) {
+        if (polled || m_next < m_incoming.size() || !m_whole.empty() || m_pending || m_ended || !m_transport) {
             break;
         }
         m_incoming.clear();
@@ -173,12 +179,39 @@ void ClientSession::update(std::uint32_t real_ms, const sim::Simulation::BeforeT
         m_transport->flush();
         return;
     }
+    if (m_pending) {
+        report_loading(real_ms);
+        m_transport->flush();
+        return;  // the game comes with a later update
+    }
     if (m_simulation != nullptr) {
         run(real_ms, before_tick);
     }
     send_commands();
     report(real_ms);
+    report_loading(real_ms);
     m_transport->flush();
+}
+
+bool ClientSession::finish_pending() {
+    if (m_pending->finish.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+        // Heard, so that the host's messages are acknowledged and the link does not time out;
+        // they are read once the game is there.
+        m_transport->poll(m_incoming);
+        report_loading(0);
+        m_transport->flush();
+        return false;
+    }
+    Finish finish;
+    try {
+        finish = m_pending->finish.get();
+    } catch (const std::exception&) {
+        finish = nullptr;  // as a game that cannot be read
+    }
+    const Snapshot head = std::move(m_pending->head);
+    m_pending.reset();
+    loaded(finish ? finish() : nullptr, head);
+    return !m_ended;
 }
 
 void ClientSession::handle(TransportEvent& e) {
@@ -209,7 +242,7 @@ ClientSession::JoinStage ClientSession::join_stage() const noexcept {
     if (!m_welcomed || m_ended || !m_lobby.started || m_simulation != nullptr) {
         return JoinStage::None;
     }
-    if (!m_whole.empty()) {
+    if (!m_whole.empty() || m_pending) {
         return JoinStage::Loading;
     }
     return m_part.empty() ? JoinStage::Waiting : JoinStage::Receiving;
@@ -292,6 +325,12 @@ void ClientSession::receive(std::span<const std::uint8_t> bytes) {
         if (m_successor != m_seat) {
             m_standby.reset();
         }
+        if (std::exchange(m_starting, roster->starting) && !m_starting) {
+            SessionEvent e;
+            e.kind = SessionEvent::Kind::Started;
+            e.seat = m_seat;
+            event(std::move(e));
+        }
     } else if (auto* standby = std::get_if<Standby>(&*message)) {
         m_standby = std::move(*standby);
     } else if (auto* lobby = std::get_if<Lobby>(&*message)) {
@@ -357,7 +396,19 @@ void ClientSession::package_files(PackageFiles& m) {
 }
 
 void ClientSession::load(Snapshot& m) {
-    sim::Simulation* simulation = m_load ? m_load(m.save) : nullptr;
+    if (m_prepare) {
+        // The long part on a worker; update() keeps the connection and finishes it (finish_pending).
+        Snapshot head{m.epoch, m.frame, m.speed, m.paused, {}};
+        m_pending = Pending{
+            std::async(std::launch::async,
+                       [prepare = m_prepare, save = std::move(m.save)]() mutable { return prepare(std::move(save)); }),
+            std::move(head)};
+        return;
+    }
+    loaded(m_load ? m_load(m.save) : nullptr, m);
+}
+
+void ClientSession::loaded(sim::Simulation* simulation, const Snapshot& m) {
     if (simulation == nullptr) {
         m_simulation = nullptr;
         end(EndReason::LoadFailed);
@@ -387,6 +438,7 @@ void ClientSession::load(Snapshot& m) {
     send(kHost, Progress{m_epoch, m_frames, std::nullopt});
     m_reported = m_frames;
     m_since_report = 0;
+    m_load_reported = kNoLoadReport;  // the next game on its way starts from nothing
 }
 
 void ClientSession::turn(Turn& m) {
@@ -500,6 +552,7 @@ void ClientSession::reconnect() {
     m_closed = m_frames;
     m_epoch = 0;
     m_part.clear();
+    m_load_reported = kNoLoadReport;
     SessionEvent e;
     e.kind = SessionEvent::Kind::Reconnecting;
     e.seat = m_seat;
@@ -516,6 +569,26 @@ void ClientSession::report(std::uint32_t real_ms) {
         m_reported = m_frames;
         m_since_report = 0;
     }
+}
+
+void ClientSession::report_loading(std::uint32_t real_ms) {
+    m_since_load_report = std::min(m_since_load_report + real_ms, m_config.progress_interval_ms);
+    std::uint8_t percent = 0;
+    if (!m_whole.empty() || m_pending) {
+        percent = 100;  // here, and being loaded
+    } else if (!m_part.empty() && m_part_total > 0) {
+        percent =
+            static_cast<std::uint8_t>(std::min<std::uint64_t>(99, std::uint64_t{m_part.size()} * 100 / m_part_total));
+    } else {
+        return;  // no game on its way (one that comes whole is loaded at once)
+    }
+    // A few times a second, but the end at once: the host may be waiting for it to start.
+    if (percent == m_load_reported || (percent < 100 && m_since_load_report < m_config.progress_interval_ms)) {
+        return;
+    }
+    send(kHost, LoadProgress{percent});
+    m_load_reported = percent;
+    m_since_load_report = 0;
 }
 
 }  // namespace o1602::net

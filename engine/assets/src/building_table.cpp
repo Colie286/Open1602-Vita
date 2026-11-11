@@ -105,7 +105,7 @@ core::Result<BuildingTable> BuildingTable::from_cod(const cod::Document& haeuser
             b.ruin = n < 0 ? std::uint8_t{0xFF} : *v;
         }
         for (std::size_t i = 0; i < b.walk_speed.size(); ++i) {
-            // 0x00462834: trunc(value * 32 / 100), at most 126. Zero would mean infinite speed
+            // Trunc(value * 32 / 100), at most 126. Zero would mean infinite speed
             // (a division by zero in the original); Open1602 keeps at least 1.
             // Clamped before the product (HI-17): a large value overflowed int, undefined in C++.
             const std::int32_t percent = std::clamp(r.integer("Wegspeed", i, 100), 0, 400);
@@ -198,8 +198,8 @@ core::Result<BuildingTable> BuildingTable::from_cod(const cod::Document& haeuser
             }
         }
         if (b.prod_kind == prod::kGrowing && b.anim_count > 0) {
-            // 0x00462F1D: the number of k in 1..32 with 40 s + 7 s * k <= Interval / AnimAnz,
-            // clamped to 31 when an entry is added (0x0047C760).
+            // The number of k in 1..32 with 40 s + 7 s * k <= Interval / AnimAnz,
+            // clamped to 31 when an entry is added.
             const std::uint64_t stage_ms = std::uint64_t{b.interval} * 1000U / b.anim_count;
             std::uint32_t cls = 0;
             for (std::uint32_t k = 1; k <= 32; ++k) {
@@ -253,7 +253,7 @@ core::Result<BuildingTable> BuildingTable::from_cod(const cod::Document& haeuser
         }
     }
 
-    // Classes of inhabitants and their needs (0x00460750: k = trunc(v * 8192) / 600).
+    // Classes of inhabitants and their needs (k = trunc(v * 8192) / 600).
     const auto per_tick = [](double v) -> std::uint32_t {
         return core::saturating_cast<std::uint32_t>(
             static_cast<double>(core::saturating_cast<std::int64_t>(v * 8192.0) / 600));
@@ -311,7 +311,7 @@ core::Result<BuildingTable> BuildingTable::from_cod(const cod::Document& haeuser
         }
     }
 
-    // Unlock levels (BAUINFRA, table 0x0061FBC0: {BGruppe, Minwohn} by INFRA number).
+    // Unlock levels (BAUINFRA, {BGruppe, Minwohn} by INFRA number).
     if (const auto* infra = haeuser.root.records("BAUINFRA")) {
         for (const auto& [nummer, level] : *infra) {
             if (nummer < 0 || nummer > 255) {
@@ -323,7 +323,8 @@ core::Result<BuildingTable> BuildingTable::from_cod(const cod::Document& haeuser
             table.m_infra[static_cast<std::size_t>(nummer)] =
                 InfraLevel{static_cast<std::uint8_t>(non_negative(level.integer("BGruppe"))),
                            non_negative(level.integer("Minwohn")),
-                           {}};
+                           {},
+                           std::nullopt};
         }
     }
     std::size_t max_infra = table.m_infra.size();
@@ -338,6 +339,7 @@ core::Result<BuildingTable> BuildingTable::from_cod(const cod::Document& haeuser
             break;
         }
     }
+    table.m_original_count = table.m_types.size();
     return table;
 }
 
@@ -360,7 +362,7 @@ const BuildingType* BuildingTable::first_house(std::size_t resident_class) const
 
 const BuildingType* BuildingTable::ruin_record(std::uint8_t ruin, bool beach) const noexcept {
     std::size_t slot = ruin;
-    // The original takes the next slot on beach for every slot (0x00463FE8); only the fisher's
+    // The original takes the next slot on beach for every slot; only the fisher's
     // hut (0) and the pier (2) can stand on beach, and their next slot is their beach ruin. For
     // any other slot the next one would be another building's ruin (or past the table).
     if (beach && (slot == 0 || slot == 2)) {
@@ -406,6 +408,42 @@ core::Result<BuildingTable> BuildingTable::load(const GameDirectory& game) {
         }
     }
     return table;
+}
+
+core::Status BuildingTable::replace(std::uint32_t id, const BuildingType& by) {
+    BuildingType* old = by_id(id);
+    if (old == nullptr) {
+        return make_error(ErrorCode::NotFound, "there is no building " + std::to_string(id));
+    }
+    if (std::uint64_t{by.gfx} + by.tile_count() > kMaxSprite) {
+        return make_error(ErrorCode::InvalidFormat, "building " + std::to_string(id) + ": sprites " +
+                                                        std::to_string(by.gfx) + " + " +
+                                                        std::to_string(by.tile_count()) + " reach beyond sprite 65534");
+    }
+    const std::int32_t index = m_by_id[id - kIdOffset];
+    // The sprites the old one drew are free again, unless another building draws them too.
+    for (std::uint32_t k = 0; k < old->tile_count(); ++k) {
+        if (old->gfx + k < m_by_sprite.size() && m_by_sprite[old->gfx + k] == index) {
+            m_by_sprite[old->gfx + k] = -1;
+        }
+    }
+    BuildingType b = by;
+    b.id = id;
+    b.record = old->record;
+    b.rand_count = 0;
+    b.land_record = BuildingType::kNoRecord;
+    b.beach_offset = 0;
+    b.mouth_offset = 0;
+    if (b.gfx + b.tile_count() > m_by_sprite.size()) {
+        m_by_sprite.resize(b.gfx + b.tile_count(), -1);
+    }
+    for (std::uint32_t k = 0; k < b.tile_count(); ++k) {
+        if (m_by_sprite[b.gfx + k] < 0) {
+            m_by_sprite[b.gfx + k] = index;
+        }
+    }
+    *old = b;
+    return core::Ok{};
 }
 
 core::Result<std::uint32_t> BuildingTable::add(const BuildingType& like) {

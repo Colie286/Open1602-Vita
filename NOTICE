@@ -2,23 +2,25 @@ Open1602 Vita source distribution
 
 Open1602 and the Vita adaptations: GPL-3.0-or-later; see LICENSE and file headers.
 Original project: https://github.com/x4rd4s/open1602
-Original base: 3fde8d11ca85cc783428c96839f3fd80d4827adb (Open1602 0.3.1).
+Original base: 62a3683f029322ea67a74282bffba6f4ba38dc9d (Open1602 0.5.0).
 
-Modified distribution prepared by Colie286 on 2026-11-10. It includes the native
+Modified distribution prepared by Colie286 on 2026-11-11. It includes the native
 Vita platform, rendering, audio, controls, networking, settings and cache changes
-from the Vita port, and a standalone Vita build. Compared with the local 1.5
-release, the default master endpoint is empty; a user may supply master_server
-in settings.cfg. LAN, Direct-IP and Ad-hoc remain available.
+from the Vita port, and a standalone Vita build. The default master endpoint
+is empty; a user may supply master_server in settings.cfg. LAN, Direct-IP and Ad-hoc remain available.
 
 This source export contains no commercial game resources. The DE/EN catalogues
-and balance preset are Open1602 project sources. The two embedded window icons
-are original Open1602 CC0 artwork; see data/icons/window/LICENSE.txt.
+and balance preset are Open1602 project sources. The embedded window and UI icons
+are original Open1602 CC0 artwork; see data/icons/window/LICENSE.txt and
+data/icons/ui/LICENSE.txt.
 The three Open1602 LiveArea PNGs were supplied by the project owner as
 AI-generated artwork with permission to redistribute them under GPL-3.0-or-later.
 
 Bundled libraries retain their original notices: ENet 1.3.18 (MIT), Lua 5.4.8
 (MIT), stb_vorbis (MIT/public-domain option), dr_flac (MIT-0/public-domain option).
-The video/audio decoder files retain their upstream LGPL and other notices.
+dav1d (BSD-2-Clause) and Opus (BSD-3-Clause) are bundled with their COPYING
+files. The video/audio decoder files retain their upstream GPL, LGPL and other
+notices.
 SDL3 and zlib are pinned public submodules; the Vita SDL patches are included.
 Full linked-component notices are in platform/vita/licenses/ThirdParty.txt,
 SDL3.txt and zlib.txt. Corresponding source revisions for SDK components are in

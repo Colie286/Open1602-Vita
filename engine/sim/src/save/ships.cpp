@@ -32,10 +32,18 @@ void io_ship(A& a, S& s, std::uint16_t version) {
     a.u8_masked(s.direction, 7U);
     a.u32(s.health);
     a.u8(s.cannons);
-    a.list(s.cargo, 7, [&](auto& c) {
+    a.list(s.cargo, version >= kPackageUnits ? 11 : 7, [&](auto& c) {
         a.u8(c.ware);
         a.u32(c.amount);
         a.u16(c.price);
+        if (version >= kPackageUnits) {
+            a.u32(c.unit);
+            if constexpr (A::kReading) {
+                if (c.unit != 0 && (!assets::is_soldier_ware(c.ware) || c.unit >= assets::kMaxFigures)) {
+                    a.fail();
+                }
+            }
+        }
     });
     const std::size_t stops = version >= kLongRoutes ? TradeRoute::kStops : TradeRoute::kOriginalStops;
     const std::size_t entries = version >= kRouteWares ? RouteStop::kEntries : RouteStop::kOriginalEntries;
@@ -61,6 +69,14 @@ void io_ship(A& a, S& s, std::uint16_t version) {
     io_target(a, s.order);
     io_target(a, s.previous);
     a.boolean(s.held);
+    if (version >= kPlunderedFlag) {
+        if constexpr (A::kReading) {
+            a.boolean(s.plundered);
+            s.plundered = s.plundered && s.held;
+        } else {
+            a.boolean(s.held && s.plundered);  // only meaningful under the flag
+        }
+    }
     a.boolean(s.repairing);
     a.boolean(s.for_sale);
     a.u16(s.sale_factor);
@@ -109,8 +125,11 @@ void io_city_trade(A& a, C& c) {
 
 /// The shipyard fields of a cost building.
 template <class A, class B>
-void io_yard(A& a, B& b) {
+void io_yard(A& a, B& b, std::uint16_t version) {
     a.u8(b.order);
+    if (version >= kPackageShips) {
+        a.u32(b.order_figure);
+    }
     a.u32(b.progress);
     a.u32(b.wood);
     a.u32(b.cloth);
@@ -137,7 +156,7 @@ void io_fleet(A& a, std::uint16_t version, Id& next_ship_id, Discovered& discove
         a.bools(item.second);
     });
     a.list(cities, 12, [&](auto& c) { io_city_trade(a, c); });
-    a.list(yards, 23, [&](auto& b) { io_yard(a, b); });
+    a.list(yards, version >= kPackageShips ? 27 : 23, [&](auto& b) { io_yard(a, b, version); });
     a.list(ships, 40, [&](auto& s) { io_ship(a, s, version); });
 }
 
@@ -182,6 +201,20 @@ std::vector<Ship> read_ships(Reader& in) {
 }
 
 std::uint16_t fleet_version(const World& w) {
+    // Version 7 has all of version 6 and the ships of packages the shipyards build.
+    if (std::ranges::any_of(w.cost_buildings(), [](const CostBuilding& b) { return b.order_figure != 0; })) {
+        return kPackageShips;
+    }
+    // Version 6 has all of version 5 and the units of packages in the holds.
+    if (std::ranges::any_of(w.ships(), [](const Ship& s) {
+            return std::ranges::any_of(s.cargo, [](const CargoSlot& c) { return c.unit != 0; });
+        })) {
+        return kPackageUnits;
+    }
+    // Version 5 has all of version 4 and the pirates' mark on a surrendered ship.
+    if (std::ranges::any_of(w.ships(), [](const Ship& s) { return s.held && s.plundered; })) {
+        return kPlunderedFlag;
+    }
     // Version 4 has the routes of version 3 and wide island numbers.
     if (std::ranges::any_of(w.islands(), [](const WorldIsland& i) { return i.header.number > 0xFF; })) {
         return kWideDiscovered;

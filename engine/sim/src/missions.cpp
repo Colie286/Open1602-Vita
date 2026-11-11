@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Mission goals and the values they look at (docs/re/missions.md).
+// Mission goals and the values they look at.
 #include <algorithm>
 #include <limits>
 #include <optional>
 #include <unordered_map>
 
+#include "o1602/assets/goods.hpp"
 #include "o1602/sim/consumption.hpp"
 #include "o1602/sim/game_data.hpp"
 #include "o1602/sim/mission.hpp"
@@ -51,7 +52,7 @@ assets::MissionRecord::CityGoal record_goal(const Mission::CityGoal& g) {
     return {g.inhabitants, g.resident_class, g.count};
 }
 
-/// Whether an island has the resource of an island goal (0x0046B0A0).
+/// Whether an island has the resource of an island goal.
 bool island_has(const WorldIsland& island, std::uint8_t resource) {
     if (resource >= kFirstCrop && resource <= kLastCrop) {
         return (island.header.fertility >> (resource - kFirstCrop) & 1U) != 0;
@@ -166,7 +167,7 @@ Mission mission_from_record(const assets::MissionRecord& r, std::vector<std::str
     for (std::size_t i = 0; i < 3; ++i) {
         m.cities[i] = city_goal(r.cities[i], kClasses, warnings);
     }
-    // The loader sorts the city goals by size, largest first (0x00477FEE), and sets the goal bit
+    // The loader sorts the city goals by size, largest first, and sets the goal bit
     // of each one whose size is not 0.
     std::stable_sort(m.cities.begin(), m.cities.end(), [](const Mission::CityGoal& a, const Mission::CityGoal& b) {
         return a.inhabitants > b.inhabitants;
@@ -247,7 +248,7 @@ void prepare_missions(World& world) {
         }
     }
     world.set_missions(std::move(missions));
-    // Settings bit 5 when a mission of a player asks to defeat the pirates (0x00484EE1).
+    // Settings bit 5 when a mission of a player asks to defeat the pirates.
     World::GameSettings settings = world.game_settings();
     for (const Player& p : world.players()) {
         const Mission* m = world.mission_of(p);
@@ -262,6 +263,104 @@ void prepare_missions(World& world) {
         }
     }
     world.set_game_settings(settings);
+}
+
+Mission mission_from_goals(const World& world, const assets::ScenarioGoals& g, std::string text,
+                           std::string_view source, std::vector<std::string>* warnings) {
+    Mission m;
+    m.text = std::move(text);
+    const auto set = [&m](std::uint32_t bit, std::int32_t& field, const std::optional<std::int32_t>& value) {
+        if (value) {
+            m.goals |= bit;
+            field = *value;
+        }
+    };
+    set(goal::kInhabitants, m.min_inhabitants, g.inhabitants);
+    set(goal::kCityCount, m.min_cities, g.cities);
+    set(goal::kBalance, m.min_balance, g.balance);
+    set(goal::kTradeBalance, m.min_trade_balance, g.trade_balance);
+    if (g.defeated) {
+        m.goals |= goal::kDefeatedCount;
+        m.min_defeated = *g.defeated;
+    }
+    m.goals |= (g.castle ? goal::kCastle : 0U) | (g.cathedral ? goal::kCathedral : 0U);
+    std::size_t slot = 0;
+    for (const auto& [id, tons] : g.goods) {
+        const auto ware = assets::ware_of(world.goods(), id);
+        if (!ware || !world.goods().is_trade(*ware) || slot >= m.goods.size()) {
+            if (warnings != nullptr) {
+                warnings->push_back(std::string(source) + ": the goal names " + id +
+                                    (slot >= m.goods.size() ? ", a third good" : ", a good this game does not know"));
+            }
+            continue;
+        }
+        m.goals |= slot == 0 ? goal::kGoods1 : goal::kGoods2;
+        m.goods[slot++] = Mission::GoodsGoal{*ware, tons * 32};
+    }
+    if (g.city) {
+        m.goals |= goal::kCity1;
+        m.cities[0] = Mission::CityGoal{g.city->inhabitants, g.city->resident_class, g.city->count};
+    }
+    return m;
+}
+
+void apply_package_scenario(World& world, const assets::PackageScenario& scenario, std::string_view language,
+                            std::vector<std::string>* warnings) {
+    std::vector<Player> players = world.players();
+    if (scenario.money) {
+        for (Player& p : players) {
+            if (p.role == PlayerRole::Human) {
+                p.money = *scenario.money;
+            }
+        }
+    }
+    // The factions of the slots: the faction must be one of the world (factions.toml of a package
+    // that is on, or of the map saved with it).
+    for (const auto& [slot, id] : scenario.slots) {
+        const auto faction = find_faction(world.factions(), id);
+        if (slot >= players.size() || !faction) {
+            if (warnings != nullptr) {
+                warnings->push_back(scenario.id + ": slot " + std::to_string(slot + 1) +
+                                    (slot >= players.size() ? " is not a slot of the map" : " names no faction " + id));
+            }
+            continue;
+        }
+        Player& p = players[slot];
+        if (world.factions()[*faction].behaviour != FactionBehaviour::Settlers && p.role == PlayerRole::Human) {
+            if (warnings != nullptr) {
+                warnings->push_back(scenario.id + ": slot " + std::to_string(slot + 1) +
+                                    " is a person's; only a faction of the settlers' behaviour takes it");
+            }
+            continue;
+        }
+        if (world.factions()[*faction].behaviour != FactionBehaviour::Settlers) {
+            make_neutral(p, *faction);  // steered by its faction's behaviour, and the scripts
+        } else {
+            p.faction = *faction;
+            if (p.role == PlayerRole::Neutral) {
+                p.role = PlayerRole::Computer;
+            }
+        }
+    }
+    if (scenario.goals.any()) {
+        Mission m = mission_from_goals(world, scenario.goals, scenario.briefing(language), scenario.id, warnings);
+        // Every human plays this mission; the computers keep theirs.
+        std::vector<Mission> missions = world.missions();
+        const auto index = static_cast<MissionId>(std::min<std::size_t>(missions.size(), kNoMission - 1));
+        if (index < missions.size()) {
+            missions[index] = std::move(m);
+        } else {
+            missions.push_back(std::move(m));
+        }
+        for (Player& p : players) {
+            if (p.role == PlayerRole::Human) {
+                p.mission = index;
+            }
+        }
+        world.set_missions(std::move(missions));
+    }
+    world.set_players(std::move(players));
+    prepare_missions(world);
 }
 
 std::uint32_t city_einwohner(const City& city, std::uint32_t workers) noexcept {
@@ -341,7 +440,7 @@ std::vector<std::uint32_t> military_upkeep(const World& world, const assets::Fig
             upkeep[s.owner] += figures.unit_upkeep(type->kind);
         }
     }
-    // Units in training or waiting in a castle count too (player + 0xA6 from recruiting on).
+    // Units in training or waiting in a castle count too (from recruiting on).
     for (const CostBuilding& b : world.cost_buildings()) {
         if (b.kind != CostBuilding::Kind::Castle || b.island >= world.islands().size()) {
             continue;
@@ -358,19 +457,19 @@ std::vector<std::uint32_t> military_upkeep(const World& world, const assets::Fig
     for (const Ship& ship : world.ships()) {
         for (const CargoSlot& c : ship.cargo) {
             if (is_soldier_ware(c.ware) && ship.owner < upkeep.size()) {
-                if (const assets::FigureType* type = figures.get(unit_of_ware(c.ware))) {
+                if (const assets::FigureType* type = figures.get(hold_unit(c))) {
                     upkeep[ship.owner] += figures.unit_upkeep(type->kind);
                 }
             }
         }
     }
-    // Cannon towers (Turm: line of figuren.cod, player + 0xA4).
+    // Cannon towers (Turm: line of figuren.cod).
     for (const Tower& t : world.towers()) {
         if (t.owner < upkeep.size()) {
             upkeep[t.owner] += figures.tower_upkeep();
         }
     }
-    // Computer players pay nothing (0x00475B00).
+    // Computer players pay nothing.
     for (std::size_t p = 0; p < upkeep.size(); ++p) {
         if (world.players()[p].role != PlayerRole::Human) {
             upkeep[p] = 0;
@@ -439,7 +538,7 @@ MissionCheck check_mission(const World& world, const assets::BuildingTable& buil
     }
     const std::uint32_t required = m->goals & ~goal::kComputers;
     // A mission without goals (the endless games: a text only) does nothing, not even its loss
-    // conditions (0x00475440).
+    // conditions.
     if (required == 0 || (pl->role == PlayerRole::Computer && (m->goals & goal::kComputers) == 0)) {
         return check;
     }
@@ -564,7 +663,7 @@ MissionCheck check_mission(const World& world, const assets::BuildingTable& buil
     }
     check.achieved = a;
     check.won = (required & ~a) == 0;
-    // Loss conditions (0x00475440, rt + 0x04).
+    // Loss conditions (rt + 0x04).
     if ((m->losses & loss::kProtectedCity) != 0) {
         bool kept = false;
         for (std::size_t i = 0; i < world.cities().size() && !kept; ++i) {

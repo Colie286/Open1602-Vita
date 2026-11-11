@@ -60,13 +60,13 @@ static void early_language(void){
 #define BOOT_LOG "ux0:data/open1602/launcher.log"
 #define BOOT_PREVIOUS "ux0:data/open1602/launcher.previous.log"
 #define HEAP_PHASE "BEGIN newlib heap 2 MiB / minimal launcher"
-#define BOOT_HEADER "OPEN1602 VITA - MINIMAL STARTER 1.50"
+#define BOOT_HEADER "OPEN1602 VITA - MINIMAL STARTER 1.60"
 #define LOG_HEADER "LOG: UX0:DATA/OPEN1602/LAUNCHER.LOG"
 #else
 #define BOOT_LOG "ux0:data/open1602/startup.log"
 #define BOOT_PREVIOUS "ux0:data/open1602/startup.previous.log"
 #define HEAP_PHASE "BEGIN newlib heap 128 MiB / full client"
-#define BOOT_HEADER "OPEN1602 VITA - FULL CLIENT 1.50"
+#define BOOT_HEADER "OPEN1602 VITA - FULL CLIENT 1.60"
 #define LOG_HEADER "LOG: UX0:DATA/OPEN1602/STARTUP.LOG"
 #endif
 static const char log_path[] = BOOT_LOG;
@@ -275,7 +275,7 @@ void __wrap__init_vita_heap(void) {
         sceIoRemove(BOOT_PREVIOUS);
         sceIoRename(log_path,BOOT_PREVIOUS);
     }
-    vita_boot_write("BEGIN pre-newlib heap / build 1.50 / upstream 3fde8d11");
+    vita_boot_write("BEGIN pre-newlib heap / build 1.60 / upstream 62a3683f");
     vita_boot_write(session_text);
     // Normal boot is silent; retain the durable pre-heap log. Only the explicit
     // diagnostic marker or a real fatal error takes over scanout.

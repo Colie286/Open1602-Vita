@@ -18,17 +18,18 @@ using ui::Rect;
 
 constexpr Id kItem = 1;  // + Item
 constexpr Id kClose = 20;
+constexpr Id kKeysButton = 21;
 
 constexpr std::int32_t kRowY = 64;
 constexpr std::int32_t kRowH = 36;
 constexpr std::int32_t kPercentW = 96;  ///< the value beside a slider
-constexpr std::int32_t kLabelW = 260;
-constexpr std::int32_t kValueW = 232;
+constexpr std::int32_t kLabelW = 310;
+constexpr std::int32_t kValueW = 266;
 
 constexpr std::array<std::string_view, DisplayMenu::kItems> kLabels = {
-    "display.mode",       "display.size",         "display.ui_scale",   "display.zoom",       "display.zoom_drawing",
-    "display.vsync",      "display.edge_scroll",  "display.edge_speed", "display.grab_mouse", "display.goods_trend",
-    "display.rival_wars", "display.plant_fields", "display.graphics",  "vita.display.cpu", "vita.display.left_stick", "vita.display.right_stick", "vita.display.chat_button"};
+    "display.mode",       "display.size",        "display.ui_scale",     "display.zoom",       "display.zoom_drawing",
+    "display.vsync",      "display.edge_scroll", "display.edge_speed",   "display.grab_mouse", "display.goods_trend",
+    "display.rival_wars", "display.event_speed", "display.plant_fields", "display.graphics",   "display.autosave", "vita.display.cpu", "vita.display.left_stick", "vita.display.right_stick", "vita.display.chat_button"};
 
 std::string on_off(bool on) {
     return ui::tr(on ? "display.on" : "display.off");
@@ -76,10 +77,20 @@ std::string DisplayMenu::value_text(const DisplayModel& model, Item item) {
             return on_off(s.goods_trend);
         case Item::RivalWars:
             return on_off(s.rival_wars);
+        case Item::EventSpeed: {
+            static constexpr std::array<std::string_view, 3> kKeys = {
+                "display.event_speed.normal", "display.event_speed.attacks", "display.event_speed.keep"};
+            return ui::tr(kKeys[std::min<std::size_t>(static_cast<std::size_t>(s.event_speed), kKeys.size() - 1)]);
+        }
         case Item::PlantFields:
             return on_off(s.plant_fields);
         case Item::Graphics:
             return ui::tr(s.classic_graphics ? "display.graphics_classic" : "display.graphics_modern");
+        case Item::Autosave:
+            if (s.autosave_minutes <= 0) {
+                return on_off(false);
+            }
+            return ui::tr("display.minutes", {std::to_string(s.autosave_minutes)});
     }
     return {};
 }
@@ -152,12 +163,24 @@ bool DisplayMenu::choose(DisplayModel& model, Item item, bool forward) {
         case Item::RivalWars:
             s.rival_wars = !s.rival_wars;
             return true;
+        case Item::EventSpeed: {
+            constexpr std::uint8_t kValues = 3;
+            const auto now = static_cast<std::uint8_t>(s.event_speed);
+            s.event_speed = static_cast<EventSpeed>((now + (forward ? 1 : kValues - 1)) % kValues);
+            return true;
+        }
         case Item::PlantFields:
             s.plant_fields = !s.plant_fields;
             return true;
         case Item::Graphics:
             s.classic_graphics = !s.classic_graphics;
             return true;
+        case Item::Autosave: {
+            const std::int32_t next = next_autosave(s.autosave_minutes, forward);
+            const bool changed = next != s.autosave_minutes;
+            s.autosave_minutes = next;
+            return changed;
+        }
     }
     return false;
 }
@@ -184,11 +207,20 @@ DisplayMenu::Result DisplayMenu::mouse(std::int32_t x, std::int32_t y, bool down
         const bool changed=next!=speed;speed=next;
         return changed?Result::Changed:Result::None;
     }
+    if (*id == kKeysButton) {
+        return Result::Keys;
+    }
     if (*id == kItem + static_cast<Id>(Item::EdgeSpeed)) {
         // The slider, let go: the nearest step.
         const std::int32_t speed = edge_speed_at(m_form.slid_to());
         const bool changed = speed != model.settings.edge_speed;
         model.settings.edge_speed = speed;
+        return changed ? Result::Changed : Result::None;
+    }
+    if (*id == kItem + static_cast<Id>(Item::Autosave)) {
+        const std::int32_t minutes = autosave_at(m_form.slid_to());
+        const bool changed = minutes != model.settings.autosave_minutes;
+        model.settings.autosave_minutes = minutes;
         return changed ? Result::Changed : Result::None;
     }
     if (*id >= kItem && *id < kItem + static_cast<Id>(kItems)) {
@@ -217,15 +249,16 @@ void DisplayMenu::layout(const DisplayModel& model) {
         f.label(Rect{24, y, kLabelW, kRowH - 4}, ui::tr(kLabels[i]), Align::Left, used ? Tone::Normal : Tone::Dim);
         const Id id = kItem + static_cast<Id>(i);
         const Rect value{kWidth - 24 - kValueW, y, kValueW, kRowH - 6};
-        if (item == Item::EdgeSpeed || item == Item::LeftStick || item == Item::RightStick) {
+        if (item == Item::EdgeSpeed || item == Item::Autosave || item == Item::LeftStick || item == Item::RightStick) {
             // A slider, with its value beside it; while it is dragged the value it would take.
             DisplayModel shown = model;
             auto& shown_speed=item==Item::EdgeSpeed?shown.settings.edge_speed:item==Item::LeftStick?shown.settings.vita_left_stick:shown.settings.vita_right_stick;
             if (const auto at = f.sliding(id)) {
-                shown_speed = edge_speed_at(*at);
+                if (item == Item::Autosave) shown.settings.autosave_minutes = autosave_at(*at);
+                else shown_speed = edge_speed_at(*at);
             }
-            f.slider(id, Rect{value.x, value.y, value.w - kPercentW, value.h},
-                     edge_speed_position(shown_speed), used);
+            const double position = item == Item::Autosave ? autosave_position(shown.settings.autosave_minutes) : edge_speed_position(shown_speed);
+            f.slider(id, Rect{value.x, value.y, value.w - kPercentW, value.h}, position, used);
             f.label(Rect{value.x + value.w - kPercentW, value.y, kPercentW, value.h}, value_text(shown, item),
                     Align::Right, used ? Tone::Normal : Tone::Dim);
             continue;
@@ -233,8 +266,9 @@ void DisplayMenu::layout(const DisplayModel& model) {
         f.cycle_button(id, value, value_text(model, item), used);
     }
     const std::int32_t below = kRowY + static_cast<std::int32_t>(row) * kRowH + 4;
-    if(!model.fixed_window)f.paragraph(Rect{24,below,kWidth-48,kHeight-below-60},ui::tr("display.hint"),Tone::Dim);
-    f.button(kClose, Rect{(kWidth - 180) / 2, kHeight - 54, 180, 40}, ui::tr("display.close"));
+    if (!model.fixed_window) f.paragraph(Rect{24, below, kWidth - 48, kHeight - below - 60}, ui::tr("display.hint"), Tone::Dim);
+    f.button(kKeysButton, Rect{24, kHeight - 54, 260, 40}, ui::tr("display.keys"));
+    f.button(kClose, Rect{kWidth - 24 - 180, kHeight - 54, 180, 40}, ui::tr("display.close"));
 }
 
 }  // namespace o1602::app

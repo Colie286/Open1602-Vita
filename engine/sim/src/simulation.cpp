@@ -18,11 +18,11 @@ namespace o1602::sim {
 
 namespace {
 
-constexpr std::uint32_t kProductionPeriodMs = 1000;  // 0x0047DAF0: once per game second
-constexpr std::uint32_t kUpkeepPeriodMs = 5000;      // 0x00476350: each player once per 5 s
-constexpr std::uint32_t kDiplomacyTickMs = 5000;     // 0x00476350: the diplomacy counters fade
-constexpr std::uint8_t kDefeatChecks = 40;           // 0x00476350: 40 checks of 5 s
-constexpr std::size_t kArchClass = 2;                // 0x004805D0(K, 2): inhabitants of class 2 and up
+constexpr std::uint32_t kProductionPeriodMs = 1000;  // once per game second
+constexpr std::uint32_t kUpkeepPeriodMs = 5000;      // each player once per 5 s
+constexpr std::uint32_t kDiplomacyTickMs = 5000;     // the diplomacy counters fade
+constexpr std::uint8_t kDefeatChecks = 40;           // 40 checks of 5 s
+constexpr std::size_t kArchClass = 2;                // inhabitants of class 2 and up
 constexpr std::uint64_t kArchInhabitants = 200;      // more than 199, in the largest city
 constexpr std::uint16_t kMissionMessage = 0x54;      // "Ihr konntet den Euch gestellten Auftrag erfüllen!"
 constexpr std::uint16_t kColourWinMessage = 0x6B;    // "Der rote Spieler konnte seinen Auftrag erfüllen!" + colour
@@ -63,6 +63,7 @@ Simulation::Simulation(World& world, const assets::BuildingTable& buildings, con
         m_rules = *world.saved_rules();  // the settings the game was started with
     }
     world.set_original_bugs(m_rules.bugs);
+    world.set_fertile_fields(m_rules.fertile_fields);
 }
 
 Simulation::Simulation(World& world, const assets::BuildingTable& buildings, const assets::FigureTable& figures,
@@ -78,6 +79,10 @@ Simulation::Simulation(World& world, const assets::BuildingTable& buildings, con
     }
     // The towns the settings show from the start; a saved game has them discovered already.
     world.reveal_islands(m_rules.reveal);
+    // The islands' crops and deposits the settings show from the start; a saved game has them already.
+    if (m_rules.reveal_resources) {
+        world.explore_islands();
+    }
     if (const std::vector<std::uint8_t> state = world.take_simulation_state(); !state.empty()) {
         // Each part loads whole or not at all, but a later part may fail after an earlier one
         // was taken over: then all go back to how they are now, fresh.
@@ -89,7 +94,7 @@ Simulation::Simulation(World& world, const assets::BuildingTable& buildings, con
         m_state_damaged = true;
         (void)restore_state(fresh.take());
     }
-    // As the original after every load: the computer players look at the world anew (0x0042B710).
+    // As the original after every load: the computer players look at the world anew.
     m_ai.reset();
     // As when the original loads a game: every deer spot gets its deer.
     m_logistics.spawn_deer_at_spots();
@@ -164,6 +169,7 @@ void Simulation::offer_names(std::vector<std::string> cities, std::vector<std::s
     if (m_city_names.empty() && m_fleet.ship_names().empty()) {
         m_city_names = std::move(cities);
         m_fleet.set_ship_names(std::move(ships));
+        m_fleet.name_unnamed_ships();
     }
 }
 
@@ -251,7 +257,7 @@ void Simulation::save_state(core::ByteWriter& out) const {
     write_part(out, kLogisticsPart, Logistics::kStateVersion, true, [&] { m_logistics.save(out); });
     write_part(out, kFleetPart, m_fleet.state_version(), true, [&] { m_fleet.save(out); });
     write_part(out, kMilitaryPart, Military::kStateVersion, true, [&] { m_military.save(out); });
-    write_part(out, kComputersPart, ComputerPlayers::state_version(), false, [&] { m_ai.save(out); });
+    write_part(out, kComputersPart, m_ai.state_version(), false, [&] { m_ai.save(out); });
 }
 
 core::Status Simulation::restore_state(const std::vector<std::uint8_t>& state) {
@@ -303,7 +309,7 @@ core::Status Simulation::restore_state(const std::vector<std::uint8_t>& state) {
                 break;
             case kComputersPart:
                 slot = &computers;
-                max_version = ComputerPlayers::state_version();
+                max_version = ComputerPlayers::max_state_version();
                 break;
             default:
                 break;
@@ -551,6 +557,14 @@ CommandResult Simulation::execute(const Command& command) {
             execute_demolish(*m_world, *m_buildings, *demolish, m_construction_events.sink(), m_rules.refund_share());
         result.demolished = d.removed;
         result.refund = d.refund;
+        // The demolish tool also clears the player's blueprints.
+        BlueprintOrder clear;
+        clear.player = demolish->player;
+        clear.kind = BlueprintOrder::Kind::Remove;
+        clear.island = demolish->island;
+        clear.from = demolish->from;
+        clear.to = demolish->to;
+        execute_blueprints(*m_world, *m_buildings, clear, m_city_names, nullptr);
     } else if (const auto* order = std::get_if<ShipOrder>(&command)) {
         result.accepted = m_fleet.order(*order);
         if (result.accepted && order->attack) {
@@ -596,6 +610,20 @@ CommandResult Simulation::execute(const Command& command) {
         result.accepted = gate_order(*gates);
     } else if (const auto* cart = std::get_if<CartRequest>(&command)) {
         result.accepted = m_fleet.request_cart(*cart) != 0;
+    } else if (const auto* blueprint = std::get_if<BlueprintOrder>(&command)) {
+        result.accepted =
+            execute_blueprints(*m_world, *m_buildings, *blueprint, m_city_names, m_construction_events.sink()) != 0;
+    } else if (const auto* move = std::get_if<MoveOrder>(&command)) {
+        if (m_rules.moving != Moving::Off) {
+            const bool pay = m_rules.moving == Moving::Rebuild;
+            const MoveResult moved = execute_move(*m_world, *m_buildings, *move, pay, pay ? m_rules.refund_share() : 0,
+                                                  m_construction_events.sink());
+            result.accepted = moved.moved;
+            result.paid = moved.paid;
+            result.refund = moved.refund;
+        }
+    } else if (const auto* cheat_order = std::get_if<CheatOrder>(&command)) {
+        result.accepted = cheat(*cheat_order);
     }
     handle(m_construction_events.events(), first);
     return result;
@@ -606,7 +634,7 @@ bool Simulation::ask_founding(const DiplomacyOrder& order) {
     if (ship == nullptr || ship->owner != order.player) {
         return false;
     }
-    // The island by the ship (0x0046AAA0), where the ship panel offers the founding.
+    // The island by the ship, where the ship panel offers the founding.
     const auto site = kontor_site_near(*m_world, *m_buildings, ship->x, ship->y);
     if (!site) {
         return false;
@@ -646,7 +674,7 @@ bool Simulation::switch_production(const ProductionSwitch& s) {
     p.enabled = s.on;
     if (s.on && !p.working()) {
         // An idle building starts its next cycle in the next second; the time it waited does not
-        // count against its productivity (0x0047CFA0).
+        // count against its productivity.
         p.idle_cycles = 0;
         p.elapsed = p.elapsed > p.countdown ? static_cast<std::uint16_t>(p.elapsed - p.countdown) : 0;
         p.countdown = 0;
@@ -661,7 +689,7 @@ bool Simulation::city_order(const CityOrder& o) {
     }
     switch (o.op) {
         case CityOrder::Op::TaxRate: {
-            // 0x0047F130 posts the rate, 0x0047F850 measures the class against it at once.
+            // The original posts the rate measures the class against it at once.
             const auto& classes = m_buildings->resident_classes();
             if (o.resident_class >= classes.size() || o.resident_class >= city->tax_rate.size() ||
                 o.rate < CityOrder::kMinTax || o.rate > CityOrder::kMaxTax) {
@@ -680,7 +708,7 @@ bool Simulation::city_order(const CityOrder& o) {
             city->name = o.name;
             return true;
         case CityOrder::Op::MaterialLock:
-            // Switching the lock on starts the people's clock (0x0048073A).
+            // Switching the lock on starts the people's clock.
             if (o.on && !city->material_lock) {
                 city->material_reminder_ms = m_world->time_ms();
             }
@@ -726,6 +754,9 @@ bool Simulation::control_player(const PlayerControl& order) {
     }
     const bool to_person = p->role == PlayerRole::Computer && !order.computer;
     p->role = order.computer ? PlayerRole::Computer : PlayerRole::Human;
+    if (order.owner != 0) {
+        p->owner = order.owner;
+    }
     if (to_person) {
         // The person finds the ships standing where the computer left them, not sailing on to
         // where it sent them; trade routes keep running (they show in the ship's window).
@@ -747,6 +778,118 @@ bool Simulation::gate_order(const GateOrder& order) {
     return true;
 }
 
+bool Simulation::cheats_allowed(PlayerId player) const {
+    const Player* p = m_world->player(player);
+    if (p == nullptr || !p->active() || p->role != PlayerRole::Human) {
+        return false;
+    }
+    switch (m_rules.cheats) {
+        case Cheats::Off:
+            return false;
+        case Cheats::Start:
+            return true;
+        case Cheats::Code:
+            break;
+    }
+    // As in the original: with more than one person in the game only the code 512.
+    return p->cheats == Player::kCheatsAlways ||
+           (p->cheats == Player::kCheatsOn && human_players(*m_world).size() <= 1);
+}
+
+bool Simulation::cheat(const CheatOrder& order) {
+    Player* p = m_world->player(order.player);
+    if (p == nullptr || !p->active() || p->role != PlayerRole::Human || m_rules.cheats == Cheats::Off) {
+        return false;
+    }
+    if (order.op == CheatOrder::Op::Code) {
+        // 2061 switches them on and off, 512 on also with other people (the original's codes).
+        if (order.code == CheatOrder::kCode) {
+            p->cheats = p->cheats == Player::kCheatsOff ? Player::kCheatsOn : Player::kCheatsOff;
+            return true;
+        }
+        if (order.code == CheatOrder::kAlwaysCode) {
+            p->cheats = Player::kCheatsAlways;
+            return true;
+        }
+        return false;
+    }
+    if (!cheats_allowed(order.player)) {
+        return false;
+    }
+    // The ship selected, else the city of the tile under the mouse, whoever's it is.
+    Ship* ship = order.ship ? m_world->ship(*order.ship) : nullptr;
+    if (order.ship && (ship == nullptr || ship->sinking || ship->cart())) {
+        return false;
+    }
+    City* city = nullptr;
+    if (ship == nullptr && order.x < m_world->width() && order.y < m_world->height()) {
+        const World::Cell& cell = m_world->cell(order.x, order.y);
+        if (cell.island != World::kSea) {
+            const MapCell& tile = m_world->islands()[cell.island].map.top(cell.local_x, cell.local_y);
+            city = m_world->city(cell.island, tile.city);
+        }
+    }
+    switch (order.op) {
+        case CheatOrder::Op::Code:
+            break;
+        case CheatOrder::Op::Gold: {
+            Player* owner = m_world->player(ship != nullptr ? ship->owner : city != nullptr ? city->owner : kNoPlayer);
+            if (owner == nullptr) {
+                return false;
+            }
+            owner->money = static_cast<std::int32_t>(std::min<std::int64_t>(
+                std::int64_t{owner->money} + CheatOrder::kGold, std::numeric_limits<std::int32_t>::max()));
+            return true;
+        }
+        case CheatOrder::Op::Goods:
+            if (!m_world->goods().is_trade(order.ware)) {
+                return false;
+            }
+            if (ship != nullptr) {
+                return m_fleet.cheat_cargo(ship->id, order.ware, CheatOrder::kGoods) != 0;
+            }
+            if (city == nullptr) {
+                return false;
+            }
+            {
+                city->ensure_ware(order.ware);
+                std::uint32_t& stock = city->goods[order.ware];
+                // As far as the warehouses hold it.
+                const std::uint32_t room = city->capacity > stock ? city->capacity - stock : 0U;
+                const std::uint32_t put = std::min(room, CheatOrder::kGoods);
+                stock += put;
+                return put != 0;
+            }
+        case CheatOrder::Op::Cannon:
+            return ship != nullptr && m_fleet.cheat_cannon(ship->id);
+        case CheatOrder::Op::Volcano: {
+            if (order.x >= m_world->width() || order.y >= m_world->height()) {
+                return false;
+            }
+            const World::Cell& cell = m_world->cell(order.x, order.y);
+            if (cell.island == World::kSea || m_world->islands()[cell.island].craters.empty()) {
+                return false;
+            }
+            // The crater nearest to the mouse.
+            const WorldIsland& island = m_world->islands()[cell.island];
+            const Crater* best = nullptr;
+            std::int64_t best_d = 0;
+            for (const Crater& c : island.craters) {
+                const std::int64_t dx = std::int64_t{c.x} - cell.local_x;
+                const std::int64_t dy = std::int64_t{c.y} - cell.local_y;
+                const std::int64_t d = dx * dx + dy * dy;
+                if (best == nullptr || d < best_d) {
+                    best = &c;
+                    best_d = d;
+                }
+            }
+            const auto seed = static_cast<std::uint16_t>(m_world->random(RandomStream::Islands).below(0x8000));
+            return erupt(*m_world, CraterRef{cell.island, best->x, best->y}, seed, true, m_volcano_events.sink());
+        }
+    }
+    return false;
+}
+
 namespace {
 
 /// Whether an event can change the towers of its island: they depend on the tower buildings and
@@ -765,6 +908,10 @@ bool towers_affected(const ConstructionEvent& e) {
 
 void Simulation::handle(const std::vector<ConstructionEvent>& events, std::size_t first) {
     bool storage = false;
+    // Whatever is placed over a blueprint takes its place.
+    if (first < events.size()) {
+        drop_covered_blueprints(*m_world, *m_buildings, std::span(events).subspan(first));
+    }
     // S-002: figures of a building that is gone end their trip; what they carry is lost and what
     // they reserved is released. All removals up to the next founded city at once (TB-22).
     std::vector<std::uint32_t> removed;
@@ -838,7 +985,7 @@ void Simulation::handle(const std::vector<ConstructionEvent>& events, std::size_
     m_tower_islands.clear();
     if (storage) {
         m_logistics.update_storage();
-        // A smaller warehouse loses what does not fit (0x00482120).
+        // A smaller warehouse loses what does not fit.
         for (std::size_t i = first; i < events.size(); ++i) {
             if (events[i].kind != ConstructionEvent::Kind::StorageChanged) {
                 continue;
@@ -851,11 +998,10 @@ void Simulation::handle(const std::vector<ConstructionEvent>& events, std::size_
 }
 
 std::span<const Simulation::TickStep> Simulation::tick_steps() noexcept {
-    // The original runs its subsystems in this order (0x00489670): growth first (0x0047CA80),
-    // production (0x0047DAF0), then the cities (0x0047F8A0) and houses (0x0047B9C0), ..., the
-    // computer players after the players' tick (AI_Tick 0x0042B4B0) and the figures last
-    // (0x00451890). Changing the order changes the game.
-    static constexpr std::array<TickStep, 16> kSteps = {{
+    // The original runs its subsystems in this order: growth first, production, then the cities
+    // and houses, ..., the computer players after the players' tick and the figures last.
+    // Changing the order changes the game.
+    static constexpr std::array<TickStep, 17> kSteps = {{
         {"diplomacy", &Simulation::diplomacy_step},
         {"growth", &Simulation::growth_step},
         {"production", &Simulation::production_step},
@@ -867,6 +1013,7 @@ std::span<const Simulation::TickStep> Simulation::tick_steps() noexcept {
         {"islands", &Simulation::islands_step},
         {"volcanoes", &Simulation::volcanoes_step},
         {"computers", &Simulation::computers_step},
+        {"blueprints", &Simulation::blueprints_step},  // Open1602's own: the players' builders
         {"combat", &Simulation::combat_step},
         {"ships", &Simulation::ships_step},
         {"soldiers", &Simulation::soldiers_step},
@@ -892,6 +1039,13 @@ void Simulation::tick_timed(std::span<std::uint64_t> step_ns) {
     const std::uint64_t construction_before = m_construction_events.total();
     const std::uint64_t houses_before = m_house_events.total();
     const std::uint64_t game_before = m_game_events.total();
+    const std::uint64_t city_before = m_city_events.total();
+    const std::uint64_t disaster_before = m_disaster_events.total();
+    const std::uint64_t volcano_before = m_volcano_events.total();
+    const std::uint64_t island_before = m_island_events.total();
+    const std::uint64_t ship_before = m_ship_events.total();
+    const std::uint64_t military_before = m_military_events.total();
+    const std::uint64_t diplomacy_before = m_world->diplomacy().notices().total();
     apply_commands();
     if (m_paused) {
         return;  // paused by a command of this tick: the game time stands still
@@ -910,9 +1064,20 @@ void Simulation::tick_timed(std::span<std::uint64_t> step_ns) {
         }
     }
     if (m_scripts != nullptr) {
-        const TickEvents events{m_construction_events.since(construction_before), m_house_events.since(houses_before),
-                                m_game_events.since(game_before)};
-        m_scripts->after_tick(*this, events);
+        // Copies: what the scripts change adds events of its own to the buffers.
+        const auto copy = [](auto events) { return std::vector(events.begin(), events.end()); };
+        const auto construction = copy(m_construction_events.since(construction_before));
+        const auto houses = copy(m_house_events.since(houses_before));
+        const auto game = copy(m_game_events.since(game_before));
+        const auto cities = copy(m_city_events.since(city_before));
+        const auto disasters = copy(m_disaster_events.since(disaster_before));
+        const auto volcanoes = copy(m_volcano_events.since(volcano_before));
+        const auto islands = copy(m_island_events.since(island_before));
+        const auto ships = copy(m_ship_events.since(ship_before));
+        const auto military = copy(m_military_events.since(military_before));
+        const auto diplomacy = copy(m_world->diplomacy().notices().since(diplomacy_before));
+        m_scripts->after_tick(*this, TickEvents{construction, houses, game, cities, disasters, volcanoes, islands,
+                                                ships, military, diplomacy});
     }
     trim_events();
     if (m_tick_observer) {
@@ -944,7 +1109,7 @@ void Simulation::trim_events() {
 }
 
 void Simulation::diplomacy_step() {
-    // Every 5 s the diplomacy counters fade (Player_Tick 0x00476350; the original takes one
+    // Every 5 s the diplomacy counters fade (the original takes one
     // player per call, each once in 5 s).
     if (m_time_ms % kDiplomacyTickMs != 0) {
         return;
@@ -965,28 +1130,47 @@ void Simulation::production_step() {
         return;
     }
     const std::size_t first = m_production_events.size();
-    advance_production(*m_world, *m_buildings, m_production_events.sink());
+    advance_production(*m_world, *m_buildings, m_production_events.sink(), m_figures);
     for (std::size_t i = first; i < m_production_events.size(); ++i) {
         m_logistics.handle(m_production_events.events()[i]);
+    }
+    for (const std::uint32_t mine : m_logistics.take_exhausted_mines()) {
+        ProductionEvent e;
+        e.kind = ProductionEvent::Kind::VeinExhausted;
+        e.production = mine;
+        m_production_events.push(e);
     }
 }
 
 void Simulation::cities_step() {
-    // The cities consume every 10 s (0x0047F8A0 comes after the production in the original).
+    // The cities consume every 10 s (comes after the production in the original).
     if (!elapsed(m_city_ms, kCityTickMs)) {
         return;
     }
     advance_cities(*m_world, *m_buildings, m_city_events.sink());
     m_military.natives_tick();
+    // Cities a computer player has given up, also those razed before (a savegame).
+    const std::size_t first = m_construction_events.size();
+    give_up_razed_cities(*m_world, *m_buildings, m_construction_events.sink());
+    handle(m_construction_events.events(), first);
 }
 
 void Simulation::city_events_step() {
-    // Every 60-67 s a city may catch the plague, send out a robber or catch fire (0x0047F8A0).
+    // Every 60-67 s a city may catch the plague, send out a robber or catch fire.
     advance_city_events(*m_world, *m_buildings, m_rules, m_disaster_events.sink(), &m_robbers);
     for (const RobberSpawn& r : m_robbers) {
         m_logistics.spawn_robber(r);
     }
     m_robbers.clear();
+}
+
+void Simulation::blueprints_step() {
+    if (m_time_ms % kBlueprintAutoMs != 0 || m_world->blueprint_auto().empty()) {
+        return;
+    }
+    const std::size_t first = m_construction_events.size();
+    build_auto_blueprints(*m_world, *m_buildings, m_city_names, m_construction_events.sink());
+    handle(m_construction_events.events(), first);
 }
 
 void Simulation::statistics_step() {
@@ -1001,14 +1185,14 @@ void Simulation::houses_step() {
 }
 
 void Simulation::upkeep_step() {
-    // Soldiers' upkeep of human players every 5 s (0x00476350): a twelfth of the upkeep per minute.
+    // Soldiers' upkeep of human players every 5 s: a twelfth of the upkeep per minute.
     if (elapsed(m_upkeep_ms, kUpkeepPeriodMs)) {
         pay_upkeep();
     }
 }
 
 void Simulation::disasters_step() {
-    // Disasters in epochs of 10 s (0x0047A020): they spread, end or burn the building down.
+    // Disasters in epochs of 10 s: they spread, end or burn the building down.
     if (!elapsed(m_disaster_ms, kDisasterEpochMs)) {
         return;
     }
@@ -1018,9 +1202,9 @@ void Simulation::disasters_step() {
 }
 
 void Simulation::islands_step() {
-    // Island epochs of 30 s (0x0046B3E0): droughts, then deer come back and settle. The phase
+    // Island epochs of 30 s: droughts, then deer come back and settle. The phase
     // steps every 30 s; an island whose last phase differs is ticked. In a new game that happens
-    // at once for islands whose template says so (docs/re/newgame.md).
+    // at once for islands whose template says so.
     const bool epoch = elapsed(m_island_ms, Logistics::kIslandEpochMs);
     if (epoch) {
         m_world->set_island_phase(static_cast<std::uint8_t>(m_world->island_phase() + 1U));
@@ -1119,7 +1303,7 @@ void Simulation::logistics_step() {
 void Simulation::pay_upkeep() {
     const std::vector<std::uint32_t> upkeep = military_upkeep(*m_world, *m_figures);
     for (std::size_t p = 0; p < upkeep.size(); ++p) {
-        // Computer players pay nothing, as in the original (0x00475B00).
+        // Computer players pay nothing, as in the original.
         Player* player = m_world->player(static_cast<PlayerId>(p));
         if (player != nullptr && player->role == PlayerRole::Human) {
             player->money = money_plus(player->money, -static_cast<std::int64_t>(upkeep[p] / 12));
@@ -1128,15 +1312,11 @@ void Simulation::pay_upkeep() {
 }
 
 void Simulation::players_tick() {
-    // Player_Tick 0x00476350: each player once per 5 s; nothing more once the game is over.
+    // Each player once per 5 s; nothing more once the game is over.
     if (m_world->game_end()) {
         return;
     }
-    std::size_t humans = 0;
-    for (const Player& p : m_world->players()) {
-        humans += p.role == PlayerRole::Human && p.status != PlayerStatus::Absent ? 1 : 0;
-    }
-    const bool multiplayer = humans > 1;
+    const bool multiplayer = this->multiplayer();
     // The victory conditions of an endless game: alone "your task is fulfilled", with others the
     // message with the winner's colour, as the original's multiplayer races.
     const VictoryConditions& victory = m_rules.victory;
@@ -1176,8 +1356,8 @@ void Simulation::players_tick() {
                 }
                 break;
             case PlayerRole::Computer:
-                // The AI root retires a computer with no city and no ship (0x00429070), not in
-                // the tutorial (0x0042942C).
+                // The AI root retires a computer with no city and no ship, not in
+                // the tutorial.
                 if (!city && !ship && !m_world->game_settings().tutorial) {
                     defeat(id, GameEvent::Reason::Retired, true);
                 }
@@ -1205,6 +1385,165 @@ void Simulation::players_tick() {
     }
 }
 
+bool Simulation::multiplayer() const {
+    std::size_t humans = 0;
+    for (const Player& p : m_world->players()) {
+        humans += p.role == PlayerRole::Human && p.status != PlayerStatus::Absent ? 1 : 0;
+    }
+    return humans > 1;
+}
+
+bool Simulation::script_money(PlayerId player, std::int64_t amount) {
+    Player* p = m_world->player(player);
+    if (p == nullptr) {
+        return false;
+    }
+    p->money = money_plus(p->money, amount);
+    return true;
+}
+
+bool Simulation::script_treaty(PlayerId a, PlayerId b, bool peace, bool sign) {
+    const std::size_t players = m_world->players().size();
+    if (a >= players || b >= players || a == b) {
+        return false;
+    }
+    Diplomacy& diplomacy = m_world->diplomacy();
+    const Treaty value = sign ? Treaty::Signed : Treaty::None;
+    Treaty& ab = peace ? diplomacy.relation(a, b).peace : diplomacy.relation(a, b).trade;
+    Treaty& ba = peace ? diplomacy.relation(b, a).peace : diplomacy.relation(b, a).trade;
+    if (ab == value && ba == value) {
+        return false;
+    }
+    ab = value;
+    ba = value;
+    return true;
+}
+
+bool Simulation::script_destroy(std::uint16_t island, std::int32_t x, std::int32_t y) {
+    if (island >= m_world->islands().size()) {
+        return false;
+    }
+    // Only what belongs to a city: ground, forest and rocks outside stay.
+    const auto b = building_at(*m_world, *m_buildings, island, TilePos{x, y});
+    if (!b || b->city == MapCell::kNoCity || b->type->kind == kind::kGround || b->origin.x < 0 || b->origin.y < 0) {
+        return false;
+    }
+    // Unchanged original terrain (rocks, beach) stays too, as demolishing leaves it.
+    const IslandMap& map = m_world->islands()[island].map;
+    const auto ox = static_cast<std::uint32_t>(b->origin.x);
+    const auto oy = static_cast<std::uint32_t>(b->origin.y);
+    if (b->type->kind != kind::kForest && map.top(ox, oy).sprite == map.ground(ox, oy).sprite &&
+        map.top(ox, oy).rotation == map.ground(ox, oy).rotation) {
+        return false;
+    }
+    const std::size_t first = m_construction_events.size();
+    const bool destroyed = destroy_building(*m_world, *m_buildings, island, b->origin, m_construction_events.sink());
+    handle(m_construction_events.events(), first);
+    return destroyed;
+}
+
+std::optional<std::uint32_t> Simulation::script_unit(PlayerId player, std::uint32_t family, std::int32_t x,
+                                                     std::int32_t y) {
+    const Player* p = m_world->player(player);
+    const auto unit = m_figures != nullptr ? m_figures->unit_of(family) : std::nullopt;
+    const assets::FigureType* type = m_figures != nullptr ? m_figures->get(family) : nullptr;
+    if (p == nullptr || !unit || unit->family != family || type == nullptr || x < 0 || y < 0 ||
+        x >= static_cast<std::int32_t>(m_world->width()) || y >= static_cast<std::int32_t>(m_world->height())) {
+        return std::nullopt;
+    }
+    const LandMap& land = m_combat.land();
+    const std::uint16_t island = land.island_at(x, y);
+    const assets::BuildingType* ground = land.building(x, y);
+    if (island == World::kSea || (ground != nullptr && !soldiers_walk_on(*ground))) {
+        return std::nullopt;
+    }
+    Soldier s = make_soldier(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y),
+                             static_cast<std::uint16_t>(family), player, island);
+    s.health = type->combat.max_health;
+    s.anim = 1;
+    m_world->add_soldier(s);
+    return m_world->soldiers().back().id;
+}
+
+std::optional<std::int64_t> Simulation::script_goods(std::uint16_t island, std::uint8_t city, std::uint8_t ware,
+                                                     std::int64_t amount) {
+    City* c = m_world->city(island, city);
+    if (c == nullptr || !m_world->goods().is_trade(ware)) {
+        return std::nullopt;
+    }
+    c->ensure_ware(ware);
+    if (amount >= 0) {
+        const std::uint32_t room = c->capacity > c->goods[ware] ? c->capacity - c->goods[ware] : 0;
+        const auto added = static_cast<std::uint32_t>(std::min<std::int64_t>(amount, room));
+        c->goods[ware] += added;
+        return std::int64_t{added};
+    }
+    const auto taken = static_cast<std::uint32_t>(std::min<std::int64_t>(-amount, c->available(ware)));
+    c->goods[ware] -= taken;
+    return -std::int64_t{taken};
+}
+
+bool Simulation::script_mission(PlayerId player, std::optional<Mission> mission) {
+    Player* p = m_world->player(player);
+    if (p == nullptr || (p->role != PlayerRole::Human && p->role != PlayerRole::Computer)) {
+        return false;
+    }
+    if (!mission) {
+        p->mission = kNoMission;
+        return true;
+    }
+    if (p->role == PlayerRole::Computer) {
+        mission->goals |= goal::kComputers;
+    }
+    // The player's own slot if nobody else names it, else a slot nobody names, else a new one.
+    const auto named_by_other = [&](std::size_t slot) {
+        for (std::size_t i = 0; i < m_world->players().size(); ++i) {
+            if (i != player && m_world->players()[i].mission == slot) {
+                return true;
+            }
+        }
+        return false;
+    };
+    std::vector<Mission> missions = m_world->missions();
+    std::size_t slot = p->mission;
+    if (slot >= missions.size() || named_by_other(slot)) {
+        slot = 0;
+        while (slot < missions.size() && (slot == p->mission || named_by_other(slot))) {
+            ++slot;
+        }
+    }
+    if (slot >= kNoMission) {
+        return false;
+    }
+    if (slot == missions.size()) {
+        missions.push_back(std::move(*mission));
+    } else {
+        missions[slot] = std::move(*mission);
+    }
+    m_world->set_missions(std::move(missions));
+    p->mission = static_cast<MissionId>(slot);
+    return true;
+}
+
+bool Simulation::script_win(PlayerId player) {
+    const Player* p = m_world->player(player);
+    if (m_world->game_end() || p == nullptr || !p->active() ||
+        (p->role != PlayerRole::Human && p->role != PlayerRole::Computer)) {
+        return false;
+    }
+    accomplish(player, multiplayer() ? kColourWinMessage : kMissionMessage, false);
+    return true;
+}
+
+bool Simulation::script_defeat(PlayerId player) {
+    const Player* p = m_world->player(player);
+    if (m_world->game_end() || p == nullptr || !p->active()) {
+        return false;
+    }
+    defeat(player, GameEvent::Reason::Script, false);
+    return true;
+}
+
 void Simulation::accomplish(PlayerId winner) {
     const Player* p = m_world->player(winner);
     const Mission* m = p != nullptr ? m_world->mission_of(*p) : nullptr;
@@ -1212,7 +1551,7 @@ void Simulation::accomplish(PlayerId winner) {
 }
 
 void Simulation::accomplish(PlayerId winner, std::uint16_t message, bool co_winners) {
-    // Op 0x3E (0x00476950): the winner, and every other human or computer who meets his own
+    // The winner, and every other human or computer who meets his own
     // mission at this moment; the original checks players without a mission against mission 0
     // (S-106). Victory conditions count as everyone's mission, but a time limit has one winner.
     // The game is over for everybody.
@@ -1244,7 +1583,7 @@ void Simulation::accomplish(PlayerId winner, std::uint16_t message, bool co_winn
 }
 
 void Simulation::defeat(PlayerId id, GameEvent::Reason reason, bool blame) {
-    // Op 3 sub 9 (0x004766A0): the player is out. Unless he went bankrupt, the player blamed for
+    // The player is out. Unless he went bankrupt, the player blamed for
     // it (who last destroyed his Kontor or market) counts him as defeated. With 200 inhabitants
     // of the third class or higher in his largest city he may build a triumphal arch; otherwise
     // the allowance counts as used up straight away. The original does not credit him on the
@@ -1275,8 +1614,8 @@ void Simulation::defeat(PlayerId id, GameEvent::Reason reason, bool blame) {
 }
 
 std::uint64_t Simulation::upper_inhabitants_of_largest_city(PlayerId player) const {
-    // 0x004805D0 with 0x00480580: the first city of the player with the most Einwohner
-    // (0x0047F790, workers included); a player whose cities are all empty has none.
+    // The first city of the player with the most Einwohner
+    // (workers included); a player whose cities are all empty has none.
     const City* largest = nullptr;
     std::uint32_t most = 0;
     for (const City& c : m_world->cities()) {

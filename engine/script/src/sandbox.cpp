@@ -340,6 +340,7 @@ int open_libraries(lua_State* lua) {
 struct RunRequest {
     std::string_view name;
     std::string_view source;
+    bool compile_only = false;
 };
 
 int run_chunk(lua_State* lua) {
@@ -350,7 +351,9 @@ int run_chunk(lua_State* lua) {
     if (luaL_loadbufferx(lua, request.source.data(), request.source.size(), lua_tostring(lua, -1), "t") != LUA_OK) {
         return lua_error(lua);
     }
-    lua_call(lua, 0, 0);
+    if (!request.compile_only) {
+        lua_call(lua, 0, 0);
+    }
     return 0;
 }
 
@@ -925,6 +928,11 @@ core::Status Sandbox::load_table(std::string_view name, std::span<const std::uin
 
 core::Status Sandbox::run(std::string_view name, std::string_view source) {
     RunRequest request{name, source};
+    return protected_call(*m_state, run_chunk, &request, 0);
+}
+
+core::Status Sandbox::compile(std::string_view name, std::string_view source) {
+    RunRequest request{name, source, true};
     return protected_call(*m_state, run_chunk, &request, 0);
 }
 

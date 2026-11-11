@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Building and demolishing (docs/re/construction.md).
+// Building and demolishing.
 //
 // A build order is a list of buildings a player wants to place on one island, in the order of the
-// drag (a road, a field area) or a single building. Like the original (0x004084D0), the whole
+// drag (a road, a field area) or a single building. Like the original, the whole
 // order belongs to the city under its first item; items are checked one after the other, costs add
 // up in that order, and once the money or a material runs out that item and all later ones stay
 // unbuilt. Unlike the original, every peer checks the order itself (the original sent the result
@@ -15,11 +15,12 @@
 // shipyards and castles), claims territory for markets and Kontors, founds a city with the first
 // Kontor on an island and pays the costs. Demolishing restores the ground, without refunds in the
 // original and with the refund the game settings ask for in Open1602 (Rules::demolish_refund), and
-// may shrink the territory: buildings that lose it change city or fall to ruins (0x00482120).
+// may shrink the territory: buildings that lose it change city or fall to ruins.
 #pragma once
 
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -34,7 +35,7 @@ enum class BuildRefusal : std::uint8_t {
     None,
     UnknownBuilding,  ///< no such building type
     OutsideIsland,    ///< the footprint leaves the island
-    Terrain,          ///< a tile does not take this building (0x00464660)
+    Terrain,          ///< a tile does not take this building
     Territory,        ///< not completely inside the player's city (a market: no full edge inside)
     ForeignCity,      ///< the first item lies in another player's city
     CityLimit,        ///< the player has a city on the island already, or the island has 7
@@ -54,11 +55,12 @@ enum class BuildRefusal : std::uint8_t {
     Bricks,
     Cannons,
     ShipTooFar,  ///< founding from a ship: the ship is more than 16 tiles away
+    Immovable,   ///< moving: the building cannot be moved (movable_at)
 };
 
 [[nodiscard]] const char* refusal_name(BuildRefusal refusal) noexcept;
 
-/// Whether a player may pick a building in the build menu (Haus_IsAvailableForPlayer 0x0042D530):
+/// Whether a player may pick a building in the build menu:
 /// its level is unlocked, castle and cathedral are not built yet, monuments and arches lie within
 /// their allowance. Money and goods are not asked; the order checks everything again (S-014).
 [[nodiscard]] bool building_available(const Player& player, const assets::BuildingType& type) noexcept;
@@ -99,6 +101,9 @@ struct BuildOrder {
     /// Turns buildings with a door towards the nearest road within 4 tiles (the original's
     /// "Automatische Ausrichtung zur Straße").
     bool orient_to_road = true;
+    /// The editor's order (ADR 0013): nothing is paid, no building is locked or limited, and a
+    /// treasure under a building stays in the ground. Everything else is checked as for a player.
+    bool free = false;
 };
 
 /// What becomes of one item.
@@ -119,13 +124,17 @@ struct BuildPlan {
     BuildBill bill;                        ///< costs of the items that are built
     std::uint8_t city = MapCell::kNoCity;  ///< city of the order; kNoCity founds one
     std::size_t placed = 0;                ///< items that are built
-    /// Costs the resource bar shows in brackets while building (Hud_DrawResourceBar 0x0040D160):
+    /// Costs the resource bar shows in brackets while building:
     /// every item that could be placed, affordable or not; a single item (the building under
-    /// the mouse) also where it cannot be placed (0x004084D0).
+    /// the mouse) also where it cannot be placed.
     BuildBill shown;
     /// A Kontor built over the destroyed Kontor of a defenceless city of another player: the city
-    /// changes hands (build_effects 4.3, City_ChangeOwner).
+    /// changes hands (build_effects 4.3).
     bool takeover = false;
+    /// A market built over the destroyed market of another player's city (Open1602): that city.
+    /// The market joins the builder's city (`city`), and the land the destroyed market held for
+    /// it within the new market's circle goes to the builder with everything standing on it.
+    std::uint8_t captured_city = MapCell::kNoCity;
 };
 
 /// Checks an order without changing anything (the preview of the build tool).
@@ -133,6 +142,10 @@ struct BuildPlan {
 /// The same into `plan`, whose item list keeps its memory (the computers test thousands of
 /// single sites per minute, TB-9).
 void plan_build(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order, BuildPlan& plan);
+
+/// plan_build() as if gold and goods were plenty: where blueprints may go (sim/blueprints.hpp).
+void plan_blueprint(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order,
+                    BuildPlan& plan);
 
 /// What the construction changed, for the logistics, the renderer and the messages.
 struct ConstructionEvent {
@@ -157,7 +170,7 @@ struct ConstructionEvent {
     std::uint32_t money = 0;      ///< TreasureFound: the gold
 };
 
-/// Whether a city can be taken over (0x0047F1B0): no market or Kontor standing (a destroyed Kontor
+/// Whether a city can be taken over: no market or Kontor standing (a destroyed Kontor
 /// does not count) and no tower in it.
 [[nodiscard]] bool city_defenceless(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
                                     std::uint8_t city);
@@ -166,6 +179,18 @@ struct ConstructionEvent {
 /// hut of it standing; the ruins left over do not count.
 [[nodiscard]] bool native_village_gone(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
                                        std::uint8_t city);
+
+/// Whether a computer player gives up its city `city` (Open1602): defenceless (city_defenceless)
+/// and no house of it standing. Nobody lives there to take over, and its Kontor's ruin would hold
+/// the land for ever.
+[[nodiscard]] bool computer_city_gone(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
+                                      std::uint8_t city);
+
+/// Dissolves every city a computer player has given up (computer_city_gone), its land becoming
+/// free; nothing with OriginalBugs::native_land. Checked with the cities every 10 s, so that a
+/// city razed in a savegame goes too. Returns how many went.
+std::size_t give_up_razed_cities(World& world, const assets::BuildingTable& buildings,
+                                 std::vector<ConstructionEvent>* events);
 
 /// Builds what plan_build() accepts and pays for it. New cities take the next name of
 /// `city_names` (round robin, World::city_name_index()).
@@ -180,7 +205,7 @@ struct DemolishOrder {
     TilePos to;
 };
 
-/// Origins of the buildings an order removes (0x00464B40): only the player's own, no Kontor while
+/// Origins of the buildings an order removes: only the player's own, no Kontor while
 /// its city has other buildings; a rectangle larger than one tile leaves real buildings (houses,
 /// workshops, towers, mines, Kontors, shipyards, mills) standing and only clears roads, walls,
 /// fields, trees and ruins.
@@ -209,7 +234,72 @@ struct DemolishResult {
 DemolishResult execute_demolish(World& world, const assets::BuildingTable& buildings, const DemolishOrder& order,
                                 std::vector<ConstructionEvent>* events, std::uint32_t refund_percent = 0);
 
-/// Writes a building onto the tiles the way the original does after its checks (0x004653A0):
+/// Moving a building (Open1602, as in later Anno games; Rules::moving): the player's building at
+/// `from` goes to `x`, `y`, turned to `rotation`, on the same island and in the same city.
+struct MoveOrder {
+    PlayerId player = kNoPlayer;
+    std::uint16_t island = 0;
+    TilePos from;        ///< any tile of the building
+    std::int32_t x = 0;  ///< the new footprint origin
+    std::int32_t y = 0;
+    std::uint8_t rotation = 0;
+    bool orient_to_road = true;  ///< as BuildOrder::orient_to_road
+};
+
+/// Why a building cannot be moved at all, wherever it would go.
+enum class MoveRefusal : std::uint8_t {
+    None,
+    Nothing,     ///< no building of the player there
+    Holds,       ///< Kontor, market, tower or castle: it holds land or soldiers
+    NoBuilding,  ///< ruins, roads, walls, fields, trees and terrain
+    Busy,        ///< a shipyard building or repairing a ship
+    Disaster,    ///< burning or struck by the plague
+};
+
+/// The building a player would pick up to move: its origin, record, rotation and city.
+struct MovablePiece {
+    MoveRefusal refusal = MoveRefusal::Nothing;
+    const assets::BuildingType* type = nullptr;
+    TilePos origin;
+    std::uint8_t rotation = 0;
+    std::uint8_t anim_phase = 0;
+    std::uint8_t city = MapCell::kNoCity;
+    std::uint32_t width = 1;  ///< footprint as turned
+    std::uint32_t height = 1;
+
+    [[nodiscard]] bool ok() const noexcept { return refusal == MoveRefusal::None; }
+};
+
+/// Whether the building on `tile` is one `player` may move. Houses, workshops, farms, mines, mills,
+/// public buildings and idle shipyards move; Kontors, markets, towers, castles, ruins and the pieces
+/// of roads, walls and fields do not.
+[[nodiscard]] MovablePiece movable_at(const World& world, const assets::BuildingTable& buildings, PlayerId player,
+                                      std::uint16_t island, TilePos tile);
+
+/// The order as a build order of the building alone: what the build tool's preview shows.
+[[nodiscard]] BuildOrder move_build_order(const MovablePiece& piece, const MoveOrder& order);
+
+/// Where the building would stand and what it would cost: plan_build() of it as if it were gone
+/// from its old place, without the limits of castles, cathedrals and monuments (it is counted
+/// already) and without upgrading a building there; with `pay` false gold and goods do not count.
+/// The world is changed while planning and put back exactly as it was. One item; refused
+/// (Territory) if the building would leave its city.
+[[nodiscard]] BuildPlan plan_move(World& world, const assets::BuildingTable& buildings, const MoveOrder& order,
+                                  bool pay);
+
+struct MoveResult {
+    bool moved = false;
+    BuildBill paid;    ///< Moving::Rebuild: the costs at the new place
+    BuildBill refund;  ///< Moving::Rebuild: what came back for the old place (Rules::demolish_refund)
+};
+
+/// Moves the building: it keeps its level, inhabitants, stock and production; figures on their way
+/// to or from it end their trip, as when it is demolished. With `pay` the player pays as for a new
+/// building and gets `refund_percent` of its costs back, as for a demolished one.
+MoveResult execute_move(World& world, const assets::BuildingTable& buildings, const MoveOrder& order, bool pay,
+                        std::uint32_t refund_percent, std::vector<ConstructionEvent>* events);
+
+/// Writes a building onto the tiles the way the original does after its checks:
 /// walls and towers on the beach become their beach variant, roads, walls and bridges fit their
 /// neighbours, a new Kontor lays its piers. Nothing is checked, registered or paid; for tools and
 /// tests (execute_build does all of that).
@@ -221,14 +311,15 @@ void place_tiles(World& world, const assets::BuildingTable& buildings, std::uint
 void fit_connection(World& world, const assets::BuildingTable& buildings, std::uint16_t island, std::int32_t x,
                     std::int32_t y);
 
-/// Destroys the building with origin `origin` to ruins without an order of its owner (a fire,
-/// 0x00463F40): like demolishing, the territory is checked again afterwards. A native village
-/// left without its chief's house, market and huts (native_village_gone) is dissolved, and its
-/// land becomes free (not with OriginalBugs::native_land).
+/// Destroys the building with origin `origin` to ruins without an order of its owner (a fire):
+/// like demolishing, the territory is checked again afterwards. A native village
+/// left without its chief's house, market and huts (native_village_gone) and a city a computer
+/// player gives up (computer_city_gone) are dissolved, and their land becomes free (not with
+/// OriginalBugs::native_land).
 bool destroy_building(World& world, const assets::BuildingTable& buildings, std::uint16_t island, TilePos origin,
                       std::vector<ConstructionEvent>* events);
 
-/// Whether crops of `ware` grow on the tile (0x004684A0): the island's fertility for the ware
+/// Whether crops of `ware` grow on the tile: the island's fertility for the ware
 /// (0, 64 or 128), weighted with the Randwachs of the ground and lowered by a drought on the
 /// island, picks one of five patterns.
 [[nodiscard]] bool tile_fertile(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
@@ -251,8 +342,22 @@ bool destroy_building(World& world, const assets::BuildingTable& buildings, std:
                                                            PlayerId player, std::uint16_t island, TilePos origin,
                                                            std::uint32_t field, std::uint32_t seed = 0);
 
-/// How fertile an island is for a ware (0x0046AFF0): crops and resources 45..58 from the
+/// The climate of a package an island has (WorldIsland::climate) among `climates`
+/// (Balance::climates), nullptr for the original's.
+[[nodiscard]] const Climate* island_climate(std::span<const Climate> climates, const WorldIsland& island) noexcept;
+
+/// The crops an island's climate grows half without the island's bit, as fertility bits: those of
+/// its package climate, else the original's of its header (original_climate_crops).
+[[nodiscard]] std::uint32_t climate_crops(std::span<const Climate> climates, const WorldIsland& island) noexcept;
+
+/// How fertile an island is for a ware: crops and resources 45..58 from the
 /// fertility mask (128) or the climate's own crops (64); ore by its deposits (big 128, small 64).
-[[nodiscard]] std::uint32_t island_fertility(const WorldIsland& island, std::uint8_t ware) noexcept;
+[[nodiscard]] std::uint32_t island_fertility(std::span<const Climate> climates, const WorldIsland& island,
+                                             std::uint8_t ware) noexcept;
+/// The same with the climates of `world`.
+[[nodiscard]] inline std::uint32_t island_fertility(const World& world, const WorldIsland& island,
+                                                    std::uint8_t ware) noexcept {
+    return island_fertility(world.balance().climates, island, ware);
+}
 
 }  // namespace o1602::sim

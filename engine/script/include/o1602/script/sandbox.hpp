@@ -73,6 +73,8 @@ public:
 
     /// Runs a script's text (binary chunks are refused). `name` appears in its error messages.
     core::Status run(std::string_view name, std::string_view source);
+    /// Only reads the text as run() would, without running it: a syntax error with its line.
+    core::Status compile(std::string_view name, std::string_view source);
 
     /// Whether the script defined a global function of this name.
     [[nodiscard]] bool has_function(std::string_view name) const;

@@ -21,3 +21,6 @@ o1602_set_warnings(o1602_ui)
 
 file(GLOB o1602_locales CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/data/locale/*.lang")
 o1602_embed_files(o1602_ui o1602::ui::locales ${o1602_locales})
+# Open1602's own icons of the interface (the build menu's tools), PNGs named by their icon.
+file(GLOB o1602_ui_icons CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/data/icons/ui/*.png")
+o1602_embed_files(o1602_ui o1602::ui::interface_icons ${o1602_ui_icons})

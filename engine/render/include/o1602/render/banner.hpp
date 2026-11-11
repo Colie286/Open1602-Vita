@@ -9,6 +9,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -61,11 +62,19 @@ struct BannerArt {
     /// Sprites drawn for one banner (Banner::id), as an offset from `first`: the pirates' skull among
     /// the military message icons.
     std::vector<std::pair<std::string, std::int32_t>> own;
+    /// The family is a coat of arms: a package's arms of a banner (arms.toml) stand in for it.
+    bool arms = false;
 
     /// The four colours of the original one after the other from `first`.
     [[nodiscard]] static BannerArt at(std::int32_t first) {
         BannerArt art;
         art.first = first;
+        return art;
+    }
+    /// The same for coats of arms.
+    [[nodiscard]] static BannerArt arms_at(std::int32_t first) {
+        BannerArt art = at(first);
+        art.arms = true;
         return art;
     }
 };
@@ -102,13 +111,16 @@ class BannerTable {
 public:
     /// The seven banners of the original. Red, blue, yellow and white use the tinted generic flag
     /// in the colours measured from the original flags; pirates keep FAHNEPIRAT; natives and the
-    /// free trader have none. `figures` supplies the flag images (table 0x00498F2C).
+    /// free trader have none. `figures` supplies the flag images.
     [[nodiscard]] static BannerTable original(const assets::FigureTable* figures = nullptr,
                                               const BannerOptions& options = {});
 
     /// Colours offered for new banners: the four of the original and eight more that stay
     /// distinguishable on land, water and the minimap (the menu also allows any RGB colour).
     static const std::array<assets::Rgba, 12> kDefaultColours;
+    /// The colour of the k-th banner beyond kDefaultColours (k from 0), for a sim::kMaxPlayers above
+    /// twelve: hues a golden angle apart in three steps of brightness, the same on every platform.
+    [[nodiscard]] static assets::Rgba generated_colour(std::size_t k) noexcept;
     /// The former name (LC-20).
     [[deprecated("use kDefaultColours")]] static inline const std::array<assets::Rgba, 12>& kDefaultColors =
         kDefaultColours;
@@ -121,7 +133,8 @@ public:
     sim::BannerId add(Banner banner);
     /// The banners of the fifth player on (sim::kFirstExtraBanner), after the original's seven:
     /// the eight colours after the original's four, those that stand out best on the minimap's
-    /// land and are furthest from the natives' brown first.
+    /// land and are furthest from the natives' brown first; from the thirteenth player on (a higher
+    /// sim::kMaxPlayers) generated_colour().
     void add_more_players();
     /// A banner with the generic flag in `colour`; its riders get a horse and its interface art a coat
     /// of arms pattern picked from `id`.

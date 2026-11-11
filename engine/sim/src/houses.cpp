@@ -5,7 +5,9 @@
 #include <array>
 #include <bit>
 #include <set>
+#include <span>
 
+#include "o1602/assets/resident_classes.hpp"
 #include "o1602/sim/disasters.hpp"
 #include "o1602/sim/game_data.hpp"
 #include "o1602/sim/pathfinding.hpp"
@@ -21,9 +23,9 @@ constexpr std::uint8_t kFull = kFullSupply;
 constexpr std::uint8_t kNoMarket = 6;  // market distance class without (or far from) a market
 constexpr std::size_t kMaxNeighbourTiles = 40;
 
-// ---- Tables of 0x00478630 -------------------------------------------------------------------
+// ---- Tables -------------------------------------------------------------------
 
-/// 0x00403370: fixed point steps of 1/256 between (x0, y0) and (x1, y1), byte values.
+/// Fixed point steps of 1/256 between (x0, y0) and (x1, y1), byte values.
 template <std::size_t N>
 void lerp(std::array<std::int32_t, N>& t, std::int32_t x0, std::int32_t x1, std::int32_t y0, std::int32_t y1) {
     const std::int32_t step = ((y1 - y0) * 256) / (x1 - x0);  // C division: towards zero
@@ -55,7 +57,7 @@ struct Tables {
         lerp(t5, 0, 3, 102, 128);
         lerp(t5, 3, 6, 128, 192);
         lerp(t2, 0, 6, 160, 115);
-        // round(0.375 * distance): the market distance class (0x005A6AF0). In integers (ADR 0004):
+        // round(0.375 * distance): the market distance class. In integers (ADR 0004):
         // the class is the largest v with 3 * sqrt(n) / 8 + 1 / 2 >= v, that is (8v - 4)^2 <= 9n.
         for (std::size_t i = 0; i < 17; ++i) {
             for (std::size_t j = 0; j < 17; ++j) {
@@ -75,10 +77,10 @@ const Tables& tables() {
     return kTables;
 }
 
-/// What a class of inhabitants needs to live in a house (0x0047BFA0): one of the services of
+/// What a class of inhabitants needs to live in a house: one of the services of
 /// every entry. The market is no service bit of House::services; kMarketNeed stands for it.
-constexpr std::uint16_t kMarketNeed = 1U << 15;
-using ServiceNeeds = std::array<std::uint16_t, 6>;
+constexpr assets::ServiceBits kMarketNeed = assets::public_building::kMarket;
+using ServiceNeeds = std::array<assets::ServiceBits, 6>;
 constexpr std::array<ServiceNeeds, 5> kServiceNeeds = {{
     {kMarketNeed | hs::kKontor},                                                               // pioneers
     {kMarketNeed, hs::kKapelle | hs::kKirche},                                                 // settlers
@@ -87,9 +89,22 @@ constexpr std::array<ServiceNeeds, 5> kServiceNeeds = {{
     {kMarketNeed, hs::kWirtshaus, hs::kKirche, hs::kHochschule, hs::kBadehaus, hs::kTheater},  // aristocrats
 }};
 static_assert(kServiceNeeds.size() == kResidentClasses, "a row of needs for each class haeuser.cod may have");
-static_assert((kMarketNeed &
-               (hs::kDisasterMask | hs::kKapelle | hs::kKirche | hs::kWirtshaus | hs::kSchule | hs::kBadehaus |
-                hs::kTheater | hs::kHochschule | hs::kKlinik | hs::kKontor | hs::kGalgen | hs::kBrunnen)) == 0,
+// classes.toml names these bits (resident_classes.hpp).
+static_assert(assets::public_building::kChapel == hs::kKapelle && assets::public_building::kChurch == hs::kKirche &&
+                  assets::public_building::kTavern == hs::kWirtshaus &&
+                  assets::public_building::kSchool == hs::kSchule &&
+                  assets::public_building::kBathhouse == hs::kBadehaus &&
+                  assets::public_building::kTheatre == hs::kTheater &&
+                  assets::public_building::kCollege == hs::kHochschule &&
+                  assets::public_building::kDoctor == hs::kKlinik && assets::public_building::kKontor == hs::kKontor &&
+                  assets::public_building::kGallows == hs::kGalgen &&
+                  (assets::public_building::kOwnMask & 0xFFFFU) ==
+                      (assets::public_building::own(0) | assets::public_building::own(1)) &&
+                  (assets::public_building::kOwnMask & 0x9FFFU) == 0,
+              "the public buildings of classes.toml are the bits of House::services");
+static_assert((kMarketNeed & (hs::kDisasterMask | hs::kKapelle | hs::kKirche | hs::kWirtshaus | hs::kSchule |
+                              hs::kBadehaus | hs::kTheater | hs::kHochschule | hs::kKlinik | hs::kKontor | hs::kGalgen |
+                              hs::kBrunnen | hs::kOwnMask)) == 0,
               "kMarketNeed must not be a bit of House::services");
 
 /// Decline for plague and fire on the house (P7).
@@ -125,7 +140,7 @@ std::uint16_t service_bit(std::int32_t prod_kind) noexcept {
 }
 
 /// Gap between the centre column(s) of a building and the nearest column of a house, the
-/// measure of 0x00482120 (an even width has two centre columns). The original assumes a 2 x 2
+/// measure (an even width has two centre columns). The original assumes a 2 x 2
 /// house; Open1602 uses its real size.
 std::int32_t gap(std::int32_t origin, std::uint32_t size, std::int32_t house, std::uint32_t house_size) noexcept {
     const auto w = static_cast<std::int32_t>(size) - 1;
@@ -193,7 +208,7 @@ public:
             return;
         }
         const std::int32_t rate = growth_rate(city, *h);
-        // What the city remembers for its monuments (city + 0x1F8, + 0x1E4).
+        // What the city remembers for its monuments.
         if (rate > 0 && city.house_growth <= 0) {
             city.growing_since_ms = m_world.time_ms();
         }
@@ -274,7 +289,7 @@ private:
         return amount;
     }
 
-    /// The tiles around a house tell which way it faces a road (0x00467940): left 2, right 0,
+    /// The tiles around a house tell which way it faces a road: left 2, right 0,
     /// top 3, bottom 1; none keeps the rotation.
     std::uint8_t road_rotation(const House& h, std::uint8_t current) const {
         const IslandMap& map = m_world.islands()[h.island].map;
@@ -350,7 +365,7 @@ private:
             city.available(m.wood) < cost.wood) {
             return false;
         }
-        // 0x0047B160: min(stock, cost), nothing below a ton.
+        // Min(stock, cost), nothing below a ton.
         const auto take = [&](std::uint8_t ware, std::uint32_t amount) {
             city.ensure_ware(ware);
             const std::uint32_t t = std::min(city.goods[ware], amount);
@@ -375,7 +390,6 @@ private:
         }
     }
 
-    /// 0x0047C080.
     void grow(City& city, House& h, std::uint32_t add) {
         const std::uint8_t c = h.resident_class;
         std::uint32_t v = h.inhabitants64 + add;
@@ -424,7 +438,6 @@ private:
         set_inhabitants(city, h, std::min(v, max_inhabitants64(m_buildings, h.resident_class)));
     }
 
-    /// 0x0047BBC0.
     void shrink(City& city, House& h, std::uint32_t sub) {
         const std::uint8_t c = h.resident_class;
         std::uint32_t v = h.inhabitants64 > sub ? h.inhabitants64 - sub : 0;
@@ -448,7 +461,7 @@ private:
         set_inhabitants(city, h, v);
     }
 
-    /// Nobody lives there any more: every tile becomes a ruin (0x00463F40).
+    /// Nobody lives there any more: every tile becomes a ruin.
     void abandon(City& city, House& h) {
         const House copy = h;
         set_inhabitants(city, h, 0);
@@ -493,11 +506,53 @@ private:
 
 }  // namespace
 
+namespace {
+
+/// The needs of a class of the original; classes beyond the table need what the last
+/// one needs.
+std::span<const assets::ServiceBits> original_needs(std::uint8_t resident_class) noexcept {
+    return kServiceNeeds[std::min<std::size_t>(resident_class, kServiceNeeds.size() - 1)];
+}
+
+/// What class `resident_class` of `buildings` needs: its own public buildings, else those of the
+/// original's class it looks like.
+std::span<const assets::ServiceBits> needs_of(const assets::BuildingTable& buildings,
+                                              std::uint8_t resident_class) noexcept {
+    const auto& classes = buildings.resident_classes();
+    if (resident_class < classes.size() && classes[resident_class].public_needs) {
+        return *classes[resident_class].public_needs;
+    }
+    return original_needs(service_class(buildings, resident_class));
+}
+
+bool has_needs(const House& house, std::span<const assets::ServiceBits> needs) noexcept {
+    const assets::ServiceBits s = house.services | (house.market ? kMarketNeed : 0U);
+    return std::all_of(needs.begin(), needs.end(), [s](assets::ServiceBits any) { return any == 0 || (s & any) != 0; });
+}
+
+std::uint32_t panel_needs(std::span<const assets::ServiceBits> needs) noexcept {
+    std::uint32_t panel = 0;
+    for (const assets::ServiceBits any : needs) {
+        if (any == 0) {
+            continue;
+        }
+        if ((any & kMarketNeed) != 0) {
+            panel |= panel_service::kMarkt;
+            continue;
+        }
+        // The lowest bit is the lesser building; of what it shows (a church also as a chapel), its
+        // own icon is the highest bit.
+        House one;
+        one.services = any & (0U - any);
+        panel |= std::bit_floor(panel_services(one));
+    }
+    return panel;
+}
+
+}  // namespace
+
 bool has_services(const House& house, std::uint8_t resident_class) noexcept {
-    // The needs of 0x0047BFA0 by class; classes beyond the table need what the last one needs.
-    const auto s = static_cast<std::uint16_t>(house.services | (house.market ? kMarketNeed : 0U));
-    const ServiceNeeds& needs = kServiceNeeds[std::min<std::size_t>(resident_class, kServiceNeeds.size() - 1)];
-    return std::all_of(needs.begin(), needs.end(), [s](std::uint16_t any) { return any == 0 || (s & any) != 0; });
+    return has_needs(house, original_needs(resident_class));
 }
 
 std::uint8_t service_class(const assets::BuildingTable& buildings, std::uint8_t resident_class) noexcept {
@@ -506,7 +561,7 @@ std::uint8_t service_class(const assets::BuildingTable& buildings, std::uint8_t 
 }
 
 bool has_services(const House& house, const assets::BuildingTable& buildings, std::uint8_t resident_class) noexcept {
-    return has_services(house, service_class(buildings, resident_class));
+    return has_needs(house, needs_of(buildings, resident_class));
 }
 
 std::uint32_t panel_services(const House& house) noexcept {
@@ -537,25 +592,11 @@ std::uint32_t panel_services(const House& house) noexcept {
 }
 
 std::uint32_t required_panel_services(std::uint8_t resident_class) noexcept {
-    if (resident_class >= kServiceNeeds.size()) {
-        return 0;
-    }
-    std::uint32_t panel = 0;
-    for (const std::uint16_t any : kServiceNeeds[resident_class]) {
-        if (any == 0) {
-            continue;
-        }
-        if ((any & kMarketNeed) != 0) {
-            panel |= panel_service::kMarkt;
-            continue;
-        }
-        // The lowest bit is the lesser building; of what it shows (a church also as a chapel), its
-        // own icon is the highest bit.
-        House one;
-        one.services = static_cast<std::uint16_t>(any & (0U - any));
-        panel |= std::bit_floor(panel_services(one));
-    }
-    return panel;
+    return resident_class < kServiceNeeds.size() ? panel_needs(kServiceNeeds[resident_class]) : 0;
+}
+
+std::uint32_t required_panel_services(const assets::BuildingTable& buildings, std::uint8_t resident_class) noexcept {
+    return panel_needs(needs_of(buildings, resident_class));
 }
 
 namespace {
@@ -570,7 +611,7 @@ void services_on(World& world, const assets::BuildingTable& buildings, std::uint
         std::uint32_t w;
         std::uint32_t h;
         std::uint8_t radius;
-        std::uint16_t bit;  // 0 for markets
+        assets::ServiceBits bit;  // 0 for markets
     };
     std::vector<Source> sources;
     const IslandMap& map = world.islands()[island].map;
@@ -586,7 +627,8 @@ void services_on(World& world, const assets::BuildingTable& buildings, std::uint
         if (b == nullptr) {
             continue;
         }
-        const std::uint16_t bit = service_bit(b->prod_kind);
+        // A public building of a kind of its own gives its own service (own_buildings.toml).
+        const assets::ServiceBits bit = b->own_service != 0 ? b->own_service : service_bit(b->prod_kind);
         if (bit == 0 && b->prod_kind != prod::kMarket) {
             continue;
         }
@@ -629,7 +671,7 @@ void services_on(World& world, const assets::BuildingTable& buildings, std::uint
                 continue;
             }
             if (s.bit != 0) {
-                house.services = static_cast<std::uint16_t>(house.services | s.bit);
+                house.services |= s.bit;
             } else {
                 house.market = true;
                 const std::uint8_t d =
@@ -665,10 +707,10 @@ std::int32_t growth_rate(const City& city, const House& house) noexcept {
         house.market ? satisfaction_of_class(city, c) : (c == 0 ? satisfaction_of_class(city, 0) : 0);
     const bool fed = house.market || (house.services & hs::kKontor) != 0;
     const std::uint8_t food = fed ? std::min(city.food_ratio, kFull) : 0;
-    const std::uint16_t disaster = house.services & hs::kDisasterMask;
+    const auto disaster = static_cast<std::size_t>(house.services & hs::kDisasterMask);
     const std::size_t dist = std::min<std::size_t>(house.market_distance, kNoMarket);
     if (food > 87 && s > 107 && house.services_complete && disaster == 0) {
-        // A fire or plague anywhere in the city stops all growth (city + 0x1FE).
+        // A fire or plague anywhere in the city stops all growth.
         if (food >= kFull && s >= kFull && city.disasters == 0) {
             return (128 - t.t1[food]) * t.t2[dist] / 128;
         }

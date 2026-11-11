@@ -11,9 +11,16 @@
 #include <vector>
 
 #include "o1602/sim/construction.hpp"
+#include "o1602/sim/consumption.hpp"
+#include "o1602/sim/diplomacy.hpp"
+#include "o1602/sim/disasters.hpp"
 #include "o1602/sim/houses.hpp"
+#include "o1602/sim/island_events.hpp"
+#include "o1602/sim/military.hpp"
 #include "o1602/sim/mission.hpp"
 #include "o1602/sim/script_state.hpp"
+#include "o1602/sim/ships.hpp"
+#include "o1602/sim/volcanoes.hpp"
 
 namespace o1602::sim {
 
@@ -22,9 +29,16 @@ class Simulation;
 /// What happened in one tick, for the scripts. At most EventBuffer::kMaxPending / 2 events of each
 /// kind (the latest), so that every computer sees the same however often its interface takes them.
 struct TickEvents {
-    std::span<const ConstructionEvent> construction;
-    std::span<const HouseEvent> houses;
-    std::span<const GameEvent> game;
+    std::span<const ConstructionEvent> construction{};
+    std::span<const HouseEvent> houses{};
+    std::span<const GameEvent> game{};
+    std::span<const CityEvent> cities{};
+    std::span<const DisasterEvent> disasters{};
+    std::span<const VolcanoEvent> volcanoes{};
+    std::span<const IslandEvent> islands{};
+    std::span<const ShipEvent> ships{};
+    std::span<const MilitaryEvent> military{};
+    std::span<const DiplomacyNotice> diplomacy{};
 };
 
 class ScriptHost {

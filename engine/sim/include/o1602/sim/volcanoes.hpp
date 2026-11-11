@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Volcanoes (docs/re/volcanoes.md).
+// Volcanoes.
 //
 // A volcano is the big ore mountain with the record 21108; its origin tile is the crater. Once
 // the game time has passed the next eruption time, the island epoch of an island with craters
@@ -58,32 +58,34 @@ struct VolcanoEvent {
     bool message = false;
 };
 
-/// Craters of an island (0x0046C1C0): origins of record 21108, row by row from the top and from
+/// Craters of an island: origins of record 21108, row by row from the top and from
 /// right to left within a row; at most two.
 [[nodiscard]] std::vector<Crater> find_craters(const IslandMap& map, const assets::BuildingTable& buildings);
 
-/// Craters in the world, at most 20 (TIMERS +0xD0).
+/// Craters in the world: at most 20 in the original's worlds (TIMERS +0xD0), more in worlds of
+/// more than twelve players.
 [[nodiscard]] std::uint32_t crater_count(const World& world) noexcept;
 
-/// Time from one eruption to the earliest next one before the random part (0x004692F0):
-/// 35 minutes for up to one crater in the world, 6 minutes for twenty.
+/// Time from one eruption to the earliest next one before the random part:
+/// 35 minutes for up to one crater in the world, 6 minutes for twenty, beyond them shorter by as
+/// much as there are more (each crater erupts as often as with twenty).
 [[nodiscard]] std::uint64_t eruption_interval_ms(std::uint32_t craters) noexcept;
 
-/// Game time of the first eruption of a new game (0x00469270): 70 minutes and up to 15.5 more.
+/// Game time of the first eruption of a new game: 70 minutes and up to 15.5 more.
 [[nodiscard]] std::uint64_t first_eruption_ms(Random& random);
 
-/// Game time of step `step` of an eruption relative to its start, in microseconds (step
-/// table 0x0062BD40): throw `step` for steps 0..140, the end for step 141.
+/// Game time of step `step` of an eruption relative to its start, in microseconds:
+/// throw `step` for steps 0..140, the end for step 141.
 [[nodiscard]] std::uint64_t eruption_step_us(std::uint32_t step) noexcept;
 
 /// Whether volcanoes erupt in this game (settings bit 8: no volcanoes).
 [[nodiscard]] bool volcanoes_enabled(const World& world, const Rules& rules) noexcept;
 
-/// The eruption roll of the island epoch (0x0046B3E0): once the next eruption time has come, the
+/// The eruption roll of the island epoch: once the next eruption time has come, the
 /// first island with craters (in island order) picks one and it erupts.
 void roll_eruptions(World& world, const Rules& rules, std::vector<VolcanoEvent>* events);
 
-/// Lets the crater erupt now (0x0045D380, kind 0x20). False if there is no such crater.
+/// Lets the crater erupt now (kind 0x20). False if there is no such crater.
 bool erupt(World& world, CraterRef crater, std::uint16_t seed, bool message, std::vector<VolcanoEvent>* events);
 
 /// Runs the eruptions and the lava up to the current game time: throws, flights and what the lava

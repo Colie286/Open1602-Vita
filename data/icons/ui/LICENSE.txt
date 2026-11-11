@@ -1,0 +1,6 @@
+Open1602 user interface icons
+
+The six PNG icons are original Open1602 project artwork, dedicated to the
+public domain under CC0 1.0 by the original data/icons/README.md:
+https://github.com/x4rd4s/open1602/tree/62a3683f029322ea67a74282bffba6f4ba38dc9d/data/icons
+https://creativecommons.org/publicdomain/zero/1.0/

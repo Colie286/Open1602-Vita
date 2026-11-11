@@ -343,7 +343,7 @@ LandCourse LandPlanner::plan(const LandMap& map, const LandPlan& r) {
         const std::uint8_t dir = m_dirs[i];
         const std::uint8_t speed = m_speed[at(x, y)];
         std::uint8_t n = 0;
-        // A run: same direction and walking cost, at most Maxstepcnt cells (0x0046CF70).
+        // A run: same direction and walking cost, at most Maxstepcnt cells.
         while (i < m_dirs.size() && m_dirs[i] == dir && n < max_run && m_speed[at(x, y)] == speed) {
             x += step_x(dir);
             y += step_y(dir);

@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -17,6 +18,7 @@
 #include <vector>
 
 #include "o1602/assets/game_content.hpp"
+#include "o1602/assets/package_scenarios.hpp"
 #include "o1602/script/sandbox.hpp"
 #include "o1602/sim/scripting.hpp"
 #include "o1602/sim/world.hpp"
@@ -27,6 +29,9 @@ namespace o1602::script {
 inline constexpr std::string_view kScriptFile = "script.lua";
 /// The global table of a script the game saves.
 inline constexpr std::string_view kStateTable = "state";
+/// The global table of a campaign part's script that goes on to the next part
+/// (docs/modding/scenarios.md#campaigns).
+inline constexpr std::string_view kCampaignTable = "campaign";
 /// A script that failed this often is stopped for the rest of the game.
 inline constexpr std::size_t kMaxScriptErrors = 10;
 /// Messages posted beyond this many before the game takes them are dropped, the oldest first.
@@ -34,13 +39,24 @@ inline constexpr std::size_t kMaxPendingMessages = 256;
 
 struct PackageScript {
     std::string package;  ///< the package's id
-    std::string source;   ///< the text of its script.lua
+    std::string source;   ///< the text of its script.lua, or of a scenario's script
+    /// What the script's state is saved under and its errors name: empty for the package's id; a
+    /// scenario's script has the scenario's id ("<package>:<name>").
+    std::string name;
 };
+
+/// The name of a scenario's own script (section SLUA): its errors and its saved state go by it.
+inline constexpr std::string_view kScenarioScript = "scenario";
 
 /// The scripts of `packages` that have one, in their order. A script that cannot be read is
 /// reported in `problems` and left out.
 [[nodiscard]] std::vector<PackageScript> read_package_scripts(std::span<const assets::ModPackage> packages,
                                                               std::vector<std::string>& problems);
+
+/// The script of a package's scenario, if it has one: named after the scenario. One that cannot
+/// be read is reported in `problems`.
+[[nodiscard]] std::optional<PackageScript> read_scenario_script(const assets::PackageScenario& scenario,
+                                                                std::vector<std::string>& problems);
 
 /// A message a script posted (game.message): the id of a message of messages.toml, its placeholders
 /// and for whom it is (kNoPlayer: every player).
@@ -48,6 +64,8 @@ struct ScriptMessage {
     std::string id;
     std::vector<std::pair<std::string, std::string>> args;
     sim::PlayerId player = sim::kNoPlayer;
+    /// The player the message is about: its icon is in their colour. kNoPlayer: the one who sees it.
+    sim::PlayerId about = sim::kNoPlayer;
 };
 
 /// A script that failed, or a line it printed.
@@ -73,19 +91,24 @@ public:
     /// What the scripts printed and how they failed since the last call.
     [[nodiscard]] std::vector<ScriptNote> take_notes();
 
-    /// The packages with a script, in their order.
+    /// The names of the scripts (PackageScript::name), in their order.
     [[nodiscard]] std::vector<std::string> packages() const;
 
     struct Package;
 
 private:
     void dispatch(Package& package, const sim::TickEvents& events);
+    /// The events of cities, disasters, ships, fights and diplomacy.
+    void dispatch_more(Package& package, const sim::TickEvents& events);
     /// Calls `function` if the script defines it; failures count towards kMaxScriptErrors.
     void call(Package& package, std::string_view function, std::span<const Value> args = {});
     void fail(Package& package, const std::string& message);
     void add_api(Package& package);
 
     const sim::World* m_world;
+    /// The running game while after_tick() calls the scripts: what may change it. Null otherwise
+    /// (the top levels run when the game is set up), so changing it then is an error.
+    sim::Simulation* m_simulation = nullptr;
     std::vector<std::unique_ptr<Package>> m_packages;
     std::vector<ScriptMessage> m_messages;
     std::vector<ScriptNote> m_notes;

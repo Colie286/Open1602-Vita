@@ -23,6 +23,8 @@ namespace o1602::assets {
 inline constexpr std::string_view kLevelsFile = "levels.toml";
 /// The highest level a game may have: buildings keep their level in a byte (BuildingType::infra).
 inline constexpr std::size_t kMaxUnlockLevel = 255;
+/// Bytes of the string id of a level's message at most (levels.toml `message`).
+inline constexpr std::size_t kMaxMessageId = 130;
 
 /// Changes `levels` (by INFRA number, 0 = none) as `levels.toml` of `package` says, in the order
 /// of the file: a table ["anno1602:<name or number>"] or ["<package>:<name>"] changes a level there

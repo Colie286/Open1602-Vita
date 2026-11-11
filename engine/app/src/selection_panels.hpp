@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The windows of what the player clicked on the map (docs/re/ui.md#auswahlfenster): production
+// The windows of what the player clicked on the map: production
 // buildings, public buildings, houses, the own Kontor, shipyards and castles, ships. Each window
 // reads the game every frame and turns clicks into commands; it changes nothing itself.
 #pragma once
@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -21,6 +22,7 @@
 #include "o1602/assets/building_table.hpp"
 #include "o1602/assets/figure_table.hpp"
 #include "o1602/assets/game_directory.hpp"
+#include "o1602/assets/own_figures.hpp"
 #include "o1602/assets/text_table.hpp"
 #include "o1602/render/banner.hpp"
 #include "o1602/sim/simulation.hpp"
@@ -62,6 +64,10 @@ struct PanelContext {
     bool ctrl = false;
     /// Shift is held (a click on the cannons in a ship's hold mounts as many as fit).
     bool shift = false;
+    /// The unit families of the packages, which a castle trains beside the original's.
+    std::span<const assets::OwnUnit> own_units{};
+    /// The ships of the packages, which a shipyard builds beside the original's.
+    std::span<const assets::OwnShip> own_ships{};
     /// Real time in milliseconds, for what blinks (the diplomacy window's open offers).
     std::uint64_t now_ms = 0;
     [[nodiscard]] const sim::World& world() const noexcept { return simulation.world(); }
@@ -147,7 +153,7 @@ public:
     /// The window for a selection, nothing if it has none (the info mode then shows the player
     /// status).
     [[nodiscard]] SelectionPanel* panel_for(const Selection& selection, const PanelContext& context);
-    /// The window of the military mode for the selected units (Panel_UpdateSelection 0x0043AA00):
+    /// The window of the military mode for the selected units:
     /// one ship, one land unit, a group of ships or of land units; nothing without a selection.
     [[nodiscard]] SelectionPanel* military_panel_for(const PanelContext& context);
     void set_scale(double scale);

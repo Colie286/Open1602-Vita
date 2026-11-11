@@ -32,6 +32,9 @@ struct AppSettings {
     /// (the original's "Tutornr"): the tutorial runs this chapter, the menu offers it first.
     std::uint8_t tutorial_chapter = 0;
     std::string player_name;  ///< the name typed in the menu (Windows-1252)
+    /// The player ID of this installation (net::Hello::player): drawn at random once and kept, so
+    /// that multiplayer games and their savegames know the person again. 0: not drawn yet.
+    std::uint64_t player_id = 0;
     /// The installation chosen in the folder dialog at the start (UTF-8); "" if none was chosen.
     std::string game_folder;
     /// The language of Open1602's own texts ("de", "en", ...); "auto": the installation's.
@@ -58,6 +61,12 @@ struct AppSettings {
     EndlessSetup multiplayer = EndlessSetup::defaults(SetupScope::MultiplayerEndless);
     DisplaySettings display;
 };
+
+/// A new player ID (AppSettings::player_id): random, never 0.
+[[nodiscard]] std::uint64_t new_player_id();
+/// The ID as written in settings.cfg (16 hex digits) and back; nothing for anything else or 0.
+[[nodiscard]] std::string player_id_text(std::uint64_t id);
+[[nodiscard]] std::optional<std::uint64_t> parse_player_id(std::string_view text);
 
 /// "key = value" lines; unknown keys are passed over, missing ones keep `defaults`.
 [[nodiscard]] AppSettings parse_settings(std::string_view text, const AppSettings& defaults);

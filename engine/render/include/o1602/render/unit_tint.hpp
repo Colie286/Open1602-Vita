@@ -4,7 +4,7 @@
 // times, once per player colour (red, blue, yellow, white). Banners with one of these colours use
 // the drawn images; every other banner gets a template made from the four variants and tinted
 // like the generic flag (flag_tint.hpp). The variants are drawn separately, not recoloured, so a
-// tinted unit is similar to the originals but not identical (docs/re/figures.md).
+// tinted unit is similar to the originals but not identical.
 #pragma once
 
 #include <cstdint>
@@ -128,6 +128,27 @@ private:
     mutable std::mutex m_templates_mutex;
     mutable std::unordered_map<std::uint64_t, std::shared_ptr<Template>> m_templates;
     mutable std::size_t m_template_bytes=0;
+};
+
+/// Images drawn as tint templates (docs/modding/flags.md): every pure grey pixel takes on the
+/// player colour, every other pixel stays. A package's unit with `tint = true` is drawn so.
+/// colours.size() blocks of the groups' images (variants 1, stride = their images), in group order.
+class TintedTemplateSource final : public SpriteSource {
+public:
+    TintedTemplateSource(const SpriteSource& sheet, std::vector<UnitImageGroup> groups,
+                         std::vector<assets::Rgba> colours);
+    [[nodiscard]] std::uint32_t count() const override;
+    void size(std::uint32_t i, std::uint32_t& width, std::uint32_t& height) const override;
+    bool pixels(std::uint32_t i, std::vector<std::uint8_t>& rgba) const override;
+
+private:
+    /// Sprite of the sheet that image i of a block shows; nothing if none.
+    [[nodiscard]] std::optional<std::uint32_t> image(std::uint32_t i) const noexcept;
+
+    const SpriteSource& m_sheet;
+    std::vector<UnitImageGroup> m_groups;
+    std::vector<assets::Rgba> m_colours;
+    std::uint32_t m_block = 0;
 };
 
 }  // namespace o1602::render

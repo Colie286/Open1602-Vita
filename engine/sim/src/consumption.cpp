@@ -19,9 +19,9 @@ constexpr std::uint64_t kSupplyUnit = 256;   // A and B count 1/256 of a stock u
 constexpr std::uint8_t kHungerLevel = 76;    // "Euer Volk hungert" at or below
 constexpr std::uint32_t kNativeKeep = 96;    // natives keep 96/128 of their store
 constexpr std::uint32_t kNativeGoodwillFloor = 49;
-// Natives' few needs (0x0047EB30): one unit of cloth, alcohol and jewellery per tick.
+// Natives' few needs: one unit of cloth, alcohol and jewellery per tick.
 constexpr std::array<std::uint8_t, 3> kNativeGoods = {ware::kCloth, ware::kAlcohol, ware::kJewellery};
-// Pirates (0x0047EEF0): twice per tick, up to 3 t of a random ware with at least 10 t.
+// Pirates: twice per tick, up to 3 t of a random ware with at least 10 t.
 constexpr std::uint32_t kPirateMin = 10 * kStockUnitsPerTon;
 constexpr std::uint32_t kPirateTake = 3 * kStockUnitsPerTon;
 
@@ -29,7 +29,7 @@ struct Knot {
     std::int32_t x;
     std::int32_t y;
 };
-// Knots of the tax curve (0x00478630).
+// Knots of the tax curve.
 constexpr std::array<Knot, 10> kTaxKnots = {{{0, 76},
                                              {76, 89},
                                              {102, 102},
@@ -46,7 +46,7 @@ std::array<std::uint32_t, 256> build_tax_curve() {
     for (std::size_t k = 0; k + 1 < kTaxKnots.size(); ++k) {
         const Knot a = kTaxKnots[k];
         const Knot b = kTaxKnots[k + 1];
-        // 0x004033D0: fixed point with 8 fractional bits.
+        // Fixed point with 8 fractional bits.
         const std::int32_t step = ((b.y - a.y) << 8) / (b.x - a.x);
         for (std::int32_t x = a.x; x < b.x; ++x) {
             t[static_cast<std::size_t>(x)] = static_cast<std::uint32_t>(((a.y << 8) + (x - a.x) * step) >> 8);
@@ -94,7 +94,7 @@ std::uint8_t satisfaction_of(const City& city, const assets::ResidentClass& rc, 
     for (const assets::ResidentClass::Need& n : rc.needs) {
         sum += n.ware < city.supply.size() ? city.supply[n.ware].ratio : kFull;
     }
-    // 0x0047F3B0: curve[tax'] * Prozent * goods / 128, the tax lowered by the bonus of a castle or
+    // Curve[tax'] * Prozent * goods / 128, the tax lowered by the bonus of a castle or
     // cathedral: tax' = (128 - bonus / 32) * tax / 128. The original goes below the curve for a bonus
     // above 4096 (S-038); Open1602 stops at 0.
     const std::uint32_t relief = std::min<std::uint32_t>(kFull, city.satisfaction_bonus >> 5);
@@ -123,7 +123,7 @@ void consume(City& city, const assets::BuildingTable& buildings, std::vector<Cit
         City::Supply& s = city.supply[w];
         if (s.demand > s.supplied) {
             // The original always asks for one unit more than missing (kept: it is part of the
-            // balance, docs/re/consumption.md).
+            // balance.
             const std::uint64_t want = (s.demand - s.supplied) / kSupplyUnit + 1;
             const auto got = static_cast<std::uint32_t>(std::min<std::uint64_t>(want, available(city, w)));
             city.book(w, GoodsFlow::Demand, static_cast<std::uint32_t>(std::min<std::uint64_t>(want, UINT32_MAX)));
@@ -165,7 +165,7 @@ void consume(City& city, const assets::BuildingTable& buildings, std::vector<Cit
             city.tax_rate[c] = kFull;  // an empty class goes back to the normal rate
         }
         // The house queued to rise into class c already counts for it, and no longer for the class
-        // below (n_eff of 0x0047F8A0).
+        // below (n_eff).
         const auto queued = [&](std::size_t k) -> std::uint64_t {
             return k < city.upgrade_queue.size() ? city.upgrade_queue[k].inhabitants : 0;
         };
@@ -200,7 +200,7 @@ void consume_natives(City& city) {
     for (const std::uint8_t w : kNativeGoods) {
         take(city, w, std::min<std::uint32_t>(available(city, w), 1));
     }
-    // Their goodwill fades towards 49 (0x0047EB30): 1/128 every 10 s while above it.
+    // Their goodwill fades towards 49: 1/128 every 10 s while above it.
     for (std::uint32_t& g : city.goodwill) {
         if (g > kNativeGoodwillFloor) {
             g = static_cast<std::uint32_t>(std::uint64_t{g} * 127 / 128);
@@ -354,7 +354,7 @@ void allow_monument(World& world, City& city, std::vector<CityEvent>* events) {
     }
     city.growing_since_ms = world.time_ms();
     add_count(owner->monuments_allowed, 1);
-    owner->set_unlocked(infra::kMonument, true);  // op 0x55: the level only an allowance reaches
+    owner->set_unlocked(infra::kMonument, true);  // the level only an allowance reaches
     if (events != nullptr) {
         CityEvent e;
         e.kind = CityEvent::Kind::Monument;
@@ -432,7 +432,7 @@ void advance_cities(World& world, const assets::BuildingTable& buildings, std::v
         switch (world.behaviour(*owner)) {
             case FactionBehaviour::Settlers:
                 consume(*city, buildings, events);
-                // Money (0x0047F8A0): a sixth of the balance per minute, truncated towards zero
+                // Money: a sixth of the balance per minute, truncated towards zero
                 // every 10 s (kept: small balances cost nothing, as in the original).
                 owner->money =
                     money_plus(owner->money, static_cast<std::int64_t>((tax_income(*city, buildings) - costs[i]) / 6));
@@ -450,7 +450,7 @@ void advance_cities(World& world, const assets::BuildingTable& buildings, std::v
             case FactionBehaviour::Trader:
                 break;  // the free trader consumes nothing
         }
-        // The trade statistics fade (city + 0x1F0, + 0x1F4).
+        // The trade statistics fade.
         city->purchases = city->purchases * 89 / 90;
         city->sales = city->sales * 89 / 90;
         city->epoch = static_cast<std::uint8_t>((city->epoch + 1) & 7U);

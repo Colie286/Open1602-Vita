@@ -3,7 +3,9 @@
 // Which catchment circles a clicked building lights. One click lights the circle of the building
 // itself, as in the original. Clicked a second time (Open1602's own, for planning a city), it lights
 // the circles of all the player's buildings of the same type on its island together: every chapel,
-// tavern or fire station, so that the gaps between them show. Pure logic, so that the tests have it.
+// tavern or fire station, so that the gaps between them show. Another owner's Kontor or market whose trade
+// window opens (a trade treaty, the natives' village by default) lights the water its trading ships
+// come to, as in the original. Pure logic, so that the tests have it.
 #pragma once
 
 #include <cstdint>
@@ -34,5 +36,14 @@ struct CatchmentCircles {
                                                                 const assets::BuildingTable& buildings,
                                                                 sim::PlayerId player, std::uint16_t island,
                                                                 std::uint16_t x, std::uint16_t y, bool same_type);
+
+/// Another owner's Kontor or market place at (x, y) on `island` (any tile of it) whose trade window
+/// opens for `player` (a trade treaty with its owner, as with the natives from the start): the
+/// origin of its city's Kontor, where `player`'s ships trade. Clicked, it lights only the water
+/// within their reach. Nothing for `player`'s own buildings, other buildings, or without a treaty.
+[[nodiscard]] std::optional<sim::TilePos> foreign_trade_kontor(const sim::World& world,
+                                                               const assets::BuildingTable& buildings,
+                                                               sim::PlayerId player, std::uint16_t island,
+                                                               std::uint16_t x, std::uint16_t y);
 
 }  // namespace o1602::app

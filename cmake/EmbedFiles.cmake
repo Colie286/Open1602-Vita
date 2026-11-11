@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# o1602_embed_files(<target> <namespace> <file>...) - compiles text files into <target> so the game
+# o1602_embed_files(<target> <namespace> <file>...) - compiles files into <target> so the game
 # finds them without an installation folder. The generated source defines, in <namespace>,
 #   extern const EmbeddedFile kEmbeddedFiles[]; extern const std::size_t kEmbeddedFileCount;
 # with each file's name without its extension and its bytes (o1602/core/embedded_file.hpp).
@@ -8,7 +8,9 @@
 set(_o1602_embed_script "${CMAKE_CURRENT_LIST_DIR}/EmbedFiles.cmake")
 
 function(o1602_embed_files target namespace)
-    set(output "${CMAKE_CURRENT_BINARY_DIR}/${target}_embedded.cpp")
+    # One generated source per call: a target may embed several sets of files.
+    string(MAKE_C_IDENTIFIER "${namespace}" set_name)
+    set(output "${CMAKE_CURRENT_BINARY_DIR}/${target}_${set_name}_embedded.cpp")
     add_custom_command(
         OUTPUT "${output}"
         COMMAND "${CMAKE_COMMAND}" "-DOUTPUT=${output}" "-DNAMESPACE=${namespace}" "-DFILES=${ARGN}"

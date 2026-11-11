@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "build_tool.hpp"
+#include "cheat_console.hpp"
 #include "command_sink.hpp"
 #include "game_sound.hpp"
 #include "game_state.hpp"
@@ -71,13 +72,36 @@ public:
         /// Ctrl+F, Ctrl+K: the frame rate, the tile under the mouse in the corner of the map.
         virtual void toggle_fps() = 0;
         virtual void toggle_coordinates() = 0;
+        /// Ctrl+S: asks for a name to keep the copy tool's piece in hand as a template; without
+        /// one, opens the list of the templates.
+        virtual void save_template() = 0;
         virtual void toggle_unit_arms() = 0;
+        /// Reads the packages' files again (KeyAction::ReloadPackages).
+        virtual void reload_packages() = 0;
         /// F11, Alt+Enter: window or full screen.
         virtual void toggle_fullscreen() = 0;
         /// The Pause key: the original's pause with its video (without videos the game still stops).
         virtual void toggle_pause_video() = 0;
         /// A short note in the status line (EventPresenter::notify).
         virtual void notify(std::string text, std::string_view log) = 0;
+        /// A key of the editor (undo, redo, save) while it runs.
+        /// `param`: the binding's (the bookmark's number).
+        virtual void editor_key(ui::KeyAction action, std::uint8_t param = 0) = 0;
+        /// A left click on the editor's map picked `pick`.
+        virtual void editor_pick(const EditorPick& pick) = 0;
+        /// A left click on the editor's map at `tile` while an island is being placed puts it
+        /// there; false if nothing is being placed (the click picks).
+        virtual bool editor_place(const render::TilePos& tile) = 0;
+        /// A right click on the editor's map: what is being placed goes back, or the object in hand
+        /// (the tool "Select" takes over); false if nothing was.
+        virtual bool editor_cancel_place() = 0;
+        /// The left button pressed on the editor's map at `tile`, the mouse moved there with it held,
+        /// or the button let go (`tile` nothing if off the map): a stroke of a terrain tool. False
+        /// if no terrain tool is out (a press picks). `erase`: the right button began it, which
+        /// lays water for land and land for water (false if the tool has no such stroke: the
+        /// right button drags the map).
+        enum class Stroke : std::uint8_t { Begin, Continue, End };
+        virtual bool editor_stroke(std::optional<render::TilePos> tile, Stroke phase, bool erase) = 0;
         /// Where Home goes without a selection.
         [[nodiscard]] virtual render::TilePos home_tile() const = 0;
         /// The graphics of the zoom level shown; null while they are not there.
@@ -124,6 +148,9 @@ public:
     /// Applies the key settings file (--keys, else `default_file`) over the defaults, or writes
     /// `default_file` with them.
     void load_key_settings(const std::filesystem::path& default_file);
+    /// The window of the keys (keys_menu.hpp): opens it when the window "Anzeige" asks for it, and
+    /// applies and keeps what it changed. Called once a frame.
+    void update_key_settings();
 
     /// Input events but the window's (mouse positions in output pixels).
     void handle_event(const SDL_Event& event);
@@ -154,6 +181,8 @@ public:
     /// The selection changed: the windows follow (a single ship in the info mode, groups and land
     /// units in the military mode).
     void selection_changed(bool box);
+    /// The units are no longer selected: from the military mode back to the player status.
+    void leave_military_mode();
     /// Orders to the simulation; those that cannot be taken back wait for an answer (ADR 0010).
     void submit_orders(std::vector<sim::Command> orders, bool sound = true);
     /// The field of the farm (plantation, forester) at the island tile on the open ground it
@@ -161,11 +190,20 @@ public:
     void plant_fields_at(std::uint16_t island, std::int32_t x, std::int32_t y);
     /// The answer to the question before the waiting orders.
     void answer(bool yes);
+    /// Blueprint mode on or off (U, the build menu's switch): the build and copy tools then place
+    /// blueprints. Switched on outside the build mode, it opens the build menu.
+    void toggle_blueprint();
     /// A building (or the demolish tool) was taken from the menu: the selected ships and units
     /// are let go, so a right click puts the building away instead of giving them an order.
     void drop_units();
     /// Another game: no selection, pick, order or press of the old one is left.
     void reset_game();
+    /// The editor runs (ADR 0013): the map scrolls, turns and zooms, but takes no selection, tool
+    /// or order, and of the keys only the view's, the program's and the editor's count.
+    void set_editor(bool on) noexcept { m_editor = on; }
+    [[nodiscard]] bool editor() const noexcept { return m_editor; }
+    /// Whether a key's action counts in the editor.
+    [[nodiscard]] static bool editor_key(ui::KeyAction action) noexcept;
     /// The groups the player stored, for the savegame, and back from a loaded one.
     [[nodiscard]] sim::UnitGroups saved_groups() const { return m_units.saved_groups(); }
     void restore_groups(const sim::UnitGroups& groups) { m_units.restore_groups(groups); }
@@ -176,25 +214,38 @@ public:
     /// World tile the player sees under a screen point: its ground diamond drawn at its height, so
     /// the land (raised above the sea) is picked where it is drawn.
     [[nodiscard]] std::optional<render::TilePos> tile_at(double sx, double sy) const;
-    [[nodiscard]] std::optional<render::TilePos> tile_at_mouse() const { return tile_at(m_mouse_x, m_mouse_y); }
+    /// Map tile under the mouse; none while a window takes all of the mouse (a question).
+    [[nodiscard]] std::optional<render::TilePos> tile_at_mouse() const;
+    /// The editor's right button draws a stroke (the brush shown in the colour of erasing).
+    [[nodiscard]] bool right_stroke() const noexcept { return m_right_stroke; }
     /// Island tile under the mouse, nullopt over the sea.
     [[nodiscard]] std::optional<BuildTool::Spot> spot_at_mouse() const;
     /// The ship or land unit under the mouse, as a click would pick it.
-    [[nodiscard]] std::optional<ui::UnitRef> unit_at_mouse() const { return unit_at(m_mouse_x, m_mouse_y); }
+    [[nodiscard]] std::optional<ui::UnitRef> unit_at_mouse() const;
     [[nodiscard]] double mouse_x() const noexcept { return m_mouse_x; }
     [[nodiscard]] double mouse_y() const noexcept { return m_mouse_y; }
     [[nodiscard]] ui::UnitSelection& units() noexcept { return m_units; }
     [[nodiscard]] const ui::UnitSelection& units() const noexcept { return m_units; }
+    /// The number line of the cheats (drawn by the viewer while open).
+    [[nodiscard]] const CheatConsole& cheats() const noexcept { return m_cheats; }
 
     /// A pick the next click on the map answers: an attack (A) or a patrol (P).
     enum class Pick : std::uint8_t { None, Attack, Patrol };
     [[nodiscard]] Pick pick() const noexcept { return m_pick; }
+    /// F1: the keys as they are bound now, over the map.
+    void show_key_help();
+    /// The first key of `action` in the editor's context, as the overview names it ("Ctrl+S");
+    /// empty: none.
+    [[nodiscard]] std::string editor_keys(ui::KeyAction action) const;
+    /// The first key of `action` in the game's general context, as the overview names it; empty: none.
+    [[nodiscard]] std::string key_of(ui::KeyAction action) const;
 
 private:
     /// The keys of ADR 0010.
     void setup_keys();
-    /// F1: the keys as they are bound now, over the map.
-    void show_key_help();
+    [[nodiscard]] static ui::KeyBindings default_keys();
+    /// Writes the key settings file: the defaults as comments, what differs from them as lines.
+    void save_key_settings() const;
     void handle_key(int key, int scancode, std::uint16_t mod);
     [[nodiscard]] ui::KeyContext key_context() const;
     void run_action(const ui::KeyBinding& binding);
@@ -204,6 +255,10 @@ private:
     void select_building_at_mouse(const Selection& before);
     /// The key "Plant all farm fields": the selected farm's field on the open ground it reaches.
     void plant_fields();
+    /// Shift+U: the local player's blueprints of the city under the mouse are built.
+    void build_blueprints();
+    /// A click on one of the local player's blueprints opens its window; false if there is none.
+    bool open_blueprint_at_mouse();
     /// G: closes the local player's gates to foreign soldiers, or opens them again.
     void toggle_gates();
     /// Closes the open pop-up of a build category, else lays the building in hand away (the
@@ -237,6 +292,10 @@ private:
     /// The unit under a screen point: the one whose visible pixel is there, unless a map tile is
     /// drawn over it; zoomed out, else a small one near it, the local player's first.
     [[nodiscard]] std::optional<ui::UnitRef> unit_at(double sx, double sy) const;
+    /// The editor's map clicked at the mouse: a unit, a building, an island or the sea.
+    void editor_pick_at_mouse();
+    /// A key for the cheats' number line or a cheat (cheat_console.hpp); whether it took it.
+    bool cheat_key(int pressed, int scancode, std::uint16_t mod);
     /// Left button released on the map (no tool): a click or the end of a rectangle.
     void map_left_up(double x, double y, std::uint16_t mod, int clicks);
     /// An order of the selection to the screen point (right button; the left one with the
@@ -268,11 +327,13 @@ private:
     bool m_original_mouse;
     bool m_confirm;
     std::filesystem::path m_keys_file;
+    std::filesystem::path m_keys_path;  ///< the key settings file read (or written) at the start
 
     mutable render::GroundQueryCache m_ground_query;
     bool m_ground_cache_enabled=true;
     ui::KeyBindings m_keys;
     ui::UnitSelection m_units;  ///< the selected ships or land units
+    CheatConsole m_cheats;
     Pick m_pick = Pick::None;
     LeftPress m_press;  ///< the left button pressed on the map
     MapDrag m_drag;     ///< the map dragged with the right or middle button
@@ -286,9 +347,11 @@ private:
     std::optional<render::TilePos> m_grid_tile;
     double m_grid_x=0,m_grid_y=0;
     bool m_grid_on=false;
-    bool m_left_down = false;   ///< the left mouse button, for the frame's buttons
-    float m_wheel_rest = 0.0F;  ///< wheel notches begun (touchpads) the goods window did not scroll yet
-    bool m_text_input = false;  ///< the platform's text input is on (a name is typed)
+    bool m_left_down = false;     ///< the left mouse button, for the frame's buttons
+    bool m_right_stroke = false;  ///< the editor's right button draws a stroke (land and water swapped)
+    bool m_editor = false;        ///< the editor runs (set_editor)
+    float m_wheel_rest = 0.0F;    ///< wheel notches begun (touchpads) the goods window did not scroll yet
+    bool m_text_input = false;    ///< the platform's text input is on (a name is typed)
 };
 
 }  // namespace o1602::app

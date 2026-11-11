@@ -2,6 +2,7 @@
 #include "o1602/net/protocol.hpp"
 
 #include <algorithm>
+#include <string_view>
 #include <utility>
 
 #include "wire.hpp"
@@ -40,6 +41,7 @@ void put(core::ByteWriter& out, const Hello& m) {
     out.string(m.name);
     out.u8(m.seat);
     out.u64(m.token);
+    out.u64(m.player);
     out.string(m.password);
     out.boolean(m.returning);
     put_packages(out, m.packages);
@@ -99,9 +101,11 @@ void put(core::ByteWriter& out, const Roster& m) {
         out.string(member.name);
         out.u8(static_cast<std::uint8_t>(member.state));
         out.boolean(member.host);
+        out.u8(member.loaded);
     }
     out.u8(m.successor);
     out.string(m.successor_address);
+    out.boolean(m.starting);
 }
 
 void put(core::ByteWriter& out, const Desync& m) {
@@ -133,7 +137,7 @@ void put(core::ByteWriter& out, const Lobby& m) {
         out.u16(b);
     }
     out.boolean(m.computer_takes_over);
-    out.boolean(m.host_pauses_only);
+    out.boolean(m.host_controls_speed);
     out.boolean(m.spectators_chat);
 }
 
@@ -167,6 +171,10 @@ void put(core::ByteWriter& out, const SetBanner& m) {
 
 void put(core::ByteWriter& out, const Dropped& m) {
     out.u32(m.commands);
+}
+
+void put(core::ByteWriter& out, const LoadProgress& m) {
+    out.u8(m.percent);
 }
 
 void put(core::ByteWriter& out, const HostLeaving& m) {
@@ -225,6 +233,7 @@ Hello get_hello(In& in) {
     m.name = in.text(kMaxNameLength);
     m.seat = in.u8();
     m.token = in.u64();
+    m.player = in.u64();
     m.password = in.text(kMaxPasswordLength);
     m.returning = in.boolean();
     m.packages = get_packages(in);
@@ -318,10 +327,15 @@ Roster get_roster(In& in) {
         }
         member.state = static_cast<Member::State>(state);
         member.host = in.boolean();
+        member.loaded = in.u8();
+        if (member.loaded > 100) {
+            in.fail();
+        }
         m.members.push_back(std::move(member));
     }
     m.successor = in.u8();
     m.successor_address = in.text(kMaxAddressLength);
+    m.starting = in.boolean();
     return m;
 }
 
@@ -370,7 +384,7 @@ Lobby get_lobby(In& in) {
         m.banners.push_back(in.u16());
     }
     m.computer_takes_over = in.boolean();
-    m.host_pauses_only = in.boolean();
+    m.host_controls_speed = in.boolean();
     m.spectators_chat = in.boolean();
     return m;
 }
@@ -507,12 +521,19 @@ std::optional<Message> get(In& in, std::uint8_t type) {
             return get_part(in);
         case 18:
             return get_package_files(in);
+        case 19: {
+            const LoadProgress m{in.u8()};
+            if (m.percent > 100) {
+                in.fail();
+            }
+            return m;
+        }
         default:
             return std::nullopt;
     }
 }
 
-static_assert(std::variant_size_v<Message> == 19, "a new message needs its case in get()");
+static_assert(std::variant_size_v<Message> == 20, "a new message needs its case in get()");
 
 }  // namespace
 
@@ -567,6 +588,23 @@ std::uint64_t token_verifier(std::uint64_t token, std::uint64_t salt) noexcept {
         v |= std::uint64_t{digest[k]} << (8 * k);
     }
     return v;
+}
+
+std::uint64_t player_verifier(std::uint64_t player) noexcept {
+    if (player == 0) {
+        return 0;
+    }
+    core::ByteWriter in;
+    for (const char c : std::string_view("open1602 player")) {
+        in.u8(static_cast<std::uint8_t>(c));
+    }
+    in.u64(player);
+    const auto digest = core::sha256(in.data());
+    std::uint64_t v = 0;
+    for (std::size_t k = 0; k < 8; ++k) {
+        v |= std::uint64_t{digest[k]} << (8 * k);
+    }
+    return v != 0 ? v : 1;  // 0 means "nobody"
 }
 
 }  // namespace o1602::net

@@ -99,6 +99,7 @@ bool apply_levels_file(std::vector<InfraLevel>& levels, std::string_view package
 
         std::optional<std::uint8_t> resident_class;
         std::optional<std::int64_t> min_inhabitants;
+        std::optional<std::string> message;
         bool ok = true;
         for (const core::DataEntry& e : t.entries) {
             const std::string field = line_of(where, e.value.line) + "'" + e.key + "' ";
@@ -118,6 +119,16 @@ bool apply_levels_file(std::vector<InfraLevel>& levels, std::string_view package
                     ok = false;
                 } else {
                     min_inhabitants = *n;
+                }
+            } else if (e.key == "message") {
+                // A message of messages.toml; the table of messages is checked when one is shown.
+                const std::string* s = e.value.string();
+                if (s == nullptr || (!s->empty() && (s->find(':') == std::string::npos || s->size() > kMaxMessageId))) {
+                    warnings.push_back(field +
+                                       "names no message (<package>:<name> or anno1602:<number>, \"\" for none)");
+                    ok = false;
+                } else {
+                    message = *s;
                 }
             } else {
                 warnings.push_back(field + "is no field of an unlock level and is passed over");
@@ -139,6 +150,9 @@ bool apply_levels_file(std::vector<InfraLevel>& levels, std::string_view package
         }
         if (min_inhabitants) {
             level.min_inhabitants = static_cast<std::uint32_t>(*min_inhabitants);
+        }
+        if (message) {
+            level.message = std::move(message);
         }
         changed = true;
     }

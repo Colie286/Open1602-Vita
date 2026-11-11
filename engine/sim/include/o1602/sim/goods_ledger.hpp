@@ -35,8 +35,14 @@ enum class GoodsFlow : std::uint8_t {
     BoughtValue,
     TraderSoldValue,
     TraderBoughtValue,
+    /// What producers would have made while they stood still only because their own store and the
+    /// city's warehouse were full; not a movement. The window counts it as production, so that a
+    /// full warehouse does not look like a shortage (they would go on if there were room).
+    Withheld,
 };
-inline constexpr std::size_t kGoodsFlows = 16;
+inline constexpr std::size_t kGoodsFlows = 17;
+/// The flows of the first version of the savegame's section GLDG (all but Withheld).
+inline constexpr std::size_t kGoodsFlowsV1 = 16;
 
 [[nodiscard]] constexpr bool is_inflow(GoodsFlow f) noexcept {
     return f <= GoodsFlow::Returned;
@@ -56,6 +62,14 @@ struct FlowTotals {
     /// In minus out.
     [[nodiscard]] std::int64_t net() const noexcept {
         return static_cast<std::int64_t>(in()) - static_cast<std::int64_t>(out());
+    }
+    /// Production as the window shows it: what was made and what was withheld for a full warehouse.
+    [[nodiscard]] std::uint64_t production() const noexcept {
+        return of(GoodsFlow::Produced) + of(GoodsFlow::Withheld);
+    }
+    /// The balance as the window shows it: in minus out, with what was withheld for a full warehouse.
+    [[nodiscard]] std::int64_t balance() const noexcept {
+        return net() + static_cast<std::int64_t>(of(GoodsFlow::Withheld));
     }
     FlowTotals& operator+=(const FlowTotals& other) noexcept;
 };

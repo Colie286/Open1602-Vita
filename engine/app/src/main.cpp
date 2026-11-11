@@ -45,7 +45,7 @@
 
 using namespace o1602;
 
-static_assert(app::kModCtrl == SDL_KMOD_LCTRL && app::kModShift == SDL_KMOD_LSHIFT);
+static_assert(app::kModCtrl == SDL_KMOD_LCTRL && app::kModShift == SDL_KMOD_LSHIFT && app::kModAlt == SDL_KMOD_LALT);
 
 namespace {
 
@@ -54,34 +54,48 @@ int usage() {
         "usage: open1602 [--game-dir DIR] [--scenario FILE | --savegame NAME | --load FILE] [--size WxH]\n"
         "                [--zoom 0|1|2] [--frames N]\n"
         "                [--owners] [--original-sheets] [--original-flags] [--original-data] [--refund MODE]\n"
-        "                [--droughts MODE] [--volcanoes MODE] [--pirates MODE] [--pirate-nests MODE] [--reveal MODE]\n"
+        "                [--droughts MODE] [--volcanoes MODE] [--plagues MODE] [--fires MODE]\n"
+        "                [--pirates MODE] [--pirate-nests MODE] [--reveal MODE] [--reveal-resources MODE]\n"
         "                [--ore-veins MODE] [--bread MODE] [--computers MODE] [--ai MODE]\n"
         "                [--new-game DIFFICULTY [--layout 0-2] [--name NAME] [--colour 0-3]] [--seed N]\n"
         "                [--islands original|seed]\n"
         "                [--world WxH] [--players 1-12] [--island-count C] [--island-sizes S] [--villages C]\n"
         "                [--volcano-islands C] [--gold-islands auto|N] [--starts spread|together]\n"
+        "                [--island-shapes templates|mixed|own] [--island-preset P] [--island-land PERCENT]\n"
+        "                [--island-min N] [--island-max N] [--island-spread S] [--island-gap G] [--island-coast C]\n"
+        "                [--island-outline O] [--island-forest F] [--island-mountains M]\n"
         "                [--screenshot out.png] [--no-sound] [--no-music] [--no-panel] [--no-videos] [--intro]\n"
         "                [--video N] [--message ID] [--input EVENTS] [--select ISLAND,X,Y|ship:N]\n"
-        "                [--host [--port N] | --join HOST[:PORT]] [--name NAME]\n"
+        "                [--host [--port N] | --join HOST[:PORT]] [--name NAME] [--editor [FILE]]\n"
         "  --new-game D       new endless game, difficulty 0 (easy) .. 3 (hard); layout: one of the three maps,\n"
         "                     chosen by the seed\n"
         "  --seed N           the world of an endless game: its map and islands (default: random)\n"
         "  --islands MODE     original: as the original (512 worlds per file), seed: from the whole seed\n"
-        "  --world WxH ...    an own world for the new game (any of these options): size in tiles (200-2000),\n"
+        "  --world WxH ...    an own world for the new game (any of these options): size in tiles (200-4000),\n"
         "                     players with a start, island count, villages and volcano islands none|few|normal|\n"
         "                     many, island sizes small|mixed|large, islands with gold auto (default) or a\n"
-        "                     number, starts spread (default) or together\n"
+        "                     number, starts spread (default) or together, island shapes of the original's\n"
+        "                     templates (default), their own or mixed\n"
+        "  --island-preset P  islands of their own shape as varied|archipelago|continents|giants|even\n"
+        "  --island-land ...  islands of their own shape: land 5-45 percent of the map, the smallest and the\n"
+        "                     largest island's side 16-1000 tiles, spread even|mixed|giants, gap narrow|normal|\n"
+        "                     wide, coast smooth|natural|rugged, outline round|long|branched, forest and\n"
+        "                     mountains little|normal|much (with --island-shapes own or mixed)\n"
         "  --original-sheets  no figures at the smallest zoom level, as in the original\n"
         "  --original-flags   original flag images instead of the tinted generic flag\n"
         "  --original-data    the original's data without its corrections (D-001 ...; settings.cfg data_fixes)\n"
         "  --refund MODE      what demolishing gives back: none (original), partial[:PERCENT] (default 50), full\n"
         "  --droughts MODE    game (as the game's difficulty says, original), off, rare, normal, frequent\n"
-        "  --volcanoes MODE   game (as the game's settings say, original), off, on\n"
+        "  --volcanoes MODE   game (as the game's settings say, original), off, on, rare\n"
+        "  --plagues MODE     original, rare (half as often), off: plagues breaking out in towns\n"
+        "  --fires MODE       original, rare (half as often), off: fires breaking out in towns\n"
         "  --pirates MODE     game (as the game's settings say, original: none on the two easy levels), off, on\n"
         "  --pirate-nests MODE  one (original), per4 (one for every four players begun)\n"
         "  --reveal MODE      towns discovered without a ship: none (every island by ship), original (a town\n"
         "                     of a human or computer player once it is founded), all (also native villages\n"
         "                     and pirate nests, and the towns there from the start)\n"
+        "  --reveal-resources MODE  original (an island's crops and deposits by ship), all (known from the\n"
+        "                     start)\n"
         "  --ore-veins MODE   game (as the game's settings say, original: endless in every endless game),\n"
         "                     finite (large iron veins run out), endless (the deep mine digs on for ever)\n"
         "  --bread MODE       original (the original's bread chain), revised (twice the grain per field and\n"
@@ -109,6 +123,8 @@ int usage() {
         "  --select ship:N    select the N-th ship of the game (index) and look at it; unit:N a land unit\n"
         "  --load FILE        open a savegame of Open1602 (.o1602) or a file of the original by its path\n"
         "  --menu             start in the main menu (the default when no game is named)\n"
+        "  --editor [FILE]    start in the editor: with FILE (Open1602's own, or a scenario or savegame of the\n"
+        "                     original), or with a new map\n"
         "  --host             host a multiplayer game of the game named (UDP port 16020, --port N); others join\n"
         "                     into the free human slots, or watch\n"
         "  --host-public      host the named game through settings.cfg master_server (no player port forwarding)\n"
@@ -126,7 +142,7 @@ int usage() {
         "  F5 / F9        quick save / quick load     F12, Print               screenshot\n"
         "  F1             these keys over the map     F11, Alt+Enter           window / full screen\n"
         "  Ctrl + / Ctrl - the map twice / half as large\n"
-        "  B K I O        build, military, info, options   F2  goods balance\n"
+        "  B K I O        build, military, info, options   F2, Tab  goods balance\n"
         "  Enter          chat (multiplayer)\n"
         "  left mouse     select (drag: rectangle, Shift: add, Ctrl/double: all alike on screen)\n"
         "  right mouse    order (also on the minimap; Shift: queued)\n"
@@ -134,7 +150,7 @@ int usage() {
         "  . / ,          next idle ship / unit\n"
         "  units:         F attack, H stop, G hold, P patrol, C formation, Shift+C scatter, Tab one kind,\n"
         "                 Y white flag, X explore, T trade, R route, Del disband/scuttle\n"
-        "  building:      R rotate, C pick the building under the mouse, Del demolish, Tab next\n"
+        "  building:      R rotate, C pick the building under the mouse, Del demolish\n"
         "  Esc            back, out of a tool, deselect   Ctrl+Q quit   Ctrl+O ownership view\n",
         stderr);
     return 2;
@@ -245,6 +261,11 @@ int run_program(int argc, char** argv) {
         }
         scenario = savegame_path;
     }
+    if (!command.editor_file.empty()) {
+        // As --scenario: a relative path in the game directory first.
+        const auto resolved = game->resolve(command.editor_file);
+        options.editor_file = resolved ? *resolved : core::path_from_utf8(command.editor_file);
+    }
     if (!command.load.empty()) {
         options.scenario = core::path_from_utf8(command.load);
     } else if (const auto resolved = game->resolve(scenario)) {
@@ -272,6 +293,8 @@ int run_program(int argc, char** argv) {
 #endif
     options.world.seed = command.seed.value_or((std::uint64_t{device()} << 32) | device());
     options.world.guarantee_resources = options.rules.guarantee_resources;
+    options.world.climate_crops = options.rules.climate_crops;
+    options.world.big_ore_veins = options.rules.big_ore_veins;
     if (command.new_game) {
         sim::NewGameOptions& new_game_options = *command.new_game;
         new_game_options.layout = command.layout.value_or(sim::layout_for_seed(options.world.seed));
@@ -300,6 +323,8 @@ int run_program(int argc, char** argv) {
 #ifdef O1602_EXPERIMENTAL_VITA
     platform::vita::phase("BEGIN original Open1602 MapViewer");
 #endif
+    // Before the game is made: what it notes while loading already goes by the clock of the frames.
+    platform::use_fixed_clock(app::fixed_frame_ms(options));
     auto viewer = app::MapViewer::create(*game, options);
     if (!viewer) {
         app::report_fatal(viewer.error().message);
@@ -314,6 +339,8 @@ int run_program(int argc, char** argv) {
 }  // namespace
 
 int main(int argc, char** argv) {
+    int code = 1;
+    try {
 #ifdef O1602_EXPERIMENTAL_VITA
     platform::vita::phase("BEGIN main");
     bool boot_auto=false,from_launcher=false,legacy=false;const char* boot_fail=nullptr;
@@ -327,7 +354,6 @@ int main(int argc, char** argv) {
     platform::vita::boot_options(boot_auto,boot_fail);
     platform::vita::setup();
     if(!from_launcher)platform::vita::boot_wait();
-    try {
     platform::vita::legacy_controls(legacy);
     unsigned test_frame_ms=0,test_writer_ms=0;
     std::vector<std::string> args{argv[0],"--size","960x544","--zoom",legacy?"2":"1","--no-dialogs"};
@@ -366,16 +392,7 @@ int main(int argc, char** argv) {
     app::setup_diagnostics();
     // What nothing else caught (a length_error, a filesystem_error) ends the program with a
     // message, on Windows in a message box, instead of std::terminate.
-#ifndef O1602_EXPERIMENTAL_VITA
-    try {
-#endif
-        const int result=run_program(argc, argv);
-#ifdef O1602_EXPERIMENTAL_VITA
-        platform::vita::trace("EXIT code=%d",result);
-        platform::vita::finish();
-        std::fclose(stderr);
-#endif
-        return result;
+        code = run_program(argc, argv);
     } catch (const std::exception& e) {
 #ifdef O1602_EXPERIMENTAL_VITA
         platform::vita::trace("FAIL exception=%s",e.what());
@@ -384,5 +401,10 @@ int main(int argc, char** argv) {
     } catch (...) {
         app::report_fatal("unexpected error");
     }
-    return 1;
+#ifdef O1602_EXPERIMENTAL_VITA
+    platform::vita::trace("EXIT code=%d", code);
+    platform::vita::finish();
+#endif
+    app::report_exit(code);
+    return code;
 }

@@ -17,10 +17,15 @@
 #include <string_view>
 #include <vector>
 
+#include "o1602/sim/climates.hpp"
+#include "o1602/sim/computer_orders.hpp"
+#include "o1602/sim/computer_slots.hpp"
+
 namespace o1602::assets {
 class BuildingTable;
 class FigureTable;
 struct OwnBuilding;
+struct OwnFigure;
 struct ResidentClass;
 struct InfraLevel;
 }  // namespace o1602::assets
@@ -61,6 +66,7 @@ enum class FigureField : std::uint8_t {
     Cannons,   ///< Maxkanon: cannons a ship carries at most
     Price,     ///< Preis: what a ship is worth
     Material,  ///< Rohmenge: t of material a shipyard builds the ship from, of weapons a castle needs for the unit
+    Holds,     ///< Maxware: cargo holds of 50 t a ship has
 };
 
 /// A changed value of a figure, in the units of figures.toml.
@@ -81,17 +87,90 @@ struct BuildingValue {
 };
 
 struct Balance {
-    std::uint32_t trader_max_held = 50;     ///< t of a ware the free trader holds at most (0x00454B80)
+    std::uint32_t trader_max_held = 50;     ///< t of a ware the free trader holds at most
     std::uint32_t trader_max_buy = 10;      ///< t of a ware he buys at most in one visit
     std::uint32_t trader_restock_s = 60;    ///< seconds until he takes on tools or ore again (S-078)
     std::uint32_t castle_interval_s = 10;   ///< seconds of a castle's training step (11 when idle)
-    std::uint32_t castle_unload_range = 6;  ///< tiles from a ship where soldiers land (0x00448D90)
+    std::uint32_t castle_unload_range = 6;  ///< tiles from a ship where soldiers land
     std::uint32_t fire_spread = 19;         ///< chance of 128 per epoch that a fire spreads
     std::uint32_t plague_radius = 4;        ///< tiles a plague reaches to infect a neighbour
+    /// What the computer players get from nowhere, on every difficulty (the original's
+    /// cheats). Money below the first value of a pair gets the second; goods in tons.
+    std::uint32_t ai_steady_below = 3791;  ///< task 5's steady money
+    std::uint32_t ai_steady_money = 379;
+    std::uint32_t ai_founding_below = 500;  ///< a founding
+    std::uint32_t ai_founding_money = 799;
+    std::uint32_t ai_founding_bricks = 8;        ///< t of bricks into a new city
+    std::uint32_t ai_subsidy_poor_below = 4733;  ///< a computer that is behind
+    std::uint32_t ai_subsidy_poor_money = 797;
+    std::uint32_t ai_subsidy_below = 9376;  ///< from the settlers on
+    std::uint32_t ai_subsidy_money = 1793;
+    std::uint32_t ai_subsidy_wood = 7;        ///< t of wood while the stock is below as much
+    std::uint32_t ai_subsidy_tools = 3;       ///< t of tools while the stock is below as much
+    std::uint32_t ai_colony_wood_below = 19;  ///< the colony subsidy, one good per call
+    std::uint32_t ai_colony_wood = 13;
+    std::uint32_t ai_colony_tools_below = 15;
+    std::uint32_t ai_colony_tools = 9;
+    std::uint32_t ai_colony_food_below = 19;
+    std::uint32_t ai_colony_food = 9;
+    std::uint32_t ai_colony_bricks_below = 19;
+    std::uint32_t ai_colony_bricks = 9;
+    /// When a computer's city moves on to its next stage ([computer_stages].md task 5):
+    /// inhabitants of a class and the classes above it, gold, tiles of free land, houses, seconds.
+    std::uint32_t ai_pioneers_inhabitants = 2;   ///< a city founded moves on to the pioneers with this many inhabitants
+    std::uint32_t ai_colony_below_land = 600;    ///< ... or becomes a colony with less free land than this (tiles)
+    std::uint32_t ai_settlers_inhabitants = 22;  ///< the pioneers move on to the settlers
+    std::uint32_t ai_grown_houses = 24;          ///< the settlers have grown with this many houses ...
+    std::uint32_t ai_grown_settlers = 95;        ///< ... and this many settlers and above
+    std::uint32_t ai_grown_seconds = 3000;       ///< ... or after this long in the stage
+    std::uint32_t ai_grown_money = 8001;         ///< grown, they go on with this much gold (or good incomes)
+    std::uint32_t ai_main2_settlers = 170;       ///< the main city goes on with this many settlers and above ...
+    std::uint32_t ai_main2_money = 8001;         ///< ... and this much gold
+    std::uint32_t ai_main2_rich_money = 15'001;  ///< ... or this much gold alone
+    std::uint32_t ai_citizens_money = 8001;      ///< on to the citizens with this much gold
+    std::uint32_t ai_citizens2_citizens = 250;   ///< the citizens' second stage: citizens and above ...
+    std::uint32_t ai_citizens2_money = 6001;     ///< ... and gold
+    std::uint32_t ai_citizens2_rich_money = 20'001;  ///< ... or gold alone
+    std::uint32_t ai_merchants_citizens = 340;       ///< on to the merchants: citizens and above ...
+    std::uint32_t ai_merchants_money = 6001;         ///< ... and gold
+    std::uint32_t ai_merchants_rich_money = 25'001;  ///< ... or gold alone
+    std::uint32_t ai_merchants_land = 951;           ///< with less free land the city stays small
+    std::uint32_t ai_merchants2_merchants = 400;     ///< the merchants' second stage: merchants and above
+    std::uint32_t ai_aristocrats_merchants = 500;    ///< on to the aristocrats: merchants and above ...
+    std::uint32_t ai_aristocrats_money = 15'001;     ///< ... and gold
+    std::uint32_t ai_aristocrats_land = 1101;        ///< with less free land the city stays small
+    std::uint32_t ai_aristocrats2_money = 8001;  ///< the aristocrats' second stage, with their luxury goods in stock
+    /// The rest of the stages' numbers ([computer_stages], version kBalanceWithMoreStages).
+    std::uint32_t ai_colony_buildings = 7;             ///< a city founded with more buildings becomes a colony ...
+    std::uint32_t ai_colony_other_people = 4;          ///< ... or with more than one other city of so many people
+    std::uint32_t ai_colony_large_city = 1200;         ///< ... or another city of so many people
+    std::uint32_t ai_founded_abandon_seconds = 480;    ///< a city founded is given up after so long
+    std::uint32_t ai_pioneers_abandon_seconds = 1200;  ///< the pioneers' city the same
+    std::uint32_t ai_colony_animal_tiles = 120;        ///< a colony without crops: a farm of animals per so many tiles
+    std::uint32_t ai_colony_animals = 6;               ///< ... at most so many
+    std::uint32_t ai_colony_luxury_tiles = 120;        ///< a colony with crops: a field per so many tiles
+    std::uint32_t ai_grown_income = 11;                ///< grown, also with every city earning so much a minute
+    std::uint32_t ai_settlers_luxury_settlers = 135;   ///< settlers that wait build workshops and luxury from so many
+    std::uint32_t ai_settlers_luxury_fields = 4;       ///< ... so many fields of luxury crops
+    std::uint32_t ai_main_idle_money = 4000;           ///< the main city grows on with so much gold
+    std::uint32_t ai_citizens_luxury = 1;      ///< on to the citizens with more luxury goods in stock than this ...
+    std::uint32_t ai_citizens_kontor = 2;      ///< ... or a Kontor above this level
+    std::uint32_t ai_merchants2_kontor = 4;    ///< the merchants' second stage also with a Kontor of this level
+    std::uint32_t ai_aristocrats2_luxury = 3;  ///< the aristocrats' second stage with more luxury goods than this
     /// Changed values of buildings, sorted by id and field, each at most once.
     std::vector<BuildingValue> buildings;
     /// Changed values of figures, sorted by number and field, each at most once.
     std::vector<FigureValue> figures;
+    /// The computers' build orders a package changed (computers.toml), sorted by list, each once.
+    std::vector<ComputerOrder> computer_orders;
+    /// The computers' producers a package changed ([producer.<name>] of computers.toml), sorted by
+    /// slot, each once.
+    std::vector<ComputerProducer> computer_producers;
+    /// The slots of the computers' city records as the packages changed them (slots.toml): every
+    /// slot of the original's by number, empty for the original's (computer_slots_of).
+    std::vector<ComputerSlot> computer_slots;
+    /// The packages' climates (climates.toml), in load order; WorldIsland::climate numbers them from 1.
+    std::vector<Climate> climates;
 
     friend bool operator==(const Balance&, const Balance&) = default;
 };
@@ -103,10 +182,18 @@ struct BalanceField {
     std::uint32_t Balance::*value;
     std::uint32_t min;
     std::uint32_t max;
+    std::uint16_t version = 1;  ///< the version of the section BALA that holds it first
 };
 
+/// The version of the section BALA with the computers' values.
+inline constexpr std::uint16_t kBalanceWithComputers = 2;
+/// The version of the section BALA with the computers' stages.
+inline constexpr std::uint16_t kBalanceWithStages = 3;
+/// The version of the section BALA with the rest of the computers' stages.
+inline constexpr std::uint16_t kBalanceWithMoreStages = 4;
+
 /// Every value, in the order of the section BALA.
-inline constexpr std::array<BalanceField, 7> kBalanceFields = {{
+inline constexpr std::array<BalanceField, 65> kBalanceFields = {{
     {"trader", "max_held", &Balance::trader_max_held, 1, 200},
     {"trader", "max_buy", &Balance::trader_max_buy, 1, 200},
     {"trader", "restock_seconds", &Balance::trader_restock_s, 1, 3600},
@@ -114,7 +201,72 @@ inline constexpr std::array<BalanceField, 7> kBalanceFields = {{
     {"castle", "unload_range", &Balance::castle_unload_range, 1, 16},
     {"disasters", "fire_spread", &Balance::fire_spread, 0, 128},
     {"disasters", "plague_radius", &Balance::plague_radius, 0, 16},
+    {"computers", "steady_below", &Balance::ai_steady_below, 0, 1'000'000, kBalanceWithComputers},
+    {"computers", "steady_money", &Balance::ai_steady_money, 0, 100'000, kBalanceWithComputers},
+    {"computers", "founding_below", &Balance::ai_founding_below, 0, 1'000'000, kBalanceWithComputers},
+    {"computers", "founding_money", &Balance::ai_founding_money, 0, 100'000, kBalanceWithComputers},
+    {"computers", "founding_bricks", &Balance::ai_founding_bricks, 0, 100, kBalanceWithComputers},
+    {"computers", "subsidy_poor_below", &Balance::ai_subsidy_poor_below, 0, 1'000'000, kBalanceWithComputers},
+    {"computers", "subsidy_poor_money", &Balance::ai_subsidy_poor_money, 0, 100'000, kBalanceWithComputers},
+    {"computers", "subsidy_below", &Balance::ai_subsidy_below, 0, 1'000'000, kBalanceWithComputers},
+    {"computers", "subsidy_money", &Balance::ai_subsidy_money, 0, 100'000, kBalanceWithComputers},
+    {"computers", "subsidy_wood", &Balance::ai_subsidy_wood, 0, 100, kBalanceWithComputers},
+    {"computers", "subsidy_tools", &Balance::ai_subsidy_tools, 0, 100, kBalanceWithComputers},
+    {"computers", "colony_wood_below", &Balance::ai_colony_wood_below, 0, 100, kBalanceWithComputers},
+    {"computers", "colony_wood", &Balance::ai_colony_wood, 0, 100, kBalanceWithComputers},
+    {"computers", "colony_tools_below", &Balance::ai_colony_tools_below, 0, 100, kBalanceWithComputers},
+    {"computers", "colony_tools", &Balance::ai_colony_tools, 0, 100, kBalanceWithComputers},
+    {"computers", "colony_food_below", &Balance::ai_colony_food_below, 0, 100, kBalanceWithComputers},
+    {"computers", "colony_food", &Balance::ai_colony_food, 0, 100, kBalanceWithComputers},
+    {"computers", "colony_bricks_below", &Balance::ai_colony_bricks_below, 0, 100, kBalanceWithComputers},
+    {"computers", "colony_bricks", &Balance::ai_colony_bricks, 0, 100, kBalanceWithComputers},
+    {"computer_stages", "pioneers_inhabitants", &Balance::ai_pioneers_inhabitants, 0, 1'000'000, kBalanceWithStages},
+    {"computer_stages", "colony_below_land", &Balance::ai_colony_below_land, 0, 1'000'000, kBalanceWithStages},
+    {"computer_stages", "settlers_inhabitants", &Balance::ai_settlers_inhabitants, 0, 1'000'000, kBalanceWithStages},
+    {"computer_stages", "grown_houses", &Balance::ai_grown_houses, 0, 100'000, kBalanceWithStages},
+    {"computer_stages", "grown_settlers", &Balance::ai_grown_settlers, 0, 1'000'000, kBalanceWithStages},
+    {"computer_stages", "grown_seconds", &Balance::ai_grown_seconds, 0, 1'000'000, kBalanceWithStages},
+    {"computer_stages", "grown_money", &Balance::ai_grown_money, 0, 10'000'000, kBalanceWithStages},
+    {"computer_stages", "main2_settlers", &Balance::ai_main2_settlers, 0, 1'000'000, kBalanceWithStages},
+    {"computer_stages", "main2_money", &Balance::ai_main2_money, 0, 10'000'000, kBalanceWithStages},
+    {"computer_stages", "main2_rich_money", &Balance::ai_main2_rich_money, 0, 10'000'000, kBalanceWithStages},
+    {"computer_stages", "citizens_money", &Balance::ai_citizens_money, 0, 10'000'000, kBalanceWithStages},
+    {"computer_stages", "citizens2_citizens", &Balance::ai_citizens2_citizens, 0, 1'000'000, kBalanceWithStages},
+    {"computer_stages", "citizens2_money", &Balance::ai_citizens2_money, 0, 10'000'000, kBalanceWithStages},
+    {"computer_stages", "citizens2_rich_money", &Balance::ai_citizens2_rich_money, 0, 10'000'000, kBalanceWithStages},
+    {"computer_stages", "merchants_citizens", &Balance::ai_merchants_citizens, 0, 1'000'000, kBalanceWithStages},
+    {"computer_stages", "merchants_money", &Balance::ai_merchants_money, 0, 10'000'000, kBalanceWithStages},
+    {"computer_stages", "merchants_rich_money", &Balance::ai_merchants_rich_money, 0, 10'000'000, kBalanceWithStages},
+    {"computer_stages", "merchants_land", &Balance::ai_merchants_land, 0, 1'000'000, kBalanceWithStages},
+    {"computer_stages", "merchants2_merchants", &Balance::ai_merchants2_merchants, 0, 1'000'000, kBalanceWithStages},
+    {"computer_stages", "aristocrats_merchants", &Balance::ai_aristocrats_merchants, 0, 1'000'000, kBalanceWithStages},
+    {"computer_stages", "aristocrats_money", &Balance::ai_aristocrats_money, 0, 10'000'000, kBalanceWithStages},
+    {"computer_stages", "aristocrats_land", &Balance::ai_aristocrats_land, 0, 1'000'000, kBalanceWithStages},
+    {"computer_stages", "aristocrats2_money", &Balance::ai_aristocrats2_money, 0, 10'000'000, kBalanceWithStages},
+    {"computer_stages", "colony_buildings", &Balance::ai_colony_buildings, 0, 100'000, kBalanceWithMoreStages},
+    {"computer_stages", "colony_other_people", &Balance::ai_colony_other_people, 0, 1'000'000, kBalanceWithMoreStages},
+    {"computer_stages", "colony_large_city", &Balance::ai_colony_large_city, 0, 1'000'000, kBalanceWithMoreStages},
+    {"computer_stages", "founded_abandon_seconds", &Balance::ai_founded_abandon_seconds, 1, 1'000'000,
+     kBalanceWithMoreStages},
+    {"computer_stages", "pioneers_abandon_seconds", &Balance::ai_pioneers_abandon_seconds, 1, 1'000'000,
+     kBalanceWithMoreStages},
+    {"computer_stages", "colony_animal_tiles", &Balance::ai_colony_animal_tiles, 1, 1'000'000, kBalanceWithMoreStages},
+    {"computer_stages", "colony_animals", &Balance::ai_colony_animals, 0, 1000, kBalanceWithMoreStages},
+    {"computer_stages", "colony_luxury_tiles", &Balance::ai_colony_luxury_tiles, 1, 1'000'000, kBalanceWithMoreStages},
+    {"computer_stages", "grown_income", &Balance::ai_grown_income, 0, 100'000, kBalanceWithMoreStages},
+    {"computer_stages", "settlers_luxury_settlers", &Balance::ai_settlers_luxury_settlers, 0, 1'000'000,
+     kBalanceWithMoreStages},
+    {"computer_stages", "settlers_luxury_fields", &Balance::ai_settlers_luxury_fields, 0, 1000, kBalanceWithMoreStages},
+    {"computer_stages", "main_idle_money", &Balance::ai_main_idle_money, 0, 10'000'000, kBalanceWithMoreStages},
+    {"computer_stages", "citizens_luxury", &Balance::ai_citizens_luxury, 0, 100, kBalanceWithMoreStages},
+    {"computer_stages", "citizens_kontor", &Balance::ai_citizens_kontor, 0, 4, kBalanceWithMoreStages},
+    {"computer_stages", "merchants2_kontor", &Balance::ai_merchants2_kontor, 1, 5, kBalanceWithMoreStages},
+    {"computer_stages", "aristocrats2_luxury", &Balance::ai_aristocrats2_luxury, 0, 100, kBalanceWithMoreStages},
 }};
+
+/// The version of the section BALA that `balance` needs: the first that holds every value that is
+/// not the original's, 1 while the computers' values are, so that an older Open1602 still reads it.
+[[nodiscard]] std::uint16_t balance_version(const Balance& balance) noexcept;
 
 /// A field of a building as balance.toml names it and its limits there.
 struct BuildingFieldInfo {
@@ -153,7 +305,7 @@ struct FigureFieldInfo {
 };
 
 /// Every field of a figure, in the order of FigureField.
-inline constexpr std::array<FigureFieldInfo, 10> kFigureFields = {{
+inline constexpr std::array<FigureFieldInfo, 11> kFigureFields = {{
     {"speed", FigureField::Speed, 1, 10000},
     {"max_carry", FigureField::MaxCarry, 1, 64},
     {"work_time", FigureField::WorkTime, 1, 600000},
@@ -164,6 +316,7 @@ inline constexpr std::array<FigureFieldInfo, 10> kFigureFields = {{
     {"cannons", FigureField::Cannons, 0, 100},
     {"price", FigureField::Price, 0, 100000},
     {"material", FigureField::Material, 0, 255},
+    {"holds", FigureField::Holds, 1, 8},  // at most the wares of a route stop (RouteStop::kEntries)
 }};
 
 /// Whether every value lies within its limits and the building and figure values are sorted and
@@ -198,9 +351,10 @@ inline constexpr std::string_view kFiguresFile = "figures.toml";
 /// table may also name a building a package added (`own`, docs/modding/own-buildings.md).
 void apply_buildings_file(Balance& balance, std::string_view package, std::string_view utf8,
                           std::vector<std::string>& warnings, std::span<const assets::OwnBuilding> own = {});
-/// Changes values of figures as the figures.toml of `package` says, as apply_balance_file.
+/// Changes values of figures as the figures.toml of `package` says, as apply_balance_file. A
+/// table may also name a figure a package added (`own`, docs/modding/own-figures.md).
 void apply_figures_file(Balance& balance, std::string_view package, std::string_view utf8,
-                        std::vector<std::string>& warnings);
+                        std::vector<std::string>& warnings, std::span<const assets::OwnFigure> own = {});
 /// Drops the values of buildings `buildings` does not have, with a warning each.
 void drop_unknown_buildings(Balance& balance, const assets::BuildingTable& buildings,
                             std::vector<std::string>& warnings);
@@ -225,5 +379,11 @@ void apply_figure_values(assets::FigureTable& table, const assets::FigureTable& 
 /// The building values a rule brings (Rules::revised_bread: data/balance/revised_bread.toml,
 /// compiled in), to go under those of the packages.
 [[nodiscard]] std::vector<BuildingValue> rule_building_values(const Rules& rules);
+/// The figure values a rule brings (Rules::large_ship_holds: data/balance/large_ship_holds.toml,
+/// compiled in), to go under those of the packages.
+[[nodiscard]] std::vector<FigureValue> rule_figure_values(const Rules& rules);
+
+/// Adds the values of `under` that `balance` does not set itself (a rule's values under the mods').
+void add_figure_values(Balance& balance, const std::vector<FigureValue>& under);
 
 }  // namespace o1602::sim

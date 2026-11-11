@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The players' score sheets (Screen_PlayerStatus; ENDE.GAD, docs/re/ui.md "Endbildschirm"): after
+// The players' score sheets (ENDE.GAD): after
 // a game is decided, and from the info panel's "Bewertung" while it runs. The labels are part of
 // the background picture; the screen fills in a player's figures and points, the total, the name
 // and the coat of arms, and offers the coats of arms of the other players to look at theirs.
@@ -85,6 +85,8 @@ private:
     void update_strip();
     /// The rank texts the strip and the name get (the panel has no gadgets for them).
     void draw_ranks(std::vector<ui::DrawItem>& out) const;
+    /// Where the hint of the way back into a won game ends (the panel's pixels).
+    [[nodiscard]] std::int32_t hint_bottom() const;
 
     std::optional<ui::Panel> m_panel;
     double m_scale = 1.0;

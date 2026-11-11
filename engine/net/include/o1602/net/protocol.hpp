@@ -26,7 +26,7 @@ namespace o1602::net {
 /// Raised whenever the messages or the simulation change in a way older builds would not follow.
 /// The first three bytes of a Hello (its type and this version) never change, so that a computer of
 /// another version is told so (RefuseReason::Version) rather than refused as nonsense (MS-22).
-inline constexpr std::uint16_t kProtocolVersion = 19;
+inline constexpr std::uint16_t kProtocolVersion = 27;
 
 /// Upper limits a decoded message must keep; more comes from damaged or hostile data.
 inline constexpr std::size_t kMaxNameLength = sim::PlayerRename::kMaxNameLength;
@@ -36,7 +36,8 @@ inline constexpr std::uint32_t kMaxRosterMembers = 256;
 /// Computers a host takes besides itself: one fewer than a Roster holds, so that every roster it
 /// sends decodes (LC-1).
 inline constexpr std::uint32_t kMaxMembers = kMaxRosterMembers - 1;
-inline constexpr std::uint32_t kMaxSnapshotBytes = 32U << 20;
+/// A whole game, packed: a fresh world of 4000 x 4000 tiles is about 35 MiB, a played one more.
+inline constexpr std::uint32_t kMaxSnapshotBytes = 128U << 20;
 static_assert(kMaxSnapshotBytes + (64U << 10) <= kMaxMessageBytes, "a game must fit into one message");
 /// The largest message a computer sends the host (its commands and reports; the host refuses more).
 inline constexpr std::size_t kMaxMessageToHost = 1U << 20;
@@ -90,6 +91,10 @@ struct Hello {
     /// The person agreed to download the packages it lacks (Refused::share_bytes): the host sends
     /// them (PackageFiles) before it takes the computer in.
     bool fetch_packages = false;
+    /// The player ID of the installation (random, kept in its settings; 0: none). The host gives
+    /// the person the slot they played before in this game (Player::owner, player_verifier()),
+    /// even after a restart of the program or a change of host.
+    std::uint64_t player = 0;
 };
 
 /// Commands of the computer's player, in the order given; the host puts them into the next frame
@@ -111,6 +116,12 @@ struct Progress {
     std::uint32_t epoch = 0;   ///< of the game it runs (Snapshot::epoch): older reports are stale
     std::uint64_t frames = 0;  ///< frames run so far
     std::optional<FrameHash> hash;
+};
+
+/// How much of the game on its way the computer has (sent whenever that changes, a few times a
+/// second at most): the host shows it to everyone in the Roster while the game starts.
+struct LoadProgress {
+    std::uint8_t percent = 0;  ///< 0 to 100: received, and loaded at 100
 };
 
 // --- From the host to a computer ---
@@ -184,6 +195,8 @@ struct Member {
     std::string name;
     State state = State::Playing;
     bool host = false;
+    /// (Loading) How much of its game it has, 0 to 100 (LoadProgress).
+    std::uint8_t loaded = 0;
     friend bool operator==(const Member&, const Member&) = default;
 };
 
@@ -193,6 +206,9 @@ struct Roster {
     /// nobody, and its address as the host sees it, where the others then connect.
     Seat successor = sim::kNoPlayer;
     std::string successor_address;
+    /// The game has started and the host holds its first frame until every player has it loaded:
+    /// all begin together (HostSession::starting()).
+    bool starting = false;
 };
 
 /// The fingerprints of these players differed from the host's after frame `frame`; they get the
@@ -219,6 +235,9 @@ struct LobbySeat {
     /// The banner the slot's player gets (colour, flag, coat of arms). It stays with the slot when
     /// players come and go; no two slots of a lobby with Lobby::banners share one.
     sim::BannerId banner = 0;
+    /// (Host only, not sent) Who played the slot in the savegame of the lobby (Player::owner): that
+    /// person comes back into it, others take it only if no other slot is free.
+    std::uint64_t owner = 0;
     friend bool operator==(const LobbySeat&, const LobbySeat&) = default;
 };
 
@@ -240,8 +259,8 @@ struct Lobby {
     std::vector<sim::BannerId> banners;
     /// The computer plays the slots of persons who left the running game (SessionConfig).
     bool computer_takes_over = true;
-    /// Only the host pauses and resumes the game; the others' pauses are refused (MS-20).
-    bool host_pauses_only = false;
+    /// Only the host pauses, resumes and sets the speed; the others are refused (MS-20).
+    bool host_controls_speed = false;
     /// Spectators may write in the chat, to everyone (they read the lines to everyone in any case).
     bool spectators_chat = true;
     friend bool operator==(const Lobby&, const Lobby&) = default;
@@ -294,6 +313,11 @@ struct SeatToken {
 /// SHA-256(salt, token), both little endian. One way: the verifier does not give the token away.
 [[nodiscard]] std::uint64_t token_verifier(std::uint64_t token, std::uint64_t salt) noexcept;
 
+/// What a game keeps of the person who played a slot (sim::Player::owner): the first 8 bytes of
+/// SHA-256 of "open1602 player" and the player ID (Hello::player). One way: the savegame, which every
+/// computer of the game gets, does not give the ID away. 0 for no ID (and never for one).
+[[nodiscard]] std::uint64_t player_verifier(std::uint64_t player) noexcept;
+
 /// (Host, to its successor only) What the successor needs to carry the game on when the host leaves:
 /// the slots' token verifiers, so that the others get their slots back, and the slots the computer
 /// plays until someone comes. Sent again whenever it changes.
@@ -334,8 +358,9 @@ struct PackageFiles {
     std::vector<assets::PackageFile> files;
 };
 
-using Message = std::variant<Hello, CommandBatch, Progress, Welcome, Refused, Snapshot, Turn, Roster, Desync, Lobby,
-                             TakeSeat, SetReady, Chat, Standby, SetBanner, Dropped, HostLeaving, Part, PackageFiles>;
+using Message =
+    std::variant<Hello, CommandBatch, Progress, Welcome, Refused, Snapshot, Turn, Roster, Desync, Lobby, TakeSeat,
+                 SetReady, Chat, Standby, SetBanner, Dropped, HostLeaving, Part, PackageFiles, LoadProgress>;
 
 [[nodiscard]] std::vector<std::uint8_t> encode(const Message& message);
 /// What goes over the transport for an encoded message: the message itself, or the encoded Parts of

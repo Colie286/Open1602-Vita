@@ -63,7 +63,7 @@ public:
     void set_scale(double scale) { m_form.set_scale(scale); }
     [[nodiscard]] double scale() const noexcept { return m_form.scale(); }
     /// The palette colours of the banners by id (render::BannerTable), `other` for any beyond them.
-    void set_banners(std::vector<std::uint8_t> colours, std::uint8_t other) {
+    void set_banners(std::vector<std::int32_t> colours, std::uint8_t other) {
         m_banner_colours = std::move(colours);
         m_other_banner = other;
     }
@@ -98,7 +98,7 @@ private:
                 const std::array<const ui::Font*, ui::kFontSlots>* fonts);
     /// Drops players from the choice who are no longer there.
     void prune(const ChatModel& model);
-    [[nodiscard]] std::uint8_t banner_colour(sim::BannerId banner) const noexcept {
+    [[nodiscard]] std::int32_t banner_colour(sim::BannerId banner) const noexcept {
         return banner < m_banner_colours.size() ? m_banner_colours[banner] : m_other_banner;
     }
     /// The top of the history: below the row(s) of players.
@@ -106,7 +106,7 @@ private:
 
     ui::FormStyle m_style;
     ui::Form m_form;
-    std::vector<std::uint8_t> m_banner_colours;
+    std::vector<std::int32_t> m_banner_colours;  ///< palette colours or ui::rgb_ink
     std::uint8_t m_other_banner = 0;
     bool m_open = false;
     bool m_explicit_input = false, m_editing = false;

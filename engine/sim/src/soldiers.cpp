@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Soldiers: walking, choosing targets, attacking, dying (docs/re/military.md).
+// Soldiers: walking, choosing targets, attacking, dying.
 #include <algorithm>
 
 #include "o1602/sim/game_data.hpp"
@@ -17,7 +17,7 @@ constexpr std::uint32_t kIdleSpread = 8;       // ... spread over 8 steps by uni
 constexpr std::uint32_t kIdleStepMs = 25;      // of 25 ms each
 constexpr std::uint32_t kAttackWaitMs = 1000;  // and stand a second after an attack
 constexpr std::uint32_t kWanderAfterMs = 2000;
-constexpr std::uint32_t kFollowMs = 3000;  // re-plan towards a moving target (soldier + 0x14)
+constexpr std::uint32_t kFollowMs = 3000;  // re-plan towards a moving target
 constexpr std::uint32_t kHealMs = 10'000;  // inside the doctor's house
 constexpr std::uint32_t kDisbandMs = 1450;
 constexpr std::int32_t kPlanRadius = 0x2D;
@@ -27,7 +27,7 @@ constexpr std::int32_t kExplicitRange = 18;  // cells: an ordered target this ne
 constexpr std::int32_t kChaseRange = 8;      // cells: melee units chase enemies this near
 constexpr std::int32_t kMeleeRange8 = 8;
 constexpr std::int32_t kFriendlyGoal = 7;  // cells around an object a soldier may stop at
-constexpr std::int32_t kDoctorGoal = 1;    // cells from an own doctor: the soldier goes in (0x00456D00)
+constexpr std::int32_t kDoctorGoal = 1;    // cells from an own doctor: the soldier goes in
 constexpr std::int32_t kOthersRange = 8;   // cells: other figures block planning within 4 tiles
 constexpr std::int32_t kSpread = 6;        // cells: how far a place moves to a free cell
 constexpr std::int32_t kCrowded = 3;       // cells: walking slower next to another figure
@@ -183,7 +183,7 @@ void Military::advance(Soldier& s, std::uint32_t budget_us) {
             return;
         }
         if (m.phase == SoldierMotion::Phase::Healing) {
-            // Back at full health (event type 3 of 0x00478AB0, message 13).
+            // Back at full health (event type 3, message 13).
             const assets::FigureType* type = type_of(s);
             s.health = type != nullptr ? type->combat.max_health : 0;
             s.anim = kAnimStand;
@@ -207,7 +207,7 @@ std::uint32_t Military::run_us(const Soldier& s, std::uint8_t direction, std::ui
     std::uint8_t ways = 32;
     (void)m_combat->land().cell(s.cell_x(), s.cell_y(), type != nullptr ? type->speed_type : 0, &ways);
     std::uint32_t w = ways;
-    // Next to another figure with a lower number the soldier walks slower (0x00458770).
+    // Next to another figure with a lower number the soldier walks slower.
     // Whether there is one matters, not which: the order of the units does not.
     bool crowded = false;
     near_units(s.cell_x(), s.cell_y(), kCrowded, [&](const Soldier& o) {
@@ -364,7 +364,7 @@ bool Military::attackable(const Soldier& s, const Target& t) const {
 
 std::optional<std::uint8_t> Military::fire_direction(const Soldier& s, const assets::FigureType& type,
                                                      const Target& t) const {
-    // Combat_FireDirection 0x00453E50: in range of the nearest cell of the target, with nothing
+    // In range of the nearest cell of the target, with nothing
     // blocking shots in between.
     const auto cells = target_cells(t);
     if (!cells) {
@@ -424,7 +424,7 @@ bool Military::plan_to(Soldier& s, const Target& target, std::int32_t radius, bo
     r.start_y = s.cell_y();
     r.radius = radius;
     if (s.failures != 0) {
-        // After a failure the window moves by half its size in a random diagonal (0x004581F0).
+        // After a failure the window moves by half its size in a random diagonal.
         const std::uint32_t d = m_world->random(RandomStream::Military).next() & 3U;
         r.shift_x = (d & 1U) != 0 ? radius / 2 : -radius / 2;
         r.shift_y = (d & 2U) != 0 ? radius / 2 : -radius / 2;
@@ -554,7 +554,7 @@ std::pair<std::int32_t, std::int32_t> Military::free_cell(std::int32_t x, std::i
 }
 
 bool Military::arrived(Soldier& s) {
-    // Arrival (0x00456D00 step 7): at an own doctor's house the soldier goes in to be healed; at a
+    // Arrival (step 7): at an own doctor's house the soldier goes in to be healed; at a
     // place or another object it has arrived when its way ends near it.
     const auto cells = target_cells(s.target);
     if (!cells) {
@@ -607,7 +607,7 @@ bool Military::arrived(Soldier& s) {
         }
     }
     if (s.patrol.active && s.target == s.patrol.points[s.patrol.index]) {
-        // Patrol: on to the other point; once only stops after the last (0x00458190).
+        // Patrol: on to the other point; once only stops after the last.
         if (s.patrol.one_way && s.patrol.index == 1) {
             s.patrol.active = false;
             s.target = {};
@@ -637,7 +637,7 @@ void Military::next_queued(Soldier& s) {
 
 bool Military::wander(Soldier& s) {
     // Natives stroll around their home: one chance in four per look, up to five random tiles within
-    // 9 of it, on road or open ground (0x00456D00 with 0x00443320/50).
+    // 9 of it, on road or open ground (/50).
     Random& random = m_world->random(RandomStream::Military);
     if ((random.next() & 3U) != 0 || s.home.empty()) {
         return false;
@@ -649,7 +649,7 @@ bool Military::wander(Soldier& s) {
     const std::int32_t hx = home->x0 / 2;
     const std::int32_t hy = home->y0 / 2;
     for (int tries = 0; tries < 5; ++tries) {
-        // As the original's helper (Island_RandomX 0x00443320, base + r - 2 * (rand() % r)): only
+        // As the original's helper (base + r - 2 * (rand() % r)): only
         // offsets of one parity, from -7 to +9. Kept on purpose for faithful wandering.
         const std::int32_t x = hx + kWanderRange - 2 * static_cast<std::int32_t>(random.below(kWanderRange));
         const std::int32_t y = hy + kWanderRange - 2 * static_cast<std::int32_t>(random.below(kWanderRange));
@@ -685,7 +685,7 @@ void Military::kill(Soldier& s, PlayerId killer, bool disband) {
     if (!disband) {
         s.anim = kAnimDie;
     }
-    // The last human or computer player who killed a unit (player + 0x81; the natives' curse),
+    // The last human or computer player who killed a unit (the natives' curse),
     // and the score's counters.
     Player* k = m_world->player(killer);
     const bool counts = k != nullptr && (k->role == PlayerRole::Human || k->role == PlayerRole::Computer);
@@ -727,7 +727,7 @@ void Military::decide(Soldier& s) {
         start_wait(s, idle_ms(s));
         return;
     }
-    // At the end of a run the soldier stands on a cell centre (0x00456D00 step 1).
+    // At the end of a run the soldier stands on a cell centre (step 1).
     s.place_cell(s.cell_x(), s.cell_y());
     if (const std::uint16_t island = m_combat->land().island_at(s.cell_x() / 2, s.cell_y() / 2);
         island != World::kSea) {
@@ -783,7 +783,7 @@ void Military::decide(Soldier& s) {
                         }
                     }
                     if (++tried > 7) {
-                        break;  // the reachability test covers 7 candidates (0x00454580)
+                        break;  // the reachability test covers 7 candidates
                     }
                     if (melee && on_other_island(s, c.unit)) {
                         // No way leads there on foot; skip the search, which would only fail

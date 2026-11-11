@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Gadget layouts at work (docs/re/ui.md): where the regions of the screen are, what a layout
+// Gadget layouts at work: where the regions of the screen are, what a layout
 // draws in which state, and how it answers the mouse (press, release, toggles, radio groups,
-// select-on-drag, sliders, menu buttons) as the original does (0x00406660, 0x00407A70). Pure logic:
+// select-on-drag, sliders, menu buttons) as the original does. Pure logic:
 // a panel makes a list of things to draw, the frontend draws them.
 #pragma once
 
@@ -33,7 +33,7 @@ struct Rect {
 inline constexpr std::int32_t kDesignWidth = 1024;
 inline constexpr std::int32_t kDesignHeight = 768;
 
-/// The regions layouts belong to (0x00440EF0): the panel on the right, the status bar below the
+/// The regions layouts belong to: the panel on the right, the status bar below the
 /// game view, the tutorial window above it, and the whole screen (menus).
 struct ScreenRegions {
     double scale = 1.0;  ///< screen width / 1024
@@ -76,7 +76,7 @@ struct DrawItem {
         SpriteMask,    ///< the sprite's shape in palette colour `colour`
         SpriteRaster,  ///< the shape as a checkerboard of `colour`
         Text,          ///< `text` in font `block`, text colour `colour`, aligned at x, cell bottom at y
-        Fill,          ///< rectangle (x, y, w, h) in palette colour `colour`
+        Fill,          ///< rectangle (x, y, w, h) in palette colour `colour` (or ui::rgb_ink)
         Raster,        ///< checkerboard over (x, y, w, h) (disabled gadgets), black
     };
     Kind kind = Kind::Sprite;
@@ -92,7 +92,7 @@ struct DrawItem {
     std::int32_t ink = -1;
     Align align = Align::Left;
     bool half = false;   ///< drawn as a 50 % checkerboard (Alphaflg)
-    bool faded = false;  ///< sprite, mask or fill on the screen's even pixels only (0x004073C0)
+    bool faded = false;  ///< sprite, mask or fill on the screen's even pixels only
     std::string text;
     std::optional<ColourTint> tint;  ///< Sprite: recoloured
     /// Sprite: only the art's rows first_row .. first_row + rows - 1 (in the layout's pixels), each
@@ -100,6 +100,9 @@ struct DrawItem {
     std::int32_t first_row = 0;
     std::int32_t rows = 0;
     friend bool operator==(const DrawItem&, const DrawItem&) = default;
+    /// Sprite: the same for the art's columns; cols 0: all of them.
+    std::int32_t first_col = 0;
+    std::int32_t cols = 0;
 };
 
 /// What the mouse did to a panel.
@@ -121,7 +124,7 @@ public:
     [[nodiscard]] double scale() const noexcept { return m_scale; }
     void set_scale(double scale) noexcept { m_scale = scale; }
 
-    // State the game sets (0x00406EC0..0x004079B0); unknown Ids are ignored.
+    // State the game sets; unknown Ids are ignored.
     void set_text(std::int32_t id, std::string text);
     /// A text gadget's text cut so that it ends `room` design units right of the gadget's position
     /// (by default its width), its end replaced by "..." (a long savegame name ran past the list).
@@ -129,19 +132,19 @@ public:
     void set_selected(std::int32_t id, bool on);
     [[nodiscard]] bool selected(std::int32_t id) const;
     void set_hidden(std::int32_t id, bool on);
-    /// Not clickable (Gad_SetNoSel 0x004072D0).
+    /// Not clickable.
     void set_no_select(std::int32_t id, bool on);
     /// Hidden and not clickable, or both undone: what the original's windows do with gadgets that
     /// do not apply (hidden ones would still answer the mouse).
     void set_visible(std::int32_t id, bool on);
-    /// Greyed (0x00407370, gadget +0x19 bit 3): drawn as usual with black over every second pixel,
+    /// Greyed (gadget +0x19 bit 3): drawn as usual with black over every second pixel,
     /// of the picture's shape for a graphic, of the rectangle for the others. Still clickable.
     void set_disabled(std::int32_t id, bool on);
-    /// Faded (0x004073C0, +0x19 bit 4): a graphic, fill or bar drawn in its own colours on every
+    /// Faded (+0x19 bit 4): a graphic, fill or bar drawn in its own colours on every
     /// second pixel only, the background showing through the others; texts unchanged. Still clickable. The original
     /// fades the locked parts of a campaign and the Kontor's trade buttons without a ware.
     void set_faded(std::int32_t id, bool on);
-    /// Slider value scaled to `range` (0x004074F0: (value * range + size / 2) / size) and back.
+    /// Slider value scaled to `range` ((value * range + size / 2) / size) and back.
     [[nodiscard]] std::int32_t slider(std::int32_t id, std::size_t axis, std::int32_t range) const;
     void set_slider(std::int32_t id, std::size_t axis, std::int32_t value, std::int32_t range);
     /// First line of a flowing text shown (TEXTFL scrolling).
@@ -149,15 +152,17 @@ public:
     /// Last first line that still fills the flowing text's box (0 if the text fits); callers clamp
     /// their scroll to it so "down" past the end does not blank the window (UI-12).
     [[nodiscard]] std::int32_t max_scroll(std::int32_t id, const std::array<const Font*, kFontSlots>& fonts) const;
-    /// Lines a flowing text's box shows (0x00407010: Size.y / Posoffs.y), 0 for other gadgets.
+    /// Lines a flowing text's box shows (Size.y / Posoffs.y), 0 for other gadgets.
     [[nodiscard]] std::int32_t flow_rows(std::int32_t id) const;
-    /// Another sprite and pressed step for a gadget (0x004077C0, 0x00407840): message icons. With
+    /// Another sprite and pressed step for a gadget: message icons. With
     /// `tint` the sprite is recoloured (a player colour the art was not drawn in).
     void set_graphic(std::int32_t id, std::int32_t gfx, std::int32_t press_offset,
                      std::optional<ColourTint> tint = std::nullopt);
     /// Only a band of a graphic's rows (in the layout's pixels), each drawn where it would be; a
     /// picture is cut so into pieces placed apart (the settings' voice page). `count` 0: all rows.
     void set_rows(std::int32_t id, std::int32_t first, std::int32_t count);
+    /// The same for a band of a graphic's columns. `count` 0: all columns.
+    void set_columns(std::int32_t id, std::int32_t first, std::int32_t count);
     /// Another draw offset (Posoffs) for a gadget: art centred in its box, groups moved together.
     void set_offset(std::int32_t id, std::int32_t x, std::int32_t y);
     /// Moves a gadget, click area and picture (Open1602 rearranges a few windows, e.g. U-013).
@@ -173,8 +178,12 @@ public:
     [[nodiscard]] std::optional<std::int32_t> hovered() const;
     /// Gadget Id held down by the mouse now (a slider being dragged), nothing if none.
     [[nodiscard]] std::optional<std::int32_t> held() const;
-    /// Upstream #462: a popup took the current press; allow the next category press.
-    void drop_press() noexcept {m_down=false;m_pressed.reset();}
+    /// Forgets a press without a click: another panel took over the button while it was held
+    /// (a pop-up opened by the press), so that the next press here counts as a new one.
+    void drop_press() noexcept {
+        m_down = false;
+        m_pressed.reset();
+    }
 
     /// Everything to draw, in paint order. `fonts` are the three font slots (for flowing text).
     [[nodiscard]] std::vector<DrawItem> draw(const std::array<const Font*, kFontSlots>& fonts) const;
@@ -195,6 +204,8 @@ private:
         std::optional<ColourTint> tint;
         std::int32_t first_row = 0;
         std::int32_t rows = 0;
+        std::int32_t first_col = 0;
+        std::int32_t cols = 0;
     };
     /// A flowing text's wrapped lines and how many fit its box; nothing if it draws no text.
     [[nodiscard]] std::optional<std::pair<std::vector<std::string>, std::int32_t>> flow_lines(

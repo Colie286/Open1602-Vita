@@ -16,11 +16,18 @@ namespace {
 
 /// „Ihr konntet den Euch gestellten Auftrag erfüllen!“, in no player's colour.
 constexpr std::uint16_t kMessageMissionAccomplished = 0x54;
+/// A mine's ore vein is exhausted (MELDUNG 0x2D), with its video.
+constexpr std::uint16_t kMessageVeinExhausted = 0x2D;
 /// „Ein vergrabener Schatz wurde entdeckt!“ (MELDUNG 0x2E).
 constexpr std::uint16_t kMessageTreasure = 0x2E;
+/// „Ein Schiff steht zum Verkauf“ (MELDUNG 0x0A): its icon tells of a sold ship too.
+constexpr std::uint16_t kMessageShipForSale = 0x0A;
+
+/// The messages of disasters: plague, fire, drought (MELDUNG 1, 2, 3) and an eruption (0x5E).
+constexpr std::array<MessageId, 4> kDisasterMessages = {0x01, 0x02, 0x03, 0x5E};
 
 /// A message, with where it happened and the player it is about.
-Announcement announce(std::uint16_t message, std::optional<std::pair<double, double>> tile = std::nullopt,
+Announcement announce(MessageId message, std::optional<std::pair<double, double>> tile = std::nullopt,
                       std::optional<sim::PlayerId> about = std::nullopt) {
     Announcement a;
     a.message = message;
@@ -30,8 +37,7 @@ Announcement announce(std::uint16_t message, std::optional<std::pair<double, dou
 }
 
 /// Where a city's message points (Space and a click on its icon go there): the Kontor, or the middle
-/// of the island while the city has none. The original posts every message with a target (Event_Post
-/// 0x00430D50).
+/// of the island while the city has none. The original posts every message with a target.
 std::optional<std::pair<double, double>> city_spot(const sim::World& world, const sim::City* c) {
     if (c == nullptr || c->island >= world.islands().size()) {
         return std::nullopt;
@@ -73,7 +79,7 @@ Announcement announce_with_tracks(std::uint16_t message, std::uint8_t tracks) {
     return a;
 }
 
-/// „Euer Volk wünscht …“ for a build level (0x0047FF19): by INFRA number; the gallows (10) and the
+/// „Euer Volk wünscht …“ for a build level: by INFRA number; the gallows (10) and the
 /// levels without a building (market, chapel) have none.
 std::optional<std::uint16_t> wish_message(std::uint8_t infra) {
     switch (infra) {
@@ -110,20 +116,47 @@ std::optional<std::uint16_t> shortage_message(std::uint8_t ware) {
 
 }  // namespace
 
-std::array<std::pair<std::uint8_t, std::uint32_t>, 3> island_crops(const sim::WorldIsland& island) {
-    static constexpr std::array<std::uint8_t, 3> kNorth = {46, 50, 48};  // 0x0040A4D9: tobacco, grapes, sugar cane
+bool slows_down(EventSpeed setting, MessageId message) noexcept {
+    switch (setting) {
+        case EventSpeed::Normal:
+            return true;
+        case EventSpeed::Attacks:
+            return std::find(kDisasterMessages.begin(), kDisasterMessages.end(), message) == kDisasterMessages.end();
+        case EventSpeed::Keep:
+            break;
+    }
+    return false;
+}
+
+std::vector<std::pair<std::uint8_t, std::uint32_t>> island_crops(const sim::WorldIsland& island,
+                                                                 std::span<const sim::Climate> climates) {
+    static constexpr std::array<std::uint8_t, 3> kNorth = {46, 50, 48};  // tobacco, grapes, sugar cane
     static constexpr std::array<std::uint8_t, 3> kSouth = {51, 49, 47};  // cocoa, cotton, spices
-    std::array<std::pair<std::uint8_t, std::uint32_t>, 3> crops{};
-    const std::array<std::uint8_t, 3>& wares = island.header.climate == sim::climate::kSouth ? kSouth : kNorth;
-    for (std::size_t i = 0; i < crops.size(); ++i) {
-        crops[i] = {wares[i], sim::island_fertility(island, wares[i]) * 100 / 128};
+    std::vector<std::pair<std::uint8_t, std::uint32_t>> crops;
+    const auto add = [&](std::uint8_t ware) {
+        crops.emplace_back(ware, sim::island_fertility(climates, island, ware) * 100 / 128);
+    };
+    if (sim::island_climate(climates, island) == nullptr) {
+        for (const std::uint8_t ware : island.header.climate == sim::climate::kSouth ? kSouth : kNorth) {
+            add(ware);
+        }
+        return crops;
+    }
+    // A package's climate: the crops it grows, the north's first, in the same order.
+    const std::uint32_t own = sim::climate_crops(climates, island);
+    for (const auto& wares : {kNorth, kSouth}) {
+        for (const std::uint8_t ware : wares) {
+            if ((own >> (ware - sim::ware::kCornField) & 1U) != 0) {
+                add(ware);
+            }
+        }
     }
     return crops;
 }
 
-std::string crops_text(const sim::WorldIsland& island) {
+std::string crops_text(const sim::WorldIsland& island, std::span<const sim::Climate> climates) {
     std::string text;
-    for (const auto& [ware, percent] : island_crops(island)) {
+    for (const auto& [ware, percent] : island_crops(island, climates)) {
         if (!text.empty()) {
             text += ", ";
         }
@@ -170,8 +203,8 @@ std::vector<Notice> EventPresenter::city_events(const sim::World& world, sim::Pl
     for (const sim::CityEvent& e : events) {
         if (e.kind == sim::CityEvent::Kind::Population && e.owner != local && local != sim::kNoPlayer &&
             e.message >= 0x13 && e.message <= 0x1D) {
-            // Another player's city: „Eine Stadt des Konkurrenten hat nun mehr als …“ from 300 on
-            // (0x00480837). The original has three rivals and tells each city; with up to eleven,
+            // Another player's city: „Eine Stadt des Konkurrenten hat nun mehr als …“ from 300 on.
+            // The original has three rivals and tells each city; with up to eleven,
             // only the first city of each rival at each size.
             const std::uint32_t key = std::uint32_t{e.owner} << 8 | e.message;
             if (std::find(m_rival_sizes.begin(), m_rival_sizes.end(), key) == m_rival_sizes.end()) {
@@ -199,6 +232,21 @@ std::vector<Notice> EventPresenter::city_events(const sim::World& world, sim::Pl
             out.emplace_back(announce(0x48, spot));
         } else if (e.kind == sim::CityEvent::Kind::Unlocked) {
             std::fprintf(stderr, "%s: build level %u reached\n", name.c_str(), e.infra);
+            // levels.toml's message, if it gave the level one (docs/modding/levels.md).
+            const auto& levels = world.infra_levels();
+            const std::optional<std::string>* own = e.infra < levels.size() ? &levels[e.infra].message : nullptr;
+            if (own != nullptr && own->has_value()) {
+                if ((*own)->empty()) {
+                    continue;  // none
+                }
+                if (const auto message = m_messages != nullptr ? m_messages->find(**own) : std::nullopt) {
+                    Announcement a = announce(*message, spot);
+                    a.text = m_messages->text(*message, ui::current_language(), {{"city", name}});
+                    out.emplace_back(std::move(a));
+                    continue;
+                }
+                std::fprintf(stderr, "levels.toml: no message \"%s\" (messages.toml)\n", (*own)->c_str());
+            }
             if (const auto message = wish_message(e.infra)) {
                 out.emplace_back(announce(*message, spot));
             }
@@ -227,10 +275,31 @@ std::vector<Notice> EventPresenter::city_events(const sim::World& world, sim::Pl
     return out;
 }
 
-void EventPresenter::ship_events(const sim::World& world, sim::PlayerId local,
-                                 const std::vector<sim::ShipEvent>& events) const {
+std::vector<Notice> EventPresenter::ship_events(const sim::World& world, sim::PlayerId local,
+                                                const std::vector<sim::ShipEvent>& events) const {
     // MELDUNG 0x2A-0x30.
+    std::vector<Notice> out;
     for (const sim::ShipEvent& e : events) {
+        if (e.kind == sim::ShipEvent::Kind::Sold && e.player == local && local != sim::kNoPlayer) {
+            // Open1602: the seller is told who bought the ship, without voice, under the icon of
+            // the offer in the buyer's colour (the original tells nobody).
+            const sim::Ship* ship = world.ship(e.ship);
+            const sim::Player* buyer = world.player(e.city);
+            if (ship == nullptr || buyer == nullptr) {
+                continue;
+            }
+            Announcement a = announce(kMessageShipForSale,
+                                      std::make_pair(ship->pos_x / static_cast<double>(sim::kPosUnit),
+                                                     ship->pos_y / static_cast<double>(sim::kPosUnit)),
+                                      e.city);
+            a.text = ui::tr("message.ship_bought", {player_name(*buyer), ship_name(*ship),
+                                                    std::to_string(std::max<std::int64_t>(e.money, 0))});
+            a.voice = false;
+            out.emplace_back(std::move(a));
+            std::fprintf(stderr, "%s bought the ship %s for %lld\n", m_label(*buyer, e.city).c_str(),
+                         ship_name(*ship).c_str(), static_cast<long long>(e.money));
+            continue;
+        }
         if (e.player != local || e.island >= world.islands().size()) {
             continue;
         }
@@ -244,7 +313,7 @@ void EventPresenter::ship_events(const sim::World& world, sim::PlayerId local,
                 break;
             case sim::ShipEvent::Kind::CropsExplored:
                 std::fprintf(stderr, "the crops of island %u are explored: %s\n", number,
-                             crops_text(world.islands()[e.island]).c_str());
+                             crops_text(world.islands()[e.island], world.balance().climates).c_str());
                 break;
             case sim::ShipEvent::Kind::DepositFound:
                 std::fprintf(stderr, "%s on island %u (%u,%u)!\n",
@@ -258,6 +327,7 @@ void EventPresenter::ship_events(const sim::World& world, sim::PlayerId local,
                 break;
         }
     }
+    return out;
 }
 
 std::vector<Notice> EventPresenter::disaster_events(const sim::World& world, sim::PlayerId local,
@@ -280,6 +350,28 @@ std::vector<Notice> EventPresenter::disaster_events(const sim::World& world, sim
         } else if (e.kind == sim::DisasterEvent::Kind::BurnedDown) {
             std::fprintf(stderr, "%s: a building burned down (%u,%u)\n", name, e.x, e.y);
         }
+    }
+    return out;
+}
+
+std::vector<Notice> EventPresenter::production_events(const sim::World& world, sim::PlayerId local,
+                                                      const std::vector<sim::ProductionEvent>& events) const {
+    std::vector<Notice> out;
+    for (const sim::ProductionEvent& e : events) {
+        if (e.kind != sim::ProductionEvent::Kind::VeinExhausted || e.production >= world.productions().size()) {
+            continue;
+        }
+        const sim::Production& p = world.productions()[e.production];
+        if (!p.used || p.island >= world.islands().size()) {
+            continue;
+        }
+        const sim::WorldIsland& isl = world.islands()[p.island];
+        if (p.x >= isl.map.width() || p.y >= isl.map.height() || isl.map.top(p.x, p.y).owner != local) {
+            continue;
+        }
+        std::fprintf(stderr, "a mine's vein is exhausted (%u,%u)\n", p.x, p.y);
+        out.emplace_back(announce(kMessageVeinExhausted,
+                                  std::make_pair(static_cast<double>(isl.x + p.x), static_cast<double>(isl.y + p.y))));
     }
     return out;
 }
@@ -358,7 +450,7 @@ std::vector<Notice> EventPresenter::construction_events(const sim::World& world,
     std::vector<Notice> out;
     for (const sim::ConstructionEvent& e : events) {
         if (e.kind == sim::ConstructionEvent::Kind::TreasureFound) {
-            // The message at the treasure, for the builder only (0x004084D0).
+            // The message at the treasure, for the builder only.
             if (e.player == local && e.island < world.islands().size()) {
                 const sim::WorldIsland& i = world.islands()[e.island];
                 std::fprintf(stderr, "you found a treasure: %u gold (island %u)\n", e.money,
@@ -389,7 +481,7 @@ std::vector<Notice> EventPresenter::diplomacy_notices(const sim::World& world, s
     std::vector<Notice> out;
     for (const sim::DiplomacyNotice& n : notices) {
         if (n.to == local) {
-            // An answer to a founding points at the computer's city on that island (0x004294C0).
+            // An answer to a founding points at the computer's city on that island.
             const bool founding = n.kind == sim::DiplomacyNotice::Kind::FoundingProtest ||
                                   n.kind == sim::DiplomacyNotice::Kind::FoundingRefused ||
                                   n.kind == sim::DiplomacyNotice::Kind::FoundingTolerated;
@@ -460,7 +552,7 @@ std::vector<Notice> EventPresenter::game_events(const sim::World& world, sim::Pl
                 break;
             case sim::GameEvent::Kind::GameOver:
                 std::fprintf(stderr, "the game is over\n");
-                out.emplace_back(ScoreUpdate{sim::kNoPlayer, true});  // op 0x3E, after the winners are known
+                out.emplace_back(ScoreUpdate{sim::kNoPlayer, true});  // after the winners are known
                 if (e.player != local && world.player(local) != nullptr && !world.player(local)->won) {
                     expect_end_screen(sim::GameOutcome::Lost, kEndScreenDelayMs, now_ms);
                     // The winner's message: his mission's, or that of the victory conditions.
@@ -483,11 +575,11 @@ std::vector<Notice> EventPresenter::game_events(const sim::World& world, sim::Pl
                 break;
             case sim::GameEvent::Kind::PlayerDefeated:
                 std::fprintf(stderr, "%s is defeated\n", who.c_str());
-                out.emplace_back(ScoreUpdate{e.player, false});  // op 3 sub 9, the defeated one still counted
+                out.emplace_back(ScoreUpdate{e.player, false});  // the defeated one still counted
                 if (e.player == local) {
                     expect_end_screen(sim::GameOutcome::Lost, kDefeatDelayMs, now_ms);
                     out.emplace_back(announce(0x53));
-                    // The defeat videos come directly, whatever the video switches say (0x004766A0):
+                    // The defeat videos come directly, whatever the video switches say:
                     // bankruptcy 998, otherwise 1010 or 2020.
                     out.emplace_back(DirectVideo{e.reason == sim::GameEvent::Reason::Bankrupt ? std::uint16_t{998}
                                                  : (m_defeat_variant++ & 1U) == 0             ? std::uint16_t{1010}
@@ -495,9 +587,9 @@ std::vector<Notice> EventPresenter::game_events(const sim::World& world, sim::Pl
                 } else if (e.reason == sim::GameEvent::Reason::Bankrupt) {
                     out.emplace_back(announce(0x59, std::nullopt, e.player));  // the leaving player's colour
                 } else if (e.by != sim::kNoPlayer && !arch_for(local, e.player)) {
-                    // Op 3 sub 9: "Ein Konkurrent wurde besiegt!", unless nobody is credited, or
+                    // "Ein Konkurrent wurde besiegt!", unless nobody is credited, or
                     // to the credited player who hears of his triumphal arch instead; the icon in
-                    // the colour of the defeated (0x0047684B).
+                    // the colour of the defeated.
                     out.emplace_back(announce(0x5A, std::nullopt, e.player));
                 }
                 break;

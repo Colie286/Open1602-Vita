@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <string>
 
+#include "o1602/core/text.hpp"
 #include "o1602/ui/localization.hpp"
 
 namespace o1602::app {
@@ -43,6 +44,48 @@ std::string ModsMenu::state_text(State state) {
             return ui::tr("mods.state_broken");
         case State::Received:
             return ui::tr("mods.state_received");
+    }
+    return {};
+}
+
+std::string ModsMenu::short_problem_text(const assets::PackageProblem& problem) {
+    using Kind = assets::PackageProblem::Kind;
+    switch (problem.kind) {
+        case Kind::TurnedOff:
+            return ui::tr("mods.state_off");
+        case Kind::Unreadable:
+            return ui::tr("mods.state_broken");
+        case Kind::Circle:
+            return ui::tr("mods.state_circle");
+        case Kind::Missing:
+        case Kind::WrongVersion:
+        case Kind::DependencyOff:
+        case Kind::DependencyBroken:
+            return ui::tr("mods.state_needs", {core::utf8_to_cp1252(problem.dependency)});
+    }
+    return {};
+}
+
+std::string ModsMenu::problem_text(const assets::PackageProblem& problem) {
+    using Kind = assets::PackageProblem::Kind;
+    const std::string needs =
+        core::utf8_to_cp1252(problem.dependency + (problem.versions.empty() ? "" : " " + problem.versions));
+    switch (problem.kind) {
+        case Kind::TurnedOff:
+            return {};
+        case Kind::Unreadable:
+            return ui::tr("mods.problem_unreadable");
+        case Kind::Missing:
+            return ui::tr("mods.problem_missing", {needs});
+        case Kind::WrongVersion:
+            return problem.found.empty() ? ui::tr("mods.problem_no_version", {needs})
+                                         : ui::tr("mods.problem_version", {needs, core::utf8_to_cp1252(problem.found)});
+        case Kind::DependencyOff:
+            return ui::tr("mods.problem_off", {needs});
+        case Kind::DependencyBroken:
+            return ui::tr("mods.problem_broken", {needs});
+        case Kind::Circle:
+            return ui::tr("mods.problem_circle");
     }
     return {};
 }
@@ -110,12 +153,13 @@ void ModsMenu::layout(const ModsModel& model) {
         f.row(kRow + k, Rect{kLeft, y, kWidth, kRowH - 2}, m_selected == i);
         // Received packages are not turned on or off: the games that need them use them.
         if (e.state != State::Received) {
-            f.check(kCheck + k, Rect{kLeft + 6, y + 2, 30, kRowH - 6}, {}, e.state == State::On);
+            f.check(kCheck + k, Rect{kLeft + 6, y + 2, 30, kRowH - 6}, {}, e.wanted);
         }
         const Tone tone = e.state == State::On ? Tone::Normal : e.state == State::Broken ? Tone::Warning : Tone::Dim;
         f.label(Rect{kNameX, y, kVersionX - kNameX - 12, kRowH - 2}, e.name, Align::Left, tone);
         f.label(Rect{kVersionX, y, kStateX - kVersionX - 12, kRowH - 2}, e.version, Align::Left, tone);
-        f.label(Rect{kStateX, y, kLeft + kWidth - kStateX - 8, kRowH - 2}, state_text(e.state), Align::Left, tone);
+        f.label(Rect{kStateX, y, kLeft + kWidth - kStateX - 8, kRowH - 2},
+                e.short_problem.empty() ? state_text(e.state) : e.short_problem, Align::Left, tone);
     }
     const std::int32_t below = kListY + static_cast<std::int32_t>(kRows) * kRowH;
     if (count > kRows) {
@@ -123,7 +167,13 @@ void ModsMenu::layout(const ModsModel& model) {
         f.button(kDown, Rect{kLeft + kWidth - 44, below + 4, 44, 32}, "v", m_first + kRows < count);
     }
     const ModsModel::Entry* chosen = m_selected ? &model.entries[*m_selected] : nullptr;
-    if (chosen != nullptr && !chosen->description.empty()) {
+    if (chosen != nullptr && !chosen->problem.empty()) {
+        // Why it is not loaded comes first; the description follows below.
+        f.paragraph(Rect{kLeft, below + 42, kWidth, 40}, chosen->problem, Tone::Warning);
+        if (!chosen->description.empty()) {
+            f.paragraph(Rect{kLeft, below + 84, kWidth, 46}, chosen->description);
+        }
+    } else if (chosen != nullptr && !chosen->description.empty()) {
         f.paragraph(Rect{kLeft, below + 42, kWidth, 88}, chosen->description);
     }
     if (!model.notice.empty()) {

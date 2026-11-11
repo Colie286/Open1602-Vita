@@ -384,10 +384,16 @@ assets::Gadget piece(std::int32_t id, assets::GadgetKind kind, std::int32_t gfx,
 
 }  // namespace
 
+void show_popup_patches(Panel& popup) {
+    for (std::int32_t k = 0; k < static_cast<std::int32_t>(kMaxPopupRows); ++k) {
+        popup.set_columns(kPopupPatch + k, kPopupPatchFrom, kPopupPatchWidth);
+    }
+}
+
 assets::GadgetLayout build_popup(const BuildCategory& category, const std::vector<bool>& available,
                                  const assets::Gadget& button, std::int32_t gfx_bauhaus,
                                  std::int32_t locked_icon_offset) {
-    // Rows with something to pick; none at all: the last row, all "?" (0x00432D82).
+    // Rows with something to pick; none at all: the last row, all "?".
     struct Row {
         std::size_t first = 0;  ///< position of its first building in the list
         std::size_t count = 0;
@@ -436,6 +442,13 @@ assets::GadgetLayout build_popup(const BuildCategory& category, const std::vecto
             g.push_back(piece((d != 0 ? 32921 : 32901) + r, kind, gfx_bauhaus + 1, kX + d, row_y(k) + d, kWidth, 60));
         }
         g.push_back(piece(d != 0 ? 32954 : 32955, kind, gfx_bauhaus + 2, kX + d, bottom + 1 + d, kWidth, 4));
+    }
+    // A row without a third icon: the middle of its picture covered with a plain part of it.
+    for (std::size_t k = 0; k < shown.size(); ++k) {
+        if (shown[k].count < 3) {
+            g.push_back(piece(kPopupPatch + static_cast<std::int32_t>(k), GadgetKind::Graphic, gfx_bauhaus + 1,
+                              kX + kPopupPatchAt - kPopupPatchFrom, row_y(k), kWidth, 60));
+        }
     }
     // Icons, then the frames to click over them.
     std::vector<assets::Gadget> slots;

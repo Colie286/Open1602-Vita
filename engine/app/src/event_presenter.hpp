@@ -12,11 +12,13 @@
 #include <deque>
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <variant>
 #include <vector>
 
+#include "display_settings.hpp"
 #include "message_table.hpp"
 #include "multiplayer_menu.hpp"
 
@@ -43,8 +45,8 @@ struct DirectVideo {
     std::uint16_t number = 0;
 };
 
-/// The high score list takes every human still playing and `defeated`, who is out at this moment
-/// (HighScore_UpdateAllHumans 0x00475990); `progress`: a won single player game opens the next
+/// The high score list takes every human still playing and `defeated`, who is out at this moment;
+/// `progress`: a won single player game opens the next
 /// mission.
 struct ScoreUpdate {
     sim::PlayerId defeated = sim::kNoPlayer;
@@ -53,12 +55,19 @@ struct ScoreUpdate {
 
 using Notice = std::variant<Announcement, DirectVideo, ScoreUpdate>;
 
-/// The help bar of the original over grass and trees of an explored island (0x0040A3D0): the
+/// Whether a message that asks for normal speed (MessageTable, kMessageNormalSpeed) sets the game
+/// back to it under the game's setting: disasters (plague, fire, drought, eruption) only with
+/// EventSpeed::Normal, every other message (attacks) unless EventSpeed::Keep.
+[[nodiscard]] bool slows_down(EventSpeed setting, MessageId message) noexcept;
+
+/// The help bar of the original over grass and trees of an explored island: the
 /// three crops of the climate (north sugar cane, grapes, tobacco; south spices, cotton, cocoa)
-/// with their fertility in percent.
-[[nodiscard]] std::array<std::pair<std::uint8_t, std::uint32_t>, 3> island_crops(const sim::WorldIsland& island);
+/// with their fertility in percent; for a climate of a package (`climates`, Balance::climates)
+/// the crops it grows.
+[[nodiscard]] std::vector<std::pair<std::uint8_t, std::uint32_t>> island_crops(
+    const sim::WorldIsland& island, std::span<const sim::Climate> climates = {});
 /// The same for the log and the window title.
-[[nodiscard]] std::string crops_text(const sim::WorldIsland& island);
+[[nodiscard]] std::string crops_text(const sim::WorldIsland& island, std::span<const sim::Climate> climates = {});
 
 /// A line in the multiplayer chat (Windows-1252, as drawn); the chat keeps the last kChatKept
 /// lines. `chat` may be null (no panel). A player's line goes to the log, unless `echo` is off, as
@@ -75,13 +84,15 @@ public:
     explicit EventPresenter(PlayerLabel label);
     /// The players' banners, for messages that name a colour (none: the colourless ones).
     void set_banners(const render::BannerTable* banners) noexcept { m_banners = banners; }
+    /// The messages of the game, for those levels.toml gives its levels (InfraLevel::message).
+    void set_messages(const MessageTable* messages) noexcept { m_messages = messages; }
     /// The goods' names (Text.cod [WARE], by ware number, Windows-1252) for Open1602's messages.
     void set_ware_names(std::vector<std::string> names) { m_ware_names = std::move(names); }
     /// Whether wars and peace between two other players are told (DisplaySettings::rival_wars).
     void set_rival_wars(bool on) noexcept { m_rival_wars = on; }
 
     /// The end screen comes this long after the message of a decided game when it has no video,
-    /// after an own defeat without one the shorter time (docs/re/missions.md "Sieg"; with a video
+    /// after an own defeat without one the shorter time (with a video
     /// it comes when the video ends).
     static constexpr std::uint64_t kEndScreenDelayMs = 5000;
     static constexpr std::uint64_t kDefeatDelayMs = 500;
@@ -97,14 +108,19 @@ public:
     [[nodiscard]] std::vector<Notice> city_events(const sim::World& world, sim::PlayerId local,
                                                   const std::vector<sim::CityEvent>& events);
     /// Discoveries and exploring of the local player's ships, in the log (their voices come from
-    /// GameSound::ships).
-    void ship_events(const sim::World& world, sim::PlayerId local, const std::vector<sim::ShipEvent>& events) const;
+    /// GameSound::ships). Open1602 also tells, in the status bar only, when another player bought
+    /// one of the local player's ships.
+    [[nodiscard]] std::vector<Notice> ship_events(const sim::World& world, sim::PlayerId local,
+                                                  const std::vector<sim::ShipEvent>& events) const;
     /// Fires and plagues in the player's cities (MELDUNG 2, 1).
     [[nodiscard]] std::vector<Notice> disaster_events(const sim::World& world, sim::PlayerId local,
                                                       const std::vector<sim::DisasterEvent>& events) const;
     /// Droughts on islands where the player has a city (MELDUNG 3).
     [[nodiscard]] std::vector<Notice> island_events(const sim::World& world, sim::PlayerId local,
                                                     const std::vector<sim::IslandEvent>& events) const;
+    /// A mine of the player whose vein is exhausted (MELDUNG 0x2D, at the mine).
+    [[nodiscard]] std::vector<Notice> production_events(const sim::World& world, sim::PlayerId local,
+                                                        const std::vector<sim::ProductionEvent>& events) const;
     /// Volcanoes (MELDUNG 0x5E), for players who have discovered the island.
     [[nodiscard]] std::vector<Notice> volcano_events(const sim::World& world, sim::PlayerId local,
                                                      const std::vector<sim::VolcanoEvent>& events) const;
@@ -126,8 +142,8 @@ public:
     // The end screen of a decided game.
 
     /// The end screen follows a decided game when the videos of its messages are over (`videos`:
-    /// one plays or waits) and the delay ran out while the game was not paused (docs/re/missions.md
-    /// "Sieg"). Called every frame the game runs; returns the outcome once it is due.
+    /// one plays or waits) and the delay ran out while the game was not paused.
+    /// Called every frame the game runs; returns the outcome once it is due.
     [[nodiscard]] std::optional<sim::GameOutcome> end_screen_due(std::uint64_t now_ms, bool videos, bool game_paused);
     /// The final end screen was shown: once per game (a won game may go on).
     void end_screen_shown() noexcept { m_end_shown = true; }
@@ -166,6 +182,7 @@ private:
 
     PlayerLabel m_label;
     const render::BannerTable* m_banners = nullptr;
+    const MessageTable* m_messages = nullptr;
     /// The rivals' city sizes told (owner << 8 | message).
     std::vector<std::uint32_t> m_rival_sizes;
     std::vector<std::string> m_ware_names;

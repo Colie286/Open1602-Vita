@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The tutorial ("Einführungsspiel", docs/re/tutorial.md): five chapters, each a scenario of its own.
+// The tutorial ("Einführungsspiel"): five chapters, each a scenario of its own.
 // The window above the status bar shows a page of Text.cod [TUTOR] (six lines), and help bubbles
 // of BUBBLE.GAD point at what to click next. Every frame the chapter's step is read from the game
 // and the interface: which page the window shows and which bubbles are drawn. Only the interface
@@ -79,7 +79,7 @@ inline constexpr std::uint8_t kNext = 63;
 inline constexpr std::uint8_t kCount = 64;
 }  // namespace bubble
 
-/// What a ship can do where it lies (Ship_ContextActions 0x0044E630), as bits.
+/// What a ship can do where it lies, as bits.
 namespace ship_action {
 inline constexpr std::uint8_t kShipyard = 0x01;  ///< an own shipyard in reach
 inline constexpr std::uint8_t kTrade = 0x02;     ///< trade or transfer at the Kontor in reach
@@ -96,9 +96,9 @@ struct TutorialView {
     /// The side panel: its mode, the diplomacy window (in the info mode here, a mode of its own in
     /// the original: 30017) or the settings.
     enum class Mode : std::uint8_t { Build, Military, Info, Diplomacy, Settings };
-    /// The window of the info mode (0x00633724).
+    /// The window of the info mode.
     enum class Window : std::uint8_t { None, Ship, OwnHouse, PartnerKontor, Other };
-    /// The page of the ship window (0x0063364C).
+    /// The page of the ship window.
     enum class ShipPage : std::uint8_t { Main, Transfer, Trade, Other };
 
     Mode mode = Mode::Info;
@@ -107,16 +107,16 @@ struct TutorialView {
     ShipPage ship_page = ShipPage::Main;
     bool consumer_goods = false;   ///< transfer page: the group of consumer goods is chosen
     std::uint8_t kontor_ware = 0;  ///< transfer page: the ware chosen at the Kontor, 0 none
-    /// The military mode's selection (0x0062BDE0, 0x0061FC88).
+    /// The military mode's selection.
     std::vector<ui::UnitRef> units;
-    bool picking_patrol = false;  ///< the ship's window waits for the patrol's point (0x004894F0 = 5)
-    /// The build menu: its pop-up of a category open (bit 0 of 0x004A0C60 clear) and which, and the
-    /// building the menu has picked (0x00432970).
+    bool picking_patrol = false;  ///< the ship's window waits for the patrol's point
+    /// The build menu: its pop-up of a category open (bit 0 clear) and which, and the
+    /// building the menu has picked.
     bool popup_open = false;
     std::int32_t popup_category = 0;
     std::optional<std::uint32_t> menu_building;
-    bool holding_building = false;  ///< the build tool holds a building to place (0x005B1A68)
-    bool short_of_wood = false;     ///< what it would place lacks wood (0x0040D070 = 23)
+    bool holding_building = false;  ///< the build tool holds a building to place
+    bool short_of_wood = false;     ///< what it would place lacks wood (= 23)
 };
 
 /// What the game holds this frame, as far as the chapter asks (tutorial_facts).
@@ -125,7 +125,7 @@ struct TutorialFacts {
     struct ShipState {
         bool exists = false;
         bool moving = false;
-        bool loaded = false;         ///< anything on board, soldiers too (0x0044E400)
+        bool loaded = false;         ///< anything on board, soldiers too
         std::uint8_t actions = 0;    ///< ship_action bits
         bool island_ore = false;     ///< the island whose rectangle it lies in has iron ore
         bool island_city = false;    ///< ... and a city
@@ -141,7 +141,7 @@ struct TutorialFacts {
     std::array<ShipState, 3> ships{};
 
     /// Chapter 1: the human's buildings on the island of his town; "connected": a market cart from
-    /// the Kontor reaches it on roads (0x004310C0).
+    /// the Kontor reaches it on roads.
     struct Settlement {
         std::uint32_t foresters = 0;
         std::uint32_t fishers = 0;
@@ -187,7 +187,7 @@ public:
 
     explicit Tutorial(std::uint8_t chapter = 0);
 
-    /// Remembers the human's town and ships as the chapter starts (0x0042BB90): the largest city,
+    /// Remembers the human's town and ships as the chapter starts: the largest city,
     /// the ships in the order of the game's list.
     void start(const sim::World& world, sim::PlayerId human);
 
@@ -200,12 +200,12 @@ public:
 
     [[nodiscard]] static std::int32_t first_page(std::uint8_t chapter) noexcept;
     [[nodiscard]] static std::int32_t last_page(std::uint8_t chapter) noexcept;
-    /// The voice file (Speech8) the chapter starts with (0x00498428).
+    /// The voice file (Speech8) the chapter starts with.
     [[nodiscard]] static std::uint16_t speech(std::uint8_t chapter) noexcept;
     /// The chapter after `chapter` („Einführungsspiel beenden“): nothing after the last.
     [[nodiscard]] static std::optional<std::uint8_t> next_chapter(std::uint8_t chapter) noexcept;
 
-    /// The step of this frame (0x00431500): sets the page and returns the bubbles to draw.
+    /// The step of this frame: sets the page and returns the bubbles to draw.
     std::vector<std::uint8_t> step(const TutorialView& view, const TutorialFacts& facts);
 
     /// What the step reads from the game.
@@ -213,13 +213,13 @@ public:
                                       const assets::BuildingTable& buildings, const assets::FigureTable& figures,
                                       sim::PlayerId human) const;
 
-    /// The human's ships the chapter started with (0x0049FA3C...), the first is 0x0049F79C.
+    /// The human's ships the chapter started with.
     [[nodiscard]] const std::vector<std::uint32_t>& ships() const noexcept { return m_ships; }
 
 private:
-    static constexpr std::int32_t kLastPaged = 1;  ///< 0x004987F4
+    static constexpr std::int32_t kLastPaged = 1;
 
-    /// Chapter 1's step from the buildings (0x00431330): the page 9 to 18.
+    /// Chapter 1's step from the buildings: the page 9 to 18.
     [[nodiscard]] std::int32_t settle_step(const TutorialFacts::Settlement& s) const noexcept;
     void info_discover(const TutorialView& view, const TutorialFacts& facts, std::vector<std::uint8_t>& out);
     void info_settle(const TutorialView& view, std::int32_t step, std::vector<std::uint8_t>& out);
@@ -228,14 +228,14 @@ private:
     void sea_battle(const TutorialView& view, const TutorialFacts& facts, std::vector<std::uint8_t>& out);
     void land_battle(const TutorialView& view, const TutorialFacts& facts, std::vector<std::uint8_t>& out);
     [[nodiscard]] bool alone(const TutorialView& view, std::size_t ship) const;
-    /// The chapter is done (0x0062C188): its last page, which asks to end it.
+    /// The chapter is done: its last page, which asks to end it.
     void finish() noexcept;
 
     std::uint8_t m_chapter = 0;
     std::int32_t m_page = 0;
-    bool m_done = false;                                                   ///< 0x0062C188
-    bool m_house_seen = false;                                             ///< 0x0049FE00
-    bool m_cloth_loaded = false;                                           ///< 0x0049FE4C bit 0x40
+    bool m_done = false;
+    bool m_house_seen = false;
+    bool m_cloth_loaded = false;                                           ///< bit 0x40
     bool m_partner_seen = false;                                           ///< bit 0x400
     bool m_bricks_bought = false;                                          ///< bit 0x800
     bool m_cavalry_sent = false;                                           ///< bit 0x01

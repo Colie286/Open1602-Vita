@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Scheduler, task stack, root task and (re)initialisation of the computer players
-// (docs/re/ai.md, "Flow and tick").
+// Scheduler, task stack, root task and (re)initialisation of the computer players.
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
@@ -9,7 +8,6 @@
 
 #include "ai_archive.hpp"
 #include "ai_engine.hpp"
-#include "o1602/core/profile.hpp"
 #include "ai_tables.hpp"
 
 #include "o1602/core/file.hpp"
@@ -21,14 +19,14 @@ namespace ai {
 
 namespace {
 
-constexpr std::uint64_t kReinitMs = 3'600'000;  // 0x00429070: re-init after 3600 s
-constexpr std::uint32_t kDiplomacyMs = 30'000;  // P+0x83 > 5: six phases of 5 s
+constexpr std::uint64_t kReinitMs = 3'600'000;  // re-init after 3600 s
+constexpr std::uint32_t kDiplomacyMs = 30'000;  // six phases of 5 s
 
 }  // namespace
 
 Engine::Engine(Simulation& sim, State& state)
     : m_sim(sim), m_world(*sim.m_world), m_buildings(*sim.m_buildings), m_state(state) {
-    // The producer table of AI_Init (0x0042B710): per ware up to four records in file order; a
+    // The producer table of AI_Init: per ware up to four records in file order; a
     // record without raw material takes only the first place (the original's quirk, kept: it decides
     // which record a Need picks).
     m_producers.resize(256);
@@ -45,6 +43,7 @@ Engine::Engine(Simulation& sim, State& state)
             list.push_back(&b);
         }
     }
+    m_package_needs = ai::package_needs(m_buildings);
 }
 
 CommandResult Engine::execute(const Command& command) {
@@ -72,8 +71,9 @@ void Engine::reset() {
     m_state.players.clear();
     for (std::size_t i = 0; i < m_world.players().size(); ++i) {
         const Player& pl = m_world.players()[i];
-        if (pl.role != PlayerRole::Computer && m_world.behaviour(pl) != FactionBehaviour::Pirates) {
-            continue;
+        if ((pl.role != PlayerRole::Computer && m_world.behaviour(pl) != FactionBehaviour::Pirates) ||
+            m_world.faction(pl).scripted) {
+            continue;  // a scripted faction's players are its scripts' (Faction::scripted)
         }
         AiPlayer p;
         p.player = static_cast<PlayerId>(i);
@@ -124,16 +124,17 @@ bool Engine::accepts(const State& state) const {
         }
         for (std::size_t i = 0; i < p.stack.size(); ++i) {
             const std::uint8_t task = p.stack[i];
-            if (task < kSettleArea || task > kClaimLand ||
+            if (task < kSettleArea || task > kOwnPublicLast ||
                 std::find(p.stack.begin(), p.stack.begin() + static_cast<std::ptrdiff_t>(i), task) !=
                     p.stack.begin() + static_cast<std::ptrdiff_t>(i)) {
                 return false;
             }
         }
         const Search& s = p.search;
-        if (s.segment < 0 || s.slot >= kSlots || s.remaining < -kMaxSpan || s.remaining > kMaxSpan ||
-            s.extra < -kMaxSpan || s.extra > kMaxSpan || s.target_x < -1 || s.target_x > kMaxSpan || s.target_y < -1 ||
-            s.target_y > kMaxSpan) {
+        const bool own_public = s.slot > kOwnPublicSlot - kMaxOwnPublic && s.slot <= kOwnPublicSlot;
+        if (s.segment < 0 || (s.slot >= kSlots + m_package_needs.size() && !own_public) || s.remaining < -kMaxSpan ||
+            s.remaining > kMaxSpan || s.extra < -kMaxSpan || s.extra > kMaxSpan || s.target_x < -1 ||
+            s.target_x > kMaxSpan || s.target_y < -1 || s.target_y > kMaxSpan) {
             return false;
         }
     }
@@ -170,7 +171,7 @@ void Engine::tick(std::uint32_t dt_ms) {
             if (m_world.behaviour(*pl) != FactionBehaviour::Pirates) {
                 continue;
             }
-            // The pirates take one step every 10 s (0x00429FD0).
+            // The pirates take one step every 10 s.
             p.t_main -= dt;
             if (p.t_main <= 0) {
                 p.t_main = kPirateStepMs;
@@ -182,7 +183,7 @@ void Engine::tick(std::uint32_t dt_ms) {
             continue;  // the slot was taken over by a human
         }
         if (!computers_play) {
-            continue;  // switched off: the original skips its whole AI tick (0x0048975B)
+            continue;  // switched off: the original skips its whole AI tick
         }
         // Each computer steps every 50 ms of game time. The original lets only one slot act per
         // simulation slice, so its pace followed the frame rate and the number of computers (S-095).
@@ -198,7 +199,7 @@ void Engine::tick(std::uint32_t dt_ms) {
             p.t_10s -= dt;
         }
         if (p.has_plan && p.t_6s < 0) {
-            if (!tutorial()) {  // the tutorial's computers neither buy peace nor recruit (0x0042B67A)
+            if (!tutorial()) {  // the tutorial's computers neither buy peace nor recruit
                 buy_pirate_peace(p);
                 recruit(p);
             }
@@ -208,7 +209,7 @@ void Engine::tick(std::uint32_t dt_ms) {
             logistics(p);  // additive: the 10-s phase is kept
             p.t_10s += 10'000;
         }
-        // A treaty that changed is answered at once (the original sets P+0x83 to 6 then).
+        // A treaty that changed is answered at once, as in the original.
         const std::size_t players = m_world.players().size();
         p.seen_treaties.resize(players, 0xFF);
         for (std::size_t b = 0; b < players; ++b) {
@@ -243,7 +244,7 @@ void Engine::step(AiPlayer& p) {
     const std::uint8_t id = top(p);
     run_task(p);
     if (id != kRoot && !p.pirates) {
-        target_scan(p);  // one foreign city after every step (0x004298F0)
+        target_scan(p);  // one foreign city after every step
     }
     m_state.max_score = std::max(m_state.max_score, p.score);
 }
@@ -251,8 +252,8 @@ void Engine::step(AiPlayer& p) {
 void Engine::run_task(AiPlayer& p) {
     const std::uint8_t id = top(p);
     if (tutorial() && !p.pirates) {
-        // The tutorial (TIMERS +0xA5, 0x00429AA0): no city check or maintenance, no root task, so
-        // no development; task 5 only tops up the money (0x00428E30). Other tasks of a loaded
+        // The tutorial (TIMERS +0xA5): no city check or maintenance, no root task, so
+        // no development; task 5 only tops up the money. Other tasks of a loaded
         // stack run out as usual.
         if (id == kRoot) {
             return;
@@ -322,7 +323,7 @@ void Engine::run_task(AiPlayer& p) {
             }
             break;
         default:
-            if (id >= kWoodcutter && id <= kDenkmal) {
+            if ((id >= kWoodcutter && id <= kDenkmal) || (id >= kOwnPublicFirst && id <= kOwnPublicLast)) {
                 task_building(p, id);
             } else {
                 pop(p);  // unknown ids never stay on the stack
@@ -332,7 +333,7 @@ void Engine::run_task(AiPlayer& p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Task stack (0x0040FB80..0x0040FC30)
+// Task stack
 
 std::uint8_t Engine::top(const AiPlayer& p) const {
     return p.stack.empty() ? std::uint8_t{kRoot} : p.stack.back();
@@ -381,7 +382,7 @@ bool Engine::city_valid(AiPlayer& p, bool clear) {
 }
 
 void Engine::check_city_loss(AiPlayer& p) {
-    // 0x0042A270: fewer cities than at the last init -> start over.
+    // Fewer cities than at the last init -> start over.
     if (own_city_count(p.player) < p.cities) {
         init_player(p);
     }
@@ -392,7 +393,7 @@ bool Engine::classic() const {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Root task (0x00429070)
+// Root task
 
 void Engine::root(AiPlayer& p) {
     if (p.settle.active) {
@@ -462,7 +463,7 @@ void Engine::root(AiPlayer& p) {
     if (!p.has_city) {
         const std::vector<Ship*> ships = own_ships(p);
         if (ships.empty()) {
-            // Retired by the players' check every 5 s (Simulation::players_tick, 0x00476290).
+            // Retired by the players' check every 5 s (Simulation::players_tick).
             return;
         }
         if (p.settle.active) {
@@ -474,7 +475,7 @@ void Engine::root(AiPlayer& p) {
             p.settle.cursor = static_cast<std::uint16_t>(rng().below(16));
             p.settle.need = p.pirates ? 150 : 1800;
             p.settle.floor = 300;
-            p.settle.crop = p.pirates ? 0 : first_crop(p.player);
+            p.settle.crop = p.pirates ? 0 : first_crop(m_world.balance().computer_orders, p.player);
             p.settle.active = true;
             pick_island(p);
         }
@@ -504,14 +505,14 @@ void Engine::root(AiPlayer& p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// (Re)initialisation (0x0040F580)
+// (Re)initialisation
 
 void Engine::init_player(AiPlayer& p) {
     refund(p);
     const PlayerId id = p.player;
     const bool pirates = p.pirates;
-    // The jobs of the ships stay: the original keeps them on the ships themselves (ship +0x1A7,
-    // +0x1AC, +0x1AE), which its re-initialisation does not touch.
+    // The jobs of the ships stay: the original keeps them on the ships themselves,
+    // which its re-initialisation does not touch.
     std::vector<ShipNote> jobs = std::move(p.ships);
     p = AiPlayer{};
     p.player = id;
@@ -553,9 +554,9 @@ void Engine::init_player(AiPlayer& p) {
 }
 
 void Engine::city_founded(std::uint16_t island, std::uint8_t index) {
-    // 0x004294C0 with event 0x0E (from 0x00465170): a computer with a city on the island, at peace
+    // On event 0x0E: a computer with a city on the island, at peace
     // with the founder, whose home city lies on another island and whose city here has fewer than
-    // 10 inhabitants (0x0040F430(city, 0, 10) == 0) takes it ill (event 5).
+    // 10 inhabitants ((city, 0, 10) == 0) takes it ill (event 5).
     const City* founded = city(island, index);
     if (founded == nullptr) {
         return;
@@ -605,11 +606,11 @@ void Engine::land_freed(std::uint16_t island) {
 }
 
 void Engine::founding_query(PlayerId asker, std::uint16_t island) {
-    // 0x004294C0 with order 0x4C: the computer of the first city on the island (0x00429470: its city
+    // As in the original: the computer of the first city on the island (its city
     // slots in order, player kind 0x0C) answers, at peace with the asker and on any but a large
     // island. Its home city there: a protest under threat of war (0x49); elsewhere it tolerates a
     // young colony (fewer than 10 inhabitants) once its cities reached the merchants' stages
-    // (+0x10640 > 0x28, 0x4B), otherwise not (0x4A).
+    // (0x4B), otherwise not (0x4A).
     if (island >= m_world.islands().size() || m_world.islands()[island].header.template_size > 3) {
         return;
     }
@@ -648,7 +649,7 @@ void Engine::founding_query(PlayerId asker, std::uint16_t island) {
 
 void Engine::take_original_jobs(AiPlayer& p) {
     // An original savegame keeps the jobs on its ships (SHIP4 +0x24 mission, +0x3E parameter,
-    // +0x40 counter). Taken over: missions with a city (1 fetch troops, 2 go home, 5 and 6 attack,
+    // counter). Taken over: missions with a city (1 fetch troops, 2 go home, 5 and 6 attack,
     // parameter island number * 32 + city), and with mission 0 a patrol (a looping route round the
     // island in the parameter) or a cooldown. The rest starts over.
     for (Ship& s : m_world.ships()) {
@@ -687,7 +688,7 @@ void Engine::take_original_jobs(AiPlayer& p) {
 
 void Engine::choose_home(AiPlayer& p) {
     // The last city with at least 10 inhabitants of class 2 or higher, unless a later one has more
-    // free land (0x0040F580).
+    // free land.
     const auto& cities = m_world.cities();
     std::uint32_t best = 0;
     std::optional<std::size_t> home;
@@ -721,7 +722,6 @@ ComputerPlayers::ComputerPlayers(Simulation& simulation)
 ComputerPlayers::~ComputerPlayers() = default;
 
 void ComputerPlayers::tick(std::uint32_t dt_ms) {
-    core::profile::Scope timer(core::profile::AI);
     m_engine->tick(dt_ms);
 }
 
@@ -729,12 +729,29 @@ void ComputerPlayers::reset() {
     m_engine->reset();
 }
 
-std::uint16_t ComputerPlayers::state_version() noexcept {
+std::uint16_t ComputerPlayers::max_state_version() noexcept {
     return static_cast<std::uint16_t>(ai::kStateVersion);
 }
 
+std::uint16_t ComputerPlayers::state_version() const noexcept {
+    // Without public buildings of a kind of their own past the 19th bit the state fits version 5, and
+    // a game writes the bytes it wrote before.
+    constexpr std::uint64_t kNarrow = 0xFFFFFFFFU;
+    for (const ai::AiPlayer& p : m_state->players) {
+        if (p.search.service > kNarrow) {
+            return static_cast<std::uint16_t>(ai::kStateWithWideFlags);
+        }
+        for (const ai::CityPlan& r : p.plans) {
+            if (r.flags > kNarrow) {
+                return static_cast<std::uint16_t>(ai::kStateWithWideFlags);
+            }
+        }
+    }
+    return static_cast<std::uint16_t>(ai::kStateWithWideFlags - 1);
+}
+
 void ComputerPlayers::save(core::ByteWriter& out) const {
-    ai::Saver saver(out);
+    ai::Saver saver(out, state_version());
     saver(*m_state);
 }
 
@@ -785,7 +802,8 @@ std::vector<ComputerPlayers::View> ComputerPlayers::view() const {
         v.stack = p.stack;
         for (const ai::CityPlan& r : p.plans) {
             View::City c{r.island, r.city, r.stage, r.flags, {}};
-            for (const ai::SlotState& s : r.slots) {
+            for (std::size_t k = 0; k < ai::kSlots + m_engine->package_needs().size(); ++k) {
+                const ai::SlotState& s = r.slots[k];
                 c.slots.push_back({s.count, s.attempts, s.fail_level});
             }
             v.plans.push_back(std::move(c));

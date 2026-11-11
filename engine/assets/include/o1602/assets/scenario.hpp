@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Players and ships of scenarios (.szs/.szm) and savegames (.gam). Both file types use the same
-// chunk set (one chunk name table in 1602.exe at 0x00498244); see docs/formats/gam.md.
+// chunk set; see docs/formats/gam.md.
 #pragma once
 
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -23,13 +24,13 @@ enum class PlayerKind : std::uint8_t {
     Computer = 0x0C,
     Trader = 0x0D,  ///< free trader
     Pirate = 0x0E,
-    /// Set by the game, not by scenarios: a player who lost (op 3 sub 9) or a slot nobody plays
-    /// (no city and no ship at the start, 0x0048C0F0; docs/re/missions.md).
+    /// Set by the game, not by scenarios: a player who lost or a slot nobody plays
+    /// (no city and no ship at the start).
     Defeated = 0x09,
     Absent = 0x0A,
 };
 
-/// Colour of a player (PLAYER4 byte +7). Selects the flag figure (table at 0x00498F2C):
+/// Colour of a player (PLAYER4 byte +7). Selects the flag figure:
 /// 0..3 FAHNE1..FAHNE4 (red, blue, yellow, white), 4 FAHNEPIRAT; 5 and 6 have no flag.
 enum class PlayerColour : std::uint8_t {
     Red = 0,
@@ -56,10 +57,10 @@ struct PlayerRecord {
     std::uint8_t slot = 0;  ///< index of the record, also used as owner number on tiles and ships
     PlayerColour colour = PlayerColour::Red;
     std::string name;  ///< +0x3C0, Windows-1252; empty in scenarios, the human's name in savegames
-    /// Unlocked build levels: bit n - 1 = INFRA number n (+0x34; runtime player +0x6C, set by the
-    /// city tick 0x0047F8A0 and never cleared).
+    /// Unlocked build levels: bit n - 1 = INFRA number n (+0x34, set by the
+    /// city tick and never cleared).
     std::uint32_t infra_mask = 0;
-    std::uint8_t castles_built = 0;       ///< +0x0E (runtime +0x87): Schloss built, at most one
+    std::uint8_t castles_built = 0;       ///< +0x0E: Schloss built, at most one
     std::uint8_t cathedrals_built = 0;    ///< +0x0F (+0x88): Kathedrale built, at most one
     std::uint16_t monuments_allowed = 0;  ///< +0x38 (+0x8A): Denkmal allowances
     std::uint16_t monuments_built = 0;    ///< +0x3A (+0x8C)
@@ -69,7 +70,7 @@ struct PlayerRecord {
     std::uint16_t soldiers_lost = 0;      ///< +0x16
     std::uint16_t ships_lost = 0;         ///< +0x18
     std::uint16_t ships_sunk = 0;         ///< +0x1A
-    /// Diplomacy towards the 7 slots (saver 0x00478160, docs/re/diplomacy.md): treaty states 0..3,
+    /// Diplomacy towards the 7 slots: treaty states 0..3,
     /// the time of the last war declaration (1/10 s, only the own entry is used), the decaying
     /// tribute, trade and damage counters, and the first 7 of 32 remembered events.
     std::array<std::uint8_t, 7> peace{};        ///< +0xC0 + 8b
@@ -85,13 +86,13 @@ struct PlayerRecord {
     };
     std::array<Event, 7> events{};   ///< +0x1C0 + 8i
     std::uint8_t blamed = kNoOwner;  ///< +0x08: last player who destroyed a Kontor or market of it
-    /// +0x0C (runtime +0x7C): the AUFTRAG4 slot of the player's mission, 0xFF = none.
+    /// +0x0C: the AUFTRAG4 slot of the player's mission, 0xFF = none.
     std::uint8_t mission = 0xFF;
-    /// +0x0A (runtime +0x9E): bad 5-s checks so far (bankrupt, or nothing left in a multiplayer game).
+    /// +0x0A: bad 5-s checks so far (bankrupt, or nothing left in a multiplayer game).
     std::uint16_t defeat_counter = 0;
-    /// +0x1C (runtime +0x70): the switches a scenario sets for a computer (docs/re/ai.md), and
-    /// +0x20, +0x22, +0x24, +0x25 (runtime +0xA0, +0xA2, +0x7F, +0x80) the thresholds of its
-    /// attitude. The loader 0x00477911 takes them for human and computer slots only.
+    /// +0x1C: the switches a scenario sets for a computer, and
+    /// +0x20, +0x22, +0x24, +0x25 the thresholds of its
+    /// attitude. The original takes them for human and computer slots only.
     std::uint32_t scenario_flags = 0;
     std::uint16_t rival_inhabitants = 0;
     std::uint16_t own_inhabitants = 0;
@@ -99,9 +100,9 @@ struct PlayerRecord {
     std::uint8_t rival_development = 0;
 };
 
-/// One mission (AUFTRAG4 record, 0x8C4 bytes; loader 0x00477B70, writer 0x00478380,
-/// docs/re/missions.md). The original keeps 4 slots; each player picks one (PlayerRecord::mission).
-/// Values are as stored; the checks and the load-time steps of the original are the simulation's.
+/// One mission (AUFTRAG4 record, 0x8C4 bytes). The original keeps 4 slots; each player picks one
+/// (PlayerRecord::mission). Values are as stored; the checks and the load-time steps of the original are the
+/// simulation's.
 struct MissionRecord {
     static constexpr std::size_t kSize = 0x8C4;
     static constexpr std::size_t kTextSize = 0x800;
@@ -144,14 +145,14 @@ struct MissionRecord {
 /// AUFTRAG and AUFTRAG2 are not read (no shipped file has them).
 core::Result<std::vector<MissionRecord>> load_missions(const ChunkFile& file);
 
-/// The record as the original writes it (0x00478380): fields it does not read are 0.
+/// The record as the original writes it: fields it does not read are 0.
 [[nodiscard]] std::vector<std::uint8_t> encode_mission(const MissionRecord& record);
 
 /// Number of PLAYER4 records in the original files (4 players, free trader, pirates, natives).
 /// Only the file format is limited to this; the engine is not (ADR 0007).
 inline constexpr std::uint8_t kOriginalPlayerSlots = 7;
 
-/// One ship (SHIP4 record, 0x1B4 bytes; written by 0x004600C0 from the ship table at 0x004CF358,
+/// One ship (SHIP4 record, 0x1B4 bytes; written from the ship,
 /// 150 x 0x218). Position = the display figure's floating point position, truncated.
 struct ShipRecord {
     std::string name;
@@ -160,7 +161,7 @@ struct ShipRecord {
     std::uint16_t figure = 0;  ///< FIGUR number in figuren.cod (HANDEL1 = 21, PIRAT = 31, ...)
     std::uint8_t owner = kNoOwner;
     std::uint8_t direction = 0;  ///< +0x50: byte 3 of the display figure, 0..7 in 45 degree steps
-    /// +0x4D: island at the ship's position (0x0046A570, e.g. lying at a warehouse), 0xFF = open sea.
+    /// +0x4D: island at the ship's position (e.g. lying at a warehouse), 0xFF = open sea.
     std::uint8_t island = 0xFF;
     /// +0x174: eight cargo slots of 8 bytes: the good as the Id of the building that produces it
     /// (like KONTOR2) and the amount in 1/32 t. Empty slots have producer 0.
@@ -176,7 +177,7 @@ struct ShipRecord {
     std::uint8_t cannons = 0;       ///< +0x42
     std::uint8_t flags = 0;         ///< +0x43: bit 1 route on, bit 3 one-way route, bit 2 for sale, bit 4 repair
     std::uint16_t sale_factor = 0;  ///< +0x44: sale price factor, 128 = 100 %
-    /// The computer player's job of the ship (docs/re/ai.md): +0x24 mission (0 idle), +0x3E its
+    /// The computer player's job of the ship: +0x24 mission (0 idle), +0x3E its
     /// parameter (island number * 32 + city, a patrol island or a cooldown), +0x40 its counter.
     std::uint16_t ai_mission = 0;
     std::uint16_t ai_param = 0;
@@ -225,7 +226,7 @@ core::Result<std::vector<ShipRecord>> load_ships(const ChunkFile& file);
 /// The world plan of a scenario that makes its islands at the start (SZENE chunk, 0x494 bytes; the
 /// endless games). For each island its number, place, size class and climate; the template, which
 /// islands get a native village, the crops and the ore and gold deposits are drawn when the game
-/// starts (docs/re/worldgen.md).
+/// starts.
 struct ScenarioPlan {
     static constexpr std::uint16_t kRandomTemplate = 0xFFFF;
     static constexpr std::uint8_t kClimateByPosition = 2;
@@ -237,6 +238,8 @@ struct ScenarioPlan {
         std::uint16_t template_number = kRandomTemplate;
         std::uint32_t x = 0;  ///< world tile of the top left corner
         std::uint32_t y = 0;
+
+        friend bool operator==(const Island&, const Island&) = default;
     };
     /// An entry of the ore, crop or treasure list: a haeuser.cod building whose Ware names what
     /// is placed, how many times, and (ore) 0 big vein, 1 small vein.
@@ -244,6 +247,8 @@ struct ScenarioPlan {
         std::uint32_t building = 0;  ///< haeuser.cod Id
         std::uint16_t count = 0;
         std::uint32_t type = 0;
+
+        friend bool operator==(const Resource&, const Resource&) = default;
     };
     std::array<std::uint32_t, 2> natives{};  ///< native villages to place in the north, the south
     std::uint32_t max_crops = 0;             ///< crops per island in the main passes, 0 = 2
@@ -253,10 +258,18 @@ struct ScenarioPlan {
     std::array<Resource, 12> crops{};
     std::array<Resource, 4> treasures{};
     std::vector<Island> islands;
+
+    friend bool operator==(const ScenarioPlan&, const ScenarioPlan&) = default;
 };
 
 /// The SZENE chunk, nothing if the file has none.
 [[nodiscard]] core::Result<std::optional<ScenarioPlan>> load_scenario_plan(const ChunkFile& file);
+
+/// `base` (a SZENE chunk, or nothing) with the fields of `plan` written into it: the chunk a
+/// scenario of that plan carries. Bytes the plan does not hold stay as they were; the chunk is at
+/// least as long as a plan of 50 islands needs. At most 50 islands are written.
+[[nodiscard]] std::vector<std::uint8_t> write_scenario_plan(std::span<const std::uint8_t> base,
+                                                            const ScenarioPlan& plan);
 
 /// RANDTAB: the 512 random numbers the world plan draws from (a saved rand() table), nothing if
 /// the file has none. A shorter chunk repeats, as the original copies it.
@@ -266,7 +279,7 @@ struct ScenarioPlan {
 /// menu; nothing if the file has none.
 [[nodiscard]] std::optional<std::uint32_t> load_mission_number(const ChunkFile& file);
 
-/// The head of a scenario as the menu's list reads it (0x0048D7A0: the SZENE_* chunks before the
+/// The head of a scenario as the menu's list reads it (the SZENE_* chunks before the
 /// rest), with the original's defaults for chunks a file does not have.
 struct ScenarioHeader {
     static constexpr std::uint32_t kNone = 0xFF;

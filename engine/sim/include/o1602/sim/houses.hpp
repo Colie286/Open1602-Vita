@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Houses: who lives where, and how houses grow, rise to the next class, fall back or are
-// abandoned (docs/re/houses.md).
+// abandoned.
 //
 // Every house is visited about every 15.5 s (16 timer groups, 15 s + 64 ms * group). Its growth
 // rate follows the city's food supply, the satisfaction of its class and the public buildings in
@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "o1602/assets/building_table.hpp"
+#include "o1602/assets/resident_classes.hpp"
 #include "o1602/sim/world.hpp"
 
 namespace o1602::sim {
@@ -35,9 +36,11 @@ inline constexpr std::uint16_t kKlinik = 1U << 9;
 inline constexpr std::uint16_t kKontor = 1U << 10;
 inline constexpr std::uint16_t kGalgen = 1U << 11;
 inline constexpr std::uint16_t kBrunnen = 1U << 12;
+/// Public buildings of a kind of their own (assets::public_building::kOwn, own_buildings.toml).
+inline constexpr assets::ServiceBits kOwnMask = assets::public_building::kOwnMask;
 }  // namespace house_service
 
-/// Bits of the house panel's public buildings (Class_RequiredServices 0x0047F320, the icons of
+/// Bits of the house panel's public buildings (the icons of
 /// SIEDLER): another layout than House::services.
 namespace panel_service {
 inline constexpr std::uint32_t kMarkt = 0x01;
@@ -71,28 +74,32 @@ struct HouseEvent {
     std::uint8_t resident_class = 0;  ///< class after the change
 };
 
-/// Whether a house has the public buildings class `resident_class` needs (0x0047BFA0): pioneers a
+/// Whether a house has the public buildings class `resident_class` needs: pioneers a
 /// market or Kontor; settlers a market and a chapel or church; citizens also a tavern and a
 /// school; merchants a church and a bath house; aristocrats a college and a theatre. A class a
 /// package added needs what the original's class it looks like needs (ResidentClass::look).
 [[nodiscard]] bool has_services(const House& house, std::uint8_t resident_class) noexcept;
-/// has_services for class `resident_class` of `buildings`, also one a package added.
+/// has_services for class `resident_class` of `buildings`, also one a package added: the public
+/// buildings classes.toml gave the class (ResidentClass::public_needs), else those of its look.
 [[nodiscard]] bool has_services(const House& house, const assets::BuildingTable& buildings,
                                 std::uint8_t resident_class) noexcept;
 /// The class of the original whose public buildings class `resident_class` needs.
 [[nodiscard]] std::uint8_t service_class(const assets::BuildingTable& buildings, std::uint8_t resident_class) noexcept;
 
-/// The public buildings in reach of a house in the panel's layout (House_PanelServices
-/// 0x0047B200). A church also counts as a chapel and a college as a school; a Kontor is no market.
+/// The public buildings in reach of a house in the panel's layout .
+/// A church also counts as a chapel and a college as a school; a Kontor is no market.
 [[nodiscard]] std::uint32_t panel_services(const House& house) noexcept;
 
-/// What class `resident_class` needs of public buildings in the panel's layout
-/// (Class_RequiredServices 0x0047F320), from the same table as has_services: of each choice the
+/// What class `resident_class` needs of public buildings in the panel's layout,
+/// from the same table as has_services: of each choice the
 /// market, else the lesser building (a chapel for a chapel or church). 0 beyond the table.
 [[nodiscard]] std::uint32_t required_panel_services(std::uint8_t resident_class) noexcept;
+/// required_panel_services for class `resident_class` of `buildings`, as has_services reads it.
+[[nodiscard]] std::uint32_t required_panel_services(const assets::BuildingTable& buildings,
+                                                    std::uint8_t resident_class) noexcept;
 
-/// Recomputes which markets, Kontors and public buildings reach each house of island `island`
-/// (0x00482120): buildings of the same city whose Radius covers the house from their centre.
+/// Recomputes which markets, Kontors and public buildings reach each house of island `island`:
+/// buildings of the same city whose Radius covers the house from their centre.
 void update_services(World& world, const assets::BuildingTable& buildings, std::uint16_t island);
 /// The same for the houses of `cities` on island `island` only (a building changes only its own
 /// city's services).
@@ -101,7 +108,7 @@ void update_services(World& world, const assets::BuildingTable& buildings, std::
 /// The same for every island.
 void update_services(World& world, const assets::BuildingTable& buildings);
 
-/// Growth rate of a house (0x0047B410): positive grows by rate * 6/128 of its inhabitants per
+/// Growth rate of a house: positive grows by rate * 6/128 of its inhabitants per
 /// visit, negative shrinks by |rate| * 4/128, 0 stays.
 [[nodiscard]] std::int32_t growth_rate(const City& city, const House& house) noexcept;
 

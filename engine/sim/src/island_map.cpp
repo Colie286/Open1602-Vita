@@ -76,10 +76,7 @@ core::Status IslandMap::write(const assets::BuildingType& b, std::int32_t x, std
                                                      std::to_string(x) + "," + std::to_string(y));
     }
 
-    const auto w = static_cast<std::int32_t>(b.size_x);
-    const auto h = static_cast<std::int32_t>(b.size_y);
-    std::uint32_t sprite = b.gfx;
-    const auto put = [&](std::int32_t tx, std::int32_t ty) {
+    const auto put = [&](std::int32_t tx, std::int32_t ty, std::uint32_t k) {
         const std::size_t i = index(static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(ty));
         PlayerId o = owner;
         std::uint8_t c = city;
@@ -91,44 +88,13 @@ core::Status IslandMap::write(const assets::BuildingType& b, std::int32_t x, std
         }
         const auto phase = static_cast<std::uint8_t>(anim_phase & 0xFU);
         const auto bits = static_cast<std::uint8_t>(random & 0x1FU);
-        m_top[i] = MapCell{static_cast<std::uint16_t>(sprite), rotation, phase, o, c, bits};
+        m_top[i] = MapCell{static_cast<std::uint16_t>(b.gfx + k), rotation, phase, o, c, bits};
         if (mode == Mode::LoadGround) {
             m_ground[i] = m_top[i];
         }
-        ++sprite;
     };
-
-    // Traversal order per rotation as in the original placement routine (0x00463B10).
-    switch (rotation) {
-        case 0:
-            for (std::int32_t j = 0; j < h; ++j) {
-                for (std::int32_t i = 0; i < w; ++i) {
-                    put(x + i, y + j);
-                }
-            }
-            break;
-        case 1:
-            for (std::int32_t j = h - 1; j >= 0; --j) {
-                for (std::int32_t i = 0; i < w; ++i) {
-                    put(x + j, y + i);
-                }
-            }
-            break;
-        case 2:
-            for (std::int32_t j = h - 1; j >= 0; --j) {
-                for (std::int32_t i = w - 1; i >= 0; --i) {
-                    put(x + i, y + j);
-                }
-            }
-            break;
-        default:
-            for (std::int32_t j = 0; j < h; ++j) {
-                for (std::int32_t i = w - 1; i >= 0; --i) {
-                    put(x + j, y + i);
-                }
-            }
-            break;
-    }
+    // Traversal order per rotation as in the original placement routine.
+    for_each_footprint(b, x, y, rotation, put);
     // Every block the footprint covers (fw, fh >= 1: the building fit).
     const auto left = static_cast<std::uint32_t>(x);
     const auto top = static_cast<std::uint32_t>(y);
@@ -194,8 +160,8 @@ IslandMap IslandMap::from_island(const assets::Island& island, const assets::Bui
                      std::to_string(tile.y));
                 continue;
             }
-            // The original's loader (0x00468550): every tile goes on top; terrain of no city also
-            // becomes the ground (not ruins, 0x00463E10).
+            // The original's loader: every tile goes on top; terrain of no city also
+            // becomes the ground (not ruins).
             constexpr std::uint8_t kNoCityBits = 7;
             const bool ground = tile.city() == kNoCityBits && b->kind != kind::kRuin && b->kind != kind::kBeachRuin &&
                                 !territory_building(buildings, *b);
@@ -210,7 +176,7 @@ IslandMap IslandMap::from_island(const assets::Island& island, const assets::Bui
 }
 
 bool territory_building(const assets::BuildingTable& buildings, const assets::BuildingType& b) noexcept {
-    // HAUS_PRODTYP Kind (0x00480B70 -> 0x00480B40 -> 0x00480AF0).
+    // HAUS_PRODTYP Kind.
     const auto crop = [](const assets::BuildingType* t) {
         return t != nullptr && t->ware != ware::kGrass && t->ware != ware::kTree && t->ware != ware::kFish;
     };

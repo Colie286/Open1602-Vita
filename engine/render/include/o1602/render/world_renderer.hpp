@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Draw list for a viewport of the world map (islands + open sea), same rules as the island
-// renderer (docs/re/rendering.md). Coordinates are "world pixels" of the selected zoom level:
+// renderer. Coordinates are "world pixels" of the selected zoom level:
 //   left edge of tile (vx, vy) = (vx - vy + view_height - 1) * tile_width / 2
 //   bottom of tile row d = vx + vy = d * tile_height / 2 + tile_height - 1
 // where (vx, vy) are world coordinates after view rotation.
@@ -70,7 +70,7 @@ void world_tile_center(const WorldView& view, std::uint32_t x, std::uint32_t y, 
     return tile_width(zoom);
 }
 
-/// Sprite of an open sea tile: ripple pattern (frame + 3x + y) mod AnimAnz (0x00489C90).
+/// Sprite of an open sea tile: ripple pattern (frame + 3x + y) mod AnimAnz.
 [[nodiscard]] std::uint32_t sea_sprite(const assets::BuildingType& sea, std::uint32_t frame, std::uint32_t x,
                                        std::uint32_t y);
 
@@ -88,9 +88,8 @@ struct SpriteExtent {
                                                              const AnimationClock& clock, const WorldView& view,
                                                              const Viewport& viewport, const SpriteExtent& extent);
 
-/// Figures the original spawns on buildings every frame (Buildings_SpawnDisplayFigures, 0x00486B60
-/// -> 0x004466A0). Buildings do not move, so Open1602 collects them once per world; what depends on
-/// the building's state (smoke, status icons) is decided when drawing.
+/// Figures the original spawns on buildings every frame. Buildings do not move, so Open1602 collects them once per
+/// world; what depends on the building's state (smoke, status icons) is decided when drawing.
 enum class BuildingFigureRole : std::uint8_t {
     Flag,        ///< warehouse, market, tower (kind 0x1D): flag in the colour of the owner's banner
     Smoke,       ///< chimney of a workshop (kind 0x17): rises while the building works, translucent
@@ -99,7 +98,7 @@ enum class BuildingFigureRole : std::uint8_t {
     Disaster,    ///< plague or fire on a house, for everybody (kind 0x1A, SENSENMANN)
     MarketFire,  ///< a burning market of the local player (kind 0x18, BRANDMARKT)
     Deposit,     ///< ore (SHOWEISEN) or gold (SHOWGOLD) on a mountain, once the local player explored
-                 ///< the deposit (kind 0x1B, 0x00487076 and 0x0045205B)
+                 ///< the deposit (kind 0x1B)
 };
 
 struct BuildingFigure {
@@ -137,8 +136,8 @@ struct FigureInstance {
     std::uint8_t anim = 0;     ///< ANIM index and frame (AnimState)
     std::uint8_t frame = 0;
     std::uint8_t direction = 0;  ///< 0..7
-    /// Height in half tile widths, drawn that much higher (0x00451CA4). The original gives every
-    /// walking land figure the height of the tile it was made on, 0.028 * Posoffs (0x00446CA0),
+    /// Height in half tile widths, drawn that much higher. The original gives every
+    /// walking land figure the height of the tile it was made on, 0.028 * Posoffs,
     /// so 0.56 on land, and keeps it while it walks (render::spawn_height).
     double z = 0.0;
     /// Share of the body hidden from below in 1/256 of its height, kCropHidden or more: not drawn
@@ -151,13 +150,13 @@ struct FigureInstance {
     /// not by Blocknr, which many figures lack; nothing = Blocknr.
     std::optional<assets::FigureSheet> sheet;
     /// Island the figure belongs to: it is seen only once the local player has discovered that
-    /// island (0x00451590). sim::World::kSea: everywhere (deer, kind 0x11, are not checked).
+    /// island. sim::World::kSea: everywhere (deer, kind 0x11, are not checked).
     std::uint16_t island = sim::World::kSea;
 };
 
 /// A figure of an effect hanging or flying over the world: the fire over an erupting volcano
 /// (VULKAN, kind 0x20) and lumps of lava (VULKANFIRE1, kind 0x21). Drawn from EFFEKTE.BSH at a
-/// height over its point, with its shadow on the ground while it is low (0x0044FA90).
+/// height over its point, with its shadow on the ground while it is low.
 struct EffectFigure {
     double x = 0.0;  ///< world position in tiles (continuous)
     double y = 0.0;
@@ -172,11 +171,11 @@ struct EffectFigure {
     std::uint8_t direction = 0;         ///< 0..7
     std::optional<std::uint8_t> frame;  ///< a frame of its own instead of one from the time
     /// Island the effect belongs to (volcano fire and lava, kinds 0x20 and 0x21): seen only once the
-    /// local player has discovered it (0x00451590). sim::World::kSea: everywhere.
+    /// local player has discovered it. sim::World::kSea: everywhere.
     std::uint16_t island = sim::World::kSea;
 };
 
-/// Smoke of a ship's broadside (KANONSHOT1, KANONSHOT2), drawn with the ship (0x00447880).
+/// Smoke of a ship's broadside (KANONSHOT1, KANONSHOT2), drawn with the ship.
 struct ShipSmoke {
     std::uint16_t figure = 0;  ///< the ship type's Shotfignr
     std::uint8_t side = 0;     ///< 0: fired to the right of the ship's heading (bearing + 2), 1: to the left
@@ -184,21 +183,21 @@ struct ShipSmoke {
 };
 using ShipSmokeMap = std::unordered_map<std::uint32_t, ShipSmoke>;  ///< by Ship::id
 
-/// Where a figure attached to a building stands (0x004466A0): the building centre plus the
+/// Where a figure attached to a building stands: the building centre plus the
 /// figure's Fahnoffs turned with the building, in world tiles.
 void building_attach_point(const sim::WorldIsland& island, const assets::BuildingType& b, std::uint32_t x,
                            std::uint32_t y, std::uint8_t rotation, const assets::FigureType& fig, double& cx,
                            double& cy);
 
 /// World pixel of a text hanging at height `z` (half tile widths) over world point (x, y): the
-/// centre and bottom of its line (Figures_DrawRow 0x0044FA90, kind 7). Truncated like the other
-/// figures and one row higher, as Open1602's tile rows start one row lower (docs/re/figures.md).
+/// centre and bottom of its line (kind 7). Truncated like the other
+/// figures and one row higher, as Open1602's tile rows start one row lower.
 [[nodiscard]] std::pair<std::int32_t, std::int32_t> text_figure_point(const WorldView& view, double x, double y,
                                                                       double z);
 
 /// Opacity of figure shadows (the original dithers every second pixel).
 inline constexpr std::uint8_t kShadowAlpha = 128;
-/// Opacity of chimney smoke (the original draws every second pixel, 0x004048E0).
+/// Opacity of chimney smoke (the original draws every second pixel).
 inline constexpr std::uint8_t kSmokeAlpha = 128;
 
 /// A tile marked with a translucent diamond, e.g. the red ground under a building that cannot be
@@ -214,11 +213,22 @@ struct TileMark {
     bool on_top = false;
 };
 
+/// Tiles whose buildings are drawn in a colour (Open1602's blueprints): each sprite of such a tile
+/// has its colours multiplied by `colour` and is drawn with its opacity (DrawCommand::Mode::Tinted),
+/// the whole building, roof included.
+struct SpriteTints {
+    assets::Rgba colour{255, 255, 255, 255};
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> tiles;  ///< world tiles, sorted
+    [[nodiscard]] bool contains(std::uint32_t x, std::uint32_t y) const noexcept {
+        return std::binary_search(tiles.begin(), tiles.end(), std::pair{x, y});
+    }
+};
+
 /// Colour of the hatching over an area dragged out for fields or trees (History Edition).
 inline constexpr assets::Rgba kDragHatch{202, 172, 52, 255};
 
 /// Brightness of a dimmed tile (of 255): the original's shading tables 1 and 2 map each colour
-/// to the palette colour nearest to 0.62 times it (0x004032F0); Open1602 scales the colours.
+/// to the palette colour nearest to 0.62 times it; Open1602 scales the colours.
 inline constexpr std::uint8_t kDimBrightness = 158;
 
 /// Colour of the dashed border of a catchment circle.
@@ -248,6 +258,8 @@ public:
     [[nodiscard]] static TileLighting territory(sim::PlayerId player);
     /// Only the land of `player` inside the circle `area` (world tiles) stays lit.
     [[nodiscard]] static TileLighting circle(sim::PlayerId player, const sim::Catchment& area);
+    /// All land dimmed, `player`'s too: only what harbour() adds stays lit (another owner's Kontor).
+    [[nodiscard]] static TileLighting harbours_only(sim::PlayerId player);
 
     /// Lights the land inside the circle `area` (world tiles) too, besides the circles lit so far.
     TileLighting& add_circle(const sim::Catchment& area);
@@ -332,7 +344,7 @@ private:
 };
 
 /// Everything besides the tiles that goes into the world draw list.
-/// Animation phases of the production buildings as the presentation runs them (0x004638C0). They
+/// Animation phases of the production buildings as the presentation runs them. They
 /// follow the real-time animation clock, so they live here and not in sim::Production, whose phase
 /// is part of the game state and must not depend on the frame rate (ADR 0004). Indexed like
 /// World::productions(); a building without an entry shows its saved phase.
@@ -376,18 +388,25 @@ struct WorldLayers {
     const BannerTable* banners = nullptr;
     /// Atlas index of each banner's tinted flag (WorldGraphics::banner_flags).
     const std::vector<std::optional<std::uint32_t>>* banner_flags = nullptr;
+    /// Which of them are a package's flag (WorldGraphics::package_flags).
+    const std::vector<bool>* package_flags = nullptr;
     /// Ownership view: tiles owned by a player get a diamond in the colour of the owner's banner.
     bool owner_tint = false;
     /// Single marked tiles, drawn on top of everything.
     const std::vector<TileMark>* tile_marks = nullptr;
     /// Tiles drawn darker (while building, or around a clicked building).
     const TileLighting* lighting = nullptr;
+    /// Tiles whose buildings are drawn tinted (blueprints).
+    const SpriteTints* sprite_tints = nullptr;
+    /// Tiles whose buildings are drawn checkered in `colour` (DrawCommand::Mode::Checkered): a
+    /// building being placed. Only the colour's r, g, b count.
+    const SpriteTints* sprite_checker = nullptr;
     /// Flags, smoke and status icons of buildings (collect_building_figures). Smoke and icons need
     /// the atlas bases of their sheets (`sheet_base`) and follow the buildings' production state.
     const std::vector<BuildingFigure>* building_figures = nullptr;
     /// Player whose buildings show status icons (the original: the local player). kNoPlayer: none.
     /// Islands this player has not discovered show only their ground layer, without buildings,
-    /// building figures or land figures (0x00489C90, 0x00486B60, 0x00451590); with kNoPlayer every
+    /// building figures or land figures; with kNoPlayer every
     /// island shows everything.
     sim::PlayerId local_player = sim::kNoPlayer;
     /// Sets of figures on land (animals, soldiers, ...) with their shadows. Needs `figures` and the
@@ -397,6 +416,10 @@ struct WorldLayers {
     std::array<std::optional<std::uint32_t>, assets::kFigureSheetCount> sheet_base{};
     /// Tinted units for banners without drawn variants (WorldGraphics::unit_tint).
     const UnitTint* unit_tint = nullptr;
+    /// The same for package units with a block per colour (WorldGraphics::package_unit_tint).
+    const UnitTint* package_unit_tint = nullptr;
+    /// Package units drawn as tint templates, for every banner (WorldGraphics::template_tint).
+    const UnitTint* template_tint = nullptr;
     /// Volcano fire, lava, hits, wrecks and the scenery. Needs `figures` and the atlas bases of
     /// their sheets (EFFEKTE.BSH, SCHATTEN.BSH, ...).
     const std::vector<EffectFigure>* effects = nullptr;
@@ -413,7 +436,7 @@ struct WorldLayers {
 /// tile row after whose flat pass they are drawn.
 struct FigureSprites {
     std::int32_t row = 0;
-    std::int32_t depth = 0;  ///< Y of the original (0x00451CC5): order within the row, smaller first
+    std::int32_t depth = 0;  ///< Y of the original: order within the row, smaller first
     std::array<DrawCommand, 5> parts{};
     std::uint8_t count = 0;
 };
@@ -430,10 +453,10 @@ struct DrawListScratch {
 };
 
 /// Shadow and body of a land figure (exposed for tests). The original keeps every figure at
-/// Y = y + Posoffs[1] * w/64 (0x00451CC5), which is also its depth; the height z lifts body and
-/// shadow by trunc(z * w/2) without changing Y. Body: Gfx + animation (0x0044F8F0), centred, bottom
+/// Y = y + Posoffs[1] * w/64, which is also its depth; the height z lifts body and
+/// shadow by trunc(z * w/2) without changing Y. Body: Gfx + animation, centred, bottom
 /// at Y + Posoffs[0] * w/64 - lift; shadow: figure `Schatten` from SCHATTEN.BSH, centred on
-/// y - lift (cases 8-0x12 of 0x0044FA90).
+/// y - lift (cases 8-0x12).
 [[nodiscard]] bool land_figure_sprites(const FigureInstance& figure, const sim::World& world, const WorldView& view,
                                        const WorldLayers& layers, FigureSprites& out);
 
@@ -444,7 +467,7 @@ struct DrawListScratch {
                                          const WorldLayers& layers, std::uint64_t time_ms, FigureSprites& out);
 
 /// Draw list including ships (drawn after the flat pass of their tile row, like the figures in
-/// the original, 0x0044FA90) and the ownership tint.
+/// the original) and the ownership tint.
 void build_world_draw_list(const sim::World& world, const assets::BuildingTable& buildings, const AnimationClock& clock,
                            const WorldView& view, const Viewport& viewport, const WorldLayers& layers,
                            std::vector<DrawCommand>& out);

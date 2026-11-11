@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "o1602/assets/building_looks.hpp"
 #include "o1602/assets/package_graphics.hpp"
 #include "o1602/render/sprite_source.hpp"
 
@@ -20,10 +21,11 @@ namespace o1602::render {
 /// The sprites of one image at one zoom level (0 = largest), decoded once: from its PNG for that
 /// level, else from the next larger level's at half size. A pixel of less than half alpha is
 /// transparent, any other opaque. Transparent rows above a sprite are left out: sprites stand on
-/// their bottom row. An image that cannot be read gives empty sprites and an error().
+/// their bottom row; with `whole`, a sprite keeps every row of its cell (a flag, which hangs from
+/// its top). An image that cannot be read gives empty sprites and an error().
 class PackageImageSource final : public SpriteSource {
 public:
-    PackageImageSource(const assets::PackageImage& image, std::size_t zoom);
+    PackageImageSource(const assets::PackageImage& image, std::size_t zoom, bool whole = false);
     [[nodiscard]] std::uint32_t count() const override { return static_cast<std::uint32_t>(m_sprites.size()); }
     void size(std::uint32_t i, std::uint32_t& width, std::uint32_t& height) const override;
     bool pixels(std::uint32_t i, std::vector<std::uint8_t>& rgba) const override;
@@ -59,6 +61,23 @@ private:
 
     std::vector<Placed> m_placed;  ///< sorted by `at`
     std::uint32_t m_count = 0;
+};
+
+/// A source with some of its sprites drawn as others of it (assets/building_looks.hpp): sprite
+/// `from + i` of a redirect is sprite `to + i` of `base`. The base must outlive it.
+class RedirectedSprites final : public SpriteSource {
+public:
+    RedirectedSprites(const SpriteSource& base, std::vector<assets::SpriteRedirect> redirects);
+    [[nodiscard]] std::uint32_t count() const override { return m_base->count(); }
+    void size(std::uint32_t i, std::uint32_t& width, std::uint32_t& height) const override;
+    bool pixels(std::uint32_t i, std::vector<std::uint8_t>& rgba) const override;
+
+private:
+    /// The sprite of the base drawn for `i`.
+    [[nodiscard]] std::uint32_t target(std::uint32_t i) const noexcept;
+
+    const SpriteSource* m_base;
+    std::vector<assets::SpriteRedirect> m_redirects;  ///< sorted by `from`, not overlapping
 };
 
 /// The picture of a package's icon, RGBA with its alpha as the PNG has it.

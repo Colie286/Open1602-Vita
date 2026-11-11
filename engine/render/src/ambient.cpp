@@ -37,7 +37,7 @@ constexpr std::uint16_t kPilger = assets::figure::kPilgrim;
 constexpr std::uint32_t kWalkRadius = 10;  // the 21 x 21 search window around the house
 constexpr std::uint32_t kStraight = 64;    // one step of the original's wave search
 constexpr std::uint32_t kDiagonal = 90;
-constexpr std::uint32_t kWalkerTries = 10;      // per city round (0x00480370)
+constexpr std::uint32_t kWalkerTries = 10;      // per city round
 constexpr std::uint32_t kHouseBucket = 1087;    // records of the original's house list a try picks from
 constexpr std::uint32_t kMinSettlers = 30;      // settlers and better for walkers
 constexpr std::uint32_t kJugglerCitizens = 59;  // citizens and better for a juggler: more than this
@@ -81,10 +81,10 @@ std::uint32_t inhabitants_from(const sim::City& c, std::size_t first) {
 }
 
 /// Direction code 1..8 (N, NE, E, SE, S, SW, W, NW) away from the blocked sides
-/// (bit 0 +y, bit 1 -x, bit 2 -y, bit 3 +x); 0 = free choice, 15 = nowhere (0x00498EFC, 0x00498F0C).
+/// (bit 0 +y, bit 1 -x, bit 2 -y, bit 3 +x); 0 = free choice, 15 = nowhere.
 constexpr std::array<std::uint8_t, 16> kAwayDolphin = {0, 1, 3, 2, 5, 3, 4, 3, 7, 8, 1, 1, 6, 7, 5, 0xFF};
 constexpr std::array<std::uint8_t, 16> kAwayWhale = {0, 1, 3, 3, 5, 3, 5, 3, 7, 1, 1, 1, 7, 7, 5, 0xFF};
-/// Species by rand() & 7 (0x00498F1C): dolphins 5 of 8, whales 2, a kraken 1.
+/// Species by rand() & 7: dolphins 5 of 8, whales 2, a kraken 1.
 constexpr std::array<std::uint16_t, 8> kSpecies = {kFigureDolphin, kFigureKraken,  kFigureDolphin, kFigureDolphin,
                                                    kFigureWhale,   kFigureDolphin, kFigureWhale,   kFigureDolphin};
 
@@ -282,7 +282,7 @@ void Ambient::city_round(const sim::World& world, const assets::BuildingTable& b
     if (c.island >= world.islands().size() || inhabitants_from(c, 1) < kMinSettlers) {
         return;
     }
-    // No townsfolk while soldiers of another player stand on the island (0x00480370).
+    // No townsfolk while soldiers of another player stand on the island.
     if (foreign_troops(world, c.island, c.owner)) {
         return;
     }
@@ -330,7 +330,7 @@ void Ambient::frame(const sim::World& world, const assets::BuildingTable& buildi
         if (w.island >= world.islands().size() || now >= w.end_ms || !known(w.island)) {
             continue;
         }
-        // On the straight line between the centres of two tiles of its path (0x00459F40).
+        // On the straight line between the centres of two tiles of its path.
         const double elapsed = std::max(0.0, drawn - static_cast<double>(w.start_ms));
         const auto next = std::upper_bound(w.arrive.begin(), w.arrive.end(), elapsed,
                                            [](double e, std::uint32_t a) { return e < a; });
@@ -407,7 +407,7 @@ void Ambient::frame(const sim::World& world, const assets::BuildingTable& buildi
             building_attach_point(island, *b, x, y, cell.rotation, *fig, e.x, e.y);
             e.z = fig->fahnoffs[2];
             // The shadow lies under his feet, not on the ground below the market: kind 0x1E centres
-            // it on the lifted point like the body (0x0045092D), without the ground height of lava.
+            // it on the lifted point like the body, without the ground height of lava.
             e.ground = e.z;
             e.figure = kFigureJuggler;
             e.anim = j.anim.anim;
@@ -442,7 +442,7 @@ void Ambient::send_walker(const sim::World& world, const assets::BuildingTable& 
     const auto cy = static_cast<std::int32_t>(house.y + (hh - 1) / 2);
     const std::vector<std::int32_t> targets = walker_targets(roll);
 
-    // Wave search on the roads of a 21 x 21 window (0x0046F000 grid, 0x0046C7D0 search): roads,
+    // Wave search on the roads of a 21 x 21 window (grid, search): roads,
     // squares, bridges, piers and the middle of gates are open; buildings of this city of the
     // chosen kinds are goals; the first goal at least `min_cost` away is taken, nearer ones are
     // dead ends.
@@ -561,7 +561,7 @@ void Ambient::send_walker(const sim::World& world, const assets::BuildingTable& 
         return;
     }
     // Speed * 0.002 tiles per second on the road (Wegspeed 100 %) from tile centre to tile centre,
-    // diagonal steps sqrt(2) times as long (0x0044A690); in whole milliseconds so that every
+    // diagonal steps sqrt(2) times as long; in whole milliseconds so that every
     // computer lets it arrive at the same moment.
     const std::uint32_t ms_per_tile = (500'000U + type->speed - 1) / type->speed;
     w.arrive.assign(w.path.size(), 0);
@@ -571,7 +571,7 @@ void Ambient::send_walker(const sim::World& world, const assets::BuildingTable& 
     }
     w.start_ms = at_ms;
     w.end_ms = at_ms + w.arrive.back();
-    // The height of the house tile, kept on the way (0x0044B140): 0.56 on land.
+    // The height of the house tile, kept on the way: 0.56 on land.
     w.z = spawn_height(world, buildings, world.islands()[house.island].x + house.x + 0.5,
                        world.islands()[house.island].y + house.y + 0.5);
     w.anim_ms = at_ms;
@@ -583,7 +583,7 @@ void Ambient::send_walker(const sim::World& world, const assets::BuildingTable& 
 
 void Ambient::sea_round(const sim::World& world, const assets::FigureTable& figures, std::uint64_t at_ms,
                         std::uint64_t round, std::uint32_t bx, std::uint32_t by) {
-    // The original tries 3 random tiles of the screen (0x00487F10), so where the player looks
+    // The original tries 3 random tiles of the screen, so where the player looks
     // decides where creatures come up. Here each block of 28 x 28 tiles, about one screen of
     // 1024 x 768 at the nearest zoom, has the 3 tries: the same sea everywhere.
     // At the original's rate a creature comes up in nearly every block every 5 s, which over the
@@ -624,7 +624,7 @@ void Ambient::sea_block(const sim::World& world, const assets::FigureTable& figu
             continue;
         }
         const std::uint16_t species = kSpecies[random.below(8)];
-        // Sides to keep away from: ships and islands near the spot (0x0044A200).
+        // Sides to keep away from: ships and islands near the spot.
         std::uint32_t blocked = 0;
         bool near_ship = false;
         const auto rows = static_cast<std::int32_t>(m_ship_squares.size() / m_ship_cols);
@@ -683,7 +683,7 @@ void Ambient::sea_block(const sim::World& world, const assets::FigureTable& figu
         if (type == nullptr || type->speed == 0) {
             return;
         }
-        // Worktime runs down at Speed per 50 ms (0x00451890).
+        // Worktime runs down at Speed per 50 ms.
         const std::uint64_t life = std::uint64_t{type->work_time_ms} * 500 / type->speed;
         const double x = tx + 0.5;
         const double y = ty + 0.5;
@@ -745,7 +745,7 @@ void Ambient::jugglers(const sim::World& world, const assets::BuildingTable& bui
         if (city == nullptr || inhabitants_from(*city, 2) <= kJugglerCitizens) {
             continue;
         }
-        // One per market; its act (ANIM) is (x + y) % 5 of the market (0x004466A0).
+        // One per market; its act (ANIM) is (x + y) % 5 of the market.
         auto [it, fresh] = m_jugglers.try_emplace(key3(p.island, p.x, p.y));
         if (fresh) {
             it->second.anim =

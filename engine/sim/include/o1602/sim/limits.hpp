@@ -11,9 +11,12 @@
 
 namespace o1602::sim {
 
-/// Players with a start in a new world: as many as there are banner colours that stay apart
-/// (render::BannerTable::kDefaultColours). The world generator, the start dialogs, the lobby and
-/// add_players all take this one.
+/// Players with a start in a new world: as many as there are hand-picked banner colours that stay
+/// apart (render::BannerTable::kDefaultColours). The world generator, the start dialogs, the lobby
+/// and add_players all take this one. It may be raised: the banners and names beyond the twelve are
+/// generated, who knows a deposit has no limit (assets::SlotSet), the ids and the savegame reach
+/// kMaxPlayerSlots < kMaxPlayerCount (player.hpp); only the screens with an entry per player need
+/// room for them (ADR 0007).
 inline constexpr std::size_t kMaxPlayers = 12;
 
 /// Island numbers (assets::IslandHeader::number) are one byte in the islands' files and in every

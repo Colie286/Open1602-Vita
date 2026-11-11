@@ -32,6 +32,23 @@ Form::Widget make(Form::Widget::Kind kind, Form::Id id, Rect r, std::string text
     return w;
 }
 
+/// Where a tooltip of `lines` lines, the widest `widest` design units, goes for `anchor`: below it,
+/// or above it where the screen ends, within the 1024 x 768 design.
+Rect tooltip_box(const Rect& anchor, std::size_t lines, double widest) {
+    constexpr std::int32_t kLine = 22;
+    constexpr std::int32_t kGapToAnchor = 4;
+    constexpr std::int32_t kMargin = 4;
+    const std::int32_t w =
+        std::min(Form::kTooltipWidth, static_cast<std::int32_t>(std::ceil(widest)) + 1 + 2 * kPadding + 2 * kBorder);
+    const auto h = static_cast<std::int32_t>(lines) * kLine + 2 * kPadding;
+    std::int32_t x = std::clamp(anchor.x, kMargin, std::max(kMargin, 1024 - kMargin - w));
+    std::int32_t y = anchor.y + anchor.h + kGapToAnchor;
+    if (y + h > 768 - kMargin) {
+        y = std::max(kMargin, anchor.y - kGapToAnchor - h);
+    }
+    return Rect{x, y, w, h};
+}
+
 }  // namespace
 
 std::vector<std::string> wrap_lines(const Font* font, std::string_view text, double width) {
@@ -153,7 +170,7 @@ void Form::panel(Rect r) {
     m_widgets.push_back(make(Widget::Kind::Panel, -1, r));
 }
 
-void Form::swatch(Rect r, std::uint8_t colour) {
+void Form::swatch(Rect r, std::int32_t colour) {
     Widget w = make(Widget::Kind::Swatch, -1, r);
     w.colour = colour;
     m_widgets.push_back(std::move(w));
@@ -166,10 +183,10 @@ void Form::label(Rect r, std::string text, Align align, Tone tone) {
     m_widgets.push_back(std::move(w));
 }
 
-void Form::speech(Rect r, std::string speaker, std::uint8_t ink, std::string text, Tone tone) {
+void Form::speech(Rect r, std::string speaker, std::int32_t ink, std::string text, Tone tone) {
     Widget w = make(Widget::Kind::Speech, -1, r, std::move(speaker));
     w.value = std::move(text);
-    w.colour = ink;
+    w.ink = ink;
     w.tone = tone;
     m_widgets.push_back(std::move(w));
 }
@@ -182,8 +199,9 @@ void Form::entry(Rect r, std::string label, std::string value, Tone label_tone, 
     m_widgets.push_back(std::move(w));
 }
 
-void Form::paragraph(Rect r, std::string text, Tone tone, std::int32_t line) {
+void Form::paragraph(Rect r, std::string text, Tone tone, std::int32_t line, std::string fallback) {
     Widget w = make(Widget::Kind::Paragraph, -1, r, std::move(text));
+    w.value = std::move(fallback);
     w.tone = tone;
     w.line = std::max(line, 1);
     m_widgets.push_back(std::move(w));
@@ -226,6 +244,10 @@ void Form::slider(Id id, Rect r, double position, bool enabled) {
     w.position = std::isfinite(position) ? std::clamp(position, 0.0, 1.0) : 0.0;
     w.enabled = enabled;
     m_widgets.push_back(std::move(w));
+}
+
+void Form::tooltip(Rect anchor, std::string text) {
+    m_widgets.push_back(make(Widget::Kind::Tooltip, -1, anchor, std::move(text)));
 }
 
 void Form::progress(Rect r, double done) {
@@ -330,7 +352,7 @@ std::vector<DrawItem> Form::draw(const std::array<const Font*, kFontSlots>& font
     const double s = m_scale;
     const auto px = [s](std::int32_t v) { return to_pixels(v, s); };
     std::vector<DrawItem> out;
-    const auto fill = [&](Rect r, std::uint8_t colour, bool ground = false) {
+    const auto fill = [&](Rect r, std::int32_t colour, bool ground = false) {
         DrawItem d;
         d.kind = DrawItem::Kind::Fill;
         d.x = px(r.x);
@@ -401,7 +423,7 @@ std::vector<DrawItem> Form::draw(const std::array<const Font*, kFontSlots>& font
                 DrawItem rest = line;
                 rest.text = line.text.substr(split);
                 line.text.resize(split);
-                line.ink = w.colour;
+                line.ink = w.ink;
                 rest.x = line.x + static_cast<std::int32_t>(std::lround(text_width(font, line.text) * s));
                 if (!rest.text.empty()) {
                     out.push_back(std::move(rest));
@@ -422,6 +444,10 @@ std::vector<DrawItem> Form::draw(const std::array<const Font*, kFontSlots>& font
                 if (font != nullptr) {
                     const double room = std::max(0.0, (w.rect.w - 2.0 * kPadding) * font->design_scale());
                     lines = wrap_text(*font, w.text, static_cast<std::uint32_t>(room));
+                    const auto fit = static_cast<std::size_t>(std::max(w.rect.h / w.line, 0));
+                    if (lines.size() > fit && !w.value.empty()) {
+                        lines = wrap_text(*font, w.value, static_cast<std::uint32_t>(room));
+                    }
                 } else {
                     lines = {w.text};
                 }
@@ -488,6 +514,29 @@ std::vector<DrawItem> Form::draw(const std::array<const Font*, kFontSlots>& font
                 if (done > 0) {
                     fill(Rect{w.rect.x + inset, w.rect.y + inset, done, std::max(w.rect.h - 2 * inset, 0)},
                          m_style.frame);
+                }
+                break;
+            }
+            case Widget::Kind::Tooltip: {
+                // Opaque, also on a parchment: the text must be read over the rows below it.
+                constexpr std::int32_t kLine = 22;
+                const double room = kTooltipWidth - 2.0 * kPadding - 2.0 * kBorder;
+                std::vector<std::string> lines;
+                if (font != nullptr) {
+                    lines = wrap_text(*font, w.text, static_cast<std::uint32_t>(room * font->design_scale()));
+                } else {
+                    lines = wrap_lines(nullptr, w.text, room);
+                }
+                double widest = 0.0;
+                for (const std::string& l : lines) {
+                    widest = std::max(widest, text_width(font, l));
+                }
+                const Rect box = tooltip_box(w.rect, lines.size(), widest);
+                fill(box, m_style.frame);
+                fill(Rect{box.x + kBorder, box.y + kBorder, box.w - 2 * kBorder, box.h - 2 * kBorder}, m_style.ground);
+                for (std::size_t i = 0; i < lines.size(); ++i) {
+                    const std::int32_t y = box.y + kPadding + static_cast<std::int32_t>(i) * kLine;
+                    text(Rect{box.x + kBorder, y, box.w - 2 * kBorder, kLine}, lines[i], Align::Left, m_style.text);
                 }
                 break;
             }

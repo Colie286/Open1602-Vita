@@ -27,7 +27,8 @@ constexpr std::array<std::array<const char*, 2>, kKeyHelpPages> kSectionHeadings
 /// The page and section of the clicks of add_click_lines(): ships and units selected.
 constexpr KeyHelpPlace kClickPlace{3, 1};
 /// What each click does (keys.click.<name>), all with Shift.
-constexpr std::array<const char*, 2> kShiftClicks = {"keys.click.castle_all", "keys.click.cannons"};
+constexpr std::array<const char*, 4> kShiftClicks = {"keys.click.castle_all", "keys.click.cannons",
+                                                     "keys.click.cannons_unmount", "keys.click.trade_cart"};
 /// The page and section of a building clicked twice: the map.
 constexpr KeyHelpPlace kTwicePlace{0, 0};
 
@@ -71,6 +72,39 @@ KeyHelpPlace key_help_place(KeyAction action) noexcept {
         case KeyAction::Help:
         case KeyAction::Cancel:
         case KeyAction::Quit:
+        case KeyAction::EditorUndo:
+        case KeyAction::EditorRedo:
+        case KeyAction::EditorSave:
+        case KeyAction::EditorNew:
+        case KeyAction::EditorOpen:
+        case KeyAction::EditorSaveAs:
+        case KeyAction::EditorRotate:
+        case KeyAction::EditorBrushBigger:
+        case KeyAction::EditorBrushSmaller:
+        case KeyAction::EditorTestPlay:
+        case KeyAction::EditorBookmarkSet:
+        case KeyAction::EditorBookmarkGo:
+        case KeyAction::EditorFind:
+        case KeyAction::EditorToolSelect:
+        case KeyAction::EditorToolIsland:
+        case KeyAction::EditorToolPlaceholder:
+        case KeyAction::EditorToolLand:
+        case KeyAction::EditorToolWater:
+        case KeyAction::EditorToolCoast:
+        case KeyAction::EditorToolBrush:
+        case KeyAction::EditorToolRandom:
+        case KeyAction::EditorToolFill:
+        case KeyAction::EditorToolReplace:
+        case KeyAction::EditorToolPipette:
+        case KeyAction::EditorToolArea:
+        case KeyAction::EditorToolPaste:
+        case KeyAction::EditorToolBuild:
+        case KeyAction::EditorToolTemplate:
+        case KeyAction::EditorToolShip:
+        case KeyAction::EditorToolUnit:
+        case KeyAction::EditorToolResource:
+        case KeyAction::EditorToolRemove:
+        case KeyAction::EditorToolMarker:
             return {0, 1};
         case KeyAction::ModeBuild:
         case KeyAction::ModeMilitary:
@@ -86,7 +120,10 @@ KeyHelpPlace key_help_place(KeyAction action) noexcept {
         case KeyAction::RotateBuildingBack:
         case KeyAction::PickBuilding:
         case KeyAction::DemolishTool:
-        case KeyAction::NextBuilding:
+        case KeyAction::CopyTool:
+        case KeyAction::BlueprintMode:
+        case KeyAction::BuildBlueprints:
+        case KeyAction::SaveTemplate:
         case KeyAction::PlantFields:
         case KeyAction::ToggleGates:
             return {2, 0};
@@ -120,6 +157,7 @@ KeyHelpPlace key_help_place(KeyAction action) noexcept {
         case KeyAction::ShowFps:
         case KeyAction::ShowCoordinates:
         case KeyAction::ShowUnitArms:
+        case KeyAction::ReloadPackages:
         case KeyAction::Fullscreen:
             return {4, 0};
     }

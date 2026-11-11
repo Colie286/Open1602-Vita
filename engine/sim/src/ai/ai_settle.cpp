@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Founding cities (docs/re/ai.md, "Settling"): the island search (0x00416370), the free land
+// Founding cities: the island search, the free land
 // test (task 2), the Kontor site and the free cargo (task 3), the landing (task 4), later colonies
-// (0x00426290) and giving a city up (task 0x2E).
+// and giving a city up (task 0x2E).
 #include <algorithm>
 #include <array>
 #include <limits>
@@ -14,7 +14,7 @@ namespace o1602::sim::ai {
 
 namespace {
 
-constexpr std::uint64_t kColonyCooldownMs = 60'000;  // C+0x30: 60 s between settlement events
+constexpr std::uint64_t kColonyCooldownMs = 60'000;  // 60 s between settlement events
 constexpr std::int32_t kNeedStep = 50;
 constexpr std::uint32_t kPirateRegionPasses = 6;  // passes a further nest keeps to a part without one
 constexpr std::uint8_t kLandRetries = 4;
@@ -55,10 +55,10 @@ Ship* Engine::settle_ship(AiPlayer& p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The island search (0x00416370)
+// The island search
 
 bool Engine::island_allowed(const AiPlayer& p, std::uint16_t island) const {
-    // 0x0040E570: no own city there, and no city of a human or computer with at most two cities.
+    // No own city there, and no city of a human or computer with at most two cities.
     for (const City& c : m_world.cities()) {
         if (c.island != island) {
             continue;
@@ -160,7 +160,7 @@ void Engine::pick_island(AiPlayer& p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Task 2: free land (0x00416FD0 -> 0x00415AF0)
+// Task 2: free land
 
 void Engine::task_settle_area(AiPlayer& p) {
     pop(p);
@@ -281,7 +281,7 @@ void Engine::scan_area(std::uint16_t island, AreaScan& out) const {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Task 3: the Kontor site (0x004172E0)
+// Task 3: the Kontor site
 
 std::uint64_t Engine::island_revision(std::uint16_t island) const {
     const IslandMap& map = island_of(island).map;
@@ -460,9 +460,9 @@ void Engine::task_settle_site(AiPlayer& p) {
 }
 
 void Engine::free_colony_cargo(AiPlayer& p, Ship& ship, bool computer) {
-    // 0x00416A80: the AI's founding goods come from nowhere (the original sends them as raw cargo
-    // messages). Computers: wood and tools up to 50 t, food up to 15 t, bricks 20 t if neither
-    // food nor bricks are aboard. Pirates: food 15 t and bricks up to 20 t.
+    // The AI's founding goods come from nowhere (the original sends them as raw cargo
+    // messages). Wood and tools up to 50 t; computers food up to 15 t and bricks 20 t if neither
+    // food nor bricks are aboard, pirates food 15 t and bricks up to 20 t.
     (void)p;
     const auto& m = m_buildings.materials();
     const std::uint8_t food = m_buildings.food_ware();
@@ -492,10 +492,10 @@ void Engine::free_colony_cargo(AiPlayer& p, Ship& ship, bool computer) {
             }
         }
     };
+    const bool food_or_bricks = ship.load(food) != 0 || ship.load(m.bricks) != 0;
+    top_up(m.wood, 50 * kTon);
+    top_up(m.tools, 50 * kTon);
     if (computer) {
-        const bool food_or_bricks = ship.load(food) != 0 || ship.load(m.bricks) != 0;
-        top_up(m.wood, 50 * kTon);
-        top_up(m.tools, 50 * kTon);
         top_up(food, 15 * kTon);
         if (!food_or_bricks) {
             top_up(m.bricks, 20 * kTon);
@@ -508,7 +508,7 @@ void Engine::free_colony_cargo(AiPlayer& p, Ship& ship, bool computer) {
 
 bool Engine::open_sea_ahead(std::uint16_t island, std::int32_t x, std::int32_t y, std::uint32_t width,
                             std::uint32_t height, std::uint8_t rotation) const {
-    // 0x00417220: from the beach of a candidate, every tile towards the water out to the edge of
+    // From the beach of a candidate, every tile towards the water out to the edge of
     // the island's rectangle must be sea, so that a ship can reach the site from outside. Without
     // it the computer can pick the shore of a lake inside the island, which its ship never
     // reaches. Open1602 starts at the Kontor's water side and allows a few tiles of beach or surf
@@ -571,7 +571,7 @@ Target Engine::water_near(std::uint16_t island, std::int32_t x, std::int32_t y) 
 }
 
 // ---------------------------------------------------------------------------------------------
-// Task 4: landing and founding (0x00417690)
+// Task 4: landing and founding
 
 void Engine::task_settle_land(AiPlayer& p) {
     Settlement& s = p.settle;
@@ -602,8 +602,10 @@ void Engine::task_settle_land(AiPlayer& p) {
         if (o != nullptr && m_world.behaviour(*o) == FactionBehaviour::Natives && island_size(island) >= 4) {
             continue;
         }
+        // The original's computers keep off the largest islands where another computer has a
+        // city, though not where a human has one; improved, a computer's city counts as a human's.
         const bool human = o != nullptr && o->role == PlayerRole::Human;
-        if ((!human && island_size(island) > 3) || own_city_count(c.owner) < 2 || free < 300 ||
+        if ((classic() && !human && island_size(island) > 3) || own_city_count(c.owner) < 2 || free < 300 ||
             has_population(c, 0, 50)) {
             return;
         }
@@ -625,8 +627,9 @@ void Engine::task_settle_land(AiPlayer& p) {
         return;
     }
     Player& pl = player(p);
-    if (pl.money < kCheats.founding_below) {
-        pl.money = money_plus(pl.money, std::int64_t{kCheats.founding_money});  // the original's founding money (cheat)
+    if (pl.money < cheats().founding_below) {
+        pl.money =
+            money_plus(pl.money, std::int64_t{cheats().founding_money});  // the original's founding money (cheat)
     }
     BuildOrder order;
     order.player = p.player;
@@ -668,7 +671,7 @@ void Engine::task_settle_land(AiPlayer& p) {
     r.land = free_land(island, c->index, &r.land_percent);
     unload_at(*c, *ship, false, false);
     add_goods(*c, m_buildings.materials().bricks,
-              kCheats.founding_bricks * kStockUnitsPerTon);  // free bricks after founding
+              cheats().founding_bricks * kStockUnitsPerTon);  // free bricks after founding
     s.failed = false;
     p.budget = 14;
     if (!p.home_valid) {
@@ -711,7 +714,7 @@ void Engine::end_settlement(AiPlayer& p) {
 }
 
 void Engine::unload_at(City& c, Ship& ship, bool keep_basics, bool destroy) {
-    // 0x004168E0: every hold into the warehouse as far as there is room; with `destroy` the rest
+    // Every hold into the warehouse as far as there is room; with `destroy` the rest
     // is thrown away (S-097: the original does this when it brings goods home).
     const auto& m = m_buildings.materials();
     for (CargoSlot& slot : ship.cargo) {
@@ -738,10 +741,10 @@ void Engine::unload_at(City& c, Ship& ship, bool keep_basics, bool destroy) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Later colonies (0x00426290, 0x00422380, 0x00416CA0)
+// Later colonies
 
 bool Engine::crop_available(std::uint8_t crop) const {
-    // 0x0040E620: some city of any computer player lies on an island that grows the crop fully
+    // Some city of any computer player lies on an island that grows the crop fully
     // (ore: a big or small vein; gold: a big one). Shared by all computers.
     for (const City& c : m_world.cities()) {
         const Player* o = m_world.player(c.owner);
@@ -787,7 +790,7 @@ std::uint8_t Engine::choose_colony_crop(AiPlayer& p) {
 }
 
 std::uint32_t Engine::colony_ship_candidate(AiPlayer& p) {
-    // 0x00423FF0: an idle or patrolling ship without a mission, the fewest cannons.
+    // An idle or patrolling ship without a mission, the fewest cannons.
     if (Ship* s = settle_ship(p)) {
         return s->id;
     }
@@ -806,7 +809,7 @@ std::uint32_t Engine::colony_ship_candidate(AiPlayer& p) {
 }
 
 bool Engine::want_colony(AiPlayer& p, std::uint8_t mode, bool force, bool food) {
-    // A scenario can forbid further cities (player +0x70 bit 1, tested by 0x00426290 and its callers).
+    // A scenario can forbid further cities.
     if (player(p).scenario.has(scenario_flag::kNoColonies)) {
         return false;
     }
@@ -879,19 +882,19 @@ bool Engine::prepare_colony_ship(AiPlayer& p, std::uint8_t crop, bool food) {
     if (behind(p) && !threatened(p)) {
         // The colony subsidy (cheat): one ware per call into the current city.
         bool given = true;
-        if (c->stock(m.wood) < kCheats.wood_below * kStockUnitsPerTon) {
-            add_goods(*c, m.wood, kCheats.wood * kStockUnitsPerTon);
-        } else if (c->stock(m.tools) < kCheats.tools_below * kStockUnitsPerTon) {
-            add_goods(*c, m.tools, kCheats.tools * kStockUnitsPerTon);
+        if (c->stock(m.wood) < cheats().wood_below * kStockUnitsPerTon) {
+            add_goods(*c, m.wood, cheats().wood * kStockUnitsPerTon);
+        } else if (c->stock(m.tools) < cheats().tools_below * kStockUnitsPerTon) {
+            add_goods(*c, m.tools, cheats().tools * kStockUnitsPerTon);
         } else {
             std::uint32_t inhabited = 0;
             for (const City& o : m_world.cities()) {
                 inhabited += o.owner == p.player && population(o) > 0 ? 1U : 0U;
             }
-            if (inhabited < 2 && c->stock(food_ware) < kCheats.food_below * kStockUnitsPerTon) {
-                add_goods(*c, food_ware, kCheats.food * kStockUnitsPerTon);
-            } else if (inhabited >= 2 && c->stock(m.bricks) < kCheats.bricks_below * kStockUnitsPerTon) {
-                add_goods(*c, m.bricks, kCheats.bricks * kStockUnitsPerTon);
+            if (inhabited < 2 && c->stock(food_ware) < cheats().food_below * kStockUnitsPerTon) {
+                add_goods(*c, food_ware, cheats().food * kStockUnitsPerTon);
+            } else if (inhabited >= 2 && c->stock(m.bricks) < cheats().bricks_below * kStockUnitsPerTon) {
+                add_goods(*c, m.bricks, cheats().bricks * kStockUnitsPerTon);
             } else {
                 given = false;
             }
@@ -944,7 +947,7 @@ bool Engine::prepare_colony_ship(AiPlayer& p, std::uint8_t crop, bool food) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Task 0x2E: giving a city up (0x0041DF00)
+// Task 0x2E: giving a city up
 
 void Engine::task_abandon(AiPlayer& p) {
     City* c = current_city(p);

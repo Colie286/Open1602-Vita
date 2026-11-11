@@ -13,8 +13,8 @@ namespace o1602::ui {
 namespace {
 
 constexpr double kShipFormationScale = 3.5;  // tiles between the places of a ship formation
-constexpr double kScatter = 13.36;           // 1.67 times the spread, in 1/8 tile (0x0044C8B0)
-constexpr std::uint32_t kWoundedLimit = 64;  // health * 128 / max: half health (0x0044C510)
+constexpr double kScatter = 13.36;           // 1.67 times the spread, in 1/8 tile
+constexpr std::uint32_t kWoundedLimit = 64;  // health * 128 / max: half health
 
 bool valid(const sim::World& world, const UnitRef& ref) {
     if (ref.kind == UnitRef::Kind::Ship) {
@@ -23,6 +23,12 @@ bool valid(const sim::World& world, const UnitRef& ref) {
     }
     const sim::Soldier* s = world.soldier(ref.id);
     return s != nullptr && !s->away();
+}
+
+/// A trade cart: kept as a ship, but it never goes in a group with ships or soldiers.
+bool is_cart(const sim::World& world, const UnitRef& ref) {
+    const sim::Ship* s = ref.kind == UnitRef::Kind::Ship ? world.ship(ref.id) : nullptr;
+    return s != nullptr && s->cart();
 }
 
 std::int16_t to_offset(double v) {
@@ -217,7 +223,8 @@ void UnitSelection::toggle(const sim::World& world, const UnitRef& ref) {
         remove(world, ref);
         return;
     }
-    if (!m_units.empty() && m_units.front().kind == ref.kind && owner(world) == unit_owner(world, ref)) {
+    if (!m_units.empty() && m_units.front().kind == ref.kind && owner(world) == unit_owner(world, ref) &&
+        !is_cart(world, ref) && !is_cart(world, m_units.front())) {
         std::vector<UnitRef> units = m_units;
         units.push_back(ref);
         set(world, std::move(units));
@@ -237,6 +244,14 @@ void UnitSelection::box(const sim::World& world, std::vector<UnitCandidate> cand
     if (own) {
         std::erase_if(candidates, [&](const UnitCandidate& c) { return unit_owner(world, c.ref) != local; });
     }
+    const bool keep = additive && !m_units.empty() && owner(world) == local;
+    if (keep && !is_cart(world, m_units.front())) {
+        // Adding to ships or soldiers: a trade cart in the rectangle is not added to them.
+        std::erase_if(candidates, [&](const UnitCandidate& c) { return is_cart(world, c.ref); });
+        if (candidates.empty()) {
+            return;
+        }
+    }
     const UnitCandidate* best = &candidates.front();
     for (const UnitCandidate& c : candidates) {
         if (c.overlap >= best->overlap) {
@@ -247,13 +262,18 @@ void UnitSelection::box(const sim::World& world, std::vector<UnitCandidate> cand
         select(world, best->ref);  // somebody else's units: one of them, to look at
         return;
     }
+    if (is_cart(world, best->ref)) {
+        // The rectangle is mostly a trade cart: that cart alone, as its window shows one unit.
+        select(world, best->ref);
+        return;
+    }
     const UnitRef::Kind kind = best->ref.kind;
     std::vector<UnitRef> units;
-    if (additive && !m_units.empty() && m_units.front().kind == kind && owner(world) == local) {
+    if (keep && m_units.front().kind == kind) {
         units = m_units;
     }
     for (const UnitCandidate& c : candidates) {
-        if (c.ref.kind == kind) {
+        if (c.ref.kind == kind && !is_cart(world, c.ref)) {
             units.push_back(c.ref);
         }
     }
@@ -484,7 +504,7 @@ void UnitSelection::store_group(std::size_t g) {
     if (g >= kGroups) {
         return;
     }
-    // A unit belongs to one group at a time (Group_Store 0x0044D1D0).
+    // A unit belongs to one group at a time.
     std::unordered_set<std::uint64_t> in;
     for (const UnitRef& r : m_units) {
         in.insert(key_of(r));
@@ -538,7 +558,7 @@ bool UnitSelection::recall_group(const sim::World& world, std::size_t g) {
     m_offsets.clear();
     for (const Member& m : group) {
         m_units.push_back(m.ref);
-        m_offsets.push_back(m.offset);  // the shape the group had (Group_Recall 0x0044D2B0)
+        m_offsets.push_back(m.offset);  // the shape the group had
     }
     m_changed = true;
     return true;
@@ -587,7 +607,7 @@ std::vector<sim::Command> UnitSelection::move_orders(const sim::World& world, si
     for (std::size_t i = 0; i < m_units.size(); ++i) {
         const UnitRef& r = m_units[i];
         if (!valid(world, r) || unit_owner(world, r) != local) {
-            continue;  // only the player's own units take orders (0x0044D540)
+            continue;  // only the player's own units take orders
         }
         const Offset& off = m_offsets[i];
         if (r.kind == UnitRef::Kind::Ship) {

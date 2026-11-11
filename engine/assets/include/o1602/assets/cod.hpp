@@ -14,7 +14,7 @@ namespace o1602::assets {
 
 /// .cod files (haeuser.cod, figuren.cod, Text.cod, Editor.cod) are plain text scripts in
 /// Windows-1252 where every byte is stored negated (two's complement): stored = -plain.
-/// See docs/formats/cod.md. Verified against 1602.exe @ 0x0048F94D (Text.cod loader).
+/// See docs/formats/cod.md. Verified against (Text.cod loader).
 
 /// Decodes raw .cod bytes to the original Windows-1252 text.
 std::string decode_cod(std::span<const std::uint8_t> encoded);

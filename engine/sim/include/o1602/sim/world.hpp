@@ -31,6 +31,7 @@
 #include "o1602/sim/production.hpp"
 #include "o1602/sim/random.hpp"
 #include "o1602/sim/rules.hpp"
+#include "o1602/sim/scenario_data.hpp"
 #include "o1602/sim/script_state.hpp"
 #include "o1602/sim/ship.hpp"
 #include "o1602/sim/soldier.hpp"
@@ -38,7 +39,7 @@
 
 namespace o1602::sim {
 
-/// A spot in a forest where deer live (island + 0x6C, HIRSCH2): the island keeps up to 8.
+/// A spot in a forest where deer live (HIRSCH2): the island keeps up to 8.
 /// Coordinates are 16 bit like the islands; the original's 8 bits only bind the .GAM export.
 struct DeerSpot {
     bool used = false;
@@ -47,7 +48,7 @@ struct DeerSpot {
     std::uint64_t respawn_ms = 0;  ///< game time before which no new deer comes
 };
 
-/// A volcano crater: the origin tile of a volcano mountain (docs/re/volcanoes.md).
+/// A volcano crater: the origin tile of a volcano mountain.
 struct Crater {
     std::uint16_t x = 0;  ///< island tile (8 bit in the original's format, 16 here)
     std::uint16_t y = 0;
@@ -63,9 +64,9 @@ struct WorldIsland {
     std::uint8_t deer_phase = 0;  ///< island epochs (30 s) since the last deer census, 0..3
     /// Phase of the island epochs (World::island_phase) the island was last ticked in (INSEL5 +0x0A).
     /// A new game takes it from the template, so islands whose template says otherwise than 0 get
-    /// their first epoch at once (docs/re/newgame.md).
+    /// their first epoch at once.
     std::uint8_t last_phase = 0;
-    /// Drought on the island (docs/re/growth.md#drought).
+    /// Drought on the island.
     struct Drought {
         std::uint8_t strength = 0;   ///< 0 = none; lowers the fertility by strength/128
         std::uint64_t end_ms = 0;    ///< game time it ends; then the strength halves every epoch
@@ -75,10 +76,12 @@ struct WorldIsland {
     /// Volcano craters, at most two (INSEL5 +0x17/+0x3C).
     std::vector<Crater> craters{};
     bool volcano_erupted = false;  ///< a volcano of the island has erupted (for the computer players)
-    /// Players who know the island (island + 0x43): a ship of theirs came close (docs/re/ships.md).
+    /// A climate of a package (Balance::climates[climate - 1], climates.hpp); 0: the header's.
+    std::uint8_t climate = 0;
+    /// Players who know the island: a ship of theirs came close.
     std::vector<bool> discovered{};
 
-    /// Players who explored the island's crops with a ship (island + 0x42, docs/re/ships.md#erkunden).
+    /// Players who explored the island's crops with a ship.
     std::vector<bool> explored{};
 
     [[nodiscard]] bool discovered_by(PlayerId p) const noexcept { return p < discovered.size() && discovered[p]; }
@@ -99,9 +102,9 @@ private:
     }
 };
 
-/// Whether player `p` knows the deposit (explored it; docs/re/ships.md#erkunden). Up to 32 players.
+/// Whether player `p` knows the deposit (explored it). Any number of players.
 [[nodiscard]] inline bool deposit_known(const assets::IslandHeader::Deposit& d, PlayerId p) noexcept {
-    return p < 32 && (d.mask >> p & 1U) != 0;
+    return d.mask.contains(p);
 }
 
 /// Whether `name` can name a player, a city or a ship (the renames of PlayerRename, CityOrder and
@@ -109,7 +112,7 @@ private:
 /// from the network too and must not break lines of lists and files.
 [[nodiscard]] bool valid_name(std::string_view name, std::size_t max_length) noexcept;
 
-/// Natives' goodwill towards a player who starts a game (0x0046A220).
+/// Natives' goodwill towards a player who starts a game.
 inline constexpr std::uint32_t kNativeGoodwillStart = 200;
 /// Goodwill never grows above this: far above what trade reaches against the decay (tens of
 /// thousands), and low enough that no product with it leaves 32 bits.
@@ -134,10 +137,10 @@ struct City {
     /// does not fit when a cart unloads (S-024); Open1602 lets a cart load only what will fit.
     std::vector<std::uint32_t> incoming;
     /// Room per ware in 1/32 t, the same for every ware: the Maxlager of the warehouse plus 10 t
-    /// for every further market or warehouse of the city (0x0047AB00). Computed by the logistics.
+    /// for every further market or warehouse of the city. Computed by the logistics.
     std::uint32_t capacity = 0;
 
-    /// Consumption accounting of one good (city + 0x150 + 12 * e, MARKT2): what the inhabitants
+    /// Consumption accounting of one good (MARKT2): what the inhabitants
     /// asked for and what they got, both decaying by 15/16 every 10 s, in 1/8192 t.
     struct Supply {
         std::uint64_t demand = 0;               ///< A (the original keeps 32 bits and overflows, see consumption.md)
@@ -149,11 +152,11 @@ struct City {
     std::vector<std::uint8_t> satisfaction;  ///< per class, 128 = content
     std::vector<std::uint8_t> tax_rate;      ///< per class, 128 = normal (64..192)
     std::vector<Supply> supply;              ///< per ware
-    std::uint8_t food_ratio = 128;           ///< supply of food (city + 0x255)
-    /// Pride in a castle or cathedral (city + 0x200): each adds 800, the city tick takes 1/256 off.
+    std::uint8_t food_ratio = 128;           ///< supply of food
+    /// Pride in a castle or cathedral: each adds 800, the city tick takes 1/256 off.
     /// Every 32 lower the taxes the satisfaction is measured against by 1/128. Not in the .GAM.
     std::uint16_t satisfaction_bonus = 0;
-    /// One house per target class may try out the next class (city + 0x234): its inhabitants
+    /// One house per target class may try out the next class: its inhabitants
     /// count for that class in the demand for one tick, then it upgrades or gives up.
     struct UpgradeSlot {
         std::uint32_t inhabitants = 0;  ///< 0 = free
@@ -164,24 +167,24 @@ struct City {
     std::uint8_t epoch = 0;                  ///< counts the city's 10-s ticks, 0..7
     /// The player keeps building material from the people (city window): no house upgrades.
     bool material_lock = false;
-    /// Game time the lock was switched on or the people last complained about it (city + 0x1E8).
+    /// Game time the lock was switched on or the people last complained about it.
     std::uint64_t material_reminder_ms = 0;
     std::uint8_t worst_good = 0;  ///< the scarcest good whose supply keeps falling, 0 = none
-    /// The last population message of the city (city + 0x253, 0x11 = 100 inhabitants ... 0x1D =
+    /// The last population message of the city (0x11 = 100 inhabitants ... 0x1D =
     /// 9000; 0 = none yet): each comes once, as the city first passes its mark.
     std::uint8_t population_message = 0;
-    /// Fires and plagues burning in the city now (city + 0x1FE, kept by recount_disasters): any
+    /// Fires and plagues burning in the city now (kept by recount_disasters): any
     /// of them stops the growth of every house.
     std::uint16_t disasters = 0;
-    /// Game time of the next check for plague, robbers and fire (city + 0x1E0, every 60-67 s).
+    /// Game time of the next check for plague, robbers and fire (every 60-67 s).
     std::uint64_t next_event_ms = 0;
-    /// The growth of the house the growth pass looked at last (city + 0x1F8, > 0 grows) and the
-    /// game time it last turned positive or the people last wanted a monument (city + 0x1E4). The
+    /// The growth of the house the growth pass looked at last (> 0 grows) and the
+    /// game time it last turned positive or the people last wanted a monument. The
     /// original does not save either: after loading its savegames both are 0, here too.
     std::int32_t house_growth = 0;
     std::uint64_t growing_since_ms = 0;
-    /// What the Kontor offers to other players' ships and the free trader, per ware (city ware
-    /// slot +2, +4, +8; docs/re/ships.md). A ware is sold or bought, not both.
+    /// What the Kontor offers to other players' ships and the free trader, per ware.
+    /// A ware is sold or bought, not both.
     struct Trade {
         bool sell = false;
         bool buy = false;
@@ -191,20 +194,20 @@ struct City {
         std::uint32_t limit = 0;       ///< buys only up to this stock (1/32 t)
     };
     std::vector<Trade> trade;  ///< per ware
-    /// Natives: goodwill towards each player (city + 0x206); selling to them raises it, buying
+    /// Natives: goodwill towards each player; selling to them raises it, buying
     /// from them uses it up. Indexed by PlayerId, one entry per player (fit_goodwill); a player
     /// without an entry gets nothing.
     std::vector<std::uint32_t> goodwill;
-    bool trader_inbound = false;  ///< a free trader sails here (city + 0x257 bit 1)
-    /// Ships that gave up their way to the Kontor since the last route stop there (city + 0x252);
-    /// at four, a computer owner blames the human ships near it (Fleet, docs/re/ships.md).
+    bool trader_inbound = false;  ///< a free trader sails here
+    /// Ships that gave up their way to the Kontor since the last route stop there;
+    /// at four, a computer owner blames the human ships near it (Fleet).
     std::uint8_t ships_gave_up = 0;
-    /// Game time a building of the city was last hit (city + 0x1EC): the natives send more warriors
+    /// Game time a building of the city was last hit: the natives send more warriors
     /// for 10 minutes after.
     std::uint64_t last_attacked_ms = 0;
     /// Natives: the village has cursed its destroyer (once).
     bool cursed = false;
-    /// Trade statistics of the city's Kontor (city + 0x1F0, + 0x1F4): every purchase and sale adds
+    /// Trade statistics of the city's Kontor: every purchase and sale adds
     /// 32 times its value, the city tick takes 1/90 off every 10 s; divided by 480 they are a
     /// moving average per minute (the city window).
     std::int64_t purchases = 0;
@@ -235,7 +238,7 @@ struct City {
         const std::uint32_t r = reserved_of(ware);
         return s > r ? s - r : 0;
     }
-    /// Room left for a ware; less than a ton counts as none (0x0047AA00).
+    /// Room left for a ware; less than a ton counts as none.
     [[nodiscard]] std::uint32_t free_space(std::uint8_t ware) const noexcept {
         const std::uint32_t s = stock(ware);
         const std::uint32_t room = capacity > s ? capacity - s : 0;
@@ -258,7 +261,7 @@ struct City {
     }
 };
 
-/// A fire or a plague on a building (the original's list 0x005A5100, docs/re/disasters.md).
+/// A fire or a plague on a building (the original's list).
 struct Disaster {
     enum class Kind : std::uint8_t { Plague = 1, Fire = 2 };
     Kind kind = Kind::Fire;
@@ -324,7 +327,7 @@ struct Animal {
     std::uint16_t figure = 0;  ///< FIGUR number (HIRSCH, ANTILOPE)
 };
 
-/// A house and its inhabitants (the original's house list at 0x005A77E8, SIEDLER).
+/// A house and its inhabitants (the original's house list, SIEDLER).
 struct House {
     std::uint16_t island = 0;  ///< index into World::islands()
     std::uint16_t x = 0;       ///< origin tile of the building
@@ -338,12 +341,12 @@ struct House {
     std::uint8_t market_distance = 6;  ///< distance class to the nearest market, 6 = none
     bool market = false;               ///< a market is in range
     bool services_complete = false;    ///< has the public buildings its class needs
-    std::uint16_t services = 0;        ///< public buildings in range (bits as the original)
+    assets::ServiceBits services = 0;  ///< public buildings in range (bits as the original, packages' above)
 
     [[nodiscard]] std::uint32_t inhabitants() const noexcept { return inhabitants64 >> 6; }
 };
 
-/// The 16 house timer groups: group g ticks every 15 s + 64 ms * g (docs/re/houses.md).
+/// The 16 house timer groups: group g ticks every 15 s + 64 ms * g.
 struct HouseClocks {
     static constexpr std::size_t kGroups = 16;
     std::array<std::uint32_t, kGroups> time_ms{};
@@ -358,10 +361,12 @@ struct CostBuilding {
     std::uint16_t x = 0;
     std::uint16_t y = 0;
     bool enabled = true;
-    /// Shipyards (the original's WERFT table 0x005A6C18, docs/re/ships.md): the ship being built
+    /// Shipyards (the original's WERFT): the ship being built
     /// and the material in the yard.
     static constexpr std::uint8_t kNoOrder = 0xFF;
     std::uint8_t order = kNoOrder;  ///< ship type 0..3 (HANDEL1, HANDEL2, KRIEG1, KRIEG2)
+    /// A package's ship of type `order` being built (own_figures.hpp, OwnShip), 0: the original's.
+    std::uint32_t order_figure = 0;
     std::uint32_t progress = 0;     ///< build points, 32 per full cycle
     std::uint32_t wood = 0;         ///< Rohstoff in the yard, 1/32 t
     std::uint32_t cloth = 0;        ///< Workstoff in the yard, 1/32 t (the original does not save it)
@@ -373,12 +378,21 @@ struct CostBuilding {
     /// Finished ships that found no free water to be launched on (WERFT + 0x10); at 100 a computer
     /// owner blames the human ships near the yard.
     std::uint8_t failed_launches = 0;
-    /// Castles (MILITAR, 0x0055EB80): weapons in store (swords, muskets, cannons, 1/32 t) and the
+    /// Castles (MILITAR): weapons in store (swords, muskets, cannons, 1/32 t) and the
     /// training slots (3, 5 or 8 used by castle size). `countdown` counts the seconds to the next
     /// training step.
     std::array<std::uint32_t, 3> weapons{};
     std::vector<CastleSlot> slots{};
 };
+
+/// The ship a shipyard builds for its order: a package's (CostBuilding::order_figure) or the
+/// original's of its type; 0 without an order.
+[[nodiscard]] inline std::uint32_t yard_ship(const CostBuilding& yard) noexcept {
+    if (yard.order == CostBuilding::kNoOrder) {
+        return 0;
+    }
+    return yard.order_figure != 0 ? yard.order_figure : figure::ship_figure(yard.order);
+}
 
 /// A growing field, tree, meadow or fish shoal (ROHWACHS2 in the original). One growth stage of
 /// class c lasts 40 s + 7 s * c; at AnimAnz stages the tile turns into its ripe record.
@@ -401,7 +415,7 @@ struct GrowthState {
 
 class World;
 
-/// An object reference of the original files (SHIP4 targets and route stops, docs/re/ships.md):
+/// An object reference of the original files (SHIP4 targets and route stops):
 /// byte 0 the type (1-3 a ship by its slot, whose id is slot + 1; 0x32-0x34 a building, 0x35 a city,
 /// 0x37 a world position). Unknown types give no target.
 [[nodiscard]] Target target_from_ref(const World& world, std::uint32_t ref);
@@ -416,6 +430,26 @@ struct GroupMember {
 };
 /// A player's stored groups, keys 1 .. 9 and 0.
 using UnitGroups = std::array<std::vector<GroupMember>, 10>;
+
+/// A building a player planned without paying for it (Open1602, as in later Anno games): it holds
+/// its place for its owner, who alone sees it, until it is built (sim/blueprints.hpp).
+struct Blueprint {
+    PlayerId player = kNoPlayer;
+    std::uint16_t island = 0;
+    std::uint32_t building = 0;  ///< HAUS Id, as a BuildItem's
+    std::int32_t x = 0;          ///< footprint origin on the island
+    std::int32_t y = 0;
+    std::uint8_t rotation = 0;
+    std::uint8_t anim_phase = 0;
+    friend bool operator==(const Blueprint&, const Blueprint&) = default;
+};
+/// A city whose blueprints its owner lets build by themselves as soon as they can be paid.
+struct BlueprintAuto {
+    PlayerId player = kNoPlayer;
+    std::uint16_t island = 0;
+    std::uint8_t city = 0;
+    friend bool operator==(const BlueprintAuto&, const BlueprintAuto&) = default;
+};
 
 /// The world map: open sea with islands placed on it (the original keeps one 4-byte cell per
 /// world tile: island number, local x, local y, colour table - see rendering.md). The size is a
@@ -453,8 +487,56 @@ public:
     /// Mutable island for the simulation (fields growing, deposits running out).
     [[nodiscard]] WorldIsland& island(std::size_t index) { return m_islands[index]; }
 
-    /// Adds an island at its header position. Fails if it leaves the world or overlaps another one.
-    core::Status add_island(WorldIsland island);
+    /// Adds an island at its header position. Fails if it leaves the world or overlaps another one;
+    /// with `buildings` the rectangles may overlap where one of the two islands has sea (a tile
+    /// there belongs to the island with land, else to the one added first).
+    core::Status add_island(WorldIsland island, const assets::BuildingTable* buildings = nullptr);
+
+    // Islands changed by the editor (ADR 0013). Each fails without a change; `buildings` decides,
+    // as for add_island(), which tiles of overlapping rectangles are sea.
+
+    /// What keeps an island from being turned, copied or taken out: a city on it, buildings or
+    /// fires of a game, units standing on it, or the state of a running game (whose figures name
+    /// islands and tiles). Wild animals, growing trees and fields, deposits and craters do not.
+    enum class IslandUse : std::uint8_t { None, Cities, Buildings, Units, RunningGame };
+    [[nodiscard]] IslandUse island_use(std::size_t index) const;
+    /// Moves island `index` so that its tile (0,0) lies at (x, y). Fails if it leaves the map,
+    /// overlaps another island, lands on a ship, units stand on it or a game is running.
+    core::Status move_island(std::size_t index, std::uint32_t x, std::uint32_t y,
+                             const assets::BuildingTable* buildings = nullptr);
+    /// Turns island `index` a quarter clockwise about its centre (as near as the tiles allow,
+    /// inside the map): every tile with its picture, deposits, craters, deer, animals and growing
+    /// tiles go with it. Only an island without use (island_use()).
+    core::Status rotate_island(std::size_t index, const assets::BuildingTable* buildings = nullptr);
+    /// A copy of island `index` with the number `number` at (x, y), added as the last island:
+    /// its tiles, deposits (nobody knows them), craters, deer, animals and growing tiles, but
+    /// nobody has discovered it. Only an island without use.
+    core::Status copy_island(std::size_t index, std::uint32_t x, std::uint32_t y, std::uint16_t number,
+                             const assets::BuildingTable* buildings = nullptr);
+    /// Takes island `index` out with its animals and growing tiles; the islands after it move
+    /// one place forward, and everything that names them follows. Only an island without use.
+    core::Status remove_island(std::size_t index, const assets::BuildingTable* buildings = nullptr);
+    /// Island `index` grown by `left`, `top`, `right` and `bottom` tiles of open sea (`sea`, in the
+    /// phase of the world's open sea at its place), keeping every tile where it is on the map: its
+    /// deposits, craters, deer, animals and growing tiles move with its tiles. Fails if it would
+    /// leave the map or reach over another island's land, or grow beyond kMaxIslandSide. Only an
+    /// island without use (island_use()).
+    core::Status grow_island(std::size_t index, std::uint32_t left, std::uint32_t top, std::uint32_t right,
+                             std::uint32_t bottom, const assets::BuildingType& sea,
+                             const assets::BuildingTable* buildings = nullptr);
+    /// Island `other` joined into island `keep`: `keep` grows by open sea (`sea`) to the rectangle
+    /// of both, takes the tiles of `other` where it has open sea itself, and its deposits, craters,
+    /// deer, animals and growing tiles; then `other` is taken out (remove_island(), so `keep`
+    /// moves one place forward if it came after it). `keep` keeps its number, climate and header.
+    /// Only islands without use; on failure the world is as it was.
+    core::Status merge_islands(std::size_t keep, std::size_t other, const assets::BuildingType& sea,
+                               const assets::BuildingTable* buildings = nullptr);
+    /// The smallest island number no island has, nothing if all are taken.
+    [[nodiscard]] std::optional<std::uint16_t> free_island_number() const;
+    /// The map made `width` x `height` tiles large (at least 1, at most kMaxSide), growing or cut
+    /// at the right and the bottom: everything keeps its place. Fails if an island, a ship, a
+    /// land unit, a marker or an island of the world plan would lie outside.
+    core::Status resize(std::uint32_t width, std::uint32_t height, const assets::BuildingTable* buildings = nullptr);
 
     [[nodiscard]] const std::vector<Player>& players() const noexcept { return m_players; }
     [[nodiscard]] const std::vector<Ship>& ships() const noexcept { return m_ships; }
@@ -480,6 +562,9 @@ public:
     [[nodiscard]] const std::vector<Faction>& factions() const noexcept { return m_factions; }
     /// Replaces the factions; a player of a faction that is no longer there becomes a settler.
     void set_factions(std::vector<Faction> factions);
+    /// Gives the slots of each replaced faction to the faction that replaces it (factions.toml
+    /// `replaces`), in order; a replacement whose factions this world does not have does nothing.
+    void replace_factions(const std::vector<FactionReplacement>& replacements);
     /// The values of the balance this game plays with (balance.hpp): the original's unless a
     /// package changed them before the game started.
     [[nodiscard]] const Balance& balance() const noexcept { return m_balance; }
@@ -496,6 +581,11 @@ public:
     /// where its packages give the same buildings the same Ids again.
     [[nodiscard]] const std::vector<assets::OwnBuilding>& own_buildings() const noexcept { return m_own_buildings; }
     void set_own_buildings(std::vector<assets::OwnBuilding> own) { m_own_buildings = std::move(own); }
+    /// The figures the packages added and the numbers this game gave them (own_figures.hpp), kept
+    /// in the savegame (section OWNF): the buildings' carriers and workers name those numbers, so a
+    /// game only loads where its packages give the same figures the same numbers again.
+    [[nodiscard]] const std::vector<assets::OwnFigure>& own_figures() const noexcept { return m_own_figures; }
+    void set_own_figures(std::vector<assets::OwnFigure> own) { m_own_figures = std::move(own); }
     /// The goods this game trades: the original's and those its packages added (goods.hpp), kept
     /// in the savegame (section GOOD).
     [[nodiscard]] const assets::Goods& goods() const noexcept { return m_goods; }
@@ -542,6 +632,9 @@ public:
     /// leaves alone; it shows an island only when a city is founded there). No ship event: nobody
     /// sailed there.
     void reveal_islands(Reveal reveal, std::uint16_t island = kSea);
+    /// Rules::reveal_resources: every player has explored every island, its crops and all its ore
+    /// and gold deposits, as if a ship of theirs had explored it. No ship event: nobody sailed there.
+    void explore_islands();
     /// Removes a city (it was dissolved); pointers to cities become invalid.
     void remove_city(std::uint16_t island, std::uint8_t index);
     /// Mutable lookup for the simulation.
@@ -623,16 +716,18 @@ public:
         std::uint8_t difficulty = 2;
         std::uint32_t flags = 0;                 ///< the k... bits above
         std::uint32_t pirate_interval_s = 1500;  ///< TIMERS +0xB8: time between two new pirate ships
-        /// TIMERS +0xA5 (0x005B62FC): the tutorial; set only in Einführungsspiel0-4. Its computer
+        /// TIMERS +0xA5: the tutorial; set only in Einführungsspiel0-4. Its computer
         /// opponents keep their towns as they are and do not recruit, buy peace or order ships.
         bool tutorial = false;
+        /// A running game changed in the editor (section EDTD): it enters no list of best results.
+        bool edited = false;
     };
     [[nodiscard]] const GameSettings& game_settings() const noexcept { return m_game_settings; }
     void set_game_settings(const GameSettings& s) noexcept { m_game_settings = s; }
     /// Game time from which droughts may come again (TIMERS +0xB4; 90 min into a new game).
     [[nodiscard]] std::uint64_t next_drought_ms() const noexcept { return m_next_drought_ms; }
     void set_next_drought_ms(std::uint64_t t) noexcept { m_next_drought_ms = t; }
-    /// Phase of the drought table (0..31, the original's 0x00548D30); drawn once per world. The
+    /// Phase of the drought table (0..31); drawn once per world. The
     /// original rolls it anew at every load and does not save it.
     [[nodiscard]] std::optional<std::uint8_t> drought_seed() const noexcept { return m_drought_seed; }
     void set_drought_seed(std::uint8_t s) noexcept { m_drought_seed = static_cast<std::uint8_t>(s & 31U); }
@@ -652,6 +747,22 @@ public:
     /// in this game yet.
     [[nodiscard]] const std::vector<ScriptState>& script_states() const noexcept { return m_script_states; }
     void set_script_states(std::vector<ScriptState> states) noexcept { m_script_states = std::move(states); }
+    /// The scenario of a package the game was started from ("<package>:<name>",
+    /// docs/modding/scenarios.md), empty for any other game; kept with the savegame (section SCEN),
+    /// so that its script goes on when the game is loaded.
+    [[nodiscard]] const std::string& package_scenario() const noexcept { return m_package_scenario; }
+    void set_package_scenario(std::string id) noexcept { m_package_scenario = std::move(id); }
+    /// A part of a package's campaign (docs/modding/scenarios.md#campaigns): the campaign, the part
+    /// counted from 0 and what the part before left to it (the table `campaign` of its script,
+    /// script::Sandbox::save_table), kept with the savegame (section CAMP).
+    struct CampaignPart {
+        std::string campaign;  ///< "<package>:<name>"
+        std::uint8_t part = 0;
+        std::vector<std::uint8_t> carried;
+        friend bool operator==(const CampaignPart&, const CampaignPart&) = default;
+    };
+    [[nodiscard]] const std::optional<CampaignPart>& campaign_part() const noexcept { return m_campaign_part; }
+    void set_campaign_part(std::optional<CampaignPart> part) noexcept { m_campaign_part = std::move(part); }
     /// The groups each player stored (by PlayerId), kept with the savegame (section UGRP) so that a
     /// loaded game has them again; the original forgets them. Only the interface reads them, and the
     /// game's fingerprint leaves them out: in a multiplayer game every computer knows only its own.
@@ -663,6 +774,31 @@ public:
         }
         m_unit_groups[player] = std::move(groups);
     }
+    /// The players' blueprints in the order they were placed (sim/blueprints.hpp), and the cities
+    /// that build theirs by themselves; saved with the game (section BLUE).
+    [[nodiscard]] const std::vector<Blueprint>& blueprints() const noexcept { return m_blueprints; }
+    [[nodiscard]] std::vector<Blueprint>& blueprints() noexcept { return m_blueprints; }
+    [[nodiscard]] const std::vector<BlueprintAuto>& blueprint_auto() const noexcept { return m_blueprint_auto; }
+    [[nodiscard]] std::vector<BlueprintAuto>& blueprint_auto() noexcept { return m_blueprint_auto; }
+    /// The description of a scenario of the editor (section SCNI, ADR 0013); nothing for a
+    /// savegame or a file of the original. Starting a game from a scenario drops it.
+    [[nodiscard]] const std::optional<ScenarioInfo>& scenario_info() const noexcept { return m_scenario_info; }
+    void set_scenario_info(std::optional<ScenarioInfo> info) noexcept { m_scenario_info = std::move(info); }
+    /// The named places and areas of the scenario (section MARK), which its script finds by name.
+    [[nodiscard]] const std::vector<ScenarioMarker>& markers() const noexcept { return m_markers; }
+    void set_markers(std::vector<ScenarioMarker> markers) noexcept { m_markers = std::move(markers); }
+    /// The scenario's own Lua script (section SLUA), empty if none; it stays with a game started
+    /// from the scenario, so that it runs on after loading.
+    [[nodiscard]] const std::string& scenario_script() const noexcept { return m_scenario_script; }
+    void set_scenario_script(std::string script) noexcept { m_scenario_script = std::move(script); }
+    /// What the editor keeps of its own (section EDIT: view, bookmarks); the game ignores it and
+    /// starting a game drops it.
+    [[nodiscard]] const std::vector<std::uint8_t>& editor_state() const noexcept { return m_editor_state; }
+    void set_editor_state(std::vector<std::uint8_t> state) noexcept { m_editor_state = std::move(state); }
+    /// The plan of islands still to be made when the game starts (section PLAN, ADR 0013): a
+    /// scenario of the original that makes its islands at the start, opened in the editor.
+    [[nodiscard]] const std::optional<PlannedIslands>& planned_islands() const noexcept { return m_planned_islands; }
+    void set_planned_islands(std::optional<PlannedIslands> planned) noexcept { m_planned_islands = std::move(planned); }
     /// Game settings saved with the game, which a Simulation of it uses (ADR 0008).
     [[nodiscard]] const std::optional<Rules>& saved_rules() const noexcept { return m_saved_rules; }
     void set_saved_rules(std::optional<Rules> rules) noexcept { m_saved_rules = rules; }
@@ -671,6 +807,10 @@ public:
     /// from its rules; they are not saved, the rules are.
     [[nodiscard]] const OriginalBugs& original_bugs() const noexcept { return m_original_bugs; }
     void set_original_bugs(const OriginalBugs& bugs) noexcept { m_original_bugs = bugs; }
+    /// Whether poor ground takes nothing from a field (Rules::fertile_fields), set like the bugs
+    /// above.
+    [[nodiscard]] bool fertile_fields() const noexcept { return m_fertile_fields; }
+    void set_fertile_fields(bool on) noexcept { m_fertile_fields = on; }
 
     /// Eruptions, lava in flight and the time of the next eruption (volcanoes.hpp).
     [[nodiscard]] const VolcanoState& volcanoes() const noexcept { return m_volcanoes; }
@@ -722,7 +862,7 @@ public:
     [[nodiscard]] const Mission* mission_of(const Player& player) const noexcept {
         return player.mission < m_missions.size() ? &m_missions[player.mission] : nullptr;
     }
-    /// The end of the game: a player accomplished the mission (docs/re/missions.md). Missions are
+    /// The end of the game: a player accomplished the mission. Missions are
     /// not checked any more afterwards; whether the game goes on is the frontend's choice.
     struct GameEnd {
         std::uint64_t time_ms = 0;
@@ -744,6 +884,7 @@ private:
     Balance m_balance;
     std::optional<std::vector<assets::ContentPackage>> m_packages;
     std::vector<assets::OwnBuilding> m_own_buildings;
+    std::vector<assets::OwnFigure> m_own_figures;
     assets::Goods m_goods;
     std::vector<assets::ResidentClass> m_classes;
     std::vector<assets::InfraLevel> m_levels;
@@ -754,6 +895,13 @@ private:
     /// (island << 8 | index) << 32 | slot of every city, sorted: the lookup of city() (TB-21).
     std::vector<std::uint64_t> m_city_keys;
     void index_cities();
+    /// Sets the cells of the map anew from the islands, in their order (add_island()'s rule for
+    /// overlapping rectangles); fails if two islands' land overlaps.
+    core::Status place_islands(const assets::BuildingTable* buildings);
+    /// Where island `index` would take the cells; an error if it leaves the map or its land
+    /// overlaps another island's.
+    core::Status claim_cells(const WorldIsland& island, const assets::BuildingTable* buildings,
+                             std::vector<bool>& taken) const;
     std::vector<Animal> m_animals;
     std::vector<Soldier> m_soldiers;
     std::uint32_t m_next_soldier_id = 1;
@@ -780,9 +928,19 @@ private:
     std::shared_ptr<const assets::ChunkFile> m_source;
     std::vector<std::uint8_t> m_simulation_state;
     std::vector<ScriptState> m_script_states;
+    std::string m_package_scenario;
+    std::optional<CampaignPart> m_campaign_part;
     std::vector<UnitGroups> m_unit_groups;
+    std::vector<Blueprint> m_blueprints;
+    std::vector<BlueprintAuto> m_blueprint_auto;
     std::optional<Rules> m_saved_rules;
+    std::optional<ScenarioInfo> m_scenario_info;
+    std::vector<ScenarioMarker> m_markers;
+    std::string m_scenario_script;
+    std::vector<std::uint8_t> m_editor_state;
+    std::optional<PlannedIslands> m_planned_islands;
     OriginalBugs m_original_bugs;
+    bool m_fertile_fields = false;
     std::vector<CostBuilding> m_cost_buildings;
     std::unordered_map<std::uint64_t, std::uint32_t> m_house_index;       ///< key: island, y, x
     std::unordered_map<std::uint64_t, std::uint32_t> m_production_index;  ///< key: island, y, x
@@ -798,7 +956,7 @@ private:
 
 /// A Kontor allows `Maxware` wares to sell and as many to buy as its second value (HAUS +0x45,
 /// +0x46). When a Kontor of a city is built or loaded and the city sells or buys more wares than
-/// it allows, all the city's trade settings are switched off (0x00481EE0). True if they were.
+/// it allows, all the city's trade settings are switched off. True if they were.
 /// Data without Maxware (both 0) sets no limit.
 bool trim_trade_settings(City& city, const assets::BuildingType& kontor);
 
@@ -811,11 +969,22 @@ void fit_goodwill(World& world);
 /// The player at this computer until there is a lobby: the first human player, kNoPlayer if none.
 [[nodiscard]] PlayerId first_human_player(const World& world) noexcept;
 
+/// The player of a person who plays the game alone, `owner` being their Player::owner: the human
+/// player they played before (a multiplayer game saved or loaded alone), else the first human
+/// player. That player gets `owner` (unless 0); the computer plays the other human players, whose
+/// people are not there. kNoPlayer, and nothing changes, if the world has no human player.
+PlayerId take_single_player(World& world, std::uint64_t owner);
+/// As take_single_player, with the human player `own` chosen by the person (a game that does not
+/// know them yet). Nothing changes if `own` is not a human player.
+void take_player(World& world, PlayerId own, std::uint64_t owner);
+/// The human players that are still in the game: those a person may take in a game loaded alone.
+[[nodiscard]] std::vector<PlayerId> human_players(const World& world);
+
 /// Loads a scenario (.SZS/.SZM) or savegame (.GAM): all islands, each on its island template and
 /// placed on the world map, the players and the ships. Problems are collected in `warnings`; islands that cannot be
 /// placed are skipped. A scenario that makes its islands at the start (the endless games) gets
 /// them as `start` says (world_generator.hpp); the world's source is then that scenario with
-/// the islands made.
+/// the islands made. With WorldStart::keep_plan it keeps the plan instead and has no islands.
 core::Result<World> load_world(const assets::ChunkFile& file, const assets::BuildingTable& buildings,
                                const assets::GameDirectory& game, std::vector<std::string>* warnings = nullptr,
                                const WorldStart& start = {});

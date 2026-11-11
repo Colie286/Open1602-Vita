@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Castles: recruiting, training, sending units out; soldiers on board ships (docs/re/military.md).
+// Castles: recruiting, training, sending units out; soldiers on board ships.
 #include <algorithm>
 #include <span>
 
@@ -51,7 +51,7 @@ std::uint32_t Military::army_size(PlayerId player) const {
 
 std::optional<std::pair<std::int32_t, std::int32_t>> Military::exit_cell(std::uint16_t island, std::uint16_t x,
                                                                          std::uint16_t y) const {
-    // A cell soldiers can stand on next to the building (0x00463A70), searched from the middle of
+    // A cell soldiers can stand on next to the building, searched from the middle of
     // its lower edge outwards.
     const auto b = building_at(*m_world, *m_buildings, island, {x, y});
     if (!b || island >= m_world->islands().size()) {
@@ -102,10 +102,10 @@ bool Military::castle(const CastleOrder& o) {
     }
     switch (o.op) {
         case CastleOrder::Op::Recruit: {
-            // Op 0x10: no gold, no inhabitants; weapons if the castle holds them.
+            // No gold, no inhabitants; weapons if the castle holds them.
             // Only the soldiers a castle trains (the unit families), not ships, towers or natives.
             const assets::FigureType* type = m_figures->get(o.figure);
-            if (type == nullptr || type->combat.max_health == 0 || !assets::FigureTable::unit_variant(o.figure)) {
+            if (type == nullptr || type->combat.max_health == 0 || !m_figures->unit_of(o.figure)) {
                 return false;
             }
             if (m_rules->max_army != 0 && army_size(owner) >= m_rules->max_army) {
@@ -116,7 +116,7 @@ bool Military::castle(const CastleOrder& o) {
                 return false;
             }
             CastleSlot slot;
-            const auto variant = assets::FigureTable::unit_variant(o.figure);
+            const auto variant = m_figures->unit_of(o.figure);
             slot.figure = static_cast<std::uint16_t>(variant ? variant->family : o.figure);
             slot.training = true;
             slot.health = type->combat.max_health;
@@ -135,7 +135,7 @@ bool Military::castle(const CastleOrder& o) {
             return true;
         }
         case CastleOrder::Op::Release: {
-            // "Einheit aussenden" (0x004491B0): a trained unit leaves the castle. Units still in
+            // "Einheit aussenden": a trained unit leaves the castle. Units still in
             // training stay (the original's button state is open).
             if (o.slot >= c->slots.size() || c->slots[o.slot].training) {
                 return false;
@@ -187,7 +187,7 @@ bool Military::castle(const CastleOrder& o) {
             return true;
         }
         case CastleOrder::Op::Cancel: {
-            // Op 0x4C value 0: paid weapons come back as far as the unit is healthy.
+            // Cancelled: paid weapons come back as far as the unit is healthy.
             if (o.slot >= c->slots.size()) {
                 return false;
             }
@@ -238,7 +238,7 @@ void Military::castles_tick() {
 }
 
 void Military::castle_second(CostBuilding& c) {
-    // Castles_Tick 0x004798E0: a countdown in seconds; at 0 the training points of the castle go to
+    // A countdown in seconds; at 0 the training points of the castle go to
     // the units in order, the first taking all it needs.
     if (c.island >= m_world->islands().size() || c.slots.empty()) {
         return;
@@ -300,7 +300,7 @@ void Military::castle_second(CostBuilding& c) {
             m_fetch.push_back(FetchRequest{c.island, c.x, c.y, weapon});
         }
     }
-    // Trained without weapons: done as soon as they are there (op 0x13 with the next points).
+    // Trained without weapons: done as soon as they are there (with the next points).
     for (CastleSlot& slot : c.slots) {
         if (slot.training && slot.progress >= kTrained && slot.armed) {
             slot.training = false;
@@ -311,12 +311,12 @@ void Military::castle_second(CostBuilding& c) {
 }
 
 std::optional<Target> Military::warrior_target(std::uint16_t island, TilePos origin, std::uint32_t width,
-                                               std::uint32_t height, PlayerId owner) {
-    // 0x00467820, called by 0x0047EB30 with a reach of 7: from the hut's origin, with the hut's
+                                               std::uint32_t height, std::uint8_t city) {
+    // Called with a reach of 7: from the hut's origin, with the hut's
     // footprint opened as the start area, a search over the 15 x 15 square around it (no circle)
     // walks on roads, open ground, ruins, squares, bridges, beach ruins, piers and the middle of
     // gates (the Land class, all at the Wegspeed of speed type 3). The goals are the roads and
-    // bridges of the natives' owner, never the start; the first goal reached is the target. No
+    // bridges of the village's city, never the start; the first goal reached is the target. No
     // random number is drawn; without such a tile the warrior stays in the hut. The original runs
     // its wavefront in rounds of 64 cost units, Open1602 the exact search of PathFinder on the same
     // costs (pathfinding.hpp).
@@ -337,7 +337,7 @@ std::optional<Target> Military::warrior_target(std::uint16_t island, TilePos ori
             }
             const MapCell& c = isl.map.top(static_cast<std::uint32_t>(p.x), static_cast<std::uint32_t>(p.y));
             const assets::BuildingType* t = c.empty() ? nullptr : m_buildings->by_sprite(c.sprite);
-            if (t != nullptr && c.owner == owner &&
+            if (t != nullptr && c.city == city &&
                 (t->kind == building_kind::kRoad || t->kind == building_kind::kBridge)) {
                 m_finder.set(p, PathFinder::Cell::Goal);
             }
@@ -386,10 +386,8 @@ void Military::natives_tick() {
             continue;
         }
         std::uint32_t& out = counts[std::size_t{found.owner} * islands + found.island];
+        // Only the village's first hut (in the order of the castle table) sends and recruits.
         for (CostBuilding& hut : m_world->cost_buildings()) {
-            if (out >= wanted) {
-                break;
-            }
             if (hut.kind != CostBuilding::Kind::Castle || hut.island != found.island ||
                 m_world->islands()[hut.island].map.top(hut.x, hut.y).city != found.index) {
                 continue;
@@ -398,40 +396,51 @@ void Military::natives_tick() {
             if (!b) {
                 continue;
             }
-            // From the last place: a trained warrior goes out, a new one starts training in its place.
-            // The map does not change in this loop, so the hut's target is searched once.
+            const assets::FigureType* recruit = m_figures->get(b->type->worker_figure);
+            const CastleSlot fresh{b->type->worker_figure, true, true,
+                                   recruit != nullptr ? recruit->combat.max_health : 0U, 0};
+            // From the last place backwards: a trained warrior goes out, and every place looked at
+            // recruits a new one, into the place left or a free one, so that the huts of
+            // a new game, which start empty, fill up. The map does not change in this loop, so the
+            // hut's target is searched once.
+            const std::size_t places = std::max<std::size_t>(b->type->max_wares, hut.slots.size());
             std::optional<std::optional<Target>> target;
-            for (std::size_t k = hut.slots.size(); k-- > 0 && out < wanted;) {
-                if (hut.slots[k].figure == 0 || hut.slots[k].training) {
+            for (std::size_t k = places; k-- > 0 && out < wanted;) {
+                bool sent = false;
+                if (k < hut.slots.size() && hut.slots[k].figure != 0 && !hut.slots[k].training) {
+                    const auto cell = exit_cell(hut.island, hut.x, hut.y);
+                    if (cell) {
+                        if (!target) {
+                            target = warrior_target(hut.island, b->origin, b->width, b->height, found.index);
+                        }
+                        if (*target) {
+                            const Target spot = **target;
+                            const CastleSlot slot = hut.slots[k];
+                            Soldier s;
+                            s.place_cell(cell->first, cell->second);
+                            s.figure = slot.figure;
+                            s.owner = found.owner;
+                            s.island = hut.island;
+                            s.health = slot.health;
+                            s.anim = 1;
+                            s.home = spot;
+                            s.target = spot;
+                            m_world->add_soldier(s);
+                            ++out;
+                            sent = true;
+                        }
+                    }
+                }
+                if (fresh.figure == 0) {
                     continue;
                 }
-                const auto cell = exit_cell(hut.island, hut.x, hut.y);
-                if (!cell) {
-                    break;
+                if (sent) {
+                    hut.slots[k] = fresh;
+                } else if (hut.slots.size() < b->type->max_wares) {
+                    hut.slots.push_back(fresh);
                 }
-                if (!target) {
-                    target = warrior_target(hut.island, b->origin, b->width, b->height, found.owner);
-                }
-                if (!*target) {
-                    continue;  // no owned road or bridge in reach: this place sends nobody
-                }
-                const Target spot = **target;
-                const CastleSlot slot = hut.slots[k];
-                Soldier s;
-                s.place_cell(cell->first, cell->second);
-                s.figure = slot.figure;
-                s.owner = found.owner;
-                s.island = hut.island;
-                s.health = slot.health;
-                s.anim = 1;
-                s.home = spot;
-                s.target = spot;
-                m_world->add_soldier(s);
-                ++out;
-                const assets::FigureType* type = m_figures->get(b->type->worker_figure);
-                hut.slots[k] = CastleSlot{b->type->worker_figure, true, true,
-                                          type != nullptr ? type->combat.max_health : slot.health, 0};
             }
+            break;
         }
     }
 }
@@ -449,7 +458,7 @@ void Military::castle_delivery(std::uint16_t island, std::uint16_t x, std::uint1
 }
 
 bool Military::board(Soldier& s, Ship& ship) {
-    // Soldier_Board 0x00458000: the first empty hold takes the unit, its health as the amount.
+    // The first empty hold takes the unit, its health as the amount.
     const assets::FigureType* type = type_of(s);
     if (type == nullptr || ship.owner != s.owner || ship.sinking) {
         return false;
@@ -460,7 +469,14 @@ bool Military::board(Soldier& s, Ship& ship) {
         }
         const std::uint32_t max = std::max<std::uint32_t>(1, type->combat.max_health);
         const std::uint32_t health = s.health != 0 ? s.health : max;
-        c.ware = unit_ware(s.figure);
+        if (assets::FigureTable::unit_variant(s.figure)) {
+            c.ware = unit_ware(s.figure);
+        } else {
+            // A unit of a package: the hold shows the original's unit of its kind.
+            const auto kind = static_cast<std::size_t>(std::clamp(type->kind, 1, 4) - 1);
+            c.ware = unit_ware(figure::kUnitFamilies[kind]);
+            c.unit = s.figure;
+        }
         c.amount = std::max<std::uint32_t>(1, health * kFullHold / max);
         c.price = 0;
         m_events.push_back(MilitaryEvent{MilitaryEvent::Kind::Boarded, Target::soldier(s.id),
@@ -477,7 +493,7 @@ bool Military::unload(const UnloadOrder& o) {
     if (ship == nullptr || ship->sinking || (o.player != kNoPlayer && ship->owner != o.player)) {
         return false;
     }
-    // Land within 6 tiles of the ship (0x00448D90, Balance::castle_unload_range): the nearest cell
+    // Land within 6 tiles of the ship (Balance::castle_unload_range): the nearest cell
     // soldiers can stand on.
     const auto range = static_cast<std::int32_t>(m_world->balance().castle_unload_range);
     const std::int32_t sx = 2 * ship->x + 1;
@@ -506,7 +522,7 @@ bool Military::unload(const UnloadOrder& o) {
         if (!is_soldier_ware(c.ware) || (o.hold != 0xFF && h != o.hold)) {
             continue;
         }
-        const std::uint16_t figure = unit_of_ware(c.ware);
+        const auto figure = static_cast<std::uint16_t>(hold_unit(c));
         const assets::FigureType* type = m_figures->get(figure);
         if (type == nullptr) {
             continue;

@@ -54,10 +54,10 @@ struct HostSetup {
     bool lan = true;  ///< answer searches on the local network
     bool join_running = true;
     bool spectators = true;
-    bool spectators_chat = true;      ///< spectators may write in the chat (they always read it)
-    bool computer_takes_over = true;  ///< the computer plays on for a person who left
-    bool host_pauses_only = false;    ///< only the host pauses and resumes (MS-20)
-    bool dedicated = false;           ///< the host plays no slot
+    bool spectators_chat = true;       ///< spectators may write in the chat (they always read it)
+    bool computer_takes_over = true;   ///< the computer plays on for a person who left
+    bool host_controls_speed = false;  ///< only the host pauses, resumes and sets the speed (MS-20)
+    bool dedicated = false;            ///< the host plays no slot
     std::uint16_t port = net::kDefaultPort;
     /// The game's settings (ADR 0008): rules, and for an endless game its world; a scenario uses
     /// the rules only, a savegame keeps its own.
@@ -72,9 +72,13 @@ struct HostSetup {
 
 /// The host's settings as the lobby passes them on (net::Lobby::setup, which the session does not
 /// read): what is played and its settings, as "key = value" text.
-[[nodiscard]] std::vector<std::uint8_t> lobby_setup(const EndlessSetup& settings, SetupScope scope);
+/// A new endless game's also its world number (`settings.world_seed`) and `level`.
+[[nodiscard]] std::vector<std::uint8_t> lobby_setup(const EndlessSetup& settings, SetupScope scope,
+                                                    std::uint8_t level = 1);
 /// The settings of a lobby's setup; nothing if it has none or not in this form.
 [[nodiscard]] std::optional<std::pair<EndlessSetup, SetupScope>> read_lobby_setup(std::span<const std::uint8_t> bytes);
+/// The level of a new endless game in a lobby's setup (1 if it names none).
+[[nodiscard]] std::uint8_t read_lobby_level(std::span<const std::uint8_t> bytes);
 /// Whether the host may block a slot of `lobby` (nobody plays it, the world is still made for all
 /// the slots): only in a new endless game before it starts. A scenario's or savegame's players
 /// are in its world already.
@@ -89,7 +93,9 @@ struct ChatLine {
     /// Said privately (net::Chat::everyone off); `to` names to whom ("an Euch", "an Anna, Bernd").
     bool whisper = false;
     std::string to;
-    std::uint64_t serial = 0;  ///< Upstream #338 prerequisite: stable local chat row, never on wire.
+    /// Counts up with each line added (add_chat_line), so a chat scrolled back holds still while
+    /// new lines come in; 0 when not counted.
+    std::uint64_t serial = 0;
 };
 
 /// What goes before a line's text: "Anna: ", "Anna (an Euch): "; nothing for a notice.
@@ -136,6 +142,7 @@ struct MultiplayerEvent {
         Settings,    ///< (host, in the lobby) the game's settings are now `setup.settings`
         Internet,    ///< leave radio, use original WLAN/UDP transport
         Adhoc,       ///< explicitly start native radio connection
+        StartNow,    ///< (host) stop waiting for the players still loading the game at the start
     };
     Kind kind = Kind::Close;
     std::string address{};
@@ -153,11 +160,12 @@ struct MultiplayerEvent {
 /// A banner as the lobby shows it: its colour in the palette and its id (render::Banner::id), whose
 /// name after the colon names its text ("anno1602:red": "net.colour.red").
 struct MenuBanner {
-    std::uint8_t colour = 0;
+    std::int32_t colour = 0;  ///< a palette colour or exactly the banner's (ui::rgb_ink)
     std::string id;
     /// The player's name in the chat: the banner's colour, lightened where it would be hard to
-    /// read on the menus' dark ground (a dark blue).
-    std::uint8_t text = 0;
+    /// read on the menus' dark ground (a dark blue): a palette colour or a colour of its own
+    /// (ui::rgb_ink).
+    std::int32_t text = 0;
 };
 
 /// The lobby slots of an endless game for `players` (clamped to HostSetup::kMinPlayers..
@@ -194,9 +202,18 @@ public:
     /// On-screen keyboards must open only after an explicit field selection.
     void explicit_text_input(bool enabled) noexcept { m_explicit_text_input = enabled; }
     void set_scale(double scale) {
+        m_scale = scale > 0.0 ? scale : 1.0;
         m_form.set_scale(scale);
         m_settings.set_scale(scale);
     }
+    /// What makes the preview of the islands of a new endless game, and its colours
+    /// (GameSettingsMenu).
+    void set_preview_maker(GameSettingsMenu::PreviewMaker maker) { m_settings.set_preview_maker(std::move(maker)); }
+    void set_preview_colours(const GameSettingsMenu::PreviewColours& colours) {
+        m_settings.set_preview_colours(colours);
+    }
+    /// The start dialog over the screens (for the tests: its preview).
+    [[nodiscard]] GameSettingsMenu& settings_dialog() noexcept { return m_settings; }
     /// The banners by id (render::BannerTable): a slot shows the colour of its banner
     /// (net::LobbySeat::banner); `other` for a banner beyond them.
     void set_banners(std::vector<MenuBanner> banners, std::uint8_t other) {
@@ -212,8 +229,8 @@ public:
     /// The right button only reaches the start dialog's settings.
     std::vector<MultiplayerEvent> mouse(const MultiplayerModel& model, std::int32_t x, std::int32_t y, bool down,
                                         ui::MouseButton button = ui::MouseButton::Left);
-    /// The mouse wheel (`notches` up positive): the games found, or the scenarios or savegames of
-    /// a game being created, a row per notch. False on a screen without a list.
+    /// The mouse wheel (`notches` up positive): the games found, the scenarios or savegames of a
+    /// game being created, or the lobby's chat, a row per notch. False on a screen without a list.
     bool wheel(const MultiplayerModel& model, std::int32_t notches);
     /// Escape: one screen back. Close on the search screen, Leave in a session; nothing when the
     /// menu went back by itself (from creating a game to the search).
@@ -234,11 +251,19 @@ private:
     void layout_browse(const MultiplayerModel& model);
     void layout_create(const MultiplayerModel& model);
     void layout_lobby(const MultiplayerModel& model);
+    /// The lobby's slots and who watches, from the top of the left column. Returns where they end.
+    std::int32_t layout_seats(const MultiplayerModel& model);
+    /// While the game starts (net::Session::starting()): everyone in the game with how far they are
+    /// with it, in place of the slots, from row m_start_first on. Returns where the rows end.
+    std::int32_t layout_start_list(const MultiplayerModel& model);
     void layout_connecting();
     /// The game from the host on its way (MultiplayerModel::join), in `box` of the lobby.
     void layout_join_progress(const MultiplayerModel& model, ui::Rect box);
     /// The start dialog over the screen: the host's settings to choose, or to look at.
-    void open_settings(const EndlessSetup& setup, SetupScope scope, GameSettingsMenu::Mode mode);
+    /// `level` the difficulty of a new endless game (its preview); `reroll` whether its world
+    /// number may change there (only while the host creates the game).
+    void open_settings(const EndlessSetup& setup, SetupScope scope, GameSettingsMenu::Mode mode, std::uint8_t level,
+                       bool reroll);
     /// Back from the start dialog to the screen it was opened from.
     void close_settings();
     /// The settings button and the summary of the rules below `y` in the right column.
@@ -259,10 +284,10 @@ private:
     ui::Form m_form;
     Screen m_network_from = Screen::Browse;
     Screen m_screen = Screen::Browse;
-    [[nodiscard]] std::uint8_t banner_colour(sim::BannerId banner) const noexcept {
+    [[nodiscard]] std::int32_t banner_colour(sim::BannerId banner) const noexcept {
         return banner < m_banners.size() ? m_banners[banner].colour : m_other_banner;
     }
-    [[nodiscard]] std::uint8_t banner_text_colour(sim::BannerId banner) const noexcept {
+    [[nodiscard]] std::int32_t banner_text_colour(sim::BannerId banner) const noexcept {
         return banner < m_banners.size() ? m_banners[banner].text : m_other_banner;
     }
     [[nodiscard]] std::string banner_label(sim::BannerId banner) const;
@@ -319,6 +344,18 @@ private:
     std::vector<sim::BannerId> m_banner_choices;  ///< the banners of the buttons shown, in order
     /// (Host) The roster entries and names of the spectators shown with a kick button.
     std::vector<std::pair<std::size_t, std::string>> m_watchers;
+    // The lobby's slots, scrolled when there are more than kSeatRows (a higher sim::kMaxPlayers).
+    std::size_t m_seat_first = 0;  ///< the first slot shown (of those not reserved)
+    std::size_t m_seat_rows = 0;   ///< slots shown at the last layout
+    std::size_t m_seat_count = 0;  ///< slots not reserved at the last layout
+    ui::Rect m_seat_box{};         ///< where the slots are, for the mouse wheel
+    // While the game starts: the list of who is in it and how far they are with it.
+    std::size_t m_start_first = 0;  ///< the first row shown
+    std::size_t m_start_rows = 0;   ///< rows shown at the last layout (0: no list)
+    ui::Rect m_start_box{};         ///< where the list is, for the mouse wheel
+    std::int32_t m_mouse_x = 0;     ///< where the mouse last was, in design units
+    std::int32_t m_mouse_y = 0;
+    double m_scale = 1.0;  ///< of the design units (set_scale())
 };
 
 }  // namespace o1602::app

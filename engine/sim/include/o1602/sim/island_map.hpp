@@ -13,7 +13,7 @@
 
 namespace o1602::sim {
 
-/// One tile of an island. Mirrors the original grid word (island + 0xAF4, 32 bit per tile):
+/// One tile of an island. Mirrors the original grid word (32 bit per tile):
 /// bits 0-12 base sprite, 13-14 rotation, 15-18 animation phase; plus the owner (the original's
 /// INSELHAUS attribute bits 22-25, translated to a PlayerId when loading). The sprite has 16 bits
 /// here, not 13, so that buildings of mods may use sprites from 8192 on; savegames store the
@@ -49,7 +49,7 @@ struct BlockHash {
 };
 
 /// Tile grid of one island with two layers: buildings/terrain on top and the ground below
-/// (the original keeps the latter in a second grid at island + 0xAFC).
+/// (the original keeps the latter in a second grid).
 class IslandMap {
 public:
     /// Tiles on a side of a block: the fingerprint of the game hashes an island's tiles block by
@@ -75,7 +75,7 @@ public:
     [[nodiscard]] std::uint64_t block_revision(std::size_t block) const { return m_revisions[block]; }
 
     /// Changes the picture of a tile in place (a field ripening or harvested: the original swaps
-    /// the sprite bits of the grid word, 0x0047CA80 / 0x0047C830).
+    /// the sprite bits of the grid word).
     void set_sprite(std::uint32_t x, std::uint32_t y, std::uint16_t sprite) {
         m_top[index(x, y)].sprite = sprite;
         touch(x, y);
@@ -90,26 +90,26 @@ public:
     }
 
     /// Places a building with its top-left footprint corner at (x, y), exactly like the original
-    /// placement routine (0x00463B10): sub-tiles receive gfx, gfx+1, ... in a rotation dependent
+    /// placement routine: sub-tiles receive gfx, gfx+1, ... in a rotation dependent
     /// order. Previous content of the covered tiles moves to the ground layer (demolishing restores
     /// it from there, so former river tiles stay water - S-009).
     /// Fails (without changes) if the rotated footprint leaves the island.
     core::Status place(const assets::BuildingType& building, std::int32_t x, std::int32_t y, std::uint8_t rotation,
                        std::uint8_t anim_phase, PlayerId owner = kNoPlayer, std::uint8_t city = MapCell::kNoCity);
 
-    /// A building the player builds (0x00463B10): like place(), but the ground layer stays as it is
+    /// A building the player builds: like place(), but the ground layer stays as it is
     /// (it keeps the island's original terrain, which demolishing restores).
     core::Status build(const assets::BuildingType& building, std::int32_t x, std::int32_t y, std::uint8_t rotation,
                        std::uint8_t anim_phase, PlayerId owner, std::uint8_t city);
 
-    /// A tile of a saved island (INSELHAUS, 0x00468550): written on top like the original's loader;
-    /// with `to_ground` it also becomes the tile's ground (0x00463E10). Nothing moves down.
+    /// A tile of a saved island (INSELHAUS): written on top like the original's loader;
+    /// with `to_ground` it also becomes the tile's ground. Nothing moves down.
     core::Status load(const assets::BuildingType& building, std::int32_t x, std::int32_t y, std::uint8_t rotation,
                       std::uint8_t anim_phase, PlayerId owner, std::uint8_t city, bool to_ground,
                       std::uint8_t random = 0);
 
     /// Takes the current picture as the original terrain of every tile (the ground layer the
-    /// original keeps at island + 0xAFC).
+    /// original keeps).
     void capture_ground() {
         m_ground = m_top;
         touch_all();
@@ -143,11 +143,11 @@ public:
     }
 
     /// Replaces the building whose footprint lies at (x, y) by another one of the same size in
-    /// place (a house changing class, ruins): owner, city and the ground below stay (0x00463EF0).
+    /// place (a house changing class, ruins): owner, city and the ground below stay.
     core::Status replace(const assets::BuildingType& building, std::int32_t x, std::int32_t y, std::uint8_t rotation,
                          std::uint8_t anim_phase);
 
-    /// Inverse of place() for one tile (original 0x00463250): building and placement origin.
+    /// Inverse of place() for one tile: building and placement origin.
     [[nodiscard]] SubTile sub_tile(const assets::BuildingTable& buildings, std::uint32_t x, std::uint32_t y) const;
     /// The placement origin of the tile (x, y) whose cell shows `building` (its by_sprite()
     /// record); inline, as the computers ask for it on every tile they look at (TB-11).
@@ -164,7 +164,7 @@ public:
         }
         const std::int32_t row = d / w;
         const std::int32_t col = d % w;
-        switch (cell.rotation & 3U) {  // original 0x00463250
+        switch (cell.rotation & 3U) {
             case 0:
                 return {px - col, py - row};
             case 1:
@@ -207,17 +207,57 @@ private:
     std::vector<std::uint64_t> m_revisions;  ///< per block
 };
 
-/// Whether a building belongs to the land of a city (0x00480B70): roads, piers, crop fields, towers,
+/// Whether a building belongs to the land of a city: roads, piers, crop fields, towers,
 /// production and public buildings, Kontors. Grass, trees, fish, ground, mountains and ruins do
 /// not. What does falls to ruins when its city loses the land; what does not is terrain the
 /// original keeps in the ground layer.
 [[nodiscard]] bool territory_building(const assets::BuildingTable& buildings, const assets::BuildingType& b) noexcept;
 
-/// Footprint after rotation (original 0x00463830): rotations 1 and 3 swap width and height.
+/// Footprint after rotation: rotations 1 and 3 swap width and height.
 inline void rotated_size(const assets::BuildingType& b, std::uint8_t rotation, std::uint32_t& w, std::uint32_t& h) {
     const bool swap = (rotation & 1U) != 0;
     w = swap ? b.size_y : b.size_x;
     h = swap ? b.size_x : b.size_y;
+}
+
+/// The tiles of a building placed with the top left of its footprint at (x, y), in the order the
+/// original's placement routine lays them: put(tile x, tile y, k) for its k-th sprite from b.gfx.
+template <typename Put>
+void for_each_footprint(const assets::BuildingType& b, std::int32_t x, std::int32_t y, std::uint8_t rotation,
+                        Put&& put) {
+    const auto w = static_cast<std::int32_t>(b.size_x);
+    const auto h = static_cast<std::int32_t>(b.size_y);
+    std::uint32_t k = 0;
+    switch (rotation & 3U) {
+        case 0:
+            for (std::int32_t j = 0; j < h; ++j) {
+                for (std::int32_t i = 0; i < w; ++i) {
+                    put(x + i, y + j, k++);
+                }
+            }
+            break;
+        case 1:
+            for (std::int32_t j = h - 1; j >= 0; --j) {
+                for (std::int32_t i = 0; i < w; ++i) {
+                    put(x + j, y + i, k++);
+                }
+            }
+            break;
+        case 2:
+            for (std::int32_t j = h - 1; j >= 0; --j) {
+                for (std::int32_t i = w - 1; i >= 0; --i) {
+                    put(x + i, y + j, k++);
+                }
+            }
+            break;
+        default:
+            for (std::int32_t j = 0; j < h; ++j) {
+                for (std::int32_t i = w - 1; i >= 0; --i) {
+                    put(x + j, y + i, k++);
+                }
+            }
+            break;
+    }
 }
 
 }  // namespace o1602::sim

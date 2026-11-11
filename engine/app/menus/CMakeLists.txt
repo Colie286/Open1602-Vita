@@ -10,15 +10,19 @@
 
 add_library(o1602_menus
     ../src/app_settings.cpp
+    ../src/blueprint_window.cpp
     ../src/build_tool.cpp
     ../src/catchment_view.cpp
     ../src/chat_window.cpp
+    ../src/cheat_console.cpp
     ../src/command_line.cpp
     ../src/command_sink.cpp
     ../src/diplomacy_panel.cpp
     ../src/diplomacy_strip.cpp
     ../src/display_menu.cpp
     ../src/display_settings.cpp
+    ../src/editor_chrome.cpp
+    ../src/editor_panel.cpp
     ../src/end_screen.cpp
     ../src/fertility_view.cpp
     ../src/endless_setup.cpp
@@ -29,10 +33,13 @@ add_library(o1602_menus
     ../src/goods_window.cpp
     ../src/high_score_file.cpp
     ../src/key_help.cpp
+    ../src/keys_menu.cpp
     ../src/list_panels.cpp
     ../src/main_menu.cpp
     ../src/map_gestures.cpp
     ../src/message_table.cpp
+    ../src/mod_check.cpp
+    ../src/mod_rules.cpp
     ../src/mods_menu.cpp
     ../src/multiplayer_menu.cpp
     ../src/multiplayer_texts.cpp
@@ -47,6 +54,8 @@ add_library(o1602_menus
     ../src/ship_panel.cpp
     ../src/side_panels.cpp
     ../src/stock_notes.cpp
+    ../src/template_window.cpp
+    ../src/templates.cpp
     ../src/tile_status.cpp
     ../src/tutorial.cpp
     ../src/unit_panels.cpp

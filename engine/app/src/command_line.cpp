@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "command_line.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <string_view>
 #include <system_error>
 
 #include "o1602/core/file.hpp"
 #include "o1602/core/text.hpp"
+#include "o1602/sim/world_plan.hpp"
 
 namespace o1602::app {
 
@@ -49,12 +51,16 @@ bool parse_input(std::string_view text, std::vector<ViewerOptions::ScriptedInput
         } else if (verb == "key") {
             in.kind = Input::Kind::Key;
             std::string_view key = args;
-            for (const auto& [suffix, mod] : {Suffix{"+ctrl", kModCtrl}, Suffix{"+shift", kModShift}}) {
+            // Any of them in any order ("119+ctrl+shift+alt"): the name ends at the first.
+            std::size_t name_end = key.size();
+            for (const auto& [suffix, mod] :
+                 {Suffix{"+ctrl", kModCtrl}, Suffix{"+shift", kModShift}, Suffix{"+alt", kModAlt}}) {
                 if (const std::size_t p = key.find(suffix); p != std::string_view::npos) {
                     in.mod = static_cast<std::uint16_t>(in.mod | mod);
-                    key = key.substr(0, p);
+                    name_end = std::min(name_end, p);
                 }
             }
+            key = key.substr(0, name_end);
             if (!parse_number(key, in.key)) {
                 return false;
             }
@@ -74,12 +80,16 @@ bool parse_input(std::string_view text, std::vector<ViewerOptions::ScriptedInput
             in.key = n;
         } else {
             // "down+shift": the modifiers held while the button goes down or up.
-            for (const auto& [suffix, mod] : {Suffix{"+ctrl", kModCtrl}, Suffix{"+shift", kModShift}}) {
+            // Any of them in any order ("119+ctrl+shift+alt"): the name ends at the first.
+            std::size_t name_end = verb.size();
+            for (const auto& [suffix, mod] :
+                 {Suffix{"+ctrl", kModCtrl}, Suffix{"+shift", kModShift}, Suffix{"+alt", kModAlt}}) {
                 if (const std::size_t p = verb.find(suffix); p != std::string_view::npos) {
                     in.mod = static_cast<std::uint16_t>(in.mod | mod);
-                    verb = verb.substr(0, p);
+                    name_end = std::min(name_end, p);
                 }
             }
+            verb = verb.substr(0, name_end);
             in.right = verb == "rdown" || verb == "rup";
             in.kind = verb == "down" || verb == "rdown" ? Input::Kind::Down
                       : verb == "up" || verb == "rup"   ? Input::Kind::Up
@@ -145,6 +155,12 @@ core::Result<CommandLine> parse_command_line(int argc, const char* const* argv) 
             game_named = true;
         } else if (arg == "--menu") {
             menu = true;
+        } else if (arg == "--editor") {
+            // The editor, with the file after it if one follows (ADR 0013).
+            options.editor = true;
+            if (has_value && !std::string_view(argv[i + 1]).starts_with("--")) {
+                out.editor_file = argv[++i];
+            }
         } else if (arg == "--no-panel") {
             options.frame = false;
         } else if (arg == "--no-sound") {
@@ -271,6 +287,21 @@ core::Result<CommandLine> parse_command_line(int argc, const char* const* argv) 
                 options.rules.volcanoes = sim::Volcanoes::Off;
             } else if (mode == "on") {
                 options.rules.volcanoes = sim::Volcanoes::On;
+            } else if (mode == "rare") {
+                options.rules.volcanoes = sim::Volcanoes::Rare;
+            } else {
+                return bad(i);
+            }
+        } else if ((arg == "--plagues" || arg == "--fires") && has_value) {
+            // Game setting: how often plagues or fires break out in towns.
+            sim::Outbreaks& rule = arg == "--plagues" ? options.rules.plagues : options.rules.fires;
+            const std::string_view mode = argv[++i];
+            if (mode == "original") {
+                rule = sim::Outbreaks::Original;
+            } else if (mode == "rare") {
+                rule = sim::Outbreaks::Rare;
+            } else if (mode == "off") {
+                rule = sim::Outbreaks::Off;
             } else {
                 return bad(i);
             }
@@ -305,6 +336,14 @@ core::Result<CommandLine> parse_command_line(int argc, const char* const* argv) 
                 options.rules.reveal = sim::Reveal::Original;
             } else if (mode == "all") {
                 options.rules.reveal = sim::Reveal::All;
+            } else {
+                return bad(i);
+            }
+        } else if (arg == "--reveal-resources" && has_value) {
+            // Game setting: whether the islands' crops and deposits are known from the start.
+            const std::string_view mode = argv[++i];
+            if (mode == "original" || mode == "all") {
+                options.rules.reveal_resources = mode == "all";
             } else {
                 return bad(i);
             }
@@ -451,6 +490,33 @@ core::Result<CommandLine> parse_command_line(int argc, const char* const* argv) 
                 return bad(i);
             }
             custom_world = true;
+        } else if (arg == "--island-shapes" && has_value) {
+            const std::string_view mode = argv[++i];
+            if (mode == "templates") {
+                custom.shapes = sim::WorldSettings::Shapes::Templates;
+            } else if (mode == "mixed") {
+                custom.shapes = sim::WorldSettings::Shapes::Mixed;
+            } else if (mode == "own") {
+                custom.shapes = sim::WorldSettings::Shapes::Own;
+            } else {
+                return bad(i);
+            }
+            custom_world = true;
+        } else if (arg == "--island-preset" && has_value) {
+            const std::string_view name = argv[++i];
+            const auto preset = std::ranges::find(sim::landscape_presets(), name, &sim::LandscapePreset::name);
+            if (preset == sim::landscape_presets().end()) {
+                return bad(i);
+            }
+            custom.shapes = sim::WorldSettings::Shapes::Own;
+            custom.landscape = preset->landscape;
+            custom_world = true;
+        } else if (arg.starts_with("--island-") && has_value &&
+                   std::ranges::find(sim::landscape_names::kKeys, arg.substr(9)) != sim::landscape_names::kKeys.end()) {
+            if (!sim::set_landscape(custom.landscape, arg.substr(9), argv[++i])) {
+                return bad(i);
+            }
+            custom_world = true;
         } else if (arg == "--starts" && has_value) {
             const std::string_view mode = argv[++i];
             if (mode == "spread") {
@@ -526,6 +592,13 @@ core::Result<CommandLine> parse_command_line(int argc, const char* const* argv) 
     // No game named: the main menu, as the original starts (with --frame off there is none). A
     // computer joining a host gets the game from it.
     options.menu = options.frame && !multiplayer_given && (menu || (!game_named && !new_game));
+    if (options.editor) {
+        if (!options.frame || multiplayer_given || game_named || new_game) {
+            return core::make_error(core::ErrorCode::InvalidFormat,
+                                    "--editor opens its own file: not with a game, --no-panel or multiplayer");
+        }
+        options.menu = true;  // the sea behind the menu, until the editor takes its place
+    }
     if (options.max_frames != 0) {
         out.dialogs = false;
     }

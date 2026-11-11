@@ -15,7 +15,7 @@ namespace o1602::app {
 
 namespace {
 
-// ENDE.GAD (docs/re/ui.md "Endbildschirm").
+// ENDE.GAD.
 constexpr std::int32_t kMainMenu = 36001;
 constexpr std::int32_t kNewGame = 36002;
 constexpr std::int32_t kBack = 36003;  // commented out in the shipped file
@@ -33,9 +33,12 @@ constexpr std::int32_t kTransferRight = 45008;
 constexpr std::int32_t kArrowGap = 6;  // between an arrow and the coat of arms beside it
 
 // The hint of Open1602's way back into a won game, over the buttons.
-constexpr std::int32_t kHintX = 512;
+// Its middle left of the screen's middle: the total's word ("Summe") reaches down beside it
+// from about x 590.
+constexpr std::int32_t kHintX = 440;
 constexpr std::int32_t kHintY = 680;
-constexpr std::int32_t kText = 4;  // text colour of the original (ui::text_colour)
+constexpr std::int32_t kHintHalf = 8;  // half the hint's height
+constexpr std::int32_t kText = 4;      // text colour of the original (ui::text_colour)
 // The ranks: under the name, and under each coat of arms of the strip (small font, its cell's bottom
 // this far below the name's or the gadget's bottom).
 constexpr std::int32_t kSmallFont = 1;
@@ -138,7 +141,7 @@ void EndScreen::open(sim::EndScreenSummary summary, bool view_only) {
     if (m_strip) {
         update_strip();
     } else {
-        // Screen_PlayerStatus: a coat of arms for every colour somebody plays, with two players or more.
+        // As in the original: a coat of arms for every colour somebody plays, with two players or more.
         for (std::size_t c = 0; c < m_slots; ++c) {
             p.set_graphic(slot_id(c), m_button_arms + static_cast<std::int32_t>(c), m_button_press);
             p.set_visible(slot_id(c),
@@ -170,7 +173,7 @@ void EndScreen::update_strip() {
         p.set_visible(slot_id(s), used);
         if (used) {
             const sim::EndScreenRow& r = m_summary.rows[m_order[place]];
-            set_banner_graphic(p, slot_id(s), render::BannerArt::at(m_button_arms),
+            set_banner_graphic(p, slot_id(s), render::BannerArt::arms_at(m_button_arms),
                                m_banners != nullptr ? m_banners->get(r.banner) : nullptr, m_button_press);
             p.set_selected(slot_id(s), m_order[place] == m_row);
         }
@@ -209,7 +212,7 @@ void EndScreen::show(std::size_t row) {
     p.set_text(kTotal, std::to_string(s.total));
     p.set_text(kName, r.name.empty() ? ui::tr("end.player", {std::to_string(r.player + 1)}) : r.name);
     // The coat of arms in the player's colour (the further colours: the white one recoloured).
-    set_banner_graphic(p, kArms, render::BannerArt::at(m_arms),
+    set_banner_graphic(p, kArms, render::BannerArt::arms_at(m_arms),
                        m_banners != nullptr ? m_banners->get(r.banner) : nullptr);
     if (m_strip) {
         // Keep the shown player in the strip.
@@ -261,11 +264,28 @@ std::vector<ui::DrawItem> EndScreen::draw(const std::array<const ui::Font*, ui::
         d.colour = kText;
         d.align = ui::Align::Centre;
         d.x = ui::to_pixels(kHintX, m_scale);
-        d.y = ui::to_pixels(kHintY, m_scale);
+        d.y = ui::to_pixels(hint_bottom(), m_scale);
         d.text = ui::tr("end.continue_hint");
         items.push_back(std::move(d));
     }
     return items;
+}
+
+std::int32_t EndScreen::hint_bottom() const {
+    // Halfway between the total's line and the buttons, clear of both (the text's bottom a little
+    // below the middle); where the layout lacks either, the place of the 1024x768 screen.
+    if (!m_panel) {
+        return kHintY;
+    }
+    const assets::GadgetLayout& layout = m_panel->layout();
+    const assets::Gadget* total = layout.find(kTotal);
+    const auto total_at = m_panel->position(kTotal);
+    const auto button_at = m_panel->position(kMainMenu);
+    if (total == nullptr || !total_at || !button_at || (*button_at)[1] <= (*total_at)[1] + total->size[1]) {
+        return kHintY;
+    }
+    const std::int32_t below = (*total_at)[1] + total->size[1];
+    return (below + (*button_at)[1]) / 2 + kHintHalf;
 }
 
 void EndScreen::draw_ranks(std::vector<ui::DrawItem>& out) const {

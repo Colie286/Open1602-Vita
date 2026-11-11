@@ -211,6 +211,13 @@ void apply_icons_file(std::vector<PackageIcon>& icons, std::string_view package,
                 } else {
                     icon.file = folder / core::path_from_utf8(*s);
                 }
+            } else if (e.key == "tint") {
+                if (const bool* on = e.value.boolean()) {
+                    icon.tint = *on;
+                } else {
+                    warnings.push_back(field + "is true or false");
+                    ok = false;
+                }
             } else {
                 warnings.push_back(field + "is no field of an icon and is passed over");
             }

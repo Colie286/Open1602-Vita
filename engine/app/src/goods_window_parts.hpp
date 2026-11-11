@@ -36,6 +36,8 @@ constexpr Id kPageDown = 9;
 constexpr Id kTab = 10;           // + GoodsWindow::Tab
 constexpr Id kRow = 100;          // + ware
 constexpr Id kProducerRow = 400;  // + row of the tab "Betriebe"
+constexpr Id kRouteSort = 60;     // + GoodsWindow::RouteOrder: the headings of the tab "Routes"
+constexpr Id kRouteRow = 2000;    // + row of the tab "Routes"
 
 constexpr std::int32_t kFontNormal = 0;
 constexpr std::int32_t kFontSmall = 1;   // column heads, axes, hints
@@ -54,7 +56,9 @@ constexpr std::int32_t kScrollX = GoodsWindow::kWidth - 18;
 constexpr std::int32_t kScrollW = 6;
 /// The tabs, under the island.
 constexpr std::int32_t kTabY = 84;
-constexpr std::int32_t kTabW = (GoodsWindow::kWidth - 2 * kMargin - 4 * 4) / 5;
+constexpr std::int32_t kTabW =
+    (GoodsWindow::kWidth - 2 * kMargin - 4 * static_cast<std::int32_t>(GoodsWindow::kTabs - 1)) /
+    static_cast<std::int32_t>(GoodsWindow::kTabs);
 constexpr std::int32_t kTabH = 26;
 
 /// The groups of the table, in the order of the original's Kontor window.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// What a fight shows besides the units themselves (docs/re/military.md#effects): the hit where a
+// What a fight shows besides the units themselves: the hit where a
 // shot lands (TREFFKAN1, TREFFKAN2, TREFFMUS), the smoke of a ship's broadside and of a tower's
 // cannon (KANONSHOT*), and the wreck a sunk ship leaves on the water (SHIPSUNK).
 //
@@ -83,7 +83,7 @@ private:
 
 /// Animation and frame of the wreck `elapsed_ms` after its ship went down, or nothing once it is
 /// gone (exposed for tests). ANIM 0 runs for the Worktime, ANIM 1 for its frames times AnimRept,
-/// then ANIM 2 and the last image of ANIM 3 (0x00452300); about 22 s in all.
+/// then ANIM 2 and the last image of ANIM 3; about 22 s in all.
 struct WreckFrame {
     std::uint8_t anim = 0;
     std::uint8_t frame = 0;

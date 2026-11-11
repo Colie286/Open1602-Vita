@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Soldiers, cannon towers and what their shots do (docs/re/military.md).
+// Soldiers, cannon towers and what their shots do.
 //
 // Like ships, a soldier decides what to do only at the end of each run of one to three half-tile
-// cells, after an attack or a short wait (0x00456D00): whether a hostile figure is in range, whether
-// to chase one, whether it has arrived. Towers look for a target once a second (0x00458AC0). Shots
+// cells, after an attack or a short wait: whether a hostile figure is in range, whether
+// to chase one, whether it has arrived. Towers look for a target once a second. Shots
 // land after the shooter's Shottime (combat.hpp); a soldier dies at 0 health, a building falls to
 // ruins at its Maxenergy. The original decides kills and destruction only on the attacker's computer;
 // Open1602 computes everything on every computer from the same state (ADR 0004).
@@ -32,7 +32,7 @@ namespace o1602::sim {
 
 class Fleet;
 
-/// Sends soldiers somewhere (Order_Move 0x0044D540): to a place, to a building, against a unit.
+/// Sends soldiers somewhere: to a place, to a building, against a unit.
 struct SoldierOrder {
     PlayerId player = kNoPlayer;
     std::vector<std::uint32_t> soldiers;  ///< Soldier::id
@@ -44,13 +44,13 @@ struct SoldierOrder {
     /// FORMATION of figuren.cod to take up around a Spot, 0xFF = none (everyone walks to the spot).
     std::uint8_t formation = 0xFF;
     /// With a Spot: where each unit goes relative to it, in 1/8 tile, in the order of `soldiers`
-    /// (the shape of the group kept, 0x0044D540). Ignored unless there is one per unit.
+    /// (the shape of the group kept). Ignored unless there is one per unit.
     std::vector<std::pair<std::int16_t, std::int16_t>> offsets{};
     /// Waits behind the unit's orders (Shift + right click).
     bool queue = false;
 };
 
-/// Further commands to one unit (soldier ops 0x0C, 0x28, 0x29, 0x2B).
+/// Further commands to one unit.
 struct SoldierCommand {
     enum class Op : std::uint8_t {
         Stop,
@@ -68,7 +68,7 @@ struct SoldierCommand {
     bool one_way = false;
 };
 
-/// Orders to a castle (building ops 0x10, 0x4C; docs/re/military.md, "Training").
+/// Orders to a castle ("Training").
 struct CastleOrder {
     enum class Op : std::uint8_t {
         Recruit,  ///< train a unit of `figure` (SOLDAT1, KAVALERIE1, MUSKETIER1, KANONIER1)
@@ -88,7 +88,7 @@ struct CastleOrder {
     Target spot;
 };
 
-/// Soldiers from a ship's holds onto land within 6 tiles (0x00448F90).
+/// Soldiers from a ship's holds onto land within 6 tiles.
 struct UnloadOrder {
     PlayerId player = kNoPlayer;
     std::uint32_t ship = 0;
@@ -140,7 +140,7 @@ public:
     void tick(std::uint32_t dt_ms, std::vector<ConstructionEvent>* construction);
 
     bool order(const SoldierOrder& order);
-    /// An attack by `self` on `target` (military mode, 0x0044D540): war with its owner unless that
+    /// An attack by `self` on `target` (military mode): war with its owner unless that
     /// is `self`, nobody or the free trader; pending peace offers end too. Returns whether the
     /// relation changed.
     bool declare_war_by_attack(PlayerId self, const Target& target);
@@ -148,7 +148,7 @@ public:
     bool castle(const CastleOrder& order);
     bool unload(const UnloadOrder& order);
 
-    /// Units a player has: on land, in castles and on board ships (Player_ArmySize 0x00475B60).
+    /// Units a player has: on land, in castles and on board ships.
     [[nodiscard]] std::uint32_t army_size(PlayerId player) const;
     /// A castle's pack donkey brought weapons (the logistics call this; amount 0: the trip failed).
     void castle_delivery(std::uint16_t island, std::uint16_t x, std::uint16_t y, std::uint8_t ware,
@@ -166,14 +166,15 @@ public:
         return r;
     }
 
-    /// The natives' city tick (every 10 s, 0x0047EB30): warriors come out of their huts, three
-    /// every 30 s, seven every 10 s for ten minutes after their village was attacked. Each goes to
-    /// the first road or bridge of the natives' owner that a search within 7 tiles of the hut
-    /// reaches (warrior_target()); a hut without one sends nobody.
+    /// The natives' city tick (every 10 s): warriors come out of the village's first
+    /// hut, three every 30 s, seven every 10 s for ten minutes after their village was attacked.
+    /// Each goes to the first road or bridge of the village that a search within 7 tiles of the
+    /// hut reaches (warrior_target()); a hut without one sends nobody. Every place of the hut looked
+    /// at recruits a new warrior, so empty huts fill up.
     void natives_tick();
-    /// Target of a warrior leaving `hut` (0x00467820): a half-tile spot, nothing without a goal.
+    /// Target of a warrior leaving `hut`: a half-tile spot, nothing without a goal.
     [[nodiscard]] std::optional<Target> warrior_target(std::uint16_t island, TilePos origin, std::uint32_t width,
-                                                       std::uint32_t height, PlayerId owner);
+                                                       std::uint32_t height, std::uint8_t city);
 
     /// A tower building was built or a city's territory changed: towers come and go with it.
     void update_towers(std::uint16_t island);
@@ -186,7 +187,7 @@ public:
 
     /// Damage of a building at its origin, 1/32 HP.
     [[nodiscard]] std::uint32_t building_damage(std::uint16_t island, std::uint16_t x, std::uint16_t y) const;
-    /// Applies damage to a building (0x0047A650): destroyed at its Maxenergy.
+    /// Applies damage to a building: destroyed at its Maxenergy.
     void damage_building(std::uint16_t island, std::uint16_t x, std::uint16_t y, std::uint32_t damage, bool cannon,
                          PlayerId attacker, std::vector<ConstructionEvent>* construction);
 
@@ -265,7 +266,7 @@ private:
     void towers_tick(std::uint32_t dt_ms);
     void tower_think(Tower& t);
 
-    /// The natives' curse (0x0047EAA0) after their village fell.
+    /// The natives' curse after their village fell.
     void curse(std::uint16_t island, std::uint8_t city, bool dissolved);
 
     // Hits and buildings (combat side)

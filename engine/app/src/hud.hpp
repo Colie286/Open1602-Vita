@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The original's frame around the map (docs/re/ui.md): the panel on the right with the minimap,
+// The original's frame around the map: the panel on the right with the minimap,
 // compass, rotate and zoom buttons and the four modes (CTRL.GAD), and the status bar below the map
 // with the status line and the icons of the last three messages (LEIST.GAD). Below the head the
 // mode's panel: the build menu or the player status (side_panels.hpp); the windows of the
@@ -18,12 +18,16 @@
 #include <utility>
 #include <vector>
 
+#include "blueprint_window.hpp"
 #include "chat_window.hpp"
 #include "diplomacy_strip.hpp"
 #include "display_menu.hpp"
+#include "editor_chrome.hpp"
+#include "editor_panel.hpp"
 #include "end_screen.hpp"
 #include "goods_window.hpp"
 #include "key_help.hpp"
+#include "keys_menu.hpp"
 #include "main_menu.hpp"
 #include "message_table.hpp"
 #include "multiplayer_menu.hpp"
@@ -32,6 +36,7 @@
 #include "selection.hpp"
 #include "selection_panels.hpp"
 #include "side_panels.hpp"
+#include "template_window.hpp"
 #include "tutorial.hpp"
 
 #include "o1602/assets/game_directory.hpp"
@@ -60,6 +65,10 @@ public:
             Message,
             Build,         ///< build mode with `building`
             Demolish,      ///< build mode, the demolish tool
+            Copy,          ///< build mode, the copy tool (Open1602)
+            Move,          ///< build mode, the move tool (Open1602)
+            Blueprint,     ///< blueprint mode on or off (Open1602)
+            Templates,     ///< build mode, the copy tool, and the templates' list (Open1602)
             TurnBuilding,  ///< the building to place by `step` quarters
             ToolOff,       ///< another mode: no building tool
             OrientToRoad,  ///< buildings with a door turn to the road (`step` 1) or not (0)
@@ -110,7 +119,7 @@ public:
     void set_messages(const MessageTable* messages) noexcept {
         m_messages = messages != nullptr ? messages : &MessageTable::original();
     }
-    /// What the resource bar at the top of the map shows (Hud_DrawResourceBar 0x0040D160): the
+    /// What the resource bar at the top of the map shows: the
     /// player's money, and of the city under the mouse its tools, wood and bricks (own city) and
     /// inhabitants with the owner's shield. Costs of a pending build order in brackets.
     struct Resources {
@@ -120,6 +129,7 @@ public:
         std::optional<std::array<std::int64_t, 3>> goods_cost;
         std::optional<std::int64_t> inhabitants;  ///< the city under the mouse (a discovered island)
         std::int32_t shield = -1;                 ///< banner of a human or computer owner, -1 the plain shield
+        bool natives = false;                     ///< the city is a native village (the native figure)
     };
     void set_resources(Resources r) { m_resources = std::move(r); }
     /// The local player's points for the info panel, and whether its "Bewertung" may be pressed.
@@ -142,7 +152,7 @@ public:
         m_tool_holding = holding;
         m_tool_short_of_wood = short_of_wood;
     }
-    /// The tutorial's chapter runs in this game, nothing: no tutorial (docs/re/tutorial.md). Its pages
+    /// The tutorial's chapter runs in this game, nothing: no tutorial. Its pages
     /// show in the mission's window and its help bubbles over the frame. After set_game().
     void set_tutorial(std::optional<std::uint8_t> chapter);
     [[nodiscard]] const Tutorial* tutorial() const noexcept { return m_tutorial ? &*m_tutorial : nullptr; }
@@ -168,6 +178,9 @@ public:
         m_banners = banners;
         m_end.set_banners(banners);
     }
+    /// The unit families of the packages, which the castles' windows offer. Kept, not copied.
+    void set_own_units(std::span<const assets::OwnUnit> units) noexcept { m_own_units = units; }
+    void set_own_ships(std::span<const assets::OwnShip> ships) noexcept { m_own_ships = ships; }
     /// The selected ships and land units: their windows show in the military mode.
     void set_units(ui::UnitSelection* units) noexcept { m_units = units; }
     /// What the player selected on the map; its window shows in the info mode. An object selected
@@ -176,8 +189,90 @@ public:
         m_selection = stamped_selection(m_selection, selection, m_selection_serial);
     }
     /// The build menu opens next with this building picked in its category (a farm's field after
-    /// looking at the farm, 0x004331B0). False if the menu has no such building.
+    /// looking at the farm). False if the menu has no such building.
     bool show_in_build_menu(std::uint32_t id) { return m_build && m_build->show(id); }
+    /// Blueprint mode is on: the build menu's title says so.
+    void set_blueprint_in_build_menu(bool on) {
+        if (m_build) {
+            m_build->set_blueprint(on);
+        }
+    }
+    /// Whether the game lets buildings move (sim::Rules::moving): the build menu offers the tool.
+    void set_moving_in_build_menu(bool allowed) {
+        if (m_build) {
+            m_build->set_moving(allowed);
+        }
+    }
+    /// The window of a blueprint (blueprint_window.hpp), opened by a click on one of the player's
+    /// blueprints at (island, x, y), its origin. The viewer fills its model every frame and takes
+    /// what was clicked.
+    void open_blueprint(std::uint16_t island, std::int32_t x, std::int32_t y) {
+        m_blueprint_at = BlueprintAt{island, x, y};
+    }
+    void close_blueprint() noexcept { m_blueprint_at.reset(); }
+    struct BlueprintAt {
+        std::uint16_t island = 0;
+        std::int32_t x = 0;
+        std::int32_t y = 0;
+    };
+    [[nodiscard]] const std::optional<BlueprintAt>& blueprint_open() const noexcept { return m_blueprint_at; }
+    void set_blueprint_model(BlueprintModel model) {
+        m_blueprint_model = std::move(model);
+        if (!m_blueprint_model.valid) {
+            m_blueprint_at.reset();
+        }
+    }
+    [[nodiscard]] std::vector<BlueprintWindow::Result> take_blueprint_clicks() {
+        return std::exchange(m_blueprint_clicks, {});
+    }
+    /// The window of the templates (template_window.hpp), beside the side panel: their list (the
+    /// tools' pop-up) or the question for a new template's name (Ctrl+S with a piece in hand). The
+    /// viewer fills the model while it is open and takes what was asked.
+    void open_templates() {
+        if (m_templates) {
+            m_templates->open_list();
+        }
+    }
+    void open_template_save(std::string_view name) {
+        if (m_templates) {
+            m_templates->open_save(name);
+        }
+    }
+    void close_templates() noexcept {
+        if (m_templates) {
+            m_templates->close();
+        }
+    }
+    [[nodiscard]] bool templates_open() const noexcept {
+        return !m_menu_active && m_templates && m_templates->is_open();
+    }
+    void set_templates_model(TemplatesModel model) { m_templates_model = std::move(model); }
+    [[nodiscard]] std::vector<TemplateRequest> take_template_requests() {
+        return std::exchange(m_template_requests, {});
+    }
+    /// The editor runs (ADR 0013): its panel takes the place of the modes below the head, whose
+    /// buttons go; the money, the mission's window and the tutorial do not show.
+    void set_editing(bool on);
+    [[nodiscard]] bool editing() const noexcept { return m_editing; }
+    /// The editor's panel, null without the menus' layouts.
+    [[nodiscard]] EditorPanel* editor_panel() noexcept { return m_editor.get(); }
+    /// What the editor's panel shows; the viewer sets it every frame.
+    void set_editor_model(EditorModel model) { m_editor_model = std::move(model); }
+    [[nodiscard]] const EditorModel& editor_model() const noexcept { return m_editor_model; }
+    /// What the editor's panel asked for since the last call.
+    [[nodiscard]] std::vector<EditorRequest> take_editor_requests() { return std::exchange(m_editor_requests, {}); }
+    /// What the editor's frame shows besides the panel (keys, the status line); the viewer sets it
+    /// every frame.
+    void set_editor_chrome(EditorChromeModel model) { m_chrome_model = std::move(model); }
+    /// A tool of the editor's tool bar chosen by its key, or a command of its menus: as clicked.
+    void editor_tool(EditorTool tool);
+    void editor_command(EditorCommand command);
+    /// The build menu shows a tool a key started (its title names it).
+    void show_tool_in_build_menu(BuildPanel::Tool tool) {
+        if (m_build) {
+            m_build->show_tool(tool);
+        }
+    }
     /// Opens the ship or city list or the diplomacy window in the info mode (the buttons of the
     /// player status, L, Shift+L, V), or closes it if it is open; returns what the tool should do.
     std::optional<Action> toggle_window(Selection::Kind kind);
@@ -193,14 +288,19 @@ public:
     /// A right click: the selected object's window goes back a page if it is on one that steps
     /// back (SelectionPanel::steps_back); false if it is not.
     bool step_back();
-    bool deselect_build_category();
     /// Commands the windows gave since the last call.
     [[nodiscard]] std::vector<sim::Command> take_commands() { return std::exchange(m_commands, {}); }
+    /// A right click on the build menu: its category is deselected (pop-up and building in hand
+    /// go), the build menu stays (as in the original). False outside the build menu, with no
+    /// category selected, or while a ship founds a Kontor.
+    bool deselect_build_category();
     /// Switches the mode (also from the keys); returns what the tool should do.
     std::optional<Action> set_mode(std::int32_t mode);
 
     /// The minimap's window on the screen (videos of messages play there, ADR 0010).
     [[nodiscard]] ui::Rect minimap_area() const { return minimap_rect(); }
+    /// The islands changed where they lie (the editor): the minimap is drawn anew.
+    void rebuild_minimap() noexcept { m_minimap_rebuild = true; }
     /// The world tile of a point on the minimap, nothing elsewhere.
     [[nodiscard]] std::optional<std::pair<double, double>> minimap_tile(std::int32_t x, std::int32_t y) const;
     /// The place of the newest message that has one (Space jumps there).
@@ -209,13 +309,30 @@ public:
     /// answer comes as Action::Answer from mouse() or answer().
     void ask(std::string question) {
         m_question = std::move(question);
+        m_choices.clear();
         m_modal_press = ModalPress::None;
     }
     [[nodiscard]] bool asking() const noexcept { return m_question.has_value(); }
     void close_question() noexcept {
         m_question.reset();
+        m_choices.clear();
         m_modal_press = ModalPress::None;
     }
+    /// One of several answers, a button each (which player to play in a game loaded alone): with
+    /// a banner, a field of its colour beside the text.
+    struct ChoiceOption {
+        std::string text;
+        std::optional<sim::BannerId> banner;
+    };
+    /// A question over the map with one button per option; the answer comes as Action::Answer with
+    /// `step` the index of the option (Enter and Escape choose the first).
+    void ask_choice(std::string question, std::vector<ChoiceOption> options) {
+        m_question = std::move(question);
+        m_choices = std::move(options);
+        m_modal_press = ModalPress::None;
+    }
+    [[nodiscard]] bool choosing() const noexcept { return m_question.has_value() && !m_choices.empty(); }
+    [[nodiscard]] std::size_t choice_count() const noexcept { return m_choices.size(); }
     /// The key overview over the map (F1, ADR 0010) in pages with tabs, as in the History Edition.
     /// A click on a tab turns to its page, any other click closes it.
     void show_help(std::array<KeyHelpPage, kKeyHelpPages> pages) {
@@ -263,11 +380,38 @@ public:
     /// (the History Edition's "Options").
     void open_display(DisplayModel model) {
         m_display_model = std::move(model);
+        m_keys_open = false;
         m_display_open = m_display != nullptr;
         m_goods_open = m_goods_open && !m_display_open;
         m_display_changed = false;
     }
     void close_display() noexcept { m_display_open = false; }
+    /// Whether the window "Anzeige" asked for the window of the keys since the last call.
+    [[nodiscard]] bool take_keys_request() noexcept { return std::exchange(m_keys_requested, false); }
+    /// The window of the keys (keys_menu.hpp) in place of the window "Anzeige", showing `model`;
+    /// closed, the window "Anzeige" is back.
+    void open_keys(KeysModel model) {
+        m_keys_model = std::move(model);
+        m_keys_open = m_keys != nullptr && m_display_open;
+        m_keys_changed = false;
+        if (m_keys_open) {
+            m_keys->open();
+        }
+    }
+    [[nodiscard]] bool keys_open() const noexcept { return m_keys_open && m_display_open && m_keys != nullptr; }
+    /// A key pressed while the window of the keys is open: it takes every key.
+    void keys_key(const ui::KeyPress& press, KeysMenu::KeyKind kind) {
+        if (keys_open()) {
+            keys_result(m_keys->key(press, kind, m_keys_model));
+        }
+    }
+    /// The keys as the window of the keys changed them since the last call, if it changed them.
+    [[nodiscard]] std::optional<ui::KeyBindings> take_keys_change() {
+        if (!std::exchange(m_keys_changed, false)) {
+            return std::nullopt;
+        }
+        return m_keys_model.keys;
+    }
     /// The goods trend under the stock of a Kontor (DisplaySettings::goods_trend).
     void set_goods_trend(bool on) noexcept { m_goods_trend = on; }
     [[nodiscard]] bool display_open() const noexcept { return m_display_open; }
@@ -333,6 +477,12 @@ public:
         if (chat_open()) {
             return m_chat_model.may_write && m_chat->typing();
         }
+        if (templates_open() && m_templates->typing()) {
+            return true;
+        }
+        if (m_editing && m_editor && m_editor->typing()) {
+            return true;
+        }
         if (naming()) {
             return true;
         }
@@ -345,6 +495,10 @@ public:
             m_menu->type(text);
         } else if (chat_open()) {
             m_chat->type(text);
+        } else if (templates_open() && m_templates->typing()) {
+            m_templates->type(text);
+        } else if (m_editing && m_editor && m_editor->typing()) {
+            m_editor->type(text);
         } else if (naming()) {
             m_names.type(text);
         } else if (m_options) {
@@ -352,9 +506,22 @@ public:
         }
     }
     void type_key(int key) {
+        // Shift+Enter (10) breaks a line in the editor's longer texts; Enter everywhere else.
+        if (key == 10 && !(m_editing && m_editor && m_editor->typing() && !chat_open() &&
+                           !(templates_open() && m_templates->typing()))) {
+            key = 13;
+        }
         if (chat_open()) {
             if (auto say = m_chat->key(m_chat_model, key)) {
                 m_chat_says.push_back(std::move(*say));
+            }
+        } else if (templates_open() && m_templates->typing()) {
+            if (auto request = m_templates->key(key)) {
+                m_template_requests.push_back(std::move(*request));
+            }
+        } else if (m_editing && m_editor && m_editor->typing()) {
+            if (auto request = m_editor->key(key)) {
+                m_editor_requests.push_back(std::move(*request));
             }
         } else if (naming()) {
             if (auto c = m_names.key(key)) {
@@ -457,6 +624,8 @@ private:
     bool refresh_minimap_island(const sim::World& world, const assets::BuildingTable& buildings,
                                 const render::BannerTable& banners, std::size_t island);
     [[nodiscard]] ui::Rect minimap_rect() const;
+    /// The editor's panel's room in the side panel (design units): below the head, to the bottom.
+    void place_editor_panel();
     /// Where the world's picture lies: all of minimap_rect() once there is a world.
     [[nodiscard]] ui::Rect minimap_image() const;
     /// m_minimap (a pixel per tile) shrunk to the minimap's w x h pixels into m_minimap_small.
@@ -484,7 +653,7 @@ private:
     std::string m_status;
     std::uint8_t m_rotation = 0;
     std::uint8_t m_building_rotation = 0;
-    std::int32_t m_mode = kModeInfo;  ///< the original starts in the info mode (0x0042BEF7)
+    std::int32_t m_mode = kModeInfo;  ///< the original starts in the info mode
     std::unique_ptr<BuildPanel> m_build;
     std::unique_ptr<InfoPanel> m_info;
     BuildPanel::Available m_available;
@@ -497,6 +666,8 @@ private:
     const render::BannerTable* m_banners = nullptr;
     const assets::BuildingTable* m_buildings = nullptr;
     const assets::FigureTable* m_figure_table = nullptr;
+    std::span<const assets::OwnUnit> m_own_units;
+    std::span<const assets::OwnShip> m_own_ships;
     sim::PlayerId m_local = sim::kNoPlayer;
     std::vector<sim::Command> m_commands;
     NameEdit m_names;  ///< the name of a ship or city being typed in its window
@@ -542,7 +713,42 @@ private:
     /// Top left of the window "Anzeige" on the screen (centred on the map).
     [[nodiscard]] ui::Rect display_rect() const;
     bool m_chat_button_enabled=false,m_chat_button_held=false,m_chat_handheld=false;
+    [[nodiscard]] ui::Rect keys_rect() const;
+    void keys_result(KeysMenu::Result result) noexcept {
+        if (result == KeysMenu::Result::Changed) {
+            m_keys_changed = true;
+        } else if (result == KeysMenu::Result::Close) {
+            m_keys_open = false;
+        }
+    }
+    /// The window "Anzeige" or in its place the window of the keys, at `ox`, `oy`.
+    void draw_display();
+    std::unique_ptr<KeysMenu> m_keys;
+    KeysModel m_keys_model;
+    bool m_keys_open = false;
+    bool m_keys_requested = false;
+    bool m_keys_changed = false;
     std::unique_ptr<ChatWindow> m_chat;
+    std::unique_ptr<BlueprintWindow> m_blueprint;
+    std::optional<BlueprintAt> m_blueprint_at;
+    BlueprintModel m_blueprint_model;
+    std::vector<BlueprintWindow::Result> m_blueprint_clicks;
+    [[nodiscard]] ui::Rect blueprint_rect() const;
+    std::unique_ptr<TemplateWindow> m_templates;
+    TemplatesModel m_templates_model;
+    std::unique_ptr<EditorPanel> m_editor;
+    std::unique_ptr<EditorChrome> m_chrome;
+    EditorChromeModel m_chrome_model;
+    /// The window and the interface's scale as laid out last: the editor lays its frame out anew.
+    std::int32_t m_layout_w = 0;
+    std::int32_t m_layout_h = 0;
+    double m_layout_scale = 0.0;
+    EditorModel m_editor_model;
+    std::vector<EditorRequest> m_editor_requests;
+    bool m_editing = false;
+    std::vector<TemplateRequest> m_template_requests;
+    /// The templates' window on the screen (at the upper right of the map, by the side panel).
+    [[nodiscard]] ui::Rect templates_rect() const;
     ChatModel m_chat_model;
     std::vector<ChatSay> m_chat_says;
     /// The chat window on the screen (at the lower left of the map).
@@ -568,13 +774,21 @@ private:
     std::optional<std::string> m_question;
     std::optional<std::array<KeyHelpPage, kKeyHelpPages>> m_help;
     std::size_t m_help_page = 0;
-    ui::Rect m_yes;  ///< the buttons of the question as last drawn
-    ui::Rect m_no;
     /// Where the left button went down while the question or the key overview was shown: they
     /// answer to a click (press and release), never to the pointer merely passing over a button.
     enum class ModalPress : std::uint8_t { None, Yes, No, Elsewhere };
     ModalPress m_modal_press = ModalPress::None;
+    std::vector<ChoiceOption> m_choices;  ///< the options of ask_choice(), empty for yes and no
+    /// The window of the question (ask, ask_choice), built as Open1602's other windows (the
+    /// settings of a game): a heading, a button per answer, a field of a banner's colour beside it.
+    ui::Form m_question_form;
+    /// The banners' colours in the palette (by BannerId) for the options' fields; grey for others.
+    std::vector<std::int32_t> m_banner_palette;  ///< the banners' colours (ui::rgb_ink)
+    std::uint8_t m_other_banner_palette = 0;
     void draw_question();
+    /// Lays the question out in m_question_form; its place on the screen.
+    [[nodiscard]] ui::Rect layout_question();
+    [[nodiscard]] std::optional<Action> question_mouse(std::int32_t x, std::int32_t y, bool down);
     /// "Auftrag ansehen": the mission's text in the window above the status bar (TUTOR.GAD).
     void draw_mission(const sim::World& world);
     void draw_help();

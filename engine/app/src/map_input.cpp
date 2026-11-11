@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <span>
 #include <string_view>
 #include <tuple>
@@ -145,10 +146,73 @@ MapInput::MapInput(const Parts& parts)
 #endif
 }
 
+bool MapInput::editor_key(ui::KeyAction action) noexcept {
+    using ui::KeyAction;
+    switch (action) {
+        case KeyAction::ScrollUp:
+        case KeyAction::ScrollDown:
+        case KeyAction::ScrollLeft:
+        case KeyAction::ScrollRight:
+        case KeyAction::RotateViewLeft:
+        case KeyAction::RotateViewRight:
+        case KeyAction::ZoomIn:
+        case KeyAction::ZoomOut:
+        case KeyAction::Screenshot:
+        case KeyAction::Help:
+        case KeyAction::Cancel:
+        case KeyAction::PixelScaleUp:
+        case KeyAction::PixelScaleDown:
+        case KeyAction::ShowFps:
+        case KeyAction::ShowCoordinates:
+        case KeyAction::Fullscreen:
+        case KeyAction::Quit:
+        case KeyAction::EditorUndo:
+        case KeyAction::EditorRedo:
+        case KeyAction::EditorSave:
+        case KeyAction::EditorNew:
+        case KeyAction::EditorOpen:
+        case KeyAction::EditorSaveAs:
+        case KeyAction::EditorRotate:
+        case KeyAction::EditorBrushBigger:
+        case KeyAction::EditorBrushSmaller:
+        case KeyAction::EditorTestPlay:
+        case KeyAction::EditorBookmarkSet:
+        case KeyAction::EditorBookmarkGo:
+        case KeyAction::EditorFind:
+        case KeyAction::EditorToolSelect:
+        case KeyAction::EditorToolIsland:
+        case KeyAction::EditorToolPlaceholder:
+        case KeyAction::EditorToolLand:
+        case KeyAction::EditorToolWater:
+        case KeyAction::EditorToolCoast:
+        case KeyAction::EditorToolBrush:
+        case KeyAction::EditorToolRandom:
+        case KeyAction::EditorToolFill:
+        case KeyAction::EditorToolReplace:
+        case KeyAction::EditorToolPipette:
+        case KeyAction::EditorToolArea:
+        case KeyAction::EditorToolPaste:
+        case KeyAction::EditorToolBuild:
+        case KeyAction::EditorToolTemplate:
+        case KeyAction::EditorToolShip:
+        case KeyAction::EditorToolUnit:
+        case KeyAction::EditorToolResource:
+        case KeyAction::EditorToolRemove:
+        case KeyAction::EditorToolMarker:
+            return true;
+        default:
+            return false;
+    }
+}
+
 void MapInput::setup_keys() {
+    m_keys = default_keys();
+}
+
+ui::KeyBindings MapInput::default_keys() {
     using ui::KeyAction;
     using ui::KeyContext;
-    ui::KeyBindings& k = m_keys;
+    ui::KeyBindings k;
     const auto general = [&](ui::KeyChord c, KeyAction a, std::uint8_t p = 0) { k.bind(KeyContext::General, c, a, p); };
     const auto building = [&](ui::KeyChord c, KeyAction a, std::uint8_t p = 0) {
         k.bind(KeyContext::Building, c, a, p);
@@ -196,9 +260,14 @@ void MapInput::setup_keys() {
     general(chord(SDLK_L, false, true), KeyAction::CityList);
     general(chord(SDLK_V), KeyAction::Diplomacy);
     general(chord(SDLK_F2), KeyAction::GoodsStatistics);
+    general(chord(SDLK_TAB), KeyAction::GoodsStatistics);  // with units selected Tab narrows them
     general(chord(SDLK_RETURN), KeyAction::Chat);
     general(chord(SDLK_KP_ENTER), KeyAction::Chat);
     general(chord(SDLK_DELETE), KeyAction::DemolishTool);
+    general(chord(SDLK_C, true), KeyAction::CopyTool);
+    general(chord(SDLK_S, true), KeyAction::SaveTemplate);
+    general(chord(SDLK_U), KeyAction::BlueprintMode);  // "Umriss"
+    general(chord(SDLK_U, false, true), KeyAction::BuildBlueprints);
     general(chord(SDLK_F), KeyAction::PlantFields);  // "Felder"
     general(chord(SDLK_G), KeyAction::ToggleGates);  // "Gates"; with units selected G holds them
     // Groups: keys 1 .. 9, 0 are groups 0 .. 9.
@@ -227,16 +296,66 @@ void MapInput::setup_keys() {
     general(chord(SDLK_F, true), KeyAction::ShowFps);
     general(chord(SDLK_K, true), KeyAction::ShowCoordinates);
     general(chord(SDLK_M), KeyAction::ShowUnitArms);
+    general(chord(SDLK_R, true, true), KeyAction::ReloadPackages);
     general(chord(SDLK_F11), KeyAction::Fullscreen);
     general(ui::KeyChord{static_cast<std::int32_t>(SDLK_RETURN), false, false, true}, KeyAction::Fullscreen);
     general(chord(SDLK_Q, true), KeyAction::Quit);
+    // The editor (ADR 0013)
+    const auto editor = [&](ui::KeyChord c, KeyAction a) { k.bind(KeyContext::Editor, c, a); };
+    editor(chord(SDLK_Z, true), KeyAction::EditorUndo);
+    editor(chord(SDLK_Y, true), KeyAction::EditorRedo);
+    editor(chord(SDLK_Z, true, true), KeyAction::EditorRedo);
+    editor(chord(SDLK_S, true), KeyAction::EditorSave);
+    editor(chord(SDLK_N, true), KeyAction::EditorNew);
+    editor(chord(SDLK_O, true), KeyAction::EditorOpen);
+    editor(chord(SDLK_S, true, true), KeyAction::EditorSaveAs);
+    editor(chord(SDLK_R), KeyAction::EditorRotate);
+    editor(chord(SDLK_PLUS), KeyAction::EditorBrushBigger);
+    editor(chord(SDLK_EQUALS), KeyAction::EditorBrushBigger);
+    editor(chord(SDLK_KP_PLUS), KeyAction::EditorBrushBigger);
+    editor(chord(SDLK_MINUS), KeyAction::EditorBrushSmaller);
+    editor(chord(SDLK_KP_MINUS), KeyAction::EditorBrushSmaller);
+    editor(chord(SDLK_F5), KeyAction::EditorTestPlay);
+    editor(chord(SDLK_F, true), KeyAction::EditorFind);
+    // Bookmarks of the view: Ctrl and a digit keeps it, the digit goes there (by their place, as the
+    // groups' digits).
+    const std::array<SDL_Scancode, 10> marks{SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3, SDL_SCANCODE_4,
+                                             SDL_SCANCODE_5, SDL_SCANCODE_6, SDL_SCANCODE_7, SDL_SCANCODE_8,
+                                             SDL_SCANCODE_9, SDL_SCANCODE_0};
+    for (std::size_t m = 0; m < marks.size(); ++m) {
+        k.bind(KeyContext::Editor, place(marks[m], true), KeyAction::EditorBookmarkSet, static_cast<std::uint8_t>(m));
+        k.bind(KeyContext::Editor, place(marks[m]), KeyAction::EditorBookmarkGo, static_cast<std::uint8_t>(m));
+    }
+    // The tools: keys that the view's (W A S D, Q, E by their place) leave free.
+    editor(chord(SDLK_V), KeyAction::EditorToolSelect);
+    editor(chord(SDLK_I), KeyAction::EditorToolIsland);
+    editor(chord(SDLK_H), KeyAction::EditorToolPlaceholder);
+    editor(chord(SDLK_L), KeyAction::EditorToolLand);
+    editor(chord(SDLK_O), KeyAction::EditorToolWater);
+    editor(chord(SDLK_K), KeyAction::EditorToolCoast);
+    editor(chord(SDLK_P), KeyAction::EditorToolBrush);
+    editor(chord(SDLK_Z), KeyAction::EditorToolRandom);
+    editor(chord(SDLK_F), KeyAction::EditorToolFill);
+    editor(chord(SDLK_F, false, true), KeyAction::EditorToolReplace);
+    editor(chord(SDLK_C), KeyAction::EditorToolPipette);
+    editor(chord(SDLK_B), KeyAction::EditorToolArea);
+    editor(chord(SDLK_V, true, false), KeyAction::EditorToolPaste);
+    editor(chord(SDLK_G), KeyAction::EditorToolBuild);
+    editor(chord(SDLK_T), KeyAction::EditorToolTemplate);
+    editor(chord(SDLK_S, false, true), KeyAction::EditorToolShip);
+    editor(chord(SDLK_U), KeyAction::EditorToolUnit);
+    editor(chord(SDLK_R, false, true), KeyAction::EditorToolResource);
+    editor(chord(SDLK_X), KeyAction::EditorToolRemove);
+    editor(chord(SDLK_M), KeyAction::EditorToolMarker);
     // Building
     building(chord(SDLK_R), KeyAction::RotateBuilding);
     building(chord(SDLK_R, false, true), KeyAction::RotateBuildingBack);
     building(chord(SDLK_C), KeyAction::PickBuilding);
     building(chord(SDLK_DELETE), KeyAction::DemolishTool);
-    building(chord(SDLK_TAB), KeyAction::NextBuilding);
-    building(chord(SDLK_TAB, false, true), KeyAction::NextBuilding, 1);
+    building(chord(SDLK_C, true), KeyAction::CopyTool);
+    building(chord(SDLK_S, true), KeyAction::SaveTemplate);
+    building(chord(SDLK_U), KeyAction::BlueprintMode);
+    building(chord(SDLK_U, false, true), KeyAction::BuildBlueprints);
     building(chord(SDLK_F), KeyAction::PlantFields);
     // Orders to the selected units
     // None of these means anything in general (no clash with W A S D).
@@ -252,10 +371,12 @@ void MapInput::setup_keys() {
     units(chord(SDLK_R), KeyAction::EditRoute);
     units(chord(SDLK_DELETE), KeyAction::Delete);
     units(chord(SDLK_TAB), KeyAction::NextKindInSelection);
+    return k;
 }
 
 void MapInput::load_key_settings(const std::filesystem::path& default_file) {
     const std::filesystem::path path = m_keys_file.empty() ? default_file : m_keys_file;
+    m_keys_path = path;
     std::error_code ec;
     if (!std::filesystem::exists(path, ec)) {
         if (!m_keys_file.empty()) {
@@ -286,6 +407,34 @@ void MapInput::load_key_settings(const std::filesystem::path& default_file) {
     }
 }
 
+void MapInput::update_key_settings() {
+    if (!m_hud) {
+        return;
+    }
+    if (m_hud->take_keys_request()) {
+        m_hud->open_keys(KeysModel{m_keys, default_keys(), key_label});
+    }
+    if (auto keys = m_hud->take_keys_change()) {
+        m_keys = std::move(*keys);
+        save_key_settings();
+    }
+}
+
+void MapInput::save_key_settings() const {
+    if (m_keys_path.empty()) {
+        return;
+    }
+    const ui::KeyBindings defaults = default_keys();
+    const std::string text = defaults.write_text(key_name, true) + "\n# Changed in the window of the keys\n" +
+                             m_keys.write_changes(defaults, key_name);
+    std::error_code ec;
+    std::filesystem::create_directories(m_keys_path.parent_path(), ec);
+    const auto* data = reinterpret_cast<const std::uint8_t*>(text.data());
+    if (auto status = core::write_file_atomic(m_keys_path, std::span<const std::uint8_t>(data, text.size())); !status) {
+        std::fprintf(stderr, "keys: %s\n", status.error().message.c_str());
+    }
+}
+
 void MapInput::show_key_help() {
     if (!m_hud) {
         return;
@@ -293,9 +442,13 @@ void MapInput::show_key_help() {
     using ui::KeyAction;
     std::vector<KeyHelpEntry> entries;
     for (const ui::KeyBinding& b : m_keys.all()) {
+        if (m_editor ? !editor_key(b.action) : b.context == ui::KeyContext::Editor) {
+            continue;
+        }
         std::string key = key_label(b.chord);
         if (b.action == KeyAction::GroupStore || b.action == KeyAction::GroupAdd ||
-            b.action == KeyAction::GroupRecall) {
+            b.action == KeyAction::GroupRecall || b.action == KeyAction::EditorBookmarkSet ||
+            b.action == KeyAction::EditorBookmarkGo) {
             if (b.param != 0) {
                 continue;
             }
@@ -308,7 +461,28 @@ void MapInput::show_key_help() {
     m_hud->show_help(std::move(pages));
 }
 
+std::string MapInput::editor_keys(ui::KeyAction action) const {
+    for (const ui::KeyBinding& b : m_keys.all()) {
+        if (b.action == action && b.context == ui::KeyContext::Editor) {
+            return key_label(b.chord);
+        }
+    }
+    return {};
+}
+
+std::string MapInput::key_of(ui::KeyAction action) const {
+    for (const ui::KeyBinding& b : m_keys.all()) {
+        if (b.action == action && b.context == ui::KeyContext::General) {
+            return key_label(b.chord);
+        }
+    }
+    return {};
+}
+
 ui::KeyContext MapInput::key_context() const {
+    if (m_editor) {
+        return ui::KeyContext::Editor;
+    }
     if (m_tool.active() || (m_hud && m_hud->mode() == Hud::kModeBuild)) {
         return ui::KeyContext::Building;
     }
@@ -320,6 +494,21 @@ ui::KeyContext MapInput::key_context() const {
 
 void MapInput::handle_key(int key, int scancode, std::uint16_t mod) {
     const ui::KeyPress press = key_press(key, scancode, mod);
+    if (m_hud && m_hud->keys_open()) {
+        // The window of the keys takes every key: the one an action waits for, or Escape.
+        using Kind = KeysMenu::KeyKind;
+        Kind kind = Kind::Other;
+        if (key == SDLK_ESCAPE) {
+            kind = Kind::Escape;
+        } else if (key == SDLK_BACKSPACE) {
+            kind = Kind::Backspace;
+        } else if (key == SDLK_LCTRL || key == SDLK_RCTRL || key == SDLK_LSHIFT || key == SDLK_RSHIFT ||
+                   key == SDLK_LALT || key == SDLK_RALT || key == SDLK_LGUI || key == SDLK_RGUI || key == SDLK_MODE) {
+            kind = Kind::Modifier;
+        }
+        m_hud->keys_key(press, kind);
+        return;
+    }
     if (m_hud && m_hud->menu_active() && !m_hud->asking() && !m_hud->helping()) {
         // The menu knows Escape (the window "Anzeige" closed, or a screen back) and the program's
         // keys, nothing of the game.
@@ -351,6 +540,25 @@ void MapInput::handle_key(int key, int scancode, std::uint16_t mod) {
         m_hud->close_help();
         return;
     }
+    if (m_hud && m_hud->choosing()) {
+        // A choice: the keys 1 to 9 take that option, Enter and Escape the first.
+        std::optional<int> index;
+        if (key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_ESCAPE) {
+            index = 0;
+        } else if (key >= static_cast<int>(SDLK_1) && key <= static_cast<int>(SDLK_9)) {
+            const int n = key - static_cast<int>(SDLK_1);
+            if (static_cast<std::size_t>(n) < m_hud->choice_count()) {
+                index = n;
+            }
+        }
+        if (index) {
+            m_hud->close_question();
+            Hud::Action a{Hud::Action::Kind::Answer};
+            a.step = *index;
+            m_host.apply_hud(a);
+        }
+        return;
+    }
     if (m_hud && m_hud->asking()) {
         // The question: Enter answers yes, Escape no.
         if (key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_ESCAPE) {
@@ -359,6 +567,9 @@ void MapInput::handle_key(int key, int scancode, std::uint16_t mod) {
             a.step = key == SDLK_ESCAPE ? 0 : 1;
             m_host.apply_hud(a);
         }
+        return;
+    }
+    if (cheat_key(key, scancode, mod)) {
         return;
     }
     if (m_hud && m_hud->display_open() && key == SDLK_ESCAPE) {
@@ -372,6 +583,76 @@ void MapInput::handle_key(int key, int scancode, std::uint16_t mod) {
     if (const auto b = m_keys.find_pressed(key_context(), press)) {
         run_action(*b);
     }
+}
+
+bool MapInput::cheat_key(int pressed, int scancode, std::uint16_t mod) {
+    using Key = CheatConsole::Key;
+    // The key without the modifiers in the keyboard's layout: Shift+M is "m" here, as the
+    // original's letters are.
+    const auto key = static_cast<int>(SDL_GetKeyFromScancode(static_cast<SDL_Scancode>(scancode), SDL_KMOD_NONE, true));
+    const bool shift = (mod & SDL_KMOD_SHIFT) != 0;
+    const bool ctrl = (mod & SDL_KMOD_CTRL) != 0;
+    const bool alt = (mod & SDL_KMOD_ALT) != 0;
+    const bool plain = !shift && !ctrl && !alt;
+    std::optional<Key> k;
+    char digit = 0;
+    if (key == SDLK_W && shift && ctrl && alt) {
+        k = Key::Open;
+    } else if (key >= static_cast<int>(SDLK_0) && key <= static_cast<int>(SDLK_9) && !ctrl && !alt) {
+        k = Key::Digit;
+        digit = static_cast<char>('0' + (key - static_cast<int>(SDLK_0)));
+    } else if (pressed >= static_cast<int>(SDLK_KP_1) && pressed <= static_cast<int>(SDLK_KP_9)) {
+        k = Key::Digit;
+        digit = static_cast<char>('1' + (pressed - static_cast<int>(SDLK_KP_1)));
+    } else if (pressed == SDLK_KP_0) {
+        k = Key::Digit;
+        digit = '0';
+    } else if (pressed == SDLK_BACKSPACE) {
+        k = Key::Backspace;
+    } else if (pressed == SDLK_RETURN || pressed == SDLK_KP_ENTER) {
+        k = Key::Enter;
+    } else if (pressed == SDLK_ESCAPE) {
+        k = Key::Escape;
+    } else if (key == SDLK_A && plain) {
+        k = Key::A;
+    } else if (key == SDLK_V && plain) {
+        k = Key::V;
+    } else if (shift && !ctrl && !alt) {
+        if (key == SDLK_M) {
+            k = Key::ShiftM;
+        } else if (key == SDLK_Z) {
+            k = Key::ShiftZ;
+        } else if (key == SDLK_T) {
+            k = Key::ShiftT;
+        } else if (key == SDLK_H) {
+            k = Key::ShiftH;
+        } else if (key == SDLK_K) {
+            k = Key::ShiftK;
+        }
+    }
+    if (!k) {
+        if (!m_cheats.open()) {
+            return false;
+        }
+        k = Key::Other;  // the open line takes every key
+    }
+    // The selected ship, else the city under the mouse.
+    CheatConsole::Target target;
+    for (const ui::UnitRef& r : m_units.units()) {
+        if (r.kind == ui::UnitRef::Kind::Ship) {
+            target.ship = r.id;
+            break;
+        }
+    }
+    if (const auto tile = tile_at_mouse()) {
+        target.x = tile->x;
+        target.y = tile->y;
+    }
+    const CheatConsole::Result r = m_cheats.key(*k, digit, simulation().cheats_allowed(local()), local(), target);
+    if (r.order) {
+        submit({*r.order}, false, false);
+    }
+    return r.taken;
 }
 
 void MapInput::scroll_with_keys(std::uint32_t delta_ms) {
@@ -440,6 +721,9 @@ void MapInput::run_action(const ui::KeyBinding& b) {
     m_window.output_size(w, h);
     const double cx = w / 2.0;
     const double cy = h / 2.0;
+    if (m_editor && !editor_key(b.action)) {
+        return;  // a key of the game: the editor's world does not run (ADR 0013)
+    }
     switch (b.action) {
         case KeyAction::ScrollUp:
         case KeyAction::ScrollDown:
@@ -523,7 +807,50 @@ void MapInput::run_action(const ui::KeyBinding& b) {
             show_key_help();
             break;
         case KeyAction::Cancel:
+            if (m_editor) {
+                if (m_hud) {
+                    (void)m_hud->back();
+                }
+                break;
+            }
             cancel_action();
+            break;
+        case KeyAction::EditorUndo:
+        case KeyAction::EditorRedo:
+        case KeyAction::EditorSave:
+        case KeyAction::EditorNew:
+        case KeyAction::EditorOpen:
+        case KeyAction::EditorSaveAs:
+        case KeyAction::EditorRotate:
+        case KeyAction::EditorBrushBigger:
+        case KeyAction::EditorBrushSmaller:
+        case KeyAction::EditorTestPlay:
+        case KeyAction::EditorBookmarkSet:
+        case KeyAction::EditorBookmarkGo:
+        case KeyAction::EditorFind:
+        case KeyAction::EditorToolSelect:
+        case KeyAction::EditorToolIsland:
+        case KeyAction::EditorToolPlaceholder:
+        case KeyAction::EditorToolLand:
+        case KeyAction::EditorToolWater:
+        case KeyAction::EditorToolCoast:
+        case KeyAction::EditorToolBrush:
+        case KeyAction::EditorToolRandom:
+        case KeyAction::EditorToolFill:
+        case KeyAction::EditorToolReplace:
+        case KeyAction::EditorToolPipette:
+        case KeyAction::EditorToolArea:
+        case KeyAction::EditorToolPaste:
+        case KeyAction::EditorToolBuild:
+        case KeyAction::EditorToolTemplate:
+        case KeyAction::EditorToolShip:
+        case KeyAction::EditorToolUnit:
+        case KeyAction::EditorToolResource:
+        case KeyAction::EditorToolRemove:
+        case KeyAction::EditorToolMarker:
+            if (m_editor) {
+                m_host.editor_key(b.action, b.param);
+            }
             break;
         case KeyAction::ModeBuild:
             set_mode(m_hud && m_hud->mode() == Hud::kModeBuild ? Hud::kModeInfo : Hud::kModeBuild);
@@ -574,11 +901,16 @@ void MapInput::run_action(const ui::KeyBinding& b) {
             m_tool.rotate(-1);
             break;
         case KeyAction::PickBuilding:
-            // The pipette: the building under the mouse becomes the order.
+            // The pipette: the building under the mouse becomes the order, as the player can order
+            // it (a grown house as the first house, a road crossing as a road, a ripe field sown).
             if (const auto spot = spot_at_mouse()) {
-                if (const auto at = sim::building_at(world(), m_buildings, spot->island, {spot->x, spot->y})) {
+                const auto at = sim::building_at(world(), m_buildings, spot->island, {spot->x, spot->y});
+                if (const assets::BuildingType* pick = at ? m_tool.orderable(*at->type) : nullptr) {
+                    if (m_hud) {
+                        (void)m_hud->show_in_build_menu(pick->id);  // the panel shows what is in hand
+                    }
                     set_mode(Hud::kModeBuild);
-                    if (m_tool.select(at->type->id)) {
+                    if (m_tool.select(pick->id)) {
                         m_tool.set_mode(BuildTool::Mode::Build);
                         drop_units();
                     }
@@ -591,12 +923,37 @@ void MapInput::run_action(const ui::KeyBinding& b) {
             }
             m_tool.set_mode(m_tool.mode() == BuildTool::Mode::Demolish ? BuildTool::Mode::Off
                                                                        : BuildTool::Mode::Demolish);
+            if (m_hud && m_tool.mode() == BuildTool::Mode::Demolish) {
+                m_hud->show_tool_in_build_menu(BuildPanel::Tool::Demolish);
+            }
             if (m_tool.active()) {
                 drop_units();
             }
             break;
-        case KeyAction::NextBuilding:
-            m_tool.cycle(b.param != 0 ? -1 : 1);
+        case KeyAction::CopyTool:
+            // The copy tool (Open1602): a piece of the city to build again elsewhere.
+            if (m_hud && m_hud->mode() != Hud::kModeBuild) {
+                set_mode(Hud::kModeBuild);
+            }
+            // Always starts it afresh (the piece in hand goes), so that the menu's title, which names
+            // the copy tool, never names a tool put away; Escape puts it away.
+            m_tool.set_mode(BuildTool::Mode::Copy);
+            if (m_hud) {
+                m_hud->show_tool_in_build_menu(BuildPanel::Tool::Copy);
+            }
+            if (m_tool.active()) {
+                drop_units();
+            }
+            break;
+        case KeyAction::SaveTemplate:
+            // Templates (Open1602): the piece in hand under a name, else the list of them.
+            m_host.save_template();
+            break;
+        case KeyAction::BlueprintMode:
+            toggle_blueprint();
+            break;
+        case KeyAction::BuildBlueprints:
+            build_blueprints();
             break;
         case KeyAction::PlantFields:
             plant_fields();
@@ -690,7 +1047,7 @@ void MapInput::run_action(const ui::KeyBinding& b) {
             } else {
                 m_units.scatter(world());
             }
-            // The group takes its places around where it stands (0x0044C6D0).
+            // The group takes its places around where it stands.
             if (const auto c = m_units.centre(world())) {
                 submit_orders(m_units.move_orders(world(), local(), c->first, c->second, false));
             }
@@ -762,6 +1119,9 @@ void MapInput::run_action(const ui::KeyBinding& b) {
         case KeyAction::ShowUnitArms:
             m_host.toggle_unit_arms();
             break;
+        case KeyAction::ReloadPackages:
+            m_host.reload_packages();
+            break;
         case KeyAction::Fullscreen:
             m_host.toggle_fullscreen();
             break;
@@ -795,7 +1155,7 @@ void MapInput::handle_event(const SDL_Event& raw) {
                 if (event.key.key == SDLK_BACKSPACE) {
                     m_hud->type_key(8);
                 } else if (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) {
-                    m_hud->type_key(13);
+                    m_hud->type_key((event.key.mod & SDL_KMOD_SHIFT) != 0 ? 10 : 13);  // 10: a line break
                 } else if (event.key.key == SDLK_ESCAPE) {
                     m_hud->type_key(27);
                 } else if (event.key.key == SDLK_TAB) {
@@ -822,8 +1182,17 @@ void MapInput::handle_event(const SDL_Event& raw) {
                     m_host.apply_hud(*a);
                 }
             }
-            if (m_left_down) {
-                m_press.move(static_cast<double>(event.motion.x), static_cast<double>(event.motion.y));
+            if (m_left_down || m_right_stroke) {
+                if (m_left_down) {
+                    m_press.move(static_cast<double>(event.motion.x), static_cast<double>(event.motion.y));
+                }
+                // A stroke of the editor's terrain tools goes on where the mouse is over the map.
+                if (m_editor && !(m_hud && m_hud->covers(static_cast<std::int32_t>(event.motion.x),
+                                                         static_cast<std::int32_t>(event.motion.y)))) {
+                    if (const auto tile = tile_at_mouse(); tile.has_value()) {
+                        (void)m_host.editor_stroke(tile, Host::Stroke::Continue, m_right_stroke);
+                    }
+                }
             }
             if (m_drag.move(static_cast<double>(event.motion.xrel), static_cast<double>(event.motion.yrel))) {
                 m_camera.scroll(-static_cast<double>(event.motion.xrel), -static_cast<double>(event.motion.yrel));
@@ -850,18 +1219,19 @@ void MapInput::handle_event(const SDL_Event& raw) {
                                                     static_cast<std::int32_t>(event.button.y), true)) {
                         m_host.apply_hud(*a);
                     }
-                } else if (event.button.button == SDL_BUTTON_RIGHT && m_hud->menu_active()) {
-                    // The menus' settings: the previous value.
+                } else if (event.button.button == SDL_BUTTON_RIGHT && (m_hud->menu_active() || m_editor)) {
+                    // The menus' settings and the editor's: the previous value.
                     (void)m_hud->mouse(static_cast<std::int32_t>(event.button.x),
                                        static_cast<std::int32_t>(event.button.y), true, ui::MouseButton::Right);
                 } else if (event.button.button == SDL_BUTTON_RIGHT) {
                     // A right click on the minimap sends the selection there (ADR 0010), elsewhere on
                     // the panel it goes back to the player status; from a page that leads somewhere
-                    // (a ship's route editor) a page back.
+                    // (a ship's route editor) a page back. In the build menu it first only
+                    // deselects the category, the menu stays (as in the original).
                     if (const auto t = m_hud->minimap_tile(static_cast<std::int32_t>(event.button.x),
                                                            static_cast<std::int32_t>(event.button.y))) {
                         order_to_tile(t->first, t->second, (SDL_GetModState() & SDL_KMOD_SHIFT) != 0);
-                    } else if(m_hud->deselect_build_category()) {
+                    } else if (m_hud->deselect_build_category()) {
                         m_tool.set_mode(BuildTool::Mode::Off);
                     } else if (!m_hud->step_back()) {
                         (void)back_to_status();
@@ -876,8 +1246,27 @@ void MapInput::handle_event(const SDL_Event& raw) {
                 }
                 break;
             }
-            if (event.button.button == SDL_BUTTON_RIGHT || event.button.button == SDL_BUTTON_MIDDLE) {
+            if (event.button.button == SDL_BUTTON_RIGHT && m_editor && !m_left_down) {
+                // The editor's right button: the shaping tools draw the other way (land and water
+                // swapped); otherwise it drags the map, and a click puts back what is in hand.
+                const auto tile = tile_at_mouse();
+                m_right_stroke = tile && m_host.editor_stroke(tile, Host::Stroke::Begin, true);
+                if (!m_right_stroke) {
+                    m_drag.press();
+                }
+            } else if (event.button.button == SDL_BUTTON_RIGHT || event.button.button == SDL_BUTTON_MIDDLE) {
                 m_drag.press();
+            } else if (m_editor) {
+                // The editor's map: no selection, tool or order of the game (ADR 0013); the left
+                // button picks what the editor's panel shows, or puts down what is being placed.
+                if (event.button.button == SDL_BUTTON_LEFT) {
+                    const auto tile = tile_at_mouse();
+                    if (!tile || !m_host.editor_place(*tile)) {
+                        if (!m_host.editor_stroke(tile, Host::Stroke::Begin, false)) {
+                            editor_pick_at_mouse();
+                        }
+                    }
+                }
             } else if (event.button.button == SDL_BUTTON_LEFT && m_tool.active()) {
                 if (const auto spot = spot_at_mouse()) {
                     m_tool.press(*spot);
@@ -889,6 +1278,9 @@ void MapInput::handle_event(const SDL_Event& raw) {
         case SDL_EVENT_MOUSE_BUTTON_UP:
             if (event.button.button == SDL_BUTTON_LEFT) {
                 m_left_down = false;
+                if (m_editor) {
+                    (void)m_host.editor_stroke(std::nullopt, Host::Stroke::End, false);
+                }
                 if (m_hud) {
                     if (const auto a = m_hud->mouse(static_cast<std::int32_t>(event.button.x),
                                                     static_cast<std::int32_t>(event.button.y), false)) {
@@ -906,12 +1298,24 @@ void MapInput::handle_event(const SDL_Event& raw) {
                 (void)m_hud->mouse(static_cast<std::int32_t>(event.button.x), static_cast<std::int32_t>(event.button.y),
                                    false, ui::MouseButton::Right);
             }
-            if (event.button.button == SDL_BUTTON_RIGHT || event.button.button == SDL_BUTTON_MIDDLE) {
-                // A right click (not a drag): an order (ADR 0010), or back with the original's mouse.
-                if (m_drag.release() && event.button.button == SDL_BUTTON_RIGHT &&
-                    !(m_hud && (m_hud->modal() || m_hud->menu_active()))) {
+            if (event.button.button == SDL_BUTTON_RIGHT && m_right_stroke) {
+                m_right_stroke = false;
+                (void)m_host.editor_stroke(std::nullopt, Host::Stroke::End, true);
+            } else if (event.button.button == SDL_BUTTON_RIGHT || event.button.button == SDL_BUTTON_MIDDLE) {
+                // A right click (not a drag): an order (ADR 0010), or back with the original's mouse;
+                // in the editor it puts back what is being placed.
+                const bool click = m_drag.release() && event.button.button == SDL_BUTTON_RIGHT;
+                if (click && m_editor) {
+                    (void)m_host.editor_cancel_place();
+                } else if (click && !(m_hud && (m_hud->modal() || m_hud->menu_active()))) {
                     if (m_original_mouse) {
                         cancel_action();
+                    } else if (m_tool.mode() == BuildTool::Mode::Copy && m_tool.layout()) {
+                        // The copied piece goes away; the copy tool and the build menu stay.
+                        m_tool.drop_layout();
+                    } else if (m_tool.mode() == BuildTool::Mode::Move && m_tool.move_hand()) {
+                        // The building in hand stays where it stands; the move tool stays.
+                        m_tool.drop_move();
                     } else if (m_hud && m_hud->picking() && m_hud->step_back()) {
                         // Choosing a route stop on the map: the right click ends the choice, the
                         // ship does not sail off.
@@ -929,7 +1333,25 @@ void MapInput::handle_event(const SDL_Event& raw) {
                 // Releasing a drag over the HUD cancels it. In particular, do
                 // not project a panel button onto a hidden island behind it.
                 if(m_hud&&m_hud->covers(static_cast<int>(event.button.x),static_cast<int>(event.button.y))){m_tool.release();break;}
-                if (const auto spot = spot_at_mouse()) {
+                if (const auto spot = spot_at_mouse(); spot && m_tool.copy_selecting()) {
+                    // The copy tool's drag ends: the piece goes into the hand (nothing if it
+                    // holds nothing of the player's own).
+                    (void)m_tool.take_layout(world(), local(), *spot);
+                } else if (spot && m_tool.move_selecting()) {
+                    // The move tool picks up the building clicked (nothing if it may not move).
+                    (void)m_tool.take_move(world(), m_buildings, local(), *spot);
+                } else if (spot && m_tool.mode() == BuildTool::Mode::Move) {
+                    // The building in hand goes where the mouse is; the tool waits for the next.
+                    if (auto order = m_tool.move_order(local(), *spot)) {
+                        m_commands.submit(std::move(*order));
+                        m_tool.drop_move();
+                    }
+                } else if (spot && m_tool.blueprint() && m_tool.places()) {
+                    // Blueprint mode: the buildings become blueprints, paid for when built.
+                    if (auto order = m_tool.blueprint_order(world(), local(), *spot)) {
+                        m_commands.submit(std::move(*order));
+                    }
+                } else if (spot) {
                     if (auto order = m_tool.build_order(world(), local(), *spot)) {
                         // A Kontor founded from a ship is the only one there: the tool is put away
                         // once it can be built (the ship's window gave it).
@@ -958,6 +1380,19 @@ void MapInput::handle_event(const SDL_Event& raw) {
                 const auto notches = static_cast<std::int32_t>(m_wheel_rest);
                 m_wheel_rest -= static_cast<float>(notches);
                 m_hud->goods_wheel(notches);
+                break;
+            }
+            if (m_editor && (SDL_GetModState() & SDL_KMOD_CTRL) != 0) {
+                // Ctrl and the wheel: the editor's brush bigger or smaller, a size a notch.
+                m_wheel_rest += y;
+                auto notches = static_cast<std::int32_t>(m_wheel_rest);
+                m_wheel_rest -= static_cast<float>(notches);
+                for (; notches > 0; --notches) {
+                    m_host.editor_key(ui::KeyAction::EditorBrushBigger);
+                }
+                for (; notches < 0; ++notches) {
+                    m_host.editor_key(ui::KeyAction::EditorBrushSmaller);
+                }
                 break;
             }
             if (m_hud && m_hud->covers(static_cast<std::int32_t>(event.wheel.mouse_x),
@@ -1008,6 +1443,17 @@ void MapInput::follow_selection() {
     // Units that died, sank or changed hands leave the selection.
     if (m_units.prune(world())) {
         selection_changed(false);
+        if (m_units.empty()) {
+            leave_military_mode();
+        }
+    }
+}
+
+void MapInput::leave_military_mode() {
+    // Open1602: the units or ships deselected (or all of them fallen or sunk), the military mode
+    // gives way to the player status; selecting units again goes back to it (selection_changed).
+    if (m_hud && m_hud->mode() == Hud::kModeMilitary) {
+        set_mode(Hud::kModeInfo);
     }
 }
 
@@ -1093,6 +1539,20 @@ std::optional<render::TilePos> MapInput::tile_at(double sx, double sy) const {
     },compute);
 }
 
+std::optional<render::TilePos> MapInput::tile_at_mouse() const {
+    if (m_hud && m_hud->modal()) {
+        return std::nullopt;
+    }
+    return tile_at(m_mouse_x, m_mouse_y);
+}
+
+std::optional<ui::UnitRef> MapInput::unit_at_mouse() const {
+    if (m_hud && m_hud->modal()) {
+        return std::nullopt;
+    }
+    return unit_at(m_mouse_x, m_mouse_y);
+}
+
 std::optional<BuildTool::Spot> MapInput::spot_at_mouse() const {
     const auto tile = m_grid_on&&m_grid_tile?m_grid_tile:tile_at_mouse();
     if (!tile) {
@@ -1131,8 +1591,8 @@ void MapInput::select_building_at_mouse(const Selection& before) {
         set_mode(mode);
     }
     if (sel.kind == Selection::Kind::Building) {
-        // Looking at a farm, a plantation or a forester picks its field in the build menu
-        // (BuildMenu_SelectFarmByWare 0x004331B0): the field whose grown stage gives the raw material.
+        // Looking at a farm, a plantation or a forester picks its field in the build menu:
+        // the field whose grown stage gives the raw material.
         const sim::SubTile t = w.islands()[sel.island].map.sub_tile(buildings, sel.x, sel.y);
         if (t.building != nullptr && t.building->raw_ware != 0) {
             for (const assets::BuildingType& field : buildings.types()) {
@@ -1147,7 +1607,7 @@ void MapInput::select_building_at_mouse(const Selection& before) {
 }
 
 void MapInput::plant_fields() {
-    // The selected farm's field (the one its window picks in the build menu, 0x004331B0) on all
+    // The selected farm's field (the one its window picks in the build menu) on all
     // open ground in its catchment; with nothing selected or another building nothing happens.
     if (m_hud && m_hud->selection().kind == Selection::Kind::Building) {
         const Selection& sel = m_hud->selection();
@@ -1201,6 +1661,14 @@ void MapInput::drop_units() {
 
 bool MapInput::cancel_build_step() {
     if (m_hud && m_hud->close_build_popup()) {
+        return true;
+    }
+    if (m_tool.mode() == BuildTool::Mode::Copy && m_tool.layout()) {
+        m_tool.drop_layout();  // the piece in hand goes first, the copy tool stays
+        return true;
+    }
+    if (m_tool.mode() == BuildTool::Mode::Move && m_tool.move_hand()) {
+        m_tool.drop_move();  // the building in hand stays where it was, the move tool stays
         return true;
     }
     if (m_tool.active()) {
@@ -1311,7 +1779,7 @@ std::optional<std::array<double, 4>> MapInput::unit_box(const ui::UnitRef& ref) 
 }
 
 std::vector<ui::UnitCandidate> MapInput::without_carts(std::vector<ui::UnitCandidate> units) const {
-    // A trade cart is picked by a click on it alone: it does not go with ships or soldiers.
+    // A trade cart does not go with ships or soldiers into "all of this kind on screen".
     std::erase_if(units, [&](const ui::UnitCandidate& c) {
         const sim::Ship* s = c.ref.kind == ui::UnitRef::Kind::Ship ? world().ship(c.ref.id) : nullptr;
         return s != nullptr && s->cart();
@@ -1471,6 +1939,44 @@ std::optional<ui::UnitRef> MapInput::unit_at(double sx, double sy) const {
     return best;
 }
 
+void MapInput::editor_pick_at_mouse() {
+    const sim::World& w = world();
+    EditorPick pick;
+    if (const auto unit = unit_at(m_mouse_x, m_mouse_y)) {
+        pick.kind = unit->kind == ui::UnitRef::Kind::Ship ? EditorPick::Kind::Ship : EditorPick::Kind::Soldier;
+        pick.id = unit->id;
+    } else if (const auto hit =
+                   building_tile_at(m_mouse_x, m_mouse_y, [&](std::uint16_t island, const sim::SubTile& t) {
+                       // What was built, not the ground, a wild tree or a rock: a click there picks
+                       // the island. Fields and planted trees are a city's.
+                       if (t.building == nullptr || !sim::destroyable(*t.building, true) ||
+                           !w.islands()[island].map.contains(t.origin_x, t.origin_y)) {
+                           return false;
+                       }
+                       return t.building->kind != sim::building_kind::kForest ||
+                              w.islands()[island]
+                                      .map
+                                      .top(static_cast<std::uint32_t>(t.origin_x),
+                                           static_cast<std::uint32_t>(t.origin_y))
+                                      .city != sim::MapCell::kNoCity;
+                   })) {
+        const sim::SubTile t = w.islands()[hit->island].map.sub_tile(m_buildings, hit->local_x, hit->local_y);
+        pick.kind = EditorPick::Kind::Building;
+        pick.island = hit->island;
+        pick.x = static_cast<std::uint32_t>(t.origin_x);
+        pick.y = static_cast<std::uint32_t>(t.origin_y);
+    } else if (const auto tile = tile_at_mouse()) {
+        const sim::World::Cell& cell = w.cell(tile->x, tile->y);
+        pick.kind = cell.island == sim::World::kSea ? EditorPick::Kind::Sea : EditorPick::Kind::Island;
+        pick.island = cell.island == sim::World::kSea ? 0 : cell.island;
+        pick.x = tile->x;
+        pick.y = tile->y;
+    } else {
+        return;
+    }
+    m_host.editor_pick(pick);
+}
+
 void MapInput::map_left_up(double x, double y, std::uint16_t mod, int clicks) {
     const bool shift = (mod & SDL_KMOD_SHIFT) != 0;
     const bool ctrl = (mod & SDL_KMOD_CTRL) != 0;
@@ -1479,7 +1985,7 @@ void MapInput::map_left_up(double x, double y, std::uint16_t mod, int clicks) {
         return;
     }
     if (m_press.rubber_band() && m_press.at()) {
-        m_units.box(world(), without_carts(units_in(m_press.at()->first, m_press.at()->second, x, y)), local(), shift);
+        m_units.box(world(), units_in(m_press.at()->first, m_press.at()->second, x, y), local(), shift);
         selection_changed(true);
         return;
     }
@@ -1497,7 +2003,7 @@ void MapInput::map_left_up(double x, double y, std::uint16_t mod, int clicks) {
         return;
     }
     // Ctrl + left click is a command on the object in both mappings, as in the original
-    // ("command on this object", 0x0040A1C7): wounded soldiers onto their own doctor to be healed.
+    // ("command on this object"): wounded soldiers onto their own doctor to be healed.
     if ((m_original_mouse || ctrl) && !m_units.empty() && m_units.owner(world()) == local()) {
         map_order(x, y, shift, ctrl);
         return;
@@ -1508,8 +2014,70 @@ void MapInput::map_left_up(double x, double y, std::uint16_t mod, int clicks) {
     if (!m_units.empty()) {
         m_units.clear();
         selection_changed(false);
+        leave_military_mode();
+    }
+    if (open_blueprint_at_mouse()) {
+        return;
     }
     select_building_at_mouse(before);
+}
+
+void MapInput::toggle_blueprint() {
+    m_tool.set_blueprint(!m_tool.blueprint());
+    if (m_hud) {
+        m_hud->set_blueprint_in_build_menu(m_tool.blueprint());
+        if (m_tool.blueprint() && m_hud->mode() != Hud::kModeBuild) {
+            set_mode(Hud::kModeBuild);
+        }
+    }
+}
+
+void MapInput::build_blueprints() {
+    const auto spot = spot_at_mouse();
+    if (!spot) {
+        return;
+    }
+    const sim::IslandMap& map = world().islands()[spot->island].map;
+    if (!map.contains(spot->x, spot->y)) {
+        return;
+    }
+    sim::BlueprintOrder order;
+    order.player = local();
+    order.kind = sim::BlueprintOrder::Kind::Build;
+    order.island = spot->island;
+    order.city = map.top(static_cast<std::uint32_t>(spot->x), static_cast<std::uint32_t>(spot->y)).city;
+    if (order.city == sim::MapCell::kNoCity) {
+        // Beside the city's land: the city of the player's nearest blueprint on the island.
+        std::int64_t best = std::numeric_limits<std::int64_t>::max();
+        for (const sim::Blueprint& b : world().blueprints()) {
+            if (b.player != local() || b.island != spot->island) {
+                continue;
+            }
+            const std::int64_t dx = b.x - spot->x;
+            const std::int64_t dy = b.y - spot->y;
+            if (dx * dx + dy * dy < best) {
+                best = dx * dx + dy * dy;
+                order.city = sim::blueprint_city(world(), b);
+            }
+        }
+    }
+    if (order.city != sim::MapCell::kNoCity) {
+        submit({std::move(order)}, true, false);
+    }
+}
+
+bool MapInput::open_blueprint_at_mouse() {
+    const auto spot = spot_at_mouse();
+    if (!m_hud || !spot) {
+        return false;
+    }
+    const auto index = sim::blueprint_at(world(), m_buildings, local(), spot->island, {spot->x, spot->y});
+    if (!index) {
+        return false;
+    }
+    const sim::Blueprint& b = world().blueprints()[*index];
+    m_hud->open_blueprint(b.island, b.x, b.y);
+    return true;
 }
 
 void MapInput::map_order(double x, double y, bool queue, bool on_object) {
@@ -1522,7 +2090,7 @@ void MapInput::map_order(double x, double y, bool queue, bool on_object) {
         if (!tile) {
             return;
         }
-        // Back and forth between where the units are and the click (0x00440BD0).
+        // Back and forth between where the units are and the click.
         std::vector<sim::Command> orders;
         for (const ui::UnitRef& r : m_units.units()) {
             if (r.kind == ui::UnitRef::Kind::Ship) {
@@ -1555,8 +2123,7 @@ void MapInput::map_order(double x, double y, bool queue, bool on_object) {
     }
     const bool attack_pick = pick == Pick::Attack;
     // Ctrl (or F first) also takes a tree or field as a target, to shoot it down, and another
-    // player's road, bridge or pier; a plain click there is a move (Haus_IsDestroyable 0x00464A80
-    // with the Ctrl flag).
+    // player's road, bridge or pier; a plain click there is a move.
     const bool fell = attack_pick || on_object;
     const auto is_tree = [](const sim::SubTile& t) {
         return t.building != nullptr && t.building->kind == sim::building_kind::kForest;
@@ -1621,8 +2188,8 @@ void MapInput::map_order(double x, double y, bool queue, bool on_object) {
             submit_orders(m_units.target_orders(world(), local(), t, queue, false));
             return;
         }
-        // Another player's building is attacked, as in the original's military mode
-        // (Haus_IsDestroyable 0x00464A80); terrain never.
+        // Another player's building is attacked, as in the original's military mode;
+        // terrain never.
         if (const auto hit = building_tile_at(x, y, [&](std::uint16_t island, const sim::SubTile& t) {
                 if (t.building == nullptr) {
                     return false;
@@ -1690,6 +2257,7 @@ void MapInput::cancel_action() {
     if (!m_units.empty()) {
         m_units.clear();
         selection_changed(false);
+        leave_military_mode();
         return;
     }
     if (m_hud && m_hud->selection().kind != Selection::Kind::None) {
@@ -1760,9 +2328,15 @@ void MapInput::submit(std::vector<sim::Command> orders, bool sound, bool ask) {
     for (sim::Command& c : orders) {
         m_commands.submit(std::move(c));
     }
-    // One acknowledgement of the first unit (0x0044D540).
+    // One acknowledgement of the first unit, as in the original: ships and soldiers answer, a market cart
+    // does not.
     if (sound && !m_units.empty()) {
-        if (const auto pos = ui::unit_position(world(), m_units.units().front())) {
+        const ui::UnitRef first = m_units.units().front();
+        const sim::Ship* cart = first.kind == ui::UnitRef::Kind::Ship ? world().ship(first.id) : nullptr;
+        if (cart != nullptr && cart->cart()) {
+            return;
+        }
+        if (const auto pos = ui::unit_position(world(), first)) {
             m_sound.order(m_units.kind() == ui::UnitRef::Kind::Ship, attack, pos->first, pos->second);
         }
     }
@@ -1785,7 +2359,7 @@ void MapInput::draw_overlay() {
         if (!b || !health) {
             continue;
         }
-        // Figure_Draw 0x0044FA90, in world pixels: a green and red bar right above the picture
+        // In world pixels: a green and red bar right above the picture
         // (ship: flag or hull), centred on the unit; its group's number (NUMBERS.BSH, sprite
         // group + 1) 2 pixels right of the bar, half the bar's height higher.
         const bool ship = ref.kind == ui::UnitRef::Kind::Ship;
@@ -1829,7 +2403,7 @@ void MapInput::draw_overlay() {
     if (graphics != nullptr && !digits.empty()) {
         graphics->renderer->draw(digits, ox, oy, k);
     }
-    // The selection rectangle: a thin white outline (0x0040CAC0).
+    // The selection rectangle: a thin white outline.
     if (const auto& at = m_press.at(); m_press.rubber_band() && at) {
         const SDL_FRect band{
             static_cast<float>(std::min(at->first, m_mouse_x)), static_cast<float>(std::min(at->second, m_mouse_y)),

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// A new endless game as the original starts it (docs/re/newgame.md): the mission screen picks the
+// A new endless game as the original starts it: the mission screen picks the
 // difficulty, the scenario list one of three map layouts; the game loads Endlosspiel<D><V>.szs,
 // which carries the world plan, four start ships, the money and the settings of that difficulty,
 // makes the islands (world_generator.hpp) and resets what it does not take from the file: the
@@ -52,7 +52,7 @@ struct NewGameOptions {
     std::optional<WorldSettings> custom;
 };
 
-/// The original's game id (0x00469410): year % 8, month, day, hour, minute and 8 random bits.
+/// The original's game id: year % 8, month, day, hour, minute and 8 random bits.
 [[nodiscard]] std::uint32_t new_game_id(std::uint32_t year, std::uint32_t month, std::uint32_t day, std::uint32_t hour,
                                         std::uint32_t minute, std::uint32_t random) noexcept;
 
@@ -107,10 +107,53 @@ std::optional<PlayerId> take_banner(World& world, PlayerId who, BannerId banner)
 [[nodiscard]] core::Result<assets::ChunkFile> own_world_scenario(const assets::ChunkFile& scenario,
                                                                  const WorldPlan& plan, std::uint8_t players);
 
+/// Makes the islands of a world that kept its plan (World::planned_islands, WorldStart::keep_plan),
+/// as the original makes them when the scenario starts: the scenario the world came from
+/// (World::source) with the plan as it is now, drawn as `start` says (from the plan's table, or
+/// with Open1602's generator if it has none). The world's description, markers and script are
+/// carried over. Fails for a world without a plan or without the scenario it came from.
+[[nodiscard]] core::Result<World> roll_planned_islands(const World& world, const assets::GameDirectory& game,
+                                                       const assets::BuildingTable& buildings, const WorldStart& start,
+                                                       std::vector<std::string>* warnings = nullptr);
+
 /// Starts a new endless game: the scenario of new_game_scenario() with its islands made.
 [[nodiscard]] core::Result<World> start_new_game(const assets::GameDirectory& game,
                                                  const assets::BuildingTable& buildings, const assets::TextTable& text,
                                                  const NewGameOptions& options,
                                                  std::vector<std::string>* warnings = nullptr);
+
+/// A new world in small (the start dialog's preview of the islands): what lies on every tile and
+/// where the ships start.
+struct WorldPreview {
+    enum class Tile : std::uint8_t {
+        Sea,   ///< open sea and the islands' water
+        Surf,  ///< the sea along a coast
+        Beach,
+        Ground,
+        Forest,
+        Mountain,    ///< ore mountains, rocks and slopes
+        Settlement,  ///< buildings: native villages
+    };
+    static constexpr std::size_t kTiles = 7;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::vector<Tile> tiles;  ///< row by row, width x height
+    std::uint32_t islands = 0;
+    std::uint64_t land = 0;  ///< tiles that are no water
+    struct Start {
+        std::uint32_t x = 0;
+        std::uint32_t y = 0;
+    };
+    std::vector<Start> starts;  ///< the ships at the start (all of them at one place: one)
+
+    [[nodiscard]] Tile at(std::uint32_t x, std::uint32_t y) const { return tiles[std::size_t{y} * width + x]; }
+};
+
+/// The world start_new_game() makes for these options, in small: the same seed, the same world.
+[[nodiscard]] core::Result<WorldPreview> preview_world(const assets::GameDirectory& game,
+                                                       const assets::BuildingTable& buildings,
+                                                       const assets::TextTable& text, const NewGameOptions& options);
+/// The preview of a world that is made already.
+[[nodiscard]] WorldPreview preview_of(const World& world, const assets::BuildingTable& buildings);
 
 }  // namespace o1602::sim

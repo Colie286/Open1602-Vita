@@ -52,6 +52,9 @@ inline constexpr std::uint8_t kFirstSoldier = 25;  ///< wSOLDAT1: soldiers in a 
 inline constexpr std::uint8_t kLastSoldier = 44;   ///< ... up to wPIONIER4
 /// A unit in a hold is the ware of its figure plus this (SOLDAT1 = 1 is wSOLDAT1 = 25).
 inline constexpr std::uint8_t kSoldierOffset = kFirstSoldier - 1;
+/// A savegame names the good of a ship's hold by its producer's Id - 20000; a unit, which has no
+/// producer, by its ware plus this (wSOLDAT1 is 9901).
+inline constexpr std::uint16_t kSoldierCargoCode = 9876;
 inline constexpr std::uint8_t kCornField = 45;
 inline constexpr std::uint8_t kTobaccoField = 46;
 inline constexpr std::uint8_t kSpiceField = 47;
@@ -120,7 +123,7 @@ inline constexpr std::array<WareGroup, 256> kWareGroups = [] {
     return static_cast<std::uint16_t>(w - ware::kSoldierOffset);
 }
 
-/// Base prices of the wares per ton (the original's table at 0x0049AE50): the default prices of a
+/// Base prices of the wares per ton: the default prices of a
 /// Kontor (sell 50 %, buy 75 %) and what the free trader pays. Indexed by ware number.
 inline constexpr std::array<std::uint16_t, ware::kLastTrade + 1> kBasePrices = {
     0, 0, 90, 700, 24, 30, 35, 10, 5, 10, 130, 180, 250, 500, 26, 100, 60, 50, 80, 50, 200, 900, 140, 30, 45};
@@ -174,7 +177,7 @@ inline constexpr std::uint8_t kMaxLevel = 32;
     }
 }
 
-/// A step of the levels that the pirates' fleet (Pirates_MaxShips 0x0040F310) and the computer
+/// A step of the levels that the pirates' fleet and the computer
 /// players' war fleets grow by: from `level` on, `ships`.
 struct ShipStep {
     std::uint8_t level;
@@ -183,9 +186,9 @@ struct ShipStep {
 inline constexpr std::array<ShipStep, 4> kShipSteps{{{kLevel5A, 4}, {kLevel4B, 3}, {kLevel3C, 2}, {kLevel2D, 1}}};
 }  // namespace infra
 
-/// The score of the end screen and the monument allowance (docs/re/missions.md).
+/// The score of the end screen and the monument allowance.
 namespace scoring {
-/// A straight segment of a score curve: entries a to b run from `from` to `to` (0x00474F90).
+/// A straight segment of a score curve: entries a to b run from `from` to `to`.
 struct Segment {
     std::int32_t a;
     std::int32_t b;
@@ -380,7 +383,7 @@ inline constexpr std::uint16_t kPilgrim = 100;    ///< PILGER
 inline constexpr std::uint16_t kWhale = 101;      ///< WAL
 inline constexpr std::uint16_t kDolphin = 102;    ///< DELPHIN
 inline constexpr std::uint16_t kKraken = 103;     ///< KRAKE
-/// Ship flags by player colour (table at 0x00498F2C): FAHNE1..4, FAHNEPIRAT.
+/// Ship flags by player colour: FAHNE1..4, FAHNEPIRAT.
 inline constexpr std::array<std::uint32_t, 5> kFlags{106, 107, 108, 109, 110};
 inline constexpr std::uint16_t kWhiteFlag = 111;  ///< FAHNEWEISS
 }  // namespace figure
@@ -465,7 +468,7 @@ inline constexpr std::uint32_t kSheepFarm = 21515;
 inline constexpr std::uint32_t kBigOreMountain = 21108;  ///< IDFELS+7: the mountain a volcano is
 inline constexpr std::uint32_t kRuin = 22601;            ///< IDRUINE: the first ruin record
 inline constexpr std::uint32_t kMeadow = 22722;          ///< IDWEIDE+21: what demolished forest becomes
-/// The ruin slots (Ruinenr) of the original (table 0x00619B20, filled at 0x00462F6A): land and
+/// The ruin slots (Ruinenr) of the original (filled): land and
 /// beach ruins of wooden houses, brick houses, plantations, field paths, roads and mines (IDRUINE
 /// + offset), the destroyed Kontors I-IV ("Kontor zerstört"), the destroyed native buildings and
 /// the destroyed market.
@@ -474,7 +477,78 @@ inline constexpr std::array<std::uint32_t, 15> kRuins{kRuin,      kRuin + 9,  kR
                                                       22123,      22124,      22210,      22240,      20823};
 /// The ripe fields the original's plans place (Endlosspiel<D><V>.szs), in their order.
 inline constexpr std::array<std::uint32_t, 6> kPlanCrops{21336, 21342, 21340, 21332, 21344, 21338};
-/// The list the original keeps after the build menu's (0x00498610), named from Text.cod
+/// The tiles of islands of their own shape (sim/island_shapes.hpp): the variants the templates use
+/// for each tile of the coast, ground (IDWEIDE+21), the forests of north and south, and the ore
+/// mountains (big 4 x 4, small 3 x 3).
+namespace island_shape {
+inline constexpr std::array<std::uint32_t, 5> kOpenSea{21201, 21202, 21203, 21204, 21209};
+/// The sea by its depth, from the coast out: light (Hell), the edge from light to middle
+/// (Übergang, turned towards the light), middle, the edge from middle to dark, dark (the open sea).
+inline constexpr std::uint32_t kLightSea = 21203;
+inline constexpr std::uint32_t kLightEdge = 21202;
+inline constexpr std::uint32_t kMiddleSea = 21204;
+inline constexpr std::uint32_t kDarkEdge = 21209;
+inline constexpr std::uint32_t kDarkSea = 21201;
+inline constexpr std::array<std::uint32_t, 5> kSurf{21214, 21215, 21216, 21217, 21218};
+inline constexpr std::array<std::uint32_t, 1> kSurfCorner{21207};
+inline constexpr std::array<std::uint32_t, 2> kSurfBay{21206, 21221};
+inline constexpr std::array<std::uint32_t, 9> kBeach{21012, 21013, 21014, 21015, 21016, 21017, 21018, 21019, 21020};
+inline constexpr std::array<std::uint32_t, 2> kOuterCorner{21051, 21052};
+inline constexpr std::array<std::uint32_t, 4> kInnerCorner{21031, 21032, 21033, 21034};
+inline constexpr std::uint32_t kGround = kMeadow;
+inline constexpr std::array<std::uint32_t, 10> kForestNorth{21304, 21306, 21308, 21310, 21312,
+                                                            21314, 21316, 21318, 21322, 21324};
+inline constexpr std::array<std::uint32_t, 10> kForestSouth{22802, 22804, 22806, 22808, 22810,
+                                                            22812, 22814, 22816, 22820, 22822};
+/// The big ore mountain that never erupts: 21108 (IDFELS+7) is the volcano,
+/// laid only where the world asks for one.
+inline constexpr std::array<std::uint32_t, 1> kBigMountain{21109};
+inline constexpr std::uint32_t kVolcanoMountain = kBigOreMountain;
+inline constexpr std::array<std::uint32_t, 2> kSmallMountain{21103, 21107};
+inline constexpr std::uint8_t kBigMountainSize = 4;
+inline constexpr std::uint8_t kSmallMountainSize = 3;
+/// The slope around a mountain (kind 31, Hang), its rock on the tile's west side at rotation 0
+/// (north 1, east 2, south 3 as the rotation turns it), and its outer corner (kind 32), the rock
+/// on the diagonal between its north and west side at rotation 0. Every ore mountain of the
+/// templates lies in rock ringed by them.
+inline constexpr std::array<std::uint32_t, 8> kSlope{22302, 22303, 22304, 22305, 22306, 22307, 22308, 22310};
+inline constexpr std::uint32_t kSlopeCorner = 22322;
+/// A river: from a spring (kind 33, a slope with the river on its east side at rotation 0) in
+/// straight pieces (kind 16, the river running east and west at rotation 0) and bends (kind 17,
+/// 2x2, joining the block's north and east side at rotation r = 0, sides r and r + 1 as it turns:
+/// north 0, east 1, south 2, west 3; the river comes in and goes out by tiles on the block's
+/// diagonal) to a river mouth on the beach (kind 24, the river on its north side, the sea on its
+/// south at rotation 0) with the surf before a river mouth (kind 22, the mouth on its north side at
+/// rotation 0).
+inline constexpr std::uint32_t kSpring = 22311;
+inline constexpr std::array<std::uint32_t, 2> kRiver{20901, 20902};
+inline constexpr std::array<std::uint32_t, 2> kRiverBend{20904, 20905};
+inline constexpr std::uint8_t kRiverBendSize = 2;
+inline constexpr std::uint32_t kRiverMouth = 21071;
+inline constexpr std::uint32_t kMouthSurf = 21208;
+/// The kinds of ground the templates mix, tile by tile (patches of one or two tiles), with how
+/// often they lay them, in thousands of tiles over all templates; any rotation.
+struct WeightedId {
+    std::uint32_t id = 0;
+    std::uint32_t weight = 0;
+};
+inline constexpr std::array<WeightedId, 15> kGroundMix{{{22722, 51},
+                                                        {22728, 47},
+                                                        {22736, 29},
+                                                        {22738, 11},
+                                                        {22724, 10},
+                                                        {22734, 9},
+                                                        {22730, 6},
+                                                        {22748, 6},
+                                                        {22726, 6},
+                                                        {22732, 5},
+                                                        {22744, 4},
+                                                        {22752, 3},
+                                                        {22740, 3},
+                                                        {22746, 2},
+                                                        {22742, 2}}};
+}  // namespace island_shape
+/// The list the original keeps after the build menu's, named from Text.cod
 /// [LANDSCHAFT]: the natives' and pirates' buildings and a few others.
 inline constexpr std::array<std::uint32_t, 17> kLandscape{22201, 22202, 22203, 22204, 22205, 22231, 22232, 22233, 22234,
                                                           22235, 22211, 22221, 22222, 22223, 22241, 21304, 22802};

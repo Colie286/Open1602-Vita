@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Ways of soldiers on land (docs/re/military.md, "Movement").
+// Ways of soldiers on land.
 //
 // Soldiers walk on a grid of half tiles: every island tile is 2 x 2 cells with the walking cost of
 // its building. They walk only on roads, gates, open ground, ruins, squares, bridges and piers, never
-// through forest, fields or buildings (0x0046F460). Unlike carriers they have no catchment circle:
-// the original plans in a square window around the soldier (0x004581F0), with a goal that depends on
+// through forest, fields or buildings. Unlike carriers they have no catchment circle:
+// the original plans in a square window around the soldier, with a goal that depends on
 // the target: cells from which a hostile target is in range and in sight, or the target itself and
 // the cells next to it. A target beyond the window is reached in legs through the window edge.
 //
@@ -60,7 +60,7 @@ private:
     const assets::BuildingTable* m_buildings = nullptr;
 };
 
-/// HAUS kinds soldiers walk on (0x0046F460).
+/// HAUS kinds soldiers walk on.
 [[nodiscard]] bool soldiers_walk_on(const assets::BuildingType& building) noexcept;
 
 /// A rectangle of half-tile cells (world coordinates), inclusive.
@@ -79,12 +79,12 @@ struct CellRect {
     [[nodiscard]] std::pair<std::int32_t, std::int32_t> nearest(std::int32_t x, std::int32_t y) const noexcept;
 };
 
-/// Whether nothing that blocks shots lies between two cells (the line-of-fire grid of 0x00453E50):
+/// Whether nothing that blocks shots lies between two cells (the line-of-fire grid):
 /// the cells on the line, without its ends, inside `ignore` excepted.
 [[nodiscard]] bool line_of_sight(const LandMap& map, std::int32_t x0, std::int32_t y0, std::int32_t x1, std::int32_t y1,
                                  const CellRect& ignore) noexcept;
 
-/// Direction 0..7 from a cell towards another (0 = -y, 2 = +x, ...), as 0x00454050.
+/// Direction 0..7 from a cell towards another (0 = -y, 2 = +x, ...).
 [[nodiscard]] std::uint8_t direction_to(std::int32_t dx, std::int32_t dy) noexcept;
 
 struct LandPlan {

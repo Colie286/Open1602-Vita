@@ -40,6 +40,7 @@ struct Decoded {
     std::optional<WorldPart> world;
     std::optional<std::uint32_t> pirate_interval_s;  ///< WRL2
     bool tutorial = false;                           ///< TUTR
+    bool edited = false;                             ///< EDTD
     struct IslandPart {
         std::uint16_t number = 0;
         std::uint8_t deer_phase = 0;
@@ -54,7 +55,7 @@ struct Decoded {
     /// Explored crops and known deposits for every player (INSEL5 keeps seven slots and 8 bits).
     struct ExplorePart {
         std::vector<bool> explored;
-        std::vector<std::uint32_t> deposit_masks;
+        std::vector<assets::SlotSet> deposit_masks;
     };
     std::optional<std::vector<ExplorePart>> explored;
     struct TileOverride {
@@ -80,14 +81,32 @@ struct Decoded {
     std::optional<std::vector<ScriptState>> script_states;
     /// The groups the players stored (UGRP).
     std::optional<std::vector<UnitGroups>> unit_groups;
+    /// The blueprints (BLUE).
+    struct BlueprintPart {
+        std::vector<Blueprint> blueprints;
+        std::vector<BlueprintAuto> autos;
+    };
+    std::optional<BlueprintPart> blueprints;
+    std::optional<std::string> package_scenario;
+    std::optional<ScenarioInfo> scenario_info;              ///< SCNI
+    std::optional<Rules> scenario_rules;                    ///< SRUL
+    std::optional<std::vector<ScenarioMarker>> markers;     ///< MARK
+    std::optional<std::string> scenario_script;             ///< SLUA
+    std::optional<std::vector<std::uint8_t>> editor_state;  ///< EDIT
+    std::optional<PlannedIslands> planned_islands;          ///< PLAN
+    std::optional<World::CampaignPart> campaign_part;
     /// The goods the packages added (GOOD).
     std::optional<assets::Goods> goods;
     /// The icons of packages the goods show, by ware number (GPIC).
     std::optional<std::vector<std::pair<std::uint8_t, std::string>>> good_pictures;
     /// The classes of inhabitants of the game (CLAS).
     std::optional<std::vector<assets::ResidentClass>> classes;
+    /// The public buildings of classes of their own, by class number (CPUB).
+    std::optional<std::vector<std::pair<std::uint8_t, std::vector<assets::ServiceBits>>>> class_public;
     /// The unlock levels of the game (LEVL).
     std::optional<std::vector<assets::InfraLevel>> levels;
+    /// The messages of unlock levels, by level number (LMSG).
+    std::optional<std::vector<std::pair<std::uint8_t, std::string>>> level_messages;
     /// The levels after the original's a player unlocked (UNLK).
     struct UnlockedMore {
         std::uint8_t player = 0;
@@ -96,10 +115,24 @@ struct Decoded {
     std::optional<std::vector<UnlockedMore>> unlocked_more;
     /// The buildings the packages added and their Ids (OWNB).
     std::optional<std::vector<assets::OwnBuilding>> own_buildings;
+    /// The figures the packages added and their numbers (OWNF).
+    std::optional<std::vector<assets::OwnFigure>> own_figures;
     /// The changed values of buildings (BLDV).
     std::optional<std::vector<BuildingValue>> building_values;
     /// The changed values of figures (FIGV).
     std::optional<std::vector<FigureValue>> figure_values;
+    /// The computers' build orders a package changed (AIOR).
+    std::optional<std::vector<ComputerOrder>> computer_orders;
+    /// The computers' producers a package changed (AIPR).
+    std::optional<std::vector<ComputerProducer>> computer_producers;
+    /// The slots of the computers' city records a package changed (SLOT).
+    std::optional<std::vector<ComputerSlot>> computer_slots;
+    /// The packages' climates and the islands that have one (CLIM).
+    struct ClimatePart {
+        std::vector<Climate> climates;
+        std::vector<std::pair<std::uint16_t, std::uint8_t>> islands;  ///< island, WorldIsland::climate
+    };
+    std::optional<ClimatePart> climates;
     /// Missions and the end of the game (MISN).
     struct MissionPart {
         std::vector<Mission> missions;
@@ -261,6 +294,12 @@ inline constexpr std::uint16_t kScenarioSwitches = 2;
 /// Version 3 of PSTA: each player also has whether his gates are closed (Player::gates_closed). The
 /// writer takes it only when a player closed them.
 inline constexpr std::uint16_t kClosedGates = 3;
+/// Version 4 of PSTA: each player also has the person who played it last (Player::owner). The
+/// writer takes it only when a player has one.
+inline constexpr std::uint16_t kPlayerOwners = 4;
+/// Version 5 of PSTA: each player also has the cheats it unlocked (Player::cheats). The writer
+/// takes it only when a player has unlocked them.
+inline constexpr std::uint16_t kPlayerCheats = 5;
 /// FLEE version 2: every ship's route with TradeRoute::kStops stops, not the original's four.
 inline constexpr std::uint16_t kLongRoutes = 2;
 /// FLEE version 3: every stop with RouteStop::kEntries wares, not the original's three.
@@ -268,6 +307,9 @@ inline constexpr std::uint16_t kRouteWares = 3;
 /// SCOR version 2: the fight counters of the players are 32 bit, not 16 (LC-9). The writer takes it
 /// only when a counter needs it, so other games write the bytes of version 1 as before.
 inline constexpr std::uint16_t kWideScores = 2;
+/// GLDG version 2: the ledgers have the flow GoodsFlow::Withheld after the 16 of version 1. The
+/// writer takes it only when one booked it, so other games write the bytes of version 1 as before.
+inline constexpr std::uint16_t kLedgerWithheld = 2;
 /// SIMU version 2: the state of the running game in parts with their own versions (SIMC, LOGI,
 /// FLET, MILI, AIST; Simulation::save_state, DS-3). Version 1 held them in one block.
 inline constexpr std::uint16_t kSectionedSimulation = 2;
@@ -280,6 +322,27 @@ inline constexpr std::uint16_t kCompactMap = 2;
 inline constexpr std::uint16_t kWideIslands = 3;
 inline constexpr std::uint16_t kWideEpochs = 2;
 inline constexpr std::uint16_t kWideDiscovered = 4;
+/// FLEE version 5: every ship also says whether the pirates have dealt with its surrender
+/// (Ship::plundered). The writer takes it only when a ship under the white flag has it.
+inline constexpr std::uint16_t kPlunderedFlag = 5;
+/// FLEE version 6: every hold also names the unit of a package it carries (CargoSlot::unit, 0 for
+/// none). The writer takes it only when a hold carries one.
+inline constexpr std::uint16_t kPackageUnits = 6;
+/// FLEE version 7: every shipyard also names the ship of a package it builds
+/// (CostBuilding::order_figure, 0 for the original's). The writer takes it only when a yard builds one.
+inline constexpr std::uint16_t kPackageShips = 7;
+/// XPLR version 2: who knows a deposit as a list of 32-bit words (assets::SlotSet), not one word, for
+/// games of more than 32 players. The writer takes it only when a player beyond the 32nd knows one.
+inline constexpr std::uint16_t kWideDepositKnowledge = 2;
+
+/// HOUS version 2: every house's public buildings in reach (House::services) as 64 bits, not 16, for
+/// the public buildings of packages' own kinds from bit 16 on. The writer takes it only when a
+/// house has one of those, so other games write the bytes of version 1 as before.
+inline constexpr std::uint16_t kWideServices = 2;
+
+/// FACT version 2: every faction also says whether scripts steer it (Faction::scripted). The writer
+/// takes it only when one is; the section is required then.
+inline constexpr std::uint16_t kScriptedFactions = 2;
 
 /// An island coordinate of ISLE and VOLC: 8 bit up to version 1, 16 bit from kWideCoordinates.
 template <class A, class T>
@@ -308,6 +371,9 @@ void write_tiles(Writer& out, const World& w, const assets::BuildingTable& build
                  std::span<const std::uint8_t> before);
 [[nodiscard]] std::vector<Decoded::TileOverride> read_tiles(Reader& in, const assets::BuildingTable& buildings);
 [[nodiscard]] std::uint64_t buildings_fingerprint(const assets::BuildingTable& buildings);
+/// The fingerprint of the buildings of haeuser.cod alone, without those the packages added: that of a
+/// map saved without packages, whose Ids the packages' buildings keep.
+[[nodiscard]] std::uint64_t original_buildings_fingerprint(const assets::BuildingTable& buildings);
 
 // world.cpp: RULE, WRLD, EPOC.
 void write_rules(Writer& out, const Rules& r);
@@ -323,16 +389,20 @@ void write_epochs(Writer& out, const World& w, std::uint16_t version);
 [[nodiscard]] std::uint16_t islands_version(const World& w);
 void write_islands(Writer& out, const World& w, std::uint16_t version);
 [[nodiscard]] std::vector<Decoded::IslandPart> read_islands(Reader& in, std::uint16_t version);
-void write_explored(Writer& out, const World& w);
-[[nodiscard]] std::vector<Decoded::ExplorePart> read_explored(Reader& in);
+/// The version of XPLR: kWideDepositKnowledge if a player beyond the 32nd knows a deposit, else 1.
+[[nodiscard]] std::uint16_t explored_version(const World& w);
+void write_explored(Writer& out, const World& w, std::uint16_t version);
+[[nodiscard]] std::vector<Decoded::ExplorePart> read_explored(Reader& in, std::uint16_t version);
 
 // players.cpp: PLAY, PSTA, MISN, SCOR, DIPL.
 void write_players(Writer& out, const World& w);
 [[nodiscard]] std::vector<Player> read_players(Reader& in);
 /// Whether the world has other factions than the base game's (only then FACT is written).
 [[nodiscard]] bool has_own_factions(const World& w);
-void write_factions(Writer& out, const World& w);
-[[nodiscard]] Decoded::FactionPart read_factions(Reader& in);
+/// The version of FACT the factions need: kScriptedFactions when one is scripted, else 1.
+[[nodiscard]] std::uint16_t factions_version(const World& w);
+void write_factions(Writer& out, const World& w, std::uint16_t version);
+[[nodiscard]] Decoded::FactionPart read_factions(Reader& in, std::uint16_t version);
 [[nodiscard]] std::uint16_t player_state_version(const World& w);
 void write_player_state(Writer& out, const World& w, std::uint16_t version);
 [[nodiscard]] std::vector<Player> read_player_state(Reader& in, std::uint16_t version);
@@ -356,12 +426,16 @@ void write_population_marks(Writer& out, const World& w);
 [[nodiscard]] std::vector<Decoded::PopulationMark> read_population_marks(Reader& in);
 void write_give_up_counts(Writer& out, const World& w);
 [[nodiscard]] std::vector<Decoded::GiveUpCount> read_give_up_counts(Reader& in);
-void write_ledgers(Writer& out, const World& w);
-[[nodiscard]] std::vector<Decoded::CityLedger> read_ledgers(Reader& in);
+/// The version of GLDG: kLedgerWithheld if a ledger booked GoodsFlow::Withheld, else 1.
+[[nodiscard]] std::uint16_t ledgers_version(const World& w);
+void write_ledgers(Writer& out, const World& w, std::uint16_t version);
+[[nodiscard]] std::vector<Decoded::CityLedger> read_ledgers(Reader& in, std::uint16_t version);
 void write_productions(Writer& out, const World& w);
 [[nodiscard]] Decoded::ProductionPart read_productions(Reader& in);
-void write_houses(Writer& out, const World& w);
-[[nodiscard]] std::vector<House> read_houses(Reader& in);
+/// The version of HOUS: kWideServices if a house has a service above the low 16 bits, else 1.
+[[nodiscard]] std::uint16_t houses_version(const World& w);
+void write_houses(Writer& out, const World& w, std::uint16_t version);
+[[nodiscard]] std::vector<House> read_houses(Reader& in, std::uint16_t version);
 void write_growth(Writer& out, const World& w);
 [[nodiscard]] std::vector<GrowthEntry> read_growth(Reader& in);
 void write_costs(Writer& out, const World& w);
@@ -372,8 +446,9 @@ void write_ships(Writer& out, const World& w);
 [[nodiscard]] std::vector<Ship> read_ships(Reader& in);
 void write_fleet(Writer& out, const World& w, std::uint16_t version);
 [[nodiscard]] Decoded::FleetPart read_fleet(Reader& in, std::uint16_t version);
-/// The version of FLEE: kRouteWares if a stop has a ware beyond the original's three, kLongRoutes
-/// if a route has a stop beyond the original's four, 1 otherwise.
+/// The version of FLEE: kPackageUnits if a hold carries a unit of a package, kPlunderedFlag if a ship under the white
+/// flag has been plundered, kWideDiscovered if an island number needs 16 bits, kRouteWares if a stop has a ware beyond
+/// the original's three, kLongRoutes if a route has a stop beyond the original's four, 1 otherwise.
 [[nodiscard]] std::uint16_t fleet_version(const World& w);
 
 // army.cpp: SOLD (files older than ARMY, read only), ARMY.

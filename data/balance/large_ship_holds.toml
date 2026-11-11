@@ -1,0 +1,12 @@
+# The figure values of the rule "Large ships' holds" (Rules::large_ship_holds,
+# docs/modding/balance.md). A package's figures.toml that changes the same values wins.
+#
+# The original gives the large merchant ship 6 holds and the large warship 8, so that the warship
+# carries more for nearly the same price and sails faster. As with the small ships, the merchant
+# ship now carries more than the warship.
+
+["anno1602:large_merchant_ship"]
+holds = 8
+
+["anno1602:large_warship"]
+holds = 6

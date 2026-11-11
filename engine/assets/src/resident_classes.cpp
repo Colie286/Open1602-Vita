@@ -2,6 +2,7 @@
 #include "o1602/assets/resident_classes.hpp"
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 
 #include "o1602/assets/original_names.hpp"
@@ -30,7 +31,7 @@ constexpr std::int64_t kMaxNeed = 100000;  // kg per 100 inhabitants and minute
 constexpr std::int64_t kMaxHiscore = 10000;
 
 /// What `need` gives a class per inhabitant and 10 s, from kg per 100 inhabitants and minute: as
-/// haeuser.cod's `Ware: W, t` (BuildingTable::from_cod, 0x00460750: trunc(t * 8192) / 600).
+/// haeuser.cod's `Ware: W, t` (BuildingTable::from_cod: trunc(t * 8192) / 600).
 std::uint32_t need_amount(std::int64_t kg) noexcept {
     return static_cast<std::uint32_t>(kg * 8192 / 1000 / 600);
 }
@@ -43,8 +44,38 @@ struct Change {
     std::optional<std::int64_t> share;
     std::optional<std::int64_t> hiscore;
     std::vector<std::pair<std::uint8_t, std::int64_t>> needs;  ///< ware, kg
+    std::optional<std::vector<ServiceBits>> public_needs;
     LocalizedNames names;
 };
+
+/// The names of public_building in classes.toml.
+struct PublicName {
+    std::string_view name;
+    ServiceBits bit;
+};
+constexpr std::array<PublicName, 11> kPublicNames{{
+    {"market", public_building::kMarket},
+    {"kontor", public_building::kKontor},
+    {"chapel", public_building::kChapel},
+    {"church", public_building::kChurch},
+    {"tavern", public_building::kTavern},
+    {"school", public_building::kSchool},
+    {"college", public_building::kCollege},
+    {"bathhouse", public_building::kBathhouse},
+    {"theatre", public_building::kTheatre},
+    {"doctor", public_building::kDoctor},
+    {"gallows", public_building::kGallows},
+}};
+
+std::string_view trimmed(std::string_view text) noexcept {
+    while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
+        text.remove_prefix(1);
+    }
+    while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) {
+        text.remove_suffix(1);
+    }
+    return text;
+}
 
 void apply(ResidentClass& c, const Change& change) {
     if (change.max_per_house) {
@@ -58,6 +89,9 @@ void apply(ResidentClass& c, const Change& change) {
     }
     if (change.hiscore) {
         c.hiscore = static_cast<std::uint32_t>(*change.hiscore);
+    }
+    if (change.public_needs) {
+        c.public_needs = change.public_needs;
     }
     // No structured bindings in the lambdas: Apple's clang 15 cannot capture them.
     for (const auto& need : change.needs) {
@@ -115,12 +149,53 @@ std::optional<std::uint8_t> class_of(std::span<const ResidentClass> classes, std
     return static_cast<std::uint8_t>(it - classes.begin());
 }
 
+std::optional<std::vector<ServiceBits>> public_needs_of(std::string_view text, std::string& error,
+                                                        std::span<const std::string> services) {
+    std::vector<ServiceBits> needs;
+    if (trimmed(text).empty()) {
+        return needs;
+    }
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        const std::size_t comma = std::min(text.find(',', start), text.size());
+        ServiceBits any = 0;
+        std::size_t from = start;
+        while (from <= comma) {
+            const std::size_t bar = std::min(text.find('|', from), comma);
+            const std::string_view name = trimmed(text.substr(from, bar - from));
+            const auto it = std::find_if(kPublicNames.begin(), kPublicNames.end(),
+                                         [&](const PublicName& p) { return p.name == name; });
+            const auto own = std::find(services.begin(), services.end(), name);
+            if (it == kPublicNames.end() && own != services.end() &&
+                own - services.begin() < static_cast<std::ptrdiff_t>(kMaxOwnServices)) {
+                any |= public_building::own(static_cast<std::size_t>(own - services.begin()));
+                from = bar + 1;
+                continue;
+            }
+            if (it == kPublicNames.end()) {
+                error =
+                    name.empty() ? "has an empty choice" : "names no public building: \"" + std::string(name) + "\"";
+                return std::nullopt;
+            }
+            any |= it->bit;
+            from = bar + 1;
+        }
+        if (needs.size() >= kMaxPublicNeeds) {
+            error = "names more than " + std::to_string(kMaxPublicNeeds) + " choices";
+            return std::nullopt;
+        }
+        needs.push_back(any);
+        start = comma + 1;
+    }
+    return needs;
+}
+
 std::string class_name(const ResidentClass& c, std::string_view language) {
     return c.names.empty() ? std::string() : name_in(c.names, language, c.id);
 }
 
 bool apply_classes_file(std::vector<ResidentClass>& classes, std::string_view package, std::string_view utf8,
-                        std::vector<std::string>& warnings, const Goods& goods) {
+                        std::vector<std::string>& warnings, const Goods& goods, std::span<const std::string> services) {
     const std::string where = std::string(package) + "/" + std::string(kClassesFile);
     auto tables = core::parse_data_file(utf8);
     if (!tables) {
@@ -190,6 +265,18 @@ bool apply_classes_file(std::vector<ResidentClass>& classes, std::string_view pa
                 number(0, 100, change.share);
             } else if (e.key == "hiscore") {
                 number(0, kMaxHiscore, change.hiscore);
+            } else if (e.key == "public") {
+                std::string error;
+                const std::string* text = e.value.string();
+                if (text == nullptr) {
+                    warnings.push_back(field + "is a text, as \"market, chapel | church\"");
+                    ok = false;
+                } else if (auto needs = public_needs_of(*text, error, services)) {
+                    change.public_needs = std::move(needs);
+                } else {
+                    warnings.push_back(field + error);
+                    ok = false;
+                }
             } else if (e.key.starts_with("need.")) {
                 const auto w = ware_of(goods, std::string_view(e.key).substr(5));
                 std::optional<std::int64_t> kg;

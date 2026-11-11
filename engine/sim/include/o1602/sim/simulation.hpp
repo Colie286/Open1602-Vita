@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The running game: advances the world in fixed ticks of game time (ADR 0004). The original
-// advances its subsystems with the frame time times the game speed in steps of at most 200 ms
-// (0x00489670): production (0x0047DAF0) once per game second, then settlers, figures, ships ...
+// advances its subsystems with the frame time times the game speed in steps of at most 200 ms:
+// production once per game second, then settlers, figures, ships ...
 // Open1602 uses fixed ticks so that every computer of a multiplayer game computes the same.
 #pragma once
 
@@ -19,6 +19,7 @@
 #include "o1602/assets/building_table.hpp"
 #include "o1602/assets/figure_table.hpp"
 #include "o1602/sim/ai.hpp"
+#include "o1602/sim/blueprints.hpp"
 #include "o1602/sim/construction.hpp"
 #include "o1602/sim/consumption.hpp"
 #include "o1602/sim/disasters.hpp"
@@ -27,6 +28,7 @@
 #include "o1602/sim/island_events.hpp"
 #include "o1602/sim/logistics.hpp"
 #include "o1602/sim/military.hpp"
+#include "o1602/sim/mission.hpp"
 #include "o1602/sim/production_cycle.hpp"
 #include "o1602/sim/rules.hpp"
 #include "o1602/sim/scripting.hpp"
@@ -40,9 +42,9 @@ namespace ai {
 class Engine;
 }
 
-/// The two switches of the production windows (docs/re/production.md, docs/re/ui.md): working on
-/// or off (Prod_SetEnabled 0x0047CFA0, also building op 0x26), and whether market carts may collect
-/// the goods (Prod_SetNoPickup 0x0047CD90). The original's windows change both only on the
+/// The two switches of the production windows: working on
+/// or off, and whether market carts may collect
+/// the goods. The original's windows change both only on the
 /// clicking computer; here they are commands like everything else.
 struct ProductionSwitch {
     enum class Op : std::uint8_t {
@@ -57,11 +59,11 @@ struct ProductionSwitch {
     Op op = Op::Enable;
 };
 
-/// Settings of the city window (docs/re/consumption.md): the tax of a class of inhabitants, the
+/// Settings of the city window: the tax of a class of inhabitants, the
 /// name, and keeping the building material from the people (no house upgrades).
 struct CityOrder {
     enum class Op : std::uint8_t {
-        TaxRate,       ///< `resident_class` pays `rate` (64..192, 128 = normal; op 0x31 sub 0x33)
+        TaxRate,       ///< `resident_class` pays `rate` (64..192, 128 = normal)
         Rename,        ///< `name`, 1 to kMaxNameLength bytes (Windows-1252)
         MaterialLock,  ///< `on`: the houses do not take the material to rise
     };
@@ -91,7 +93,7 @@ struct GameSpeedOrder {
     std::uint32_t speed = 1;
 };
 
-/// The name of a player (the original asks for it when a game starts, 0x0048A680).
+/// The name of a player (the original asks for it when a game starts).
 struct PlayerRename {
     static constexpr std::size_t kMaxNameLength = 40;
     PlayerId player = kNoPlayer;
@@ -103,6 +105,8 @@ struct PlayerRename {
 struct PlayerControl {
     PlayerId player = kNoPlayer;
     bool computer = false;
+    /// The person who takes the slot (Player::owner); 0 keeps the slot's owner as it is.
+    std::uint64_t owner = 0;
 };
 
 /// Closes or opens all the gates of a player's cities (Player::gates_closed). Closed, they let only
@@ -112,11 +116,36 @@ struct GateOrder {
     bool closed = false;
 };
 
+/// The cheats of the original (its number line, Ctrl+Shift+Alt+W): the code that unlocks them, then
+/// gold and goods for a ship or a city, a cannon for a ship and a volcano's eruption. As commands
+/// they reach every computer of a game alike. They go to the ship given, else to the city of the
+/// tile (x, y) of the world, whoever owns it (also an opponent's, as in the original).
+struct CheatOrder {
+    enum class Op : std::uint8_t {
+        Code,     ///< `code`: 2061 switches the cheats on or off, 512 on also with other people
+        Gold,     ///< 500 gold for the owner of the ship or the city
+        Goods,    ///< 5 t of `ware` into the ship's hold or the city
+        Cannon,   ///< one cannon more for the ship, up to what its type carries
+        Volcano,  ///< the crater on the island of (x, y) nearest to it erupts
+    };
+    static constexpr std::uint32_t kCode = 2061;
+    static constexpr std::uint32_t kAlwaysCode = 512;
+    static constexpr std::int32_t kGold = 500;
+    static constexpr std::uint32_t kGoods = 5 * 32;  ///< 5 t
+    PlayerId player = kNoPlayer;
+    Op op = Op::Code;
+    std::uint32_t code = 0;
+    std::uint8_t ware = 0;
+    std::optional<std::uint32_t> ship;  ///< the ship selected
+    std::uint32_t x = 0;                ///< world tile under the mouse
+    std::uint32_t y = 0;
+};
+
 /// A player's action (ADR 0004): applied at the start of a tick, the same on every computer.
-using Command =
-    std::variant<BuildOrder, DemolishOrder, ShipOrder, CargoTransfer, RouteEdit, TradeSetting, ShipyardOrder,
-                 ExploreOrder, DiplomacyOrder, SoldierOrder, SoldierCommand, CastleOrder, UnloadOrder, ProductionSwitch,
-                 CityOrder, ShipCommand, GameSpeedOrder, PlayerRename, PlayerControl, GateOrder, CartRequest>;
+using Command = std::variant<BuildOrder, DemolishOrder, ShipOrder, CargoTransfer, RouteEdit, TradeSetting,
+                             ShipyardOrder, ExploreOrder, DiplomacyOrder, SoldierOrder, SoldierCommand, CastleOrder,
+                             UnloadOrder, ProductionSwitch, CityOrder, ShipCommand, GameSpeedOrder, PlayerRename,
+                             PlayerControl, GateOrder, CartRequest, BlueprintOrder, MoveOrder, CheatOrder>;
 
 /// What became of a command.
 struct CommandResult {
@@ -124,7 +153,8 @@ struct CommandResult {
     bool late = false;               ///< refused: its tick had already run when it arrived
     std::optional<BuildPlan> build;  ///< build orders: what was built and why the rest was not
     std::size_t demolished = 0;      ///< demolish orders: buildings removed
-    BuildBill refund;                ///< demolish orders: what came back (Rules::demolish_refund)
+    BuildBill refund;                ///< demolish and move orders: what came back (Rules::demolish_refund)
+    BuildBill paid;                  ///< move orders with Moving::Rebuild: the costs at the new place
     bool accepted = false;           ///< all other orders: carried out
     std::uint32_t moved = 0;         ///< cargo transfers: goods moved, 1/32 t
 };
@@ -145,6 +175,14 @@ public:
 
     Simulation(World& world, const assets::BuildingTable& buildings, const assets::FigureTable& figures,
                Rules rules = Rules::open1602());
+    /// A simulation that only shows the world, as the editor does (ADR 0013): its parts are built
+    /// as for a game, but nothing a load does to a world for the game to run happens (no deer at
+    /// their spots, no towns revealed, the running state a savegame carries stays in the world).
+    /// advance() must not be called on it.
+    struct ViewOnly {};
+    Simulation(World& world, const assets::BuildingTable& buildings, const assets::FigureTable& figures, Rules rules,
+               ViewOnly)
+        : Simulation(world, buildings, figures, rules, Parts{}) {}
 
     /// Whether the state of the running game a world carries (a game saved by Open1602) can be
     /// read whole (the error names the part that is not); Ok for a world without one. Builds the parts of a game on the
@@ -215,6 +253,48 @@ public:
     void set_scripts(ScriptHost* scripts) noexcept { m_scripts = scripts; }
     [[nodiscard]] ScriptHost* scripts() const noexcept { return m_scripts; }
 
+    // What the scripts change (docs/modding/scripts.md). Only a ScriptHost calls these, from
+    // after_tick(): every computer of a game and every replay runs the same scripts at the same
+    // point of the tick, so these are no commands and never go over the network.
+
+    /// Adds `amount` to the money of `player` (negative: takes it), held within 32 bits; false for
+    /// no such player.
+    bool script_money(PlayerId player, std::int64_t amount);
+    /// Adds `amount` of `ware` (1/32 t) to the warehouses of the city `city` of island `island`, as
+    /// far as there is room, or takes as much (negative) as nobody has reserved. Returns what
+    /// changed, negative for taken; nothing for no such city or no trade good.
+    std::optional<std::int64_t> script_goods(std::uint16_t island, std::uint8_t city, std::uint8_t ware,
+                                             std::int64_t amount);
+    /// `player` accomplished their task and the game is over for everybody, as with the victory
+    /// conditions; false when the game is over already or the player is no human or computer still
+    /// playing.
+    bool script_win(PlayerId player);
+    /// `player` is out (GameEvent::Reason::Script), nobody credited; false when the game is over or
+    /// the player is not playing.
+    bool script_defeat(PlayerId player);
+    /// The peace (`peace`) or the trade treaty between players `a` and `b` is signed (`sign`) or
+    /// ended, both ways at once and without the other's answer; false for no such players, the
+    /// same player twice, or no change.
+    bool script_treaty(PlayerId a, PlayerId b, bool peace, bool sign);
+    /// Destroys the building of a city on tile (x, y) of island `island` to ruins, as a fire does,
+    /// whoever owns it; false if none stands there (ground, forest and rocks outside cities stay).
+    bool script_destroy(std::uint16_t island, std::int32_t x, std::int32_t y);
+    /// A land unit of `player` appears on world tile (x, y) of an island, with full health, as a
+    /// castle would release it: `family` is the red figure of a unit family (the original's or a
+    /// package's). Returns its id; nothing for no such player, no unit family, or a tile soldiers
+    /// cannot stand on.
+    std::optional<std::uint32_t> script_unit(PlayerId player, std::uint32_t family, std::int32_t x, std::int32_t y);
+    /// A ship of `player` that shipyards build (`figure`: the original's or a package's) appears on
+    /// sailable world tile (x, y), new and empty (Fleet::add_ship). Its id, or nothing.
+    std::optional<std::uint32_t> script_ship(PlayerId player, std::uint32_t figure, std::int32_t x, std::int32_t y) {
+        return m_fleet.add_ship(player, figure, x, y);
+    }
+
+    /// Gives `player` the mission `mission`, or none, from now on. The player gets a slot of their
+    /// own, so whoever shared the old mission keeps it; a computer's mission counts for it (goal
+    /// kComputers). False for no such player or one that is neither a human nor a computer.
+    bool script_mission(PlayerId player, std::optional<Mission> mission);
+
     /// Game speed factor (1 = normal, up to Rules::max_game_speed); 0 pauses. For tools and tests;
     /// a running game changes the speed with a GameSpeedOrder.
     void set_speed(std::uint32_t speed) noexcept;
@@ -229,6 +309,10 @@ public:
     [[nodiscard]] const Logistics& logistics() const noexcept { return m_logistics; }
     /// Ships, the free trader and shipyards.
     [[nodiscard]] const Fleet& fleet() const noexcept { return m_fleet; }
+    /// The figure table of the game, the packages' figures included; nullptr without one.
+    [[nodiscard]] const assets::FigureTable* figures() const noexcept { return m_figures; }
+    /// Whether `player` may cheat now (Rules::cheats, the code it typed, the people in the game).
+    [[nodiscard]] bool cheats_allowed(PlayerId player) const;
     /// Soldiers, towers and the hostile lists.
     [[nodiscard]] const Military& military() const noexcept { return m_military; }
     [[nodiscard]] const Combat& combat() const noexcept { return m_combat; }
@@ -284,6 +368,8 @@ private:
                Parts);
     void pay_upkeep();
     void players_tick();
+    /// More than one human takes part.
+    [[nodiscard]] bool multiplayer() const;
     void accomplish(PlayerId winner);
     /// `winner` won with `message`; with `co_winners` also everybody else who meets his mission
     /// or the victory conditions now.
@@ -293,12 +379,13 @@ private:
     [[nodiscard]] std::uint64_t upper_inhabitants_of_largest_city(PlayerId player) const;
     bool switch_production(const ProductionSwitch& s);
     bool city_order(const CityOrder& order);
-    /// „Kontor gründen“ (0x0043CE00 button 0x9481): the island by the ship is asked (island order 0x4C).
+    /// „Kontor gründen“ (button 0x9481): the island by the ship is asked (island order 0x4C).
     bool ask_founding(const DiplomacyOrder& order);
     bool game_speed(const GameSpeedOrder& order);
     bool rename_player(const PlayerRename& order);
     bool control_player(const PlayerControl& order);
     bool gate_order(const GateOrder& order);
+    bool cheat(const CheatOrder& order);
     core::Status restore_state(const std::vector<std::uint8_t>& state);
     core::Status restore_legacy_state(core::ByteReader& reader, std::uint16_t version);
     void handle(const std::vector<ConstructionEvent>& events, std::size_t first);
@@ -326,6 +413,7 @@ private:
     void ships_step();
     void soldiers_step();
     void logistics_step();
+    void blueprints_step();
     void statistics_step();
     /// Sends a carrier with `ware` to the shipyard or castle at (x, y); false if it cannot go.
     bool send_yard_carrier(std::uint16_t island, std::uint16_t x, std::uint16_t y, std::uint8_t ware);

@@ -15,11 +15,14 @@
 
 namespace o1602::assets {
 
+/// The public buildings in reach of a house as bits (sim::House::services, resident_classes.hpp
+/// public_building): those of the original in the low 16 bits, those of packages' own kinds above.
+using ServiceBits = std::uint64_t;
+
 class GameDirectory;
 
 /// Typed view of one HAUS record from haeuser.cod (buildings and terrain).
-/// Field meanings follow the original record layout (1602.exe g_haeuser @ 0x00609160, 0x88 bytes);
-/// see docs/re/haus-record.md. Only fields with known meaning are exposed.
+/// Only fields with known meaning are exposed.
 struct BuildingType {
     std::uint32_t id = 0;        ///< Id (20000..23500); island tiles store id - 20000
     std::uint32_t record = 0;    ///< Nummer: position in haeuser.cod (the original's table index)
@@ -35,16 +38,16 @@ struct BuildingType {
     std::uint32_t anim_frame = 0;  ///< AnimFrame: initial global frame
     std::int32_t posoffs = 0;      ///< Posoffs: elevation in pixels at full zoom (land 20, sea 0)
     /// Einhoffs (record +0x18, float): height of the building in half tile widths. Status icons and
-    /// other symbols hover at this height above the building's centre (0x00446776).
+    /// other symbols hover at this height above the building's centre.
     double icon_height = 0.0;
     bool high = false;         ///< Highflg: drawn in the second (high) pass of a row
     bool draw_ground = false;  ///< Grundflg: draw the ground tile below first
     /// Tuerflg (record +0x6A bit 0): the door is the middle tile of one edge instead of the centre
-    /// tile (0x004634C0); figures leave and enter there.
+    /// tile; figures leave and enter there.
     bool door_on_edge = false;
     /// Wegspeed (record +0x58): how fast figures walk on this tile, per figure speed type (FIGUR
     /// Speedtyp: 0 carriers, 1 soldiers, 2 carts and riders, 3 other). Stored like the original as
-    /// value * 32 / 100 (32 = 100 % = full speed, larger is slower), at most 126 (0x00462834).
+    /// value * 32 / 100 (32 = 100 % = full speed, larger is slower), at most 126.
     std::array<std::uint8_t, 4> walk_speed{32, 32, 32, 32};
     /// PlaceFlg (record +0x6A bit 2): may stand outside every city (the Kontor that founds one;
     /// terrain such as meadows).
@@ -66,7 +69,7 @@ struct BuildingType {
     static constexpr std::uint32_t kNoRecord = 0xFFFFFFFFU;
     std::uint32_t land_record = kNoRecord;
     /// Randwachs (record +0x40, value * 128 / 100): how well crops grow on this ground, 128 =
-    /// the island's full fertility (0x004684A0); the default 100 gives 128.
+    /// the island's full fertility; the default 100 gives 128.
     std::uint8_t edge_growth = 128;
     std::uint32_t build_gfx = 0;   ///< Baugfx: icon in the build menu
     std::int32_t kreuz_base = 0;   ///< KreuzBase: related base record (e.g. road crossings)
@@ -103,7 +106,7 @@ struct BuildingType {
     /// building's store is instead of running (forester, stonemason).
     bool stock_animation = false;
     /// HAUS_PRODTYP/Anicontflg (record +0x47 bit 0): when the building stops, its animation stays
-    /// at the current frame instead of jumping back to the first (grain mill, 0x004638C0).
+    /// at the current frame instead of jumping back to the first (grain mill).
     bool continuous_animation = false;
     /// HAUS_PRODTYP/Doerrflg (record +0x47 bit 3): the withered state of a field or plantation.
     bool withered = false;
@@ -111,7 +114,7 @@ struct BuildingType {
     /// (ERZBERG_KLEIN). Only mines with 0 dig on in a big vein below 120 t.
     std::uint8_t ore_mountain = 0;
     /// Nativflg (HAUS_PRODTYP, record +0x47 bit 4): a building of the natives; a city whose centre
-    /// stands on one belongs to the natives (0x0046A220).
+    /// stands on one belongs to the natives.
     bool native = false;
     /// HAUS_PRODTYP/BGruppe (record +0x2E): class of inhabitants of a house (WOHNUNG), index into
     /// BuildingTable::resident_classes().
@@ -123,6 +126,9 @@ struct BuildingType {
     std::uint16_t workers = 0;
     /// Bausample (record +0x5E): WAV_* number of the sound when it is built, 0 = none.
     std::uint16_t build_sound = 0;
+    /// Open1602's own (own_buildings.toml `service`): the service of a public building of a kind of
+    /// its own that houses in its reach get (public_building::own), 0 for that of its kind.
+    ServiceBits own_service = 0;
     /// HAUS_BAUKOST: what building costs (goods in 1/32 t, record +0x4C..+0x54).
     struct BuildCost {
         std::uint32_t tools = 0;    ///< Werkzeug
@@ -149,8 +155,7 @@ struct BuildingType {
     /// Ruinenr (record +0x66): what remains when the building is destroyed (RUINE_*, 0xFF = nothing).
     std::uint8_t ruin = 0xFF;
     /// Growing records (HAUS_PRODTYP Kind ROHSTWACHS): growth class 0..31. One growth stage lasts
-    /// 40 s + 7 s * class; the original converts Interval / AnimAnz into the class after loading
-    /// (0x00462F1D).
+    /// 40 s + 7 s * class; the original converts Interval / AnimAnz into the class after loading.
     std::uint8_t growth_class = 0;
 
     /// Number of base sprites (one per covered tile).
@@ -158,8 +163,8 @@ struct BuildingType {
 };
 
 /// A class of inhabitants (BGRUPPE in haeuser.cod: pioneers, settlers, citizens, merchants,
-/// aristocrats; any number, ADR 0007). Values are converted like the original (0x00460750) so that
-/// the economy keeps its balance (docs/re/consumption.md).
+/// aristocrats; any number, ADR 0007). Values are converted like the original so that
+/// the economy keeps its balance.
 struct ResidentClass {
     /// What the class consumes per inhabitant and 10 s, in 1/8192 t:
     /// trunc(value * 8192) / 600 of `Ware: W, value` (value = t per 100 inhabitants and minute).
@@ -179,6 +184,10 @@ struct ResidentClass {
     /// The class of the original whose faces and public buildings this one has: its own number for
     /// the original's.
     std::uint8_t look = 0;
+    /// Open1602's own (resident_classes.hpp, public_building): the public buildings the class
+    /// needs, each entry a choice of buildings any one of which will do; none: those of the
+    /// original's class `look`.
+    std::optional<std::vector<ServiceBits>> public_needs;
     /// The names a package gave the class by language code, Windows-1252; empty for the original's,
     /// which Text.cod names.
     LocalizedNames names;
@@ -187,22 +196,25 @@ struct ResidentClass {
 };
 
 /// An unlock level (BAUINFRA in haeuser.cod): a city reaches it when it has `min_inhabitants`
-/// inhabitants of class `resident_class` or higher (0x0047F8A0).
+/// inhabitants of class `resident_class` or higher.
 struct InfraLevel {
     std::uint8_t resident_class = 0;
     std::uint32_t min_inhabitants = 0;
     /// Open1602's own (unlock_levels.hpp): the string id of a level a package added, empty for those
     /// of haeuser.cod.
     std::string id;
+    /// Open1602's own (levels.toml `message`): the string id of the message (messages.toml) a
+    /// player gets on reaching the level; "" none; nothing: the original's for its levels.
+    std::optional<std::string> message;
     friend bool operator==(const InfraLevel&, const InfraLevel&) = default;
 };
 
 /// All building types of haeuser.cod with lookups by id and by sprite index
-/// (the original keeps the latter in a table at 0x00619B60).
+/// (the original keeps the latter in a).
 class BuildingTable {
 public:
     static constexpr std::uint32_t kIdOffset = 20000;
-    /// The highest Id a record may have (Haus_GetById, 0x004630F0, accepts 20000 to 23500).
+    /// The highest Id a record may have (the original accepts 20000 to 23500).
     static constexpr std::uint32_t kMaxId = 23500;
 
     /// Builds the table from an interpreted haeuser.cod (records with Id 0 are unused slots).
@@ -216,11 +228,17 @@ public:
     /// everywhere. Fails when no Id or record number is free or its sprites lie beyond the sheet;
     /// the table stays as it was then.
     core::Result<std::uint32_t> add(const BuildingType& like);
+    /// Puts `by` in the place of the building `id` a package added (a later package replaces it,
+    /// own_buildings.hpp): it keeps that building's Id and record number. Fails when there is no
+    /// such building or its sprites lie beyond the sheet; the table stays as it was then.
+    core::Status replace(std::uint32_t id, const BuildingType& by);
 
     /// The first record of id::kRequired the table lacks.
     [[nodiscard]] std::optional<std::uint32_t> missing() const noexcept;
 
     [[nodiscard]] const std::vector<BuildingType>& types() const noexcept { return m_types; }
+    /// How many of types() come from haeuser.cod: they come first, the packages' own (add) after them.
+    [[nodiscard]] std::size_t original_count() const noexcept { return m_original_count; }
     [[nodiscard]] const BuildingType* by_id(std::uint32_t id) const noexcept;
     /// The same for corrections of the data after loading (data_fixes.hpp).
     [[nodiscard]] BuildingType* by_id(std::uint32_t id) noexcept {
@@ -238,11 +256,11 @@ public:
         return index < 0 ? nullptr : &m_types[static_cast<std::size_t>(index)];
     }
     /// Building by its Nummer in haeuser.cod. Crops are three records in a row: growing, ripe
-    /// and withered (docs/re/growth.md).
+    /// and withered.
     [[nodiscard]] const BuildingType* by_record(std::uint32_t record) const noexcept;
 
     /// Record drawn for open sea: the first record with Kind MEER (19) and production kind 9,
-    /// as chosen by the original after loading (0x00462D50 -> g_seaHaus). Id 21201 in the original data.
+    /// as chosen by the original after loading (-> g_seaHaus). Id 21201 in the original data.
     [[nodiscard]] const BuildingType* open_sea() const noexcept {
         return m_open_sea < 0 ? nullptr : &m_types[static_cast<std::size_t>(m_open_sea)];
     }
@@ -270,9 +288,9 @@ public:
     /// Puts the unlock levels of a game in place of these (unlock_levels.hpp): the original's as
     /// packages changed them and those they added.
     void set_infra_levels(std::vector<InfraLevel> levels) { m_infra = std::move(levels); }
-    /// First house record of a class of inhabitants (table order; 0x00462D50), nullptr if none.
+    /// First house record of a class of inhabitants (table order), nullptr if none.
     [[nodiscard]] const BuildingType* first_house(std::size_t resident_class) const noexcept;
-    /// Ruin record for Ruinenr `ruin` (table 0x00619B20), the beach variant on beach ground;
+    /// Ruin record for Ruinenr `ruin`, the beach variant on beach ground;
     /// nullptr if the original has no record for it.
     [[nodiscard]] const BuildingType* ruin_record(std::uint8_t ruin, bool beach) const noexcept;
 
@@ -283,6 +301,7 @@ public:
 
 private:
     std::vector<BuildingType> m_types;
+    std::size_t m_original_count = 0;
     std::vector<std::int32_t> m_by_id;      ///< index by (id - kIdOffset), -1 = none
     std::vector<std::int32_t> m_by_sprite;  ///< index by sprite, -1 = none
     std::vector<std::int32_t> m_by_record;  ///< index by Nummer, -1 = none

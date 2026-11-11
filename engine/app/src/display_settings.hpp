@@ -13,6 +13,18 @@
 
 namespace o1602::app {
 
+/// Which messages set the game back to normal speed. In the original those of disasters and
+/// attacks do.
+enum class EventSpeed : std::uint8_t {
+    Normal,   ///< every one of them (original)
+    Attacks,  ///< attacks only: fires, plagues, droughts and eruptions let the game run on at its speed
+    Keep,     ///< none: the game keeps its speed
+};
+
+/// The autosave intervals offered, in minutes of game time (0: off).
+inline constexpr std::array<std::int32_t, 7> kAutosaveMinutes = {0, 5, 10, 15, 20, 30, 60};
+inline constexpr std::int32_t kAutosaveDefault = 10;
+
 struct DisplaySettings {
     bool fullscreen = false;  ///< the whole screen at the desktop's resolution (no mode change)
     /// The window's size in window coordinates when it was last left; 0: the default (1280 x 800).
@@ -49,6 +61,9 @@ struct DisplaySettings {
     /// The status bar tells when two other players go to war or make peace (the original tells
     /// only the player concerned).
     bool rival_wars = true;
+    /// Which messages set the game back to normal speed. In a multiplayer game only the host's
+    /// computer changes the speed, so the host's choice counts for everyone.
+    EventSpeed event_speed = EventSpeed::Normal;
     /// A farm, plantation, pasture or forester the player builds plants its fields on the open
     /// ground of its catchment at once, as key F does (the original plants none by itself).
     bool plant_fields = false;
@@ -57,6 +72,9 @@ struct DisplaySettings {
     /// land while building. One switch for everything where the two differ in look, not in what is
     /// shown.
     bool classic_graphics = false;
+    /// Every so many minutes of game time the game is kept as lastgame by itself (one of
+    /// kAutosaveMinutes); 0: never.
+    std::int32_t autosave_minutes = kAutosaveDefault;
 
     friend bool operator==(const DisplaySettings&, const DisplaySettings&) = default;
 };
@@ -113,6 +131,14 @@ inline constexpr std::array<WindowSize, 10> kWindowSizes = {{{1024, 768},
 [[nodiscard]] std::int32_t edge_speed_at(double position) noexcept;
 /// Where the slider of edge scrolling's `speed` stands (0..1).
 [[nodiscard]] double edge_speed_position(std::int32_t speed) noexcept;
+
+/// The autosave interval for a slider at `position` (0..1): the nearest of kAutosaveMinutes.
+[[nodiscard]] std::int32_t autosave_at(double position) noexcept;
+/// Where the slider of the autosave interval `minutes` stands (0..1); a value not offered stands
+/// at the nearest one offered.
+[[nodiscard]] double autosave_position(std::int32_t minutes) noexcept;
+/// The interval offered after (`forward`) or before `minutes`; it stops at the ends.
+[[nodiscard]] std::int32_t next_autosave(std::int32_t minutes, bool forward) noexcept;
 
 /// A "display.*" line of settings.cfg (`key` without the prefix); false if the key is unknown.
 bool read_display_line(DisplaySettings& s, std::string_view key, std::string_view value);

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The path a dragged road or wall takes (docs/re/construction.md#dragging-roads-and-walls).
+// The path a dragged road or wall takes.
 //
 // When the player drags a road or a wall, the original searches a path from the tile where the
-// drag began to the tile under the cursor (0x0040A890, 0x0040AB20, 0x0040C230, 0x0040C050): a
+// drag began to the tile under the cursor: a
 // breadth-first search over the tiles of the start tile's city that may carry the road or wall,
 // at most 257 steps. Of several shortest paths it takes the one whose tiles were reached first,
 // with the neighbours visited north, south, west, east; in open land that is all steps along y,
@@ -45,7 +45,7 @@ struct DragStep {
                                               std::uint16_t island, DragLine line, TilePos from, TilePos to,
                                               std::uint8_t rotation);
 
-/// Whether a tile with this building may be part of a dragged line (0x0040AEF0, 0x0040AE30).
+/// Whether a tile with this building may be part of a dragged line.
 /// `gate_centre`: the tile is the middle tile of a gate (roads pass gates only there).
 [[nodiscard]] bool drag_passable(DragLine line, std::int32_t kind, bool gate_centre) noexcept;
 

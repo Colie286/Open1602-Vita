@@ -30,6 +30,19 @@ core::Status check(const World& w, const Decoded& d) {
     if (d.islands && d.islands->size() != w.islands().size()) {
         return bad("islands do not match");
     }
+    if (d.climates) {
+        for (const auto& [island, climate] : d.climates->islands) {
+            if (!island_ok(w, island)) {
+                return bad("an island of a climate does not exist");
+            }
+        }
+    }
+    if (d.markers && !check_markers(*d.markers, w.width(), w.height()).empty()) {
+        return bad("a marker lies outside the world");
+    }
+    if (d.planned_islands && !check_planned_islands(*d.planned_islands, w.width(), w.height()).empty()) {
+        return bad("an island of the world plan lies outside the world");
+    }
     if (d.islands) {
         for (std::size_t i = 0; i < w.islands().size(); ++i) {
             if ((*d.islands)[i].number != w.islands()[i].header.number) {
@@ -142,6 +155,7 @@ core::Status apply_decoded(World& world, Decoded& d) {
         World::GameSettings settings = w.settings;
         settings.pirate_interval_s = d.pirate_interval_s.value_or(world.game_settings().pirate_interval_s);
         settings.tutorial = d.tutorial;
+        settings.edited = d.edited;
         world.set_game_settings(settings);
         world.set_next_drought_ms(w.next_drought_ms);
         if (w.drought_seed) {
@@ -218,9 +232,44 @@ core::Status apply_decoded(World& world, Decoded& d) {
     Balance balance = d.balance.value_or(Balance{});  // written whenever it is not the original's
     balance.buildings = d.building_values.value_or(std::vector<BuildingValue>{});
     balance.figures = d.figure_values.value_or(std::vector<FigureValue>{});
+    balance.computer_orders = d.computer_orders.value_or(std::vector<ComputerOrder>{});
+    balance.computer_producers = d.computer_producers.value_or(std::vector<ComputerProducer>{});
+    balance.computer_slots = d.computer_slots.value_or(std::vector<ComputerSlot>{});
+    if (d.climates) {
+        balance.climates = std::move(d.climates->climates);
+        for (const auto& [island, climate] : d.climates->islands) {
+            world.island(island).climate = climate;
+        }
+    }
     world.set_balance(balance);
     if (d.script_states) {
         world.set_script_states(std::move(*d.script_states));
+    }
+    if (d.campaign_part) {
+        world.set_campaign_part(std::move(d.campaign_part));
+    }
+    if (d.package_scenario) {
+        world.set_package_scenario(std::move(*d.package_scenario));
+    }
+    if (d.scenario_info) {
+        d.scenario_info->rules = d.scenario_rules;
+        world.set_scenario_info(std::move(d.scenario_info));
+    }
+    if (d.markers) {
+        world.set_markers(std::move(*d.markers));
+    }
+    if (d.scenario_script) {
+        world.set_scenario_script(std::move(*d.scenario_script));
+    }
+    if (d.editor_state) {
+        world.set_editor_state(std::move(*d.editor_state));
+    }
+    if (d.planned_islands) {
+        world.set_planned_islands(std::move(d.planned_islands));
+    }
+    if (d.blueprints) {
+        world.blueprints() = std::move(d.blueprints->blueprints);
+        world.blueprint_auto() = std::move(d.blueprints->autos);
     }
     if (d.unit_groups) {
         world.set_unit_groups(std::move(*d.unit_groups));
@@ -237,9 +286,23 @@ core::Status apply_decoded(World& world, Decoded& d) {
         world.set_goods(std::move(*d.goods));
     }
     if (d.classes) {
+        if (d.class_public) {
+            for (auto& [c, needs] : *d.class_public) {
+                if (c < d.classes->size()) {
+                    (*d.classes)[c].public_needs = std::move(needs);
+                }
+            }
+        }
         world.set_resident_classes(std::move(*d.classes));
     }
     if (d.levels) {
+        if (d.level_messages) {
+            for (auto& [n, message] : *d.level_messages) {
+                if (n < d.levels->size()) {
+                    (*d.levels)[n].message = std::move(message);  // one LEVL has not: passed over
+                }
+            }
+        }
         world.set_infra_levels(std::move(*d.levels));
     }
     if (d.unlocked_more) {
@@ -251,6 +314,9 @@ core::Status apply_decoded(World& world, Decoded& d) {
     }
     if (d.own_buildings) {
         world.set_own_buildings(std::move(*d.own_buildings));
+    }
+    if (d.own_figures) {
+        world.set_own_figures(std::move(*d.own_figures));
     }
     if (d.missions) {
         world.set_missions(std::move(d.missions->missions));
@@ -273,6 +339,8 @@ core::Status apply_decoded(World& world, Decoded& d) {
             p.purchases = from.purchases;
             p.sales = from.sales;
             p.gates_closed = from.gates_closed;
+            p.owner = from.owner;
+            p.cheats = from.cheats;
             if (d.player_switches) {
                 p.scenario = from.scenario;
             } else if (i < kept_switches.size()) {
@@ -422,6 +490,8 @@ core::Status apply_decoded(World& world, Decoded& d) {
             CostBuilding& b = world.cost_buildings()[i];
             const CostBuilding& y = d.fleet->yards[i];
             b.order = y.order;
+            b.order_figure =
+                y.order != CostBuilding::kNoOrder && y.order_figure < assets::kMaxFigures ? y.order_figure : 0;
             b.progress = y.progress;
             b.wood = y.wood;
             b.cloth = y.cloth;

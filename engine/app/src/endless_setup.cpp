@@ -10,6 +10,7 @@
 #include <optional>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "o1602/sim/player.hpp"
 #include "o1602/sim/victory.hpp"
@@ -21,7 +22,11 @@ namespace {
 
 using Amount = sim::WorldSettings::Amount;
 using Sizes = sim::WorldSettings::Sizes;
+using Shapes = sim::WorldSettings::Shapes;
 using Starts = sim::WorldSettings::Starts;
+using Landscape = sim::WorldSettings::Landscape;
+using Share = sim::shapes::Share;
+using Roughness = sim::shapes::Roughness;
 
 // The values the dialog offers.
 constexpr std::array<std::uint8_t, 3> kRefundPercents = {25, 50, 75};  // between none and full
@@ -31,11 +36,23 @@ constexpr std::array<std::uint32_t, 2> kSpeeds = {4, 8};
 /// Map sizes: smaller than the original's, its 500 x 350, then larger ones of the same shape, then
 /// the generator's largest (sim::WorldSettings::kMaxSide).
 #ifdef O1602_EXPERIMENTAL_VITA
+#ifdef O1602_EXPERIMENTAL_VITA
 constexpr std::array<std::pair<std::uint32_t, std::uint32_t>, 4> kSizes = {
     {{350, 250}, {500, 350}, {700, 490}, {1000, 700}}};
 #else
 constexpr std::array<std::pair<std::uint32_t, std::uint32_t>, 7> kSizes = {
     {{350, 250}, {500, 350}, {700, 490}, {1000, 700}, {1400, 980}, {2000, 1400}, {2000, 2000}}};
+#endif
+#else
+constexpr std::array<std::pair<std::uint32_t, std::uint32_t>, 9> kSizes = {{{350, 250},
+                                                                            {500, 350},
+                                                                            {700, 490},
+                                                                            {1000, 700},
+                                                                            {1400, 980},
+                                                                            {2000, 1400},
+                                                                            {2800, 1960},
+                                                                            {4000, 2800},
+                                                                            {4000, 4000}}};
 #endif
 static_assert(kSizes.back().first <= sim::WorldSettings::kMaxSide &&
               kSizes.back().second <= sim::WorldSettings::kMaxSide);
@@ -139,9 +156,11 @@ std::optional<std::uint32_t> parse_number(std::string_view v) {
 
 // Names of the values in settings.cfg.
 constexpr std::array<std::string_view, 5> kDroughtNames = {"game", "off", "rare", "normal", "frequent"};
-constexpr std::array<std::string_view, 3> kVolcanoNames = {"game", "off", "on"};
+constexpr std::array<std::string_view, 4> kVolcanoNames = {"game", "off", "on", "rare"};
+constexpr std::array<std::string_view, 3> kOutbreakNames = {"original", "rare", "off"};
 constexpr std::array<std::string_view, 3> kPirateNames = {"game", "off", "on"};
 constexpr std::array<std::string_view, 3> kComputerNames = {"game", "off", "on"};
+constexpr std::array<std::string_view, 3> kMovingNames = {"free", "rebuild", "off"};  // sim::Moving
 constexpr std::array<std::string_view, 3> kOreVeinNames = {"game", "finite", "endless"};
 constexpr std::array<std::string_view, 2> kPirateNestNames = {"one", "per4"};
 constexpr std::array<std::string_view, 2> kTraderReachNames = {"original", "per4"};
@@ -149,7 +168,66 @@ constexpr std::array<std::string_view, 3> kRevealNames = {"none", "original", "a
 constexpr std::array<std::string_view, 4> kAmountNames = {"none", "few", "normal", "many"};
 constexpr std::array<std::string_view, 3> kSizeNames = {"small", "mixed", "large"};
 constexpr std::array<std::string_view, 2> kStartNames = {"spread", "together"};
+constexpr std::array<std::string_view, 3> kShapeNames = {"templates", "mixed", "own"};
 constexpr std::array<std::string_view, 4> kMonumentNames = {"none", "castle", "cathedral", "both"};
+constexpr const auto& kSpreadNames = sim::landscape_names::kSpread;
+constexpr const auto& kGapNames = sim::landscape_names::kGap;
+constexpr const auto& kCoastNames = sim::landscape_names::kCoast;
+constexpr const auto& kOutlineNames = sim::landscape_names::kOutline;
+constexpr const auto& kShareNames = sim::landscape_names::kShare;
+
+// The page of the islands: percent of the map that is land, the sides of the smallest and the
+// largest island in tiles.
+constexpr std::array<std::uint32_t, 8> kLandShares = {10, 15, 20, 25, 30, 35, 40, 45};
+constexpr std::array<std::uint32_t, 11> kSmallest = {16, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200};
+constexpr std::array<std::uint32_t, 14> kLargest = {40, 50, 60, 80, 100, 120, 150, 200, 250, 300, 400, 500, 700, 1000};
+static_assert(kLandShares.front() >= Landscape::kMinLand && kLandShares.back() <= Landscape::kMaxLand);
+static_assert(kSmallest.front() >= sim::shapes::kMinSide && kLargest.back() <= sim::shapes::kMaxSide);
+
+/// The kinds of world of the page's first item, after the original's islands: Open1602's
+/// (setup.island_preset.<name>), then the packages' (landscapes.toml).
+const auto& island_presets() {
+    return sim::landscape_presets();
+}
+
+std::vector<sim::PackageLandscape>& package_presets() {
+    static std::vector<sim::PackageLandscape> presets;
+    return presets;
+}
+
+/// The presets of the first item after the original's islands.
+std::size_t island_preset_count() {
+    return island_presets().size() + package_presets().size();
+}
+
+/// The landscape of preset `i` (0: Open1602's first).
+const sim::WorldSettings::Landscape& island_preset_landscape(std::size_t i) {
+    return i < island_presets().size() ? island_presets()[i].landscape
+                                       : package_presets()[i - island_presets().size()].landscape;
+}
+
+/// The preset choice the setup is (0 the original's islands), or nothing.
+std::optional<std::size_t> island_preset(const sim::WorldSettings& w) {
+    if (w.shapes == Shapes::Templates) {
+        return 0;
+    }
+    if (w.shapes != Shapes::Own) {
+        return std::nullopt;
+    }
+    for (std::size_t i = 0; i < island_preset_count(); ++i) {
+        // The same settings; a name, if the setup has one, the preset's (two may have the same).
+        const sim::WorldSettings::Landscape& l = island_preset_landscape(i);
+        if (sim::same_islands(l, w.landscape) && (w.landscape.name.empty() || w.landscape.name == l.name)) {
+            return i + 1;
+        }
+    }
+    return std::nullopt;
+}
+
+template <class E>
+std::size_t enum_choice(E e, std::size_t n) {
+    return std::min<std::size_t>(static_cast<std::size_t>(e), n - 1);
+}
 
 template <std::size_t N>
 std::optional<std::size_t> name_index(const std::array<std::string_view, N>& names, std::string_view v) {
@@ -233,6 +311,7 @@ sim::WorldSettings EndlessSetup::world_settings() const {
         const sim::WorldSettings sized = sim::settings_for_players(w.players);
         w.width = sized.width;
         w.height = sized.height;
+        w = sim::fit_landscape(w);  // room for the largest island of its own size
     }
 #ifdef O1602_EXPERIMENTAL_VITA
     // Creation policy only: existing saves and received multiplayer worlds keep
@@ -251,7 +330,7 @@ bool operator==(const EndlessSetup& a, const EndlessSetup& b) noexcept {
     return a.rules == b.rules && a.own_world == b.own_world && a.auto_size == b.auto_size && x.width == y.width &&
            x.height == y.height && x.players == y.players && x.islands == y.islands && x.sizes == y.sizes &&
            x.natives == y.natives && x.volcanoes == y.volcanoes && x.gold_islands == y.gold_islands &&
-           x.starts == y.starts;
+           x.starts == y.starts && x.shapes == y.shapes && x.landscape == y.landscape;
 }
 
 namespace {
@@ -315,16 +394,23 @@ std::size_t setup_choices(SetupItem item) noexcept {
     switch (item) {
         case SetupItem::Refund:
             return kRefundPercents.size() + 2;
+        case SetupItem::Moving:
+            return kMovingNames.size();
         case SetupItem::Ships:
             return kShips.size();
         case SetupItem::Units:
             return kUnits.size();
         case SetupItem::GameSpeed:
             return kSpeeds.size();
+        case SetupItem::Cheats:
+            return 3;
         case SetupItem::Droughts:
             return kDroughtNames.size();
         case SetupItem::Volcanoes:
             return kVolcanoNames.size();
+        case SetupItem::Plagues:
+        case SetupItem::Fires:
+            return kOutbreakNames.size();
         case SetupItem::Pirates:
             return kPirateNames.size();
         case SetupItem::ComputerPlayers:
@@ -343,6 +429,27 @@ std::size_t setup_choices(SetupItem item) noexcept {
             return kIslandAmounts.size();
         case SetupItem::IslandSizes:
             return kSizeNames.size();
+        case SetupItem::IslandPreset:
+            return island_preset_count() + 1;
+        case SetupItem::IslandShapes:
+            return kShapeNames.size();
+        case SetupItem::LandShare:
+            return kLandShares.size();
+        case SetupItem::SmallestIsland:
+            return kSmallest.size();
+        case SetupItem::LargestIsland:
+            return kLargest.size();
+        case SetupItem::SizeSpread:
+            return kSpreadNames.size();
+        case SetupItem::IslandGap:
+            return kGapNames.size();
+        case SetupItem::Coast:
+            return kCoastNames.size();
+        case SetupItem::Outline:
+            return kOutlineNames.size();
+        case SetupItem::Forest:
+        case SetupItem::OreMountains:
+            return kShareNames.size();
         case SetupItem::Villages:
         case SetupItem::VolcanoIslands:
             return kAmounts.size();
@@ -350,11 +457,18 @@ std::size_t setup_choices(SetupItem item) noexcept {
             return kGoldIslands.size();
         case SetupItem::TraderPrices:
         case SetupItem::TraderReach:
-        case SetupItem::BreadChain:
+        case SetupItem::BalanceBread:
+        case SetupItem::BalanceHunting:
+        case SetupItem::BalanceShips:
+        case SetupItem::TradeCarts:
+        case SetupItem::FertileFields:
+        case SetupItem::ClimateCrops:
+        case SetupItem::BigOreVeins:
         case SetupItem::ShipPurchases:
         case SetupItem::Map:
         case SetupItem::Starts:
         case SetupItem::Resources:
+        case SetupItem::RevealResources:
         case SetupItem::WinEliminate:
         case SetupItem::WinAll:
         case SetupItem::WinComputers:
@@ -417,14 +531,28 @@ std::size_t setup_choice(const EndlessSetup& setup, SetupItem item) noexcept {
             std::copy(kRefundPercents.begin(), kRefundPercents.end(), percents.begin());
             return 1 + nearest(percents, std::max<std::uint32_t>(r.refund_percent, 1));
         }
+        case SetupItem::Moving:
+            return std::min<std::size_t>(static_cast<std::size_t>(r.moving), kMovingNames.size() - 1);
         case SetupItem::TraderPrices:
             return r.trader_prices == sim::TraderPrices::Market ? 1 : 0;
         case SetupItem::TraderReach:
             return r.trader_reach == sim::TraderReach::Scaled ? 1 : 0;
         case SetupItem::OreVeins:
             return std::min<std::size_t>(static_cast<std::size_t>(r.ore_veins), kOreVeinNames.size() - 1);
-        case SetupItem::BreadChain:
+        case SetupItem::BalanceBread:
             return r.revised_bread ? 1 : 0;
+        case SetupItem::BalanceHunting:
+            return r.wider_hunting ? 1 : 0;
+        case SetupItem::BalanceShips:
+            return r.large_ship_holds ? 1 : 0;
+        case SetupItem::TradeCarts:
+            return r.more_carts ? 1 : 0;
+        case SetupItem::FertileFields:
+            return r.fertile_fields ? 1 : 0;
+        case SetupItem::ClimateCrops:
+            return r.climate_crops ? 1 : 0;
+        case SetupItem::BigOreVeins:
+            return r.big_ore_veins ? 1 : 0;
         case SetupItem::ShipPurchases:
             return r.computers_buy_ships ? 1 : 0;
         case SetupItem::Ships:
@@ -433,10 +561,16 @@ std::size_t setup_choice(const EndlessSetup& setup, SetupItem item) noexcept {
             return nearest(kUnits, r.max_army);
         case SetupItem::GameSpeed:
             return nearest(kSpeeds, r.max_game_speed);
+        case SetupItem::Cheats:
+            return std::min<std::size_t>(static_cast<std::size_t>(r.cheats), 2);
         case SetupItem::Droughts:
             return std::min<std::size_t>(static_cast<std::size_t>(r.droughts), kDroughtNames.size() - 1);
         case SetupItem::Volcanoes:
-            return std::min<std::size_t>(static_cast<std::size_t>(r.volcanoes), kVolcanoNames.size() - 1);
+            return enum_choice(r.volcanoes, kVolcanoNames.size());
+        case SetupItem::Plagues:
+            return enum_choice(r.plagues, kOutbreakNames.size());
+        case SetupItem::Fires:
+            return enum_choice(r.fires, kOutbreakNames.size());
         case SetupItem::Map:
             return setup.own_world ? 1 : 0;
         case SetupItem::WorldSize: {
@@ -456,6 +590,28 @@ std::size_t setup_choice(const EndlessSetup& setup, SetupItem item) noexcept {
             return w.islands == Amount::None ? 0 : index_of(kIslandAmounts, w.islands);
         case SetupItem::IslandSizes:
             return std::min<std::size_t>(static_cast<std::size_t>(w.sizes), kSizeNames.size() - 1);
+        case SetupItem::IslandPreset:
+            return island_preset(w).value_or(0);
+        case SetupItem::IslandShapes:
+            return enum_choice(w.shapes, kShapeNames.size());
+        case SetupItem::LandShare:
+            return nearest(kLandShares, w.landscape.land);
+        case SetupItem::SmallestIsland:
+            return nearest(kSmallest, w.landscape.min_side);
+        case SetupItem::LargestIsland:
+            return nearest(kLargest, w.landscape.max_side);
+        case SetupItem::SizeSpread:
+            return enum_choice(w.landscape.spread, kSpreadNames.size());
+        case SetupItem::IslandGap:
+            return enum_choice(w.landscape.gap, kGapNames.size());
+        case SetupItem::Coast:
+            return enum_choice(w.landscape.coast, kCoastNames.size());
+        case SetupItem::Outline:
+            return enum_choice(w.landscape.outline, kOutlineNames.size());
+        case SetupItem::Forest:
+            return enum_choice(w.landscape.forest, kShareNames.size());
+        case SetupItem::OreMountains:
+            return enum_choice(w.landscape.mountains, kShareNames.size());
         case SetupItem::Villages:
             return index_of(kAmounts, w.natives);
         case SetupItem::VolcanoIslands:
@@ -466,6 +622,8 @@ std::size_t setup_choice(const EndlessSetup& setup, SetupItem item) noexcept {
             return w.starts == Starts::Together ? 1 : 0;
         case SetupItem::Resources:
             return r.guarantee_resources ? 0 : 1;
+        case SetupItem::RevealResources:
+            return r.reveal_resources ? 1 : 0;
         case SetupItem::BugFireRisk:
         case SetupItem::BugGallows:
         case SetupItem::BugRobberVictims:
@@ -477,8 +635,10 @@ std::size_t setup_choice(const EndlessSetup& setup, SetupItem item) noexcept {
         case SetupItem::BugRemoteRepair:
         case SetupItem::BugSmallYardWarships:
         case SetupItem::BugNativeLand:
-        case SetupItem::ClassicAi:
-            return r.bugs.*bug_of(item) ? 1 : 0;
+        case SetupItem::ClassicAi: {
+            const auto bug = bug_of(item);
+            return bug != nullptr && r.bugs.*bug ? 1 : 0;
+        }
         case SetupItem::ComputerPlayers:
             return std::min<std::size_t>(static_cast<std::size_t>(r.computer_players), kComputerNames.size() - 1);
         case SetupItem::Pirates:
@@ -527,14 +687,18 @@ void choose(EndlessSetup& setup, SetupItem item, std::size_t choice) {
     sim::WorldSettings& w = setup.world;
     switch (item) {
         case SetupItem::Refund:
-            if (choice == 0) {
-                r.demolish_refund = sim::Refund::None;
-            } else if (choice > kRefundPercents.size()) {
-                r.demolish_refund = sim::Refund::Full;
+            if (choice == 0 || choice > kRefundPercents.size()) {
+                // No share then: the percent goes back to its default, so that the rules are the
+                // same as before a step there and back.
+                r.demolish_refund = choice == 0 ? sim::Refund::None : sim::Refund::Full;
+                r.refund_percent = sim::Rules{}.refund_percent;
             } else {
                 r.demolish_refund = sim::Refund::Partial;
                 r.refund_percent = kRefundPercents[choice - 1];
             }
+            break;
+        case SetupItem::Moving:
+            r.moving = static_cast<sim::Moving>(choice);
             break;
         case SetupItem::TraderPrices:
             r.trader_prices = choice == 1 ? sim::TraderPrices::Market : sim::TraderPrices::Original;
@@ -545,8 +709,26 @@ void choose(EndlessSetup& setup, SetupItem item, std::size_t choice) {
         case SetupItem::OreVeins:
             r.ore_veins = static_cast<sim::OreVeins>(choice);
             break;
-        case SetupItem::BreadChain:
+        case SetupItem::BalanceBread:
             r.revised_bread = choice == 1;
+            break;
+        case SetupItem::BalanceHunting:
+            r.wider_hunting = choice == 1;
+            break;
+        case SetupItem::BalanceShips:
+            r.large_ship_holds = choice == 1;
+            break;
+        case SetupItem::TradeCarts:
+            r.more_carts = choice == 1;
+            break;
+        case SetupItem::FertileFields:
+            r.fertile_fields = choice == 1;
+            break;
+        case SetupItem::ClimateCrops:
+            r.climate_crops = choice == 1;
+            break;
+        case SetupItem::BigOreVeins:
+            r.big_ore_veins = choice == 1;
             break;
         case SetupItem::ShipPurchases:
             r.computers_buy_ships = choice == 1;
@@ -560,11 +742,20 @@ void choose(EndlessSetup& setup, SetupItem item, std::size_t choice) {
         case SetupItem::GameSpeed:
             r.max_game_speed = kSpeeds[choice];
             break;
+        case SetupItem::Cheats:
+            r.cheats = static_cast<sim::Cheats>(std::min<std::size_t>(choice, 2));
+            break;
         case SetupItem::Droughts:
             r.droughts = static_cast<sim::Droughts>(choice);
             break;
         case SetupItem::Volcanoes:
             r.volcanoes = static_cast<sim::Volcanoes>(choice);
+            break;
+        case SetupItem::Plagues:
+            r.plagues = static_cast<sim::Outbreaks>(choice);
+            break;
+        case SetupItem::Fires:
+            r.fires = static_cast<sim::Outbreaks>(choice);
             break;
         case SetupItem::Map:
             setup.own_world = choice == 1;
@@ -585,6 +776,57 @@ void choose(EndlessSetup& setup, SetupItem item, std::size_t choice) {
         case SetupItem::IslandSizes:
             w.sizes = static_cast<Sizes>(choice);
             break;
+        case SetupItem::IslandPreset:
+            if (choice == 0) {
+                w.shapes = Shapes::Templates;
+            } else {
+                w.shapes = Shapes::Own;
+                w.landscape = island_preset_landscape(std::min(choice, island_preset_count()) - 1);
+            }
+            break;
+        case SetupItem::IslandShapes:
+            w.shapes = static_cast<Shapes>(std::min<std::size_t>(choice, kShapeNames.size() - 1));
+            break;
+        case SetupItem::LandShare:
+            w.landscape.land = static_cast<std::uint8_t>(kLandShares[choice]);
+            break;
+        case SetupItem::SmallestIsland: {
+            // The largest island at least as large: the next side offered.
+            Landscape& l = w.landscape;
+            l.min_side = static_cast<std::uint16_t>(kSmallest[choice]);
+            if (l.max_side < l.min_side) {
+                l.max_side = static_cast<std::uint16_t>(*std::find_if(
+                    kLargest.begin(), kLargest.end(), [&](std::uint32_t side) { return side >= l.min_side; }));
+            }
+            break;
+        }
+        case SetupItem::LargestIsland: {
+            Landscape& l = w.landscape;
+            l.max_side = static_cast<std::uint16_t>(kLargest[choice]);
+            if (l.min_side > l.max_side) {
+                l.min_side = static_cast<std::uint16_t>(*std::find_if(
+                    kSmallest.rbegin(), kSmallest.rend(), [&](std::uint32_t side) { return side <= l.max_side; }));
+            }
+            break;
+        }
+        case SetupItem::SizeSpread:
+            w.landscape.spread = static_cast<Landscape::Spread>(choice);
+            break;
+        case SetupItem::IslandGap:
+            w.landscape.gap = static_cast<Landscape::Gap>(choice);
+            break;
+        case SetupItem::Coast:
+            w.landscape.coast = static_cast<Roughness>(choice);
+            break;
+        case SetupItem::Outline:
+            w.landscape.outline = static_cast<Landscape::Outline>(choice);
+            break;
+        case SetupItem::Forest:
+            w.landscape.forest = static_cast<Share>(choice);
+            break;
+        case SetupItem::OreMountains:
+            w.landscape.mountains = static_cast<Share>(choice);
+            break;
         case SetupItem::Villages:
             w.natives = kAmounts[choice];
             break;
@@ -600,6 +842,9 @@ void choose(EndlessSetup& setup, SetupItem item, std::size_t choice) {
         case SetupItem::Resources:
             r.guarantee_resources = choice == 0;
             break;
+        case SetupItem::RevealResources:
+            r.reveal_resources = choice == 1;
+            break;
         case SetupItem::BugFireRisk:
         case SetupItem::BugGallows:
         case SetupItem::BugRobberVictims:
@@ -612,7 +857,9 @@ void choose(EndlessSetup& setup, SetupItem item, std::size_t choice) {
         case SetupItem::BugSmallYardWarships:
         case SetupItem::BugNativeLand:
         case SetupItem::ClassicAi:
-            r.bugs.*bug_of(item) = choice == 1;
+            if (const auto bug = bug_of(item); bug != nullptr) {
+                r.bugs.*bug = choice == 1;
+            }
             break;
         case SetupItem::ComputerPlayers:
             r.computer_players = static_cast<sim::Computers>(choice);
@@ -686,10 +933,24 @@ void choose_previous(EndlessSetup& setup, SetupItem item) {
 
 bool setup_item_used(const EndlessSetup& setup, SetupItem item) noexcept {
     switch (item) {
-        case SetupItem::WorldSize:
-        case SetupItem::Players:
         case SetupItem::Islands:
         case SetupItem::IslandSizes:
+            // Islands of their own size follow the page of the islands.
+            return setup.own_world && setup.world.shapes != Shapes::Own;
+        case SetupItem::LandShare:
+        case SetupItem::SmallestIsland:
+        case SetupItem::LargestIsland:
+        case SetupItem::SizeSpread:
+        case SetupItem::IslandGap:
+        case SetupItem::Coast:
+        case SetupItem::Outline:
+        case SetupItem::Forest:
+        case SetupItem::OreMountains:
+            return setup.own_world && setup.world.shapes == Shapes::Own;
+        case SetupItem::WorldSize:
+        case SetupItem::Players:
+        case SetupItem::IslandPreset:
+        case SetupItem::IslandShapes:
         case SetupItem::Villages:
         case SetupItem::VolcanoIslands:
         case SetupItem::GoldIslands:
@@ -725,6 +986,62 @@ std::string victory_summary(const sim::VictoryConditions& v) {
 sim::OriginalBugs page_bugs(sim::OriginalBugs bugs) noexcept {
     bugs.classic_ai = false;
     return bugs;
+}
+
+sim::Rules original_disasters(sim::Rules rules) noexcept {
+    const sim::Rules original = sim::Rules::original();
+    rules.droughts = original.droughts;
+    rules.volcanoes = original.volcanoes;
+    rules.plagues = original.plagues;
+    rules.fires = original.fires;
+    return rules;
+}
+
+sim::Rules original_balance(sim::Rules rules) noexcept {
+    const sim::Rules original = sim::Rules::original();
+    rules.revised_bread = original.revised_bread;
+    rules.wider_hunting = original.wider_hunting;
+    rules.large_ship_holds = original.large_ship_holds;
+    return rules;
+}
+
+sim::Rules open1602_balance(sim::Rules rules) noexcept {
+    const sim::Rules open1602 = sim::Rules::open1602();
+    rules.revised_bread = open1602.revised_bread;
+    rules.wider_hunting = open1602.wider_hunting;
+    rules.large_ship_holds = open1602.large_ship_holds;
+    return rules;
+}
+
+std::string balance_summary(const sim::Rules& rules) {
+    const sim::Rules original = original_balance(rules);
+    const std::size_t total =
+        static_cast<std::size_t>(SetupItem::BalanceShips) - static_cast<std::size_t>(SetupItem::BalanceBread) + 1;
+    const std::size_t n = (rules.revised_bread != original.revised_bread ? 1U : 0U) +
+                          (rules.wider_hunting != original.wider_hunting ? 1U : 0U) +
+                          (rules.large_ship_holds != original.large_ship_holds ? 1U : 0U);
+    if (n == 0) {
+        return ui::tr("setup.balance.original");
+    }
+    if (n == total) {
+        return ui::tr("setup.balance.all");
+    }
+    return ui::tr("setup.balance.some", {std::to_string(n), std::to_string(total)});
+}
+
+std::string disasters_summary(const sim::Rules& rules) {
+    const sim::Rules original = original_disasters(rules);
+    const std::size_t n = (rules.droughts != original.droughts ? 1U : 0U) +
+                          (rules.volcanoes != original.volcanoes ? 1U : 0U) +
+                          (rules.plagues != original.plagues ? 1U : 0U) + (rules.fires != original.fires ? 1U : 0U);
+    if (n == 0) {
+        return ui::tr("setup.disasters.original");
+    }
+    return ui::tr(n == 1 ? "setup.disasters.one" : "setup.disasters.many", {std::to_string(n)});
+}
+
+std::string islands_summary(const EndlessSetup& setup) {
+    return setup_value(setup, SetupItem::IslandPreset);
 }
 
 std::string bugs_summary(const sim::OriginalBugs& bugs) {
@@ -802,16 +1119,24 @@ bool setup_item_offered(SetupScope scope, SetupItem item) noexcept {
     // A scenario's world is given: no world of its own, and its deposits are as its author placed them.
     switch (item) {
         case SetupItem::Refund:
+        case SetupItem::Moving:
         case SetupItem::TraderPrices:
         case SetupItem::TraderReach:
         case SetupItem::OreVeins:
-        case SetupItem::BreadChain:
+        case SetupItem::BalanceBread:
+        case SetupItem::BalanceHunting:
+        case SetupItem::BalanceShips:
+        case SetupItem::TradeCarts:
+        case SetupItem::FertileFields:
         case SetupItem::ShipPurchases:
         case SetupItem::Ships:
         case SetupItem::Units:
         case SetupItem::GameSpeed:
+        case SetupItem::Cheats:
         case SetupItem::Droughts:
         case SetupItem::Volcanoes:
+        case SetupItem::Plagues:
+        case SetupItem::Fires:
         case SetupItem::ComputerPlayers:
         case SetupItem::Pirates:
         case SetupItem::PirateNests:
@@ -872,18 +1197,25 @@ EndlessSetup multiplayer_setup(EndlessSetup setup, std::uint8_t players) {
     return setup;
 }
 
-std::string setup_label(SetupItem item) {
+std::string_view setup_label_key(SetupItem item) {
     static constexpr std::array<std::string_view, kSetupItems> kKeys = {
         "setup.refund",
+        "setup.moving",
         "setup.trader",
         "setup.trader_reach",
         "setup.ore_veins",
-        "setup.bread",
+        "setup.trade_carts",
         "setup.ships",
         "setup.units",
         "setup.speed",
+        "setup.fertile_fields",
         "setup.droughts",
         "setup.volcanoes",
+        "setup.plagues",
+        "setup.fires",
+        "setup.balance.bread",
+        "setup.balance.hunting",
+        "setup.balance.ships",
         "setup.map",
         "setup.size",
         "setup.players",
@@ -900,6 +1232,21 @@ std::string setup_label(SetupItem item) {
         "setup.pirates",
         "setup.pirate_nests",
         "setup.reveal",
+        "setup.cheats",
+        "setup.island_preset",
+        "setup.island_shapes",
+        "setup.coast",
+        "setup.outline",
+        "setup.land",
+        "setup.smallest_island",
+        "setup.largest_island",
+        "setup.size_spread",
+        "setup.island_gap",
+        "setup.forest",
+        "setup.ore_mountains",
+        "setup.climate_crops",
+        "setup.big_ore_veins",
+        "setup.reveal_resources",
         "setup.win.inhabitants",
         "setup.win.class",
         "setup.win.class_inhabitants",
@@ -926,7 +1273,12 @@ std::string setup_label(SetupItem item) {
     };
     static_assert(kKeys.size() == kSetupItems);
     const auto i = static_cast<std::size_t>(item);
-    return i < kKeys.size() ? ui::tr(kKeys[i]) : std::string{};
+    return i < kKeys.size() ? kKeys[i] : std::string_view{};
+}
+
+std::string setup_label(SetupItem item) {
+    const std::string_view key = setup_label_key(item);
+    return key.empty() ? std::string{} : ui::tr(key);
 }
 
 std::string setup_value(SetupItem item, std::size_t choice) {
@@ -942,6 +1294,11 @@ std::string setup_value(SetupItem item, std::size_t choice) {
                 return ui::tr("setup.refund.full");
             }
             return ui::tr("setup.refund.partial", {std::to_string(kRefundPercents[choice - 1])});
+        case SetupItem::Moving: {
+            static constexpr std::array<std::string_view, 3> kKeys = {"setup.moving.free", "setup.moving.rebuild",
+                                                                      "setup.off"};
+            return ui::tr(kKeys[choice]);
+        }
         case SetupItem::TraderPrices:
             return ui::tr(choice == 1 ? "setup.trader.market" : "setup.trader.original");
         case SetupItem::TraderReach:
@@ -951,8 +1308,20 @@ std::string setup_value(SetupItem item, std::size_t choice) {
                                                                       "setup.ore_veins.endless"};
             return ui::tr(kKeys[choice]);
         }
-        case SetupItem::BreadChain:
-            return ui::tr(choice == 1 ? "setup.bread.revised" : "setup.bread.original");
+        case SetupItem::BalanceBread:
+            return ui::tr(choice == 1 ? "setup.balance.bread.revised" : "setup.balance.bread.original");
+        case SetupItem::BalanceHunting:
+            return ui::tr(choice == 1 ? "setup.balance.hunting.wider" : "setup.balance.hunting.original");
+        case SetupItem::BalanceShips:
+            return ui::tr(choice == 1 ? "setup.balance.ships.merchant" : "setup.balance.ships.original");
+        case SetupItem::TradeCarts:
+            return ui::tr(choice == 1 ? "setup.trade_carts.more" : "setup.trade_carts.one");
+        case SetupItem::FertileFields:
+            return ui::tr(choice == 1 ? "setup.fertile_fields.all" : "setup.fertile_fields.original");
+        case SetupItem::ClimateCrops:
+            return ui::tr(choice == 1 ? "setup.climate_crops.all" : "setup.climate_crops.original");
+        case SetupItem::BigOreVeins:
+            return ui::tr(choice == 1 ? "setup.big_ore_veins.all" : "setup.big_ore_veins.original");
         case SetupItem::ShipPurchases:
             return ui::tr(choice == 1 ? "setup.on" : "setup.off");
         case SetupItem::Ships:
@@ -961,6 +1330,11 @@ std::string setup_value(SetupItem item, std::size_t choice) {
             return number_text(kUnits[choice]);
         case SetupItem::GameSpeed:
             return ui::tr("setup.speed.value", {std::to_string(kSpeeds[choice])});
+        case SetupItem::Cheats: {
+            static constexpr std::array<std::string_view, 3> kKeys = {"setup.cheats.code", "setup.cheats.start",
+                                                                      "setup.off"};
+            return ui::tr(kKeys[std::min<std::size_t>(choice, 2)]);
+        }
         case SetupItem::Droughts: {
             static constexpr std::array<std::string_view, 5> kKeys = {"setup.droughts.game", "setup.off",
                                                                       "setup.droughts.rare", "setup.droughts.normal",
@@ -968,7 +1342,14 @@ std::string setup_value(SetupItem item, std::size_t choice) {
             return ui::tr(kKeys[choice]);
         }
         case SetupItem::Volcanoes: {
-            static constexpr std::array<std::string_view, 3> kKeys = {"setup.volcanoes.game", "setup.off", "setup.on"};
+            static constexpr std::array<std::string_view, 4> kKeys = {"setup.volcanoes.game", "setup.off", "setup.on",
+                                                                      "setup.volcanoes.rare"};
+            return ui::tr(kKeys[choice]);
+        }
+        case SetupItem::Plagues:
+        case SetupItem::Fires: {
+            static constexpr std::array<std::string_view, 3> kKeys = {"setup.outbreaks.original",
+                                                                      "setup.outbreaks.rare", "setup.off"};
             return ui::tr(kKeys[choice]);
         }
         case SetupItem::Map:
@@ -988,6 +1369,34 @@ std::string setup_value(SetupItem item, std::size_t choice) {
                 "setup.island_sizes.small", "setup.island_sizes.mixed", "setup.island_sizes.large"};
             return ui::tr(kKeys[choice]);
         }
+        case SetupItem::IslandShapes: {
+            static constexpr std::array<std::string_view, 3> kKeys = {
+                "setup.island_shapes.templates", "setup.island_shapes.mixed", "setup.island_shapes.own"};
+            return ui::tr(kKeys[std::min<std::size_t>(choice, kKeys.size() - 1)]);
+        }
+        case SetupItem::IslandPreset:
+            if (choice > island_presets().size() && choice <= island_preset_count()) {
+                return package_presets()[choice - 1 - island_presets().size()].title(ui::current_language());
+            }
+            return ui::tr(choice == 0 ? std::string("setup.island_preset.original")
+                                      : "setup.island_preset." + std::string(island_presets()[choice - 1].name));
+        case SetupItem::LandShare:
+            return ui::tr("setup.win.percent", {std::to_string(kLandShares[choice])});
+        case SetupItem::SmallestIsland:
+            return ui::tr("setup.tiles", {std::to_string(kSmallest[choice])});
+        case SetupItem::LargestIsland:
+            return ui::tr("setup.tiles", {std::to_string(kLargest[choice])});
+        case SetupItem::SizeSpread:
+            return ui::tr("setup.size_spread." + std::string(kSpreadNames[choice]));
+        case SetupItem::IslandGap:
+            return ui::tr("setup.island_gap." + std::string(kGapNames[choice]));
+        case SetupItem::Coast:
+            return ui::tr("setup.coast." + std::string(kCoastNames[choice]));
+        case SetupItem::Outline:
+            return ui::tr("setup.outline." + std::string(kOutlineNames[choice]));
+        case SetupItem::Forest:
+        case SetupItem::OreMountains:
+            return ui::tr("setup.share." + std::string(kShareNames[choice]));
         case SetupItem::Villages:
         case SetupItem::VolcanoIslands:
             return amount_text(kAmounts[choice]);
@@ -997,6 +1406,8 @@ std::string setup_value(SetupItem item, std::size_t choice) {
             return ui::tr(choice == 1 ? "setup.starts.together" : "setup.starts.spread");
         case SetupItem::Resources:
             return ui::tr(choice == 0 ? "setup.on" : "setup.off");
+        case SetupItem::RevealResources:
+            return ui::tr(choice == 1 ? "setup.reveal_resources.all" : "setup.reveal_resources.original");
         case SetupItem::BugFireRisk:
         case SetupItem::BugGallows:
         case SetupItem::BugRobberVictims:
@@ -1119,6 +1530,26 @@ std::optional<std::string> custom_value(const EndlessSetup& setup, SetupItem ite
                 return std::to_string(w.gold_islands);
             }
             break;
+        case SetupItem::IslandPreset:
+            if (!island_preset(w)) {
+                return ui::tr("setup.island_preset.custom");
+            }
+            break;
+        case SetupItem::LandShare:
+            if (!offered(kLandShares, std::uint32_t{w.landscape.land})) {
+                return ui::tr("setup.win.percent", {std::to_string(w.landscape.land)});
+            }
+            break;
+        case SetupItem::SmallestIsland:
+            if (!offered(kSmallest, std::uint32_t{w.landscape.min_side})) {
+                return ui::tr("setup.tiles", {std::to_string(w.landscape.min_side)});
+            }
+            break;
+        case SetupItem::LargestIsland:
+            if (!offered(kLargest, std::uint32_t{w.landscape.max_side})) {
+                return ui::tr("setup.tiles", {std::to_string(w.landscape.max_side)});
+            }
+            break;
         case SetupItem::WinInhabitants:
             return condition(kWinInhabitants, v.inhabitants, "setup.win.number");
         case SetupItem::WinClassInhabitants:
@@ -1155,6 +1586,9 @@ std::string setup_value(const EndlessSetup& setup, SetupItem item) {
         const sim::WorldSettings w = setup.world_settings();
         return ui::tr("setup.size.auto", {std::to_string(w.width), std::to_string(w.height)});
     }
+    if (item == SetupItem::IslandPreset && !island_preset(setup.world)) {
+        return ui::tr("setup.island_preset.custom");  // the items below say what
+    }
     if (const auto custom = custom_value(setup, item)) {
         return ui::tr("setup.value.own", {*custom});
     }
@@ -1178,6 +1612,10 @@ bool read_setup_line(EndlessSetup& setup, std::string_view key, std::string_view
             r.demolish_refund = sim::Refund::Partial;
             r.refund_percent = static_cast<std::uint8_t>(*n);
         }
+    } else if (key == "moving") {
+        if (const auto i = name_index(kMovingNames, value)) {
+            r.moving = static_cast<sim::Moving>(*i);
+        }
     } else if (key == "trader_prices") {
         if (value == "market" || value == "original") {
             r.trader_prices = value == "market" ? sim::TraderPrices::Market : sim::TraderPrices::Original;
@@ -1196,9 +1634,42 @@ bool read_setup_line(EndlessSetup& setup, std::string_view key, std::string_view
         if (const auto i = name_index(kComputerNames, value)) {
             r.computer_players = static_cast<sim::Computers>(*i);
         }
+    } else if (key == "trade_carts") {
+        if (value == "more" || value == "one") {
+            r.more_carts = value == "more";
+        }
+    } else if (key == "fertile_fields") {
+        if (value == "all" || value == "original") {
+            r.fertile_fields = value == "all";
+        }
+    } else if (key == "cheats") {
+        if (value == "code" || value == "start" || value == "off") {
+            r.cheats = value == "code" ? sim::Cheats::Code : value == "start" ? sim::Cheats::Start : sim::Cheats::Off;
+        }
+    } else if (key == "hunting") {  // the hunter's hut alone
+        if (value == "wider" || value == "original") {
+            r.wider_hunting = value == "wider";
+        }
+    } else if (key == "climate_crops") {
+        if (value == "all" || value == "original") {
+            r.climate_crops = value == "all";
+        }
+    } else if (key == "big_ore_veins") {
+        if (value == "all" || value == "original") {
+            r.big_ore_veins = value == "all";
+        }
     } else if (key == "ship_purchases") {
         if (value == "on" || value == "off") {
             r.computers_buy_ships = value == "on";
+        }
+    } else if (key == "large_ship_holds") {
+        if (value == "merchant" || value == "original") {
+            r.large_ship_holds = value == "merchant";
+        }
+    } else if (key == "balance") {  // the one setting of before for the bread chain and the hunter's hut
+        if (value == "alternative" || value == "original") {
+            r.revised_bread = value == "alternative";
+            r.wider_hunting = value == "alternative";
         }
     } else if (key == "bread") {
         if (value == "revised" || value == "original") {
@@ -1220,6 +1691,12 @@ bool read_setup_line(EndlessSetup& setup, std::string_view key, std::string_view
         if (const auto i = name_index(kVolcanoNames, value)) {
             r.volcanoes = static_cast<sim::Volcanoes>(*i);
         }
+    } else if (key == "plagues" || key == "fires") {
+        if (const auto i = name_index(kOutbreakNames, value)) {
+            (key == "plagues" ? r.plagues : r.fires) = static_cast<sim::Outbreaks>(*i);
+        }
+    } else if (key == "event_speed") {
+        // Since moved to the display settings ("display.event_speed"): a line of before is dropped.
     } else if (key == "pirates") {
         if (const auto i = name_index(kPirateNames, value)) {
             r.pirates = static_cast<sim::Pirates>(*i);
@@ -1237,6 +1714,10 @@ bool read_setup_line(EndlessSetup& setup, std::string_view key, std::string_view
     } else if (key == "resources") {
         if (value == "on" || value == "off") {
             r.guarantee_resources = value == "on";
+        }
+    } else if (key == "reveal_resources") {
+        if (value == "all" || value == "original") {
+            r.reveal_resources = value == "all";
         }
     } else if (key == "ai") {
         if (value == "classic" || value == "open1602") {
@@ -1286,6 +1767,17 @@ bool read_setup_line(EndlessSetup& setup, std::string_view key, std::string_view
         if (const auto i = name_index(kSizeNames, value)) {
             w.sizes = static_cast<Sizes>(*i);
         }
+    } else if (key == "island_shapes") {
+        if (const auto i = name_index(kShapeNames, value)) {
+            w.shapes = static_cast<Shapes>(*i);
+        }
+    } else if (key == "island_preset") {
+        if (sim::is_landscape_name(value)) {
+            w.landscape.name = value;
+        }
+    } else if (key.starts_with("island_") &&
+               std::ranges::find(sim::landscape_names::kKeys, key.substr(7)) != sim::landscape_names::kKeys.end()) {
+        (void)sim::set_landscape(w.landscape, key.substr(7), value);
     } else if (key == "starts") {
         if (const auto i = name_index(kStartNames, value)) {
             w.starts = *i == 1 ? Starts::Together : Starts::Spread;
@@ -1308,16 +1800,27 @@ std::string write_setup(const EndlessSetup& setup, std::string_view prefix) {
         out += '\n';
     };
     line("refund", std::to_string(r.refund_share()));
+    line("moving", kMovingNames[std::min<std::size_t>(static_cast<std::size_t>(r.moving), kMovingNames.size() - 1)]);
     line("trader_prices", r.trader_prices == sim::TraderPrices::Market ? "market" : "original");
     line("trader_reach", kTraderReachNames[std::min<std::size_t>(static_cast<std::size_t>(r.trader_reach), 1)]);
     line("ore_veins", kOreVeinNames[std::min<std::size_t>(static_cast<std::size_t>(r.ore_veins), 2)]);
     line("bread", r.revised_bread ? "revised" : "original");
+    line("hunting", r.wider_hunting ? "wider" : "original");
+    line("large_ship_holds", r.large_ship_holds ? "merchant" : "original");
+    line("trade_carts", r.more_carts ? "more" : "one");
+    line("cheats", r.cheats == sim::Cheats::Code ? "code" : r.cheats == sim::Cheats::Start ? "start" : "off");
+    line("fertile_fields", r.fertile_fields ? "all" : "original");
+    line("climate_crops", r.climate_crops ? "all" : "original");
+    line("big_ore_veins", r.big_ore_veins ? "all" : "original");
     line("ships", std::to_string(r.max_ships_per_player));
     line("units", std::to_string(r.max_army));
     line("game_speed", std::to_string(r.max_game_speed));
     line("droughts", kDroughtNames[std::min<std::size_t>(static_cast<std::size_t>(r.droughts), 4)]);
-    line("volcanoes", kVolcanoNames[std::min<std::size_t>(static_cast<std::size_t>(r.volcanoes), 2)]);
+    line("volcanoes", kVolcanoNames[enum_choice(r.volcanoes, kVolcanoNames.size())]);
+    line("plagues", kOutbreakNames[enum_choice(r.plagues, kOutbreakNames.size())]);
+    line("fires", kOutbreakNames[enum_choice(r.fires, kOutbreakNames.size())]);
     line("resources", on_off(r.guarantee_resources));
+    line("reveal_resources", r.reveal_resources ? "all" : "original");
     line("ai", r.bugs.classic_ai ? "classic" : "open1602");
     line("ship_purchases", r.computers_buy_ships ? "on" : "off");
     line("computers", kComputerNames[std::min<std::size_t>(static_cast<std::size_t>(r.computer_players), 2)]);
@@ -1332,6 +1835,20 @@ std::string write_setup(const EndlessSetup& setup, std::string_view prefix) {
     line("players", std::to_string(w.players));
     line("islands", kAmountNames[std::min<std::size_t>(static_cast<std::size_t>(w.islands), kAmountNames.size() - 1)]);
     line("island_sizes", kSizeNames[std::min<std::size_t>(static_cast<std::size_t>(w.sizes), 2)]);
+    line("island_shapes", kShapeNames[enum_choice(w.shapes, kShapeNames.size())]);
+    const Landscape& l = w.landscape;
+    if (!l.name.empty()) {
+        line("island_preset", l.name);
+    }
+    line("island_land", std::to_string(l.land));
+    line("island_min", std::to_string(l.min_side));
+    line("island_max", std::to_string(l.max_side));
+    line("island_spread", kSpreadNames[enum_choice(l.spread, kSpreadNames.size())]);
+    line("island_gap", kGapNames[enum_choice(l.gap, kGapNames.size())]);
+    line("island_coast", kCoastNames[enum_choice(l.coast, kCoastNames.size())]);
+    line("island_outline", kOutlineNames[enum_choice(l.outline, kOutlineNames.size())]);
+    line("island_forest", kShareNames[enum_choice(l.forest, kShareNames.size())]);
+    line("island_mountains", kShareNames[enum_choice(l.mountains, kShareNames.size())]);
     line("villages", kAmountNames[std::min<std::size_t>(static_cast<std::size_t>(w.natives), kAmountNames.size() - 1)]);
     line("volcano_islands",
          kAmountNames[std::min<std::size_t>(static_cast<std::size_t>(w.volcanoes), kAmountNames.size() - 1)]);
@@ -1375,6 +1892,33 @@ void read_setup(EndlessSetup& setup, std::string_view text, std::string_view pre
         if (key.starts_with(prefix)) {
             (void)read_setup_line(setup, key.substr(prefix.size()), trim(line.substr(eq + 1)));
         }
+    }
+}
+
+void set_package_island_presets(std::vector<sim::PackageLandscape> presets) {
+    package_presets() = std::move(presets);
+}
+
+std::size_t landscape_choices() {
+    return 1 + island_preset_count();
+}
+
+std::string landscape_choice_name(std::size_t choice) {
+    choice = std::min(choice, island_preset_count());
+    if (choice > island_presets().size()) {
+        return package_presets()[choice - 1 - island_presets().size()].title(ui::current_language());
+    }
+    return ui::tr(choice == 0 ? std::string("setup.island_preset.original")
+                              : "setup.island_preset." + std::string(island_presets()[choice - 1].name));
+}
+
+void apply_landscape_choice(sim::WorldSettings& w, std::size_t choice) {
+    choice = std::min(choice, island_preset_count());
+    if (choice == 0) {
+        w.shapes = Shapes::Templates;
+    } else {
+        w.shapes = Shapes::Own;
+        w.landscape = island_preset_landscape(choice - 1);
     }
 }
 

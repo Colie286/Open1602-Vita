@@ -52,7 +52,7 @@ void StockNotes::add(const sim::World& world, const assets::BuildingTable& build
         const sim::MapCell& cell = island.map.top(p.x, p.y);
         const sim::City* city = world.city(p.island, cell.city);
         const assets::BuildingType* b = buildings.by_sprite(cell.sprite);
-        // Only the owner of the city sees them (0x0047DAF0: city + 0x1A against the local player, 0x005BACB0).
+        // Only the owner of the city sees them.
         if (city == nullptr || b == nullptr || local == sim::kNoPlayer || city->owner != local) {
             continue;
         }

@@ -27,6 +27,10 @@
 #include <string>
 #include <thread>
 #include <type_traits>
+#include <utility>
+
+#include "video_queue.hpp"
+
 namespace o1602::app {
 namespace {
 void video_log(const char* format,...) {
@@ -140,10 +144,12 @@ struct VideoPlayer::Worker {
             for(unsigned i=0;i<8;++i){
                 bool present=false;
                 if constexpr(std::is_same_v<std::decay_t<decltype(clip)>,video::Bink>)present=i<clip.info().tracks.size();
+                else if constexpr(std::is_same_v<std::decay_t<decltype(clip)>,video::Webm>) present=i<clip.info().tracks.size();
                 else present=i<video::kSmackerTracks&&clip.info().tracks[i].present;
                 if(!present||(s->tracks&&!(s->tracks&(1U<<i))))continue;
                 auto pcm=[&] {
                     if constexpr(std::is_same_v<std::decay_t<decltype(clip)>,video::Bink>) return clip.stream_audio(i);
+                    else if constexpr(std::is_same_v<std::decay_t<decltype(clip)>,video::Webm>) return clip.audio(i);
                     else return clip.stream_audio(i);
                 }();
                 if(!pcm)return pcm.error();
@@ -177,6 +183,12 @@ struct VideoPlayer::Worker {
             if(auto st=audio(*clip);!st)return st.error();
             return Clip{std::move(*clip)};
         }
+        if (extension == ".webm") {
+            auto clip = video::Webm::open_file(s->file);
+            if (!clip) return clip.error();
+            if (auto st=audio(*clip); !st) return st.error();
+            return Clip{std::move(*clip)};
+        }
         std::size_t compressed_budget=8*1024*1024;
 #ifdef O1602_EXPERIMENTAL_VITA
         if(std::filesystem::exists("ux0:data/open1602/video-compressed-cache-off.flag"))compressed_budget=0;
@@ -200,7 +212,8 @@ struct VideoPlayer::Worker {
                         for(unsigned y=0;y<h;++y){copy_row(p.bytes.data()+std::size_t(y)*p.stride,f.pixels.data()+at,w);at+=w;}}
                     return;
                 }
-            }else {f.h=v.info().display_height();f.smooth=false;}
+            }else if constexpr(std::is_same_v<V,video::Smacker>) {f.h=v.info().display_height();f.smooth=false;}
+            else {f.h=v.info().height;f.smooth=true;}
             f.yuv=false;v.to_rgba(f.pixels);
         },clip);f.index=position(clip);
     }
@@ -292,14 +305,25 @@ struct VideoPlayer::Worker {
 };
 VideoPlayer::VideoPlayer(SDL_Renderer* renderer,const assets::GameDirectory& game):m_renderer(renderer),m_game(&game){}
 VideoPlayer::~VideoPlayer(){stop();m_worker.reset();}
+void VideoPlayer::set_package_videos(std::vector<std::filesystem::path> files) {
+    m_package_videos = std::move(files);
+    m_available.clear();
+}
+std::optional<std::filesystem::path> VideoPlayer::find(std::uint16_t n) const {
+    if (n >= kFirstPackageVideo) {
+        const auto index = std::size_t(n - kFirstPackageVideo);
+        return index < m_package_videos.size() ? std::optional(m_package_videos[index]) : std::nullopt;
+    }
+    return find_video(*m_game, n);
+}
 bool VideoPlayer::available(std::uint16_t n) const {
 #ifdef O1602_EXPERIMENTAL_VITA
     if(n==58)return true; // permit a useful missing-file notice through the normal menu
 #endif
-auto it=m_available.find(n);if(it!=m_available.end())return it->second;return m_available[n]=find_video(*m_game,n).has_value();}
+auto it=m_available.find(n);if(it!=m_available.end())return it->second;return m_available[n]=find(n).has_value();}
 bool VideoPlayer::start(std::uint16_t n,bool loop,std::uint8_t tracks){return begin(n,loop,tracks,{});}
 bool VideoPlayer::begin(std::uint16_t n,bool loop,std::uint8_t tracks,const std::vector<std::shared_ptr<const audio::Pcm>>& reuse){
-    stop();m_missing_cd=false;auto path=find_video(*m_game,n);if(!path){
+    stop();m_missing_cd=false;auto path=find(n);if(!path){
         m_available[n]=false;
 #ifdef O1602_EXPERIMENTAL_VITA
         if(n==58){m_number=n;m_missing_cd=true;failed("CD intro missing: ux0:data/open1602/original/VideoSmk/58.smk","cd_intro_missing");}

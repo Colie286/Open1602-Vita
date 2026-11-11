@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Island worlds beyond the original's three fixed plans (Weltengenerator Stufe 1, docs/re/worldgen.md
+// Island worlds beyond the original's three fixed plans (Weltengenerator Stufe 1
 // "Eigene Welten"). The original has no generator for the layout: each endless game file carries a
 // plan with every island's place and size class, and only the contents are drawn when the game
 // starts. Open1602 makes such a plan itself for any map size and number of players - how many
@@ -10,15 +10,20 @@
 // gold within reach.
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "o1602/assets/building_table.hpp"
 #include "o1602/assets/game_directory.hpp"
 #include "o1602/assets/scenario.hpp"
 #include "o1602/core/result.hpp"
+#include "o1602/sim/island_shapes.hpp"
 #include "o1602/sim/limits.hpp"
+#include "o1602/sim/package_islands.hpp"
 
 namespace o1602::sim {
 
@@ -34,8 +39,55 @@ struct WorldSettings {
         Spread,    ///< every player has a start area of his own, all alike
         Together,  ///< all ships start at one place, as in the original
     };
+    /// The coasts of the islands (world generator stage 2, island_shapes.hpp).
+    enum class Shapes : std::uint8_t {
+        Templates,  ///< the original's island templates, as in the original
+        Mixed,      ///< about half the islands of their own shape, in the templates' sizes
+        /// Every island of its own shape and size as `landscape` says, native villages and
+        /// volcanoes on them; `islands` and `sizes` do not count then.
+        Own,
+    };
+    /// The islands of a world of islands of their own shape (Shapes::Own).
+    struct Landscape {
+        /// How the sizes are spread between the smallest and the largest side.
+        enum class Spread : std::uint8_t {
+            Even,       ///< any size as often
+            Mixed,      ///< small ones more often, as the original's plans
+            FewGiants,  ///< mostly small islands and a few of the largest
+        };
+        enum class Gap : std::uint8_t { Narrow, Normal, Wide };  ///< water between two islands
+        enum class Outline : std::uint8_t {
+            Round,     ///< about as wide as high, one body of land
+            Long,      ///< up to three times as long as wide
+            Branched,  ///< arms and peninsulas
+        };
+        static constexpr std::uint8_t kMinLand = 5;  ///< percent of the map
+        static constexpr std::uint8_t kMaxLand = 45;
+
+        std::uint8_t land = 15;        ///< percent of the map that is land (the original's plans: about 13)
+        std::uint16_t min_side = 30;   ///< tiles, at least shapes::kMinSide
+        std::uint16_t max_side = 100;  ///< tiles, at most shapes::kMaxSide
+        Spread spread = Spread::Mixed;
+        Gap gap = Gap::Normal;
+        shapes::Roughness coast = shapes::Roughness::Natural;
+        Outline outline = Outline::Round;
+        shapes::Share forest = shapes::Share::Normal;
+        shapes::Share mountains = shapes::Share::Normal;  ///< ore mountains for the size of an island
+        /// The kind of island world it is: the name of the preset it comes from ("archipelago" or
+        /// "<package>:<name>"), "" for none. A changed preset keeps its name; the packages'
+        /// climates may take another share of its islands (climates.toml `share.<name>`).
+        std::string name;
+
+        friend bool operator==(const Landscape&, const Landscape&) = default;
+
+        /// Per mille of an island's rectangle that is land (shapes::ShapeRequest::land): as the
+        /// templates up to a quarter of the map, fuller above, so that much land fits the map.
+        [[nodiscard]] std::uint16_t fill() const;
+    };
     static constexpr std::uint32_t kMinSide = 200;
-    static constexpr std::uint32_t kMaxSide = 2000;
+    /// Room for islands of shapes::kMaxSide among the start areas (fit_landscape); a world loads up
+    /// to kMaxWorldSide.
+    static constexpr std::uint32_t kMaxSide = 4000;
     static constexpr std::uint8_t kMaxGoldIslands = 250;  ///< one per island at most
 
     std::uint32_t width = 500;  ///< tiles; the original map is 500 x 350
@@ -51,14 +103,63 @@ struct WorldSettings {
     /// and players, plus one within reach of every start that has none. Otherwise exactly this many,
     /// one vein each, as far as the islands have free mountains; the starts get theirs first.
     std::uint8_t gold_islands = 0;
+    Shapes shapes = Shapes::Templates;
+    Landscape landscape;
     std::uint64_t seed = 0;
 };
+
+/// The names of the landscape's choices, as setup files and the command line write them, in the
+/// order of the enums.
+namespace landscape_names {
+inline constexpr std::array<std::string_view, 3> kSpread = {"even", "mixed", "giants"};
+inline constexpr std::array<std::string_view, 3> kGap = {"narrow", "normal", "wide"};
+inline constexpr std::array<std::string_view, 3> kCoast = {"smooth", "natural", "rugged"};
+inline constexpr std::array<std::string_view, 3> kOutline = {"round", "long", "branched"};
+inline constexpr std::array<std::string_view, 3> kShare = {"little", "normal", "much"};
+/// The keys of set_landscape().
+inline constexpr std::array<std::string_view, 9> kKeys = {"land",  "min",     "max",    "spread",   "gap",
+                                                          "coast", "outline", "forest", "mountains"};
+}  // namespace landscape_names
+
+/// A kind of world of islands of their own shape, by name: as they come (the Landscape's
+/// defaults), many small ones, a few large bodies of land, a few giants among small ones, and
+/// islands all of about one size.
+struct LandscapePreset {
+    std::string_view name;
+    WorldSettings::Landscape landscape;
+};
+/// Open1602's presets: varied (the Landscape's defaults), archipelago, continents, giants, even.
+[[nodiscard]] const std::array<LandscapePreset, 5>& landscape_presets();
+
+/// Whether `name` can name a kind of island world (Landscape::name): Open1602's preset's name or
+/// "<package>:<name>", 1 to 192 bytes without control characters.
+[[nodiscard]] bool is_landscape_name(std::string_view name) noexcept;
+
+/// Whether `a` and `b` make the same islands: all their settings but the name are the same.
+[[nodiscard]] bool same_islands(const WorldSettings::Landscape& a, const WorldSettings::Landscape& b);
+
+/// The kind of island world `landscape` is: its name, else the name of Open1602's preset with the
+/// same settings (a setup of before the names, the command line's settings), else "".
+[[nodiscard]] std::string_view landscape_name(const WorldSettings::Landscape& landscape);
+
+/// Sets one setting of `landscape` from text: `key` one of landscape_names::kKeys, `value` a
+/// number (land: percent, min and max: tiles) or a name of landscape_names. When the smallest
+/// island would be larger than the largest, the other side follows. False, and nothing changed,
+/// for an unknown key or a value out of range.
+bool set_landscape(WorldSettings::Landscape& landscape, std::string_view key, std::string_view value);
 
 /// Settings for a world of `players` with as much sea and land per player as the original's
 /// 500 x 350 for four (multiplayer games of more than four, o1602-tool bench): both sides grow with
 /// the square root of the players; four or fewer keep the original's size. The islands follow the
 /// area (WorldSettings::islands).
 [[nodiscard]] WorldSettings settings_for_players(std::uint8_t players);
+
+/// An automatic map size for islands of their own size (Shapes::Own): `settings`' size, larger
+/// where the largest island would find no room - the shorter side at least one and a half times the
+/// largest island and the edges, the area at least sixteen times the largest island's (the start
+/// areas and their islands come first, a giant needs room between them) - keeping the shape, at
+/// most kMaxSide. Other settings keep their size.
+[[nodiscard]] WorldSettings fit_landscape(WorldSettings settings);
 
 /// The start area of one player: his ship's place, his home island and how far "within reach" is.
 struct StartArea {
@@ -79,11 +180,14 @@ struct TemplateInfo {
     bool volcano = false;
     std::uint8_t big_mountains = 0;  ///< ore mountains for big veins (Erzbergnr 0)
     std::uint8_t small_mountains = 0;
+    bool package = false;  ///< an island of a package (package_islands.hpp), numbered after the original's
 };
 
-/// All island templates of the game directory; files that cannot be read are left out.
+/// All island templates of the game directory, then the islands of `package_islands`; files that
+/// cannot be read are left out.
 [[nodiscard]] std::vector<TemplateInfo> island_templates(const assets::GameDirectory& game,
-                                                         const assets::BuildingTable& buildings);
+                                                         const assets::BuildingTable& buildings,
+                                                         std::span<const PackageIsland> package_islands = {});
 
 struct WorldPlan {
     std::uint32_t width = 0;
@@ -94,10 +198,27 @@ struct WorldPlan {
     std::vector<StartArea> starts;  ///< one per player (Together: all at the same place)
     bool shared_start = false;      ///< Together: no start area of one's own to make fair
     std::uint8_t gold_islands = 0;  ///< WorldSettings::gold_islands: 0 as the plan, else exactly this many
+    /// WorldSettings::shapes: which islands get a shape of their own instead of their template (of
+    /// the template's size and with as many ore mountains), drawn from `seed`.
+    WorldSettings::Shapes shapes = WorldSettings::Shapes::Templates;
+    std::uint64_t seed = 0;
+    /// Shapes::Own: the islands of their own shape (plan flag kPlanOwnShape) with their sides, and
+    /// how they look.
+    struct OwnIsland {
+        std::uint8_t number = 0;
+        std::uint16_t width = 0;
+        std::uint16_t height = 0;
+        bool volcano = false;  ///< the island has a volcano
+        bool village = false;  ///< the island has a native village (of a native template)
+    };
+    std::vector<OwnIsland> own_islands;
+    WorldSettings::Landscape landscape;
 };
 
 /// Island flag of a plan entry that the generator keeps free of a native village (home islands).
 inline constexpr std::uint8_t kPlanNoVillage = 2;
+/// Island flag of a plan entry that is an island of its own shape and size (WorldPlan::own_islands).
+inline constexpr std::uint8_t kPlanOwnShape = 4;
 
 /// Plans a world. The same settings and seed give the same plan.
 [[nodiscard]] core::Result<WorldPlan> plan_world(const WorldSettings& settings,

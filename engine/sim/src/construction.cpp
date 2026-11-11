@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <set>
 
 #include "o1602/assets/savegame.hpp"
@@ -21,14 +22,14 @@ constexpr std::uint8_t kInfraCastle = infra::kCastle;
 constexpr std::uint8_t kInfraCathedral = infra::kCathedral;
 constexpr std::uint8_t kInfraArch = infra::kArch;
 constexpr std::uint8_t kInfraMonument = infra::kMonument;
-/// A castle or cathedral makes its city proud: city + 0x200 += 25 * 32 (command 0x4B of 0x004084D0).
+/// A castle or cathedral makes its city proud: 25 * 32 more pride.
 constexpr std::uint32_t kPrideBonus = 25 * 32;
 
 constexpr std::int32_t kShipRange = 16;       // founding from a ship: circle of radius 16
 constexpr std::int32_t kRoadSearch = 4;       // doors turn to roads within 4 tiles
 constexpr std::uint8_t kMinKontorRadius = 8;  // territory of a Kontor
 constexpr std::uint8_t kTowerRadius = 8;      // towers protect the land within 8 tiles
-/// Real buildings, which a demolition rectangle leaves standing (0x00464AE0): not roads, walls,
+/// Real buildings, which a demolition rectangle leaves standing: not roads, walls,
 /// fields, trees or ruins.
 constexpr std::array<std::int32_t, 8> kRealBuildings = {kind::kTower,      kind::kTowerBeach, kind::kBuilding,
                                                         kind::kBeachHouse, kind::kMine,       kind::kHq,
@@ -39,11 +40,11 @@ bool is_beach(std::int32_t k) noexcept {
     return k >= kind::kBeach && k <= kind::kBeachVariant;
 }
 
-/// Coast a Kontor stands at (0x00467E10).
+/// Coast a Kontor stands at.
 bool kontor_coast(std::int32_t k) noexcept {
     return is_beach(k) || k == kind::kBeachRuin || k == kind::kPier;
 }
-/// Coast inside a shipyard (0x00468090).
+/// Coast inside a shipyard.
 bool shipyard_coast(std::int32_t k) noexcept {
     return k == kind::kWallBeach || kontor_coast(k);
 }
@@ -117,7 +118,7 @@ std::int32_t wall_family_cost(const assets::BuildingTable& buildings, const asse
     return (head != nullptr ? head : land)->build_cost.money;
 }
 
-/// Whether a tile carrying `old` takes the new building (0x00464660).
+/// Whether a tile carrying `old` takes the new building.
 bool tile_accepts(const assets::BuildingTable& buildings, const assets::BuildingType& b,
                   const assets::BuildingType& old) {
     const std::int32_t o = old.kind;
@@ -127,7 +128,7 @@ bool tile_accepts(const assets::BuildingTable& buildings, const assets::Building
         case kind::kRoad:
             return open || (o == kind::kRoad && old.kreuz_base != b.kreuz_base);
         case kind::kGate:
-            // Only on roads, walls, towers and open land; never on the beach (table 0x004649A0).
+            // Only on roads, walls, towers and open land; never on the beach.
             return o == kind::kRoad || o == kind::kWall || o == kind::kTower || open;
         case kind::kWall:
         case kind::kWallBeach:
@@ -184,9 +185,9 @@ bool tile_accepts(const assets::BuildingTable& buildings, const assets::Building
 }
 
 /// Coast or river rotation of a building whose long side lies along a line of tiles.
-/// `outside`: the line next to the footprint (Kontor, 0x00467AF0), else its own edge line
-/// (shipyard 0x00467E60, water mill 0x004680F0). Order: left (2), right (0), top (3), bottom (1);
-/// `turn` is added to the rotation: the water mill's wheel faces the other way (0x004680F0 returns
+/// `outside`: the line next to the footprint (Kontor), else its own edge line
+/// (shipyard, water mill). Order: left (2), right (0), top (3), bottom (1);
+/// `turn` is added to the rotation: the water mill's wheel faces the other way (returns
 /// left 0, right 2, top 1, bottom 3).
 template <class Test, class Accept>
 std::uint8_t edge_rotation(const IslandMap& map, const assets::BuildingTable& buildings, const assets::BuildingType& b,
@@ -224,7 +225,7 @@ std::uint8_t edge_rotation(const IslandMap& map, const assets::BuildingTable& bu
     return 0xF;
 }
 
-/// Ore of the mine's kind in the mountain on the side the mine faces (0x0046C010).
+/// Ore of the mine's kind in the mountain on the side the mine faces.
 bool mine_has_deposit(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
                       const assets::BuildingType& mine, std::int32_t x, std::int32_t y, std::uint8_t rotation) {
     static constexpr std::array<TilePos, 4> kSide = {{{-1, 0}, {0, -1}, {1, 0}, {0, 1}}};
@@ -241,7 +242,7 @@ bool mine_has_deposit(const World& world, const assets::BuildingTable& buildings
     return false;
 }
 
-/// City an order belongs to (0x0046AEC0): a tile of another owner's city makes it foreign;
+/// City an order belongs to: a tile of another owner's city makes it foreign;
 /// otherwise the player's city with the most tiles under the footprint; none outside.
 struct OrderCity {
     std::uint8_t city = MapCell::kNoCity;
@@ -297,7 +298,7 @@ bool player_has_city(const World& world, std::uint16_t island, PlayerId player) 
 /// placed item (TB-7). Built when the first item asks.
 class UnitsOnIsland {
 public:
-    /// A soldier stands on the footprint (0x00442980). Open1602 also counts a soldier that is just
+    /// A soldier stands on the footprint. Open1602 also counts a soldier that is just
     /// stepping on (S-015).
     bool in_the_way(const World& world, const WorldIsland& island, const Footprint& f) {
         // Half a tile around the footprint, in the soldiers' fixed point units (ADR 0004).
@@ -345,7 +346,7 @@ struct Planner {
     std::set<std::pair<std::int32_t, std::int32_t>> taken;  // tiles of accepted items
     mutable UnitsOnIsland units;
 
-    /// Whether the footprint fits (0x00464450 with the fixes of Open1602).
+    /// Whether the footprint fits (with the fixes of Open1602).
     BuildRefusal can_place(const assets::BuildingType& b, std::uint8_t city_of_tiles, std::uint8_t rotation,
                            std::int32_t x, std::int32_t y) const {
         const Footprint f = footprint_of(b, x, y, rotation);
@@ -396,7 +397,7 @@ struct Planner {
         return BuildRefusal::None;
     }
 
-    /// Whether one side of the footprint lies completely in the city (0x00464450).
+    /// Whether one side of the footprint lies completely in the city.
     bool full_edge_in_city(const Footprint& f, std::uint8_t city_of_tiles) const {
         const auto in_city = [&](std::int32_t tx, std::int32_t ty) {
             return map.top(static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(ty)).city == city_of_tiles;
@@ -418,7 +419,7 @@ struct Planner {
         return top || bottom || left || right;
     }
 
-    /// Rotation by Kind (0x00468300); 0xF = impossible.
+    /// Rotation by Kind; 0xF = impossible.
     std::uint8_t rotate(const assets::BuildingType& b, std::uint8_t rotation, std::int32_t x, std::int32_t y) const {
         if ((b.kind == kind::kBuilding || b.kind == kind::kHq) && b.coastal) {
             return edge_rotation(map, buildings, b, x, y, true, kontor_coast, [&](std::uint8_t r, TilePos coast) {
@@ -449,7 +450,7 @@ struct Planner {
         return static_cast<std::uint8_t>(rotation & 3U);
     }
 
-    /// Mines face the one rock next to their origin (0x004671B0).
+    /// Mines face the one rock next to their origin.
     std::uint8_t mine_rotation(std::int32_t x, std::int32_t y) const {
         std::uint32_t mask = 0;
         mask |= kind_at(map, buildings, x, y - 1) == kind::kRock ? 1U : 0U;
@@ -478,12 +479,12 @@ struct Planner {
         if (b->kind == kind::kRoad || b->kind == kind::kBridge) {
             return true;
         }
-        // A gate counts with its centre tile (0x00466B40).
+        // A gate counts with its centre tile.
         const MapCell& cell = map.top(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
         return b->kind == kind::kGate && cell.sprite == b->gfx + (b->size_x * b->size_y) / 2;
     }
 
-    /// Buildings with a door turn to the nearest road within 4 tiles (0x004674B0); otherwise the
+    /// Buildings with a door turn to the nearest road within 4 tiles; otherwise the
     /// player's rotation, turned by a quarter if only the other orientation fits.
     std::uint8_t road_rotation(const assets::BuildingType& b, std::uint8_t rotation, std::int32_t x,
                                std::int32_t y) const {
@@ -571,7 +572,7 @@ const assets::BuildingType* palm_or_self(const assets::BuildingTable& buildings,
     return palm != nullptr ? palm : &b;
 }
 
-/// Ground under a wall or tower that makes it a beach variant (0x00466A80): beach walls and
+/// Ground under a wall or tower that makes it a beach variant: beach walls and
 /// towers, beach, fisher huts, beach ruins, piers, shipyards.
 bool beach_for_variant(std::int32_t k) noexcept {
     return k == kind::kWallBeach || k == kind::kTowerBeach || (k >= kind::kBeach && k <= kind::kPier) ||
@@ -583,7 +584,7 @@ struct Variant {
     std::uint8_t rotation;
 };
 
-/// Walls and towers built on the beach (0x004653A0): the record Strandoff further on, turned like
+/// Walls and towers built on the beach: the record Strandoff further on, turned like
 /// the beach tile (taken from the ground layer under beach terrain and ruins), and at a river mouth
 /// another Mundoff further on.
 Variant beach_variant(const assets::BuildingTable& buildings, const IslandMap& map, const assets::BuildingType& b,
@@ -625,7 +626,7 @@ const assets::BuildingType::BuildCost& ordered_cost(const assets::BuildingTable&
     return b.build_cost;
 }
 
-/// Goods a city or ship can pay: less than a ton counts as none (0x0047AA30).
+/// Goods a city or ship can pay: less than a ton counts as none.
 std::uint32_t usable(std::uint32_t stock) noexcept {
     return stock < assets::kStockUnitsPerTon ? 0 : stock;
 }
@@ -698,11 +699,23 @@ const char* refusal_name(BuildRefusal r) noexcept {
             return "not enough cannons";
         case BuildRefusal::ShipTooFar:
             return "the ship is too far away";
+        case BuildRefusal::Immovable:
+            return "the building cannot be moved";
     }
     return "?";
 }
 
-std::uint32_t island_fertility(const WorldIsland& island, std::uint8_t ware) noexcept {
+const Climate* island_climate(std::span<const Climate> climates, const WorldIsland& island) noexcept {
+    return island.climate != 0 && island.climate <= climates.size() ? &climates[island.climate - 1U] : nullptr;
+}
+
+std::uint32_t climate_crops(std::span<const Climate> climates, const WorldIsland& island) noexcept {
+    const Climate* own = island_climate(climates, island);
+    return own != nullptr ? own->crops : original_climate_crops(island.header.climate);
+}
+
+std::uint32_t island_fertility(std::span<const Climate> climates, const WorldIsland& island,
+                               std::uint8_t ware) noexcept {
     constexpr std::uint8_t kFirst = sim::ware::kCornField;
     constexpr std::uint8_t kLast = sim::ware::kTreasure;
     if (ware < kFirst || ware > kLast) {
@@ -722,16 +735,8 @@ std::uint32_t island_fertility(const WorldIsland& island, std::uint8_t ware) noe
         return 128;
     }
     // Without the bit, the crops of the climate still grow half: tobacco, sugar cane and wine in
-    // the north, spices, cotton and cocoa in the south.
-    const bool north = island.header.climate == climate::kNorth;
-    const bool south = island.header.climate == climate::kSouth;
-    if ((north &&
-         (ware == sim::ware::kTobaccoField || ware == sim::ware::kSugarField || ware == sim::ware::kWineField)) ||
-        (south &&
-         (ware == sim::ware::kSpiceField || ware == sim::ware::kCottonField || ware == sim::ware::kCocoaField))) {
-        return 64;
-    }
-    return 0;
+    // the north, spices, cotton and cocoa in the south, or a package climate's own.
+    return (climate_crops(climates, island) >> (ware - kFirst) & 1U) != 0 ? 64 : 0;
 }
 
 bool tile_fertile(const World& world, const assets::BuildingTable& buildings, std::uint16_t island_index,
@@ -743,7 +748,7 @@ bool tile_fertile(const World& world, const assets::BuildingTable& buildings, st
 
 bool tile_fertile_at(const World& world, const assets::BuildingTable& buildings, std::uint16_t island_index,
                      std::uint8_t ware, std::int32_t x, std::int32_t y, std::uint8_t drought) {
-    // The five patterns (table 0x00499B98): 2, 10, 16, 23 and 32 of 32 tiles carry.
+    // The five patterns: 2, 10, 16, 23 and 32 of 32 tiles carry.
     static constexpr std::array<std::array<std::uint8_t, 32>, 5> kPatterns = {{
         {0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0},
@@ -759,16 +764,18 @@ bool tile_fertile_at(const World& world, const assets::BuildingTable& buildings,
     if (!map.contains(x, y)) {
         return false;
     }
-    // Weighted with the Randwachs of the original ground (island + 0xAFC).
+    // Weighted with the Randwachs of the original ground.
     const MapCell& ground = map.ground(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
     const assets::BuildingType* g = ground.empty() ? nullptr : buildings.by_sprite(ground.sprite);
-    const std::uint32_t edge = g != nullptr ? g->edge_growth : 128;
-    std::uint32_t f = std::min<std::uint32_t>(island_fertility(island, ware) * edge >> 7, 128);
+    // Rules::fertile_fields: poor ground takes nothing from a crop, it grows as the island has it.
+    const bool even = world.fertile_fields() && ware >= ware::kCornField && ware <= ware::kCocoaField;
+    const std::uint32_t edge = g != nullptr && !even ? g->edge_growth : 128;
+    std::uint32_t f = std::min<std::uint32_t>(island_fertility(world, island, ware) * edge >> 7, 128);
     // A drought takes its share, except from grass, trees and fish.
     if (drought != 0 && ware != ware::kGrass && ware != ware::kTree && ware != ware::kFish) {
         f -= drought * f / 128;
     }
-    // Pattern by value (table 0x0054697C): 0..18, 19..41, 42..75, 76..107, 108..128.
+    // Pattern by value: 0..18, 19..41, 42..75, 76..107, 108..128.
     const std::size_t pattern = f >= 108 ? 4 : f >= 76 ? 3 : f >= 42 ? 2 : f >= 19 ? 1 : 0;
     const auto at = static_cast<std::size_t>((static_cast<std::uint32_t>(x) & 3U) + static_cast<std::uint32_t>(y) * 4U +
                                              island.header.number + ware) &
@@ -801,13 +808,63 @@ bool city_defenceless(const World& world, const assets::BuildingTable& buildings
     return true;
 }
 
+namespace {
+
+/// The city of `player` on the island with the most land in the circle of `radius` around
+/// `area`'s centre, or kNoCity when none of its land lies there.
+std::uint8_t own_city_in_circle(const World& world, const IslandMap& map, std::uint16_t island, PlayerId player,
+                                const Catchment& area, std::uint8_t radius) {
+    std::array<std::uint32_t, 256> count{};
+    const std::vector<std::uint8_t>& half = circle_table(radius);
+    for (std::int32_t dy = 0; dy <= radius; ++dy) {
+        const std::int32_t hw = half[static_cast<std::size_t>(dy)];
+        for (const std::int32_t row : {area.centre.y - dy, area.centre.y + area.parity_y + dy}) {
+            for (std::int32_t tx = area.centre.x - hw; tx <= area.centre.x + area.parity_x + hw; ++tx) {
+                if (!map.contains(tx, row)) {
+                    continue;
+                }
+                const MapCell& cell = map.top(static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(row));
+                const City* c = cell.city != MapCell::kNoCity ? world.city(island, cell.city) : nullptr;
+                if (c != nullptr && c->owner == player) {
+                    ++count[cell.city];
+                }
+            }
+            if (dy == 0 && area.parity_y == 0) {
+                break;  // the centre row once
+            }
+        }
+    }
+    std::uint8_t best = MapCell::kNoCity;
+    for (std::size_t c = 0; c < count.size(); ++c) {
+        if (count[c] > 0 && (best == MapCell::kNoCity || count[c] > count[best])) {
+            best = static_cast<std::uint8_t>(c);
+        }
+    }
+    return best;
+}
+
+}  // namespace
+
 BuildPlan plan_build(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order) {
     BuildPlan plan;
     plan_build(world, buildings, order, plan);
     return plan;
 }
 
-void plan_build(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order, BuildPlan& plan) {
+namespace {
+
+/// How plan_order() checks an order.
+struct PlanOptions {
+    /// Without it the order is checked as if gold and goods were plenty (blueprints).
+    bool pay = true;
+    /// A building being moved: it is counted already (no limits, no lock) and upgrades nothing.
+    bool move = false;
+};
+
+/// plan_build(), plan_blueprint() and plan_move().
+void plan_order(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order, BuildPlan& plan,
+                PlanOptions options) {
+    const bool pay = options.pay && !order.free;
     std::vector<PlannedBuild> items = std::move(plan.items);
     items.assign(order.items.size(), PlannedBuild{});
     plan = BuildPlan{};
@@ -843,9 +900,41 @@ void plan_build(const World& world, const assets::BuildingTable& buildings, cons
             }
         }
     }
+    // Taking a market (Open1602): a market over the destroyed market of another human or computer
+    // player's city, where the land of one of the builder's cities on the island reaches into the
+    // new market's circle. The market joins that city and takes the land the destroyed one held.
+    std::optional<BuildingAt> captured;
+    if (const assets::BuildingType* t = buildings.by_id(first.building);
+        t != nullptr && planner.foreign && !plan.takeover && order.items.size() == 1 && t->prod_kind == prod::kMarket &&
+        !t->destroyed && player != nullptr &&
+        (player->role == PlayerRole::Human || player->role == PlayerRole::Computer)) {
+        const auto old = building_at(world, buildings, order.island, {first.x, first.y});
+        const City* foreign = old ? world.city(order.island, old->city) : nullptr;
+        const Player* loser = foreign != nullptr ? world.player(foreign->owner) : nullptr;
+        std::uint32_t w = 0;
+        std::uint32_t h = 0;
+        if (old) {
+            rotated_size(*t, old->rotation, w, h);
+        }
+        if (old && old->type->destroyed && old->type->prod_kind == prod::kMarket && loser != nullptr &&
+            foreign->owner != order.player &&
+            (loser->role == PlayerRole::Human || loser->role == PlayerRole::Computer) && w == old->width &&
+            h == old->height) {
+            const std::uint8_t own =
+                own_city_in_circle(world, island.map, order.island, order.player,
+                                   catchment_of(*t, old->rotation, old->origin), std::max(t->radius, kMinKontorRadius));
+            if (own != MapCell::kNoCity) {
+                planner.city = own;
+                planner.foreign = false;
+                plan.captured_city = old->city;
+                captured = old;
+            }
+        }
+    }
     plan.city = planner.city;
 
-    // What the order may spend: the city's warehouse (or the ship when founding) and the gold.
+    // What the order may spend: the city's warehouse (or the ship when founding or taking a city
+    // over) and the gold.
     const assets::BuildingTable::Materials& m = buildings.materials();
     BuildBill available;
     if (order.ship) {
@@ -863,6 +952,10 @@ void plan_build(const World& world, const assets::BuildingTable& buildings, cons
         available.cannons = usable(c->stock(m.cannons));
     }
     available.money = player != nullptr ? player->money : 0;
+    if (!pay) {
+        constexpr std::uint32_t kPlenty = std::numeric_limits<std::uint32_t>::max() / 2;
+        available = BuildBill{kPlenty, kPlenty, kPlenty, kPlenty, std::numeric_limits<std::int64_t>::max() / 2};
+    }
     const bool limited_player =
         player != nullptr && (player->role == PlayerRole::Human || player->role == PlayerRole::Computer);
 
@@ -875,6 +968,9 @@ void plan_build(const World& world, const assets::BuildingTable& buildings, cons
     };
     const auto limit_of = [&](std::uint8_t infra) -> std::size_t {
         if (!counted(infra)) {
+            return order.items.size();
+        }
+        if (options.move || order.free) {
             return order.items.size();
         }
         const auto left = [](std::uint32_t allowed, std::uint32_t built) -> std::size_t {
@@ -904,24 +1000,31 @@ void plan_build(const World& world, const assets::BuildingTable& buildings, cons
             continue;
         }
         out.type = type;
-        // Castle, cathedral: one each; monuments and arches by allowance (0x004084D0). Counted per
+        // Castle, cathedral: one each; monuments and arches by allowance. Counted per
         // kind over the whole order, whatever else it holds.
         const std::size_t limit = limit_of(type->infra);
         if (planner.foreign) {
             out.refusal = BuildRefusal::ForeignCity;  // S-006: no building in other players' cities
             continue;
         }
-        if (limited_player && !player->unlocked(type->infra)) {
+        if (limited_player && !options.move && !order.free && !player->unlocked(type->infra)) {
             out.refusal = BuildRefusal::Locked;  // S-014: checked here, not only in the menu
             continue;
         }
 
         BuildRefusal refusal = BuildRefusal::None;
+        if (captured) {
+            // The new market stands where the destroyed one stood, turned as it was.
+            out.x = captured->origin.x;
+            out.y = captured->origin.y;
+            out.rotation = captured->rotation;
+            out.upgrade = true;
+        }
         // Upgrade in place (Ausbauflg): a building of the same family of the city is replaced and
         // keeps its origin and rotation. Open1602 accepts only buildings of the same Kind (D-006:
         // the gold mine shares the weavers' family in haeuser.cod); like the original it allows
         // steps down (S-036).
-        if (type->upgrade) {
+        if (type->upgrade && !options.move && !captured) {
             if (const auto old = building_at(world, buildings, order.island, {item.x, item.y});
                 old && old->type->kreuz_base == type->kreuz_base && old->type->id != type->id &&
                 old->type->kind == type->kind && old->city == planner.city && planner.city != MapCell::kNoCity) {
@@ -952,20 +1055,21 @@ void plan_build(const World& world, const assets::BuildingTable& buildings, cons
                     refusal = BuildRefusal::SecondKontor;
                 }
             }
-            if (refusal == BuildRefusal::None && order.ship) {
-                // The ship lies within the circle of radius 16 around the footprint.
-                const Ship* ship = world.ship(*order.ship);
-                const Footprint f = footprint_of(*type, item.x, item.y, out.rotation);
-                const std::int32_t sx =
-                    ship != nullptr ? static_cast<std::int32_t>(ship->x) - static_cast<std::int32_t>(island.x) : -1000;
-                const std::int32_t sy =
-                    ship != nullptr ? static_cast<std::int32_t>(ship->y) - static_cast<std::int32_t>(island.y) : -1000;
-                const std::int32_t dx = std::max({f.x - sx, 0, sx - (f.x + static_cast<std::int32_t>(f.w) - 1)});
-                const std::int32_t dy = std::max({f.y - sy, 0, sy - (f.y + static_cast<std::int32_t>(f.h) - 1)});
-                static const std::vector<std::uint8_t> kCircle = circle_half_widths(kShipRange);
-                if (dy > kShipRange || dx > kCircle[static_cast<std::size_t>(dy)]) {
-                    refusal = BuildRefusal::ShipTooFar;
-                }
+        }
+        // Founding a city, or taking one over (as in the original), is done from a ship within the
+        // circle of radius 16 around the footprint.
+        if (refusal == BuildRefusal::None && ((order.ship && !out.upgrade) || plan.takeover)) {
+            const Ship* ship = order.ship ? world.ship(*order.ship) : nullptr;
+            const Footprint f = footprint_of(*type, out.x, out.y, out.rotation);
+            const std::int32_t sx =
+                ship != nullptr ? static_cast<std::int32_t>(ship->x) - static_cast<std::int32_t>(island.x) : -1000;
+            const std::int32_t sy =
+                ship != nullptr ? static_cast<std::int32_t>(ship->y) - static_cast<std::int32_t>(island.y) : -1000;
+            const std::int32_t dx = std::max({f.x - sx, 0, sx - (f.x + static_cast<std::int32_t>(f.w) - 1)});
+            const std::int32_t dy = std::max({f.y - sy, 0, sy - (f.y + static_cast<std::int32_t>(f.h) - 1)});
+            static const std::vector<std::uint8_t> kCircle = circle_half_widths(kShipRange);
+            if (dy > kShipRange || dx > kCircle[static_cast<std::size_t>(dy)]) {
+                refusal = BuildRefusal::ShipTooFar;
             }
         }
         if (refusal == BuildRefusal::None) {
@@ -1051,9 +1155,20 @@ void plan_build(const World& world, const assets::BuildingTable& buildings, cons
     plan.placed = placed;
 }
 
+}  // namespace
+
+void plan_build(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order, BuildPlan& plan) {
+    plan_order(world, buildings, order, plan, PlanOptions{});
+}
+
+void plan_blueprint(const World& world, const assets::BuildingTable& buildings, const BuildOrder& order,
+                    BuildPlan& plan) {
+    plan_order(world, buildings, order, plan, PlanOptions{.pay = false});
+}
+
 namespace {
 
-/// Which cities' land reaches each tile of an island (0x00482120): a bit per city number, from the
+/// Which cities' land reaches each tile of an island: a bit per city number, from the
 /// circles of the markets and Kontors of the city and within 8 tiles of the towers of its owner.
 /// Buildings with their origin in `gone` count as removed.
 std::vector<std::uint8_t> territory_coverage(const World& world, const assets::BuildingTable& buildings,
@@ -1126,7 +1241,7 @@ std::uint8_t covering_city(const World& world, std::uint16_t island, std::uint8_
     return MapCell::kNoCity;
 }
 
-/// Changes of one island in the order of the original (0x00481450, 0x004653A0, 0x00482120).
+/// Changes of one island in the order of the original.
 class Builder {
 public:
     Builder(World& world, const assets::BuildingTable& buildings, std::uint16_t island,
@@ -1146,7 +1261,7 @@ public:
         }
     }
 
-    /// Unregisters every building whose origin lies inside the footprint (0x00481450 phase 1).
+    /// Unregisters every building whose origin lies inside the footprint (phase 1).
     /// Returns the production state of a replaced building (for upgrades).
     std::optional<Production> unregister(const Footprint& f) {
         std::optional<Production> kept;
@@ -1240,7 +1355,7 @@ public:
         return state;
     }
 
-    /// Registers a new building of city `city` (0x00481450 phase 2).
+    /// Registers a new building of city `city` (phase 2).
     void register_building(const assets::BuildingType& b, std::int32_t x, std::int32_t y, std::uint8_t city,
                            std::uint32_t rnd, const std::optional<Production>& kept) {
         City* c = m_world.city(m_island, city);
@@ -1275,7 +1390,7 @@ public:
                     c->warehouse_y = uy;
                 }
                 if (p == prod::kKontor) {
-                    // 0x00481EE0: a Kontor that allows fewer wares than the city trades in
+                    // A Kontor that allows fewer wares than the city trades in
                     // switches all trade settings off (a Kontor rebuilt at a lower level).
                     trim_trade_settings(*c, b);
                 }
@@ -1321,7 +1436,7 @@ public:
         }
     }
 
-    /// Writes the tiles and fits roads and walls to their neighbours (0x004653A0).
+    /// Writes the tiles and fits roads and walls to their neighbours.
     void write(const assets::BuildingType& placed, std::int32_t x, std::int32_t y, std::uint8_t rotation,
                std::uint8_t anim_phase, std::uint8_t city) {
         const City* c = m_world.city(m_island, city);
@@ -1340,7 +1455,7 @@ public:
         const Footprint f = footprint_of(*b, x, y, rotation);
         fit(x, y);
         fit_around(f);
-        // A new Kontor lays a pier along its coast side (Strandflg, record 0x0061FA2C), not an
+        // A new Kontor lays a pier along its coast side (Strandflg, record), not an
         // upgraded one. The piers stay when the Kontor goes, as in the original.
         if (b->coastal && old_kind != b->kind) {
             lay_piers(*b, f, rotation);
@@ -1359,7 +1474,7 @@ public:
     }
 
     /// The line of tiles in front of the long side of a Kontor (the coast its rotation was chosen
-    /// for, 0x00467AF0) becomes pier, turned like the Kontor; the tiles keep their city.
+    /// for) becomes pier, turned like the Kontor; the tiles keep their city.
     void lay_piers(const assets::BuildingType& b, const Footprint& f, std::uint8_t rotation) {
         const assets::BuildingType* pier = first_of_kind(kind::kPier);
         if (pier == nullptr) {
@@ -1397,7 +1512,7 @@ public:
         }
     }
 
-    /// The first record of a Kind, like the special records the original keeps (0x00462D90).
+    /// The first record of a Kind, like the special records the original keeps.
     const assets::BuildingType* first_of_kind(std::int32_t k) const {
         const assets::BuildingType* first = nullptr;
         for (const assets::BuildingType& t : m_buildings.types()) {
@@ -1408,7 +1523,7 @@ public:
         return first;
     }
 
-    /// Walls, gates and towers around a tile (0x00466B10): N 8, E 4, S 2, W 1.
+    /// Walls, gates and towers around a tile: N 8, E 4, S 2, W 1.
     std::uint32_t wall_mask(std::int32_t x, std::int32_t y) const {
         const auto wall_like = [&](std::int32_t tx, std::int32_t ty) {
             const std::int32_t k = kind_at(m_world.islands()[m_island].map, m_buildings, tx, ty);
@@ -1418,7 +1533,7 @@ public:
                (wall_like(x - 1, y) ? 1U : 0U);
     }
 
-    /// Where the sea lies around a beach wall (0x00466E30, then 0x00466C00): 1 N, 2 NE, 3 E, 4 SE,
+    /// Where the sea lies around a beach wall (then): 1 N, 2 NE, 3 E, 4 SE,
     /// 5 S, 6 SW, 7 W, 8 NW, 0 undecided (a straight coast).
     std::uint32_t coast_code(std::int32_t x, std::int32_t y) const {
         const IslandMap& m = m_world.islands()[m_island].map;
@@ -1509,7 +1624,7 @@ public:
                 const MapCell& nc = m.top(static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(ty));
                 return n->kind == kind::kGate && nc.sprite == n->gfx + (n->size_x * n->size_y) / 2;
             }
-            return n->kind >= kind::kGate && n->kind <= kind::kTowerBeach;  // 0x00466B10
+            return n->kind >= kind::kGate && n->kind <= kind::kTowerBeach;
         };
         const std::uint32_t mask = (connects(x, y - 1) ? 8U : 0U) | (connects(x + 1, y) ? 4U : 0U) |
                                    (connects(x, y + 1) ? 2U : 0U) | (connects(x - 1, y) ? 1U : 0U);
@@ -1618,7 +1733,7 @@ public:
         }
     }
 
-    /// Territory of a market or Kontor (0x00465170, 0x0046AC60): free land tiles in the circle.
+    /// Territory of a market or Kontor: free land tiles in the circle.
     void claim(const assets::BuildingType& b, std::int32_t x, std::int32_t y, std::uint8_t rotation,
                std::uint8_t city) {
         std::uint8_t radius = b.radius;
@@ -1654,7 +1769,7 @@ public:
         }
     }
 
-    /// Founds a city (0x00468CE0, 0x00468E10): the first free city number of the island.
+    /// Founds a city: the first free city number of the island.
     std::uint8_t found(PlayerId owner, std::int32_t x, std::int32_t y, const std::vector<std::string>& names,
                        std::size_t classes) {
         std::uint8_t index = 0;
@@ -1668,11 +1783,24 @@ public:
         c.island = m_island;
         c.index = index;
         c.owner = owner;
-        // The next name of Text.cod's [STAEDTE], round robin.
+        // The next name of Text.cod's [STAEDTE], round robin, passing over the names a city has
+        // already (a native village, a city of a world with more players than the list has room
+        // for at once); all taken, the next one.
         if (!names.empty()) {
-            const std::uint32_t n = m_world.city_name_index() % static_cast<std::uint32_t>(names.size());
+            const auto count = static_cast<std::uint32_t>(names.size());
+            const std::uint32_t first = m_world.city_name_index() % count;
+            std::uint32_t n = first;
+            for (std::uint32_t tries = 0; tries < count; ++tries) {
+                const std::uint32_t candidate = (first + tries) % count;
+                const auto taken = std::any_of(m_world.cities().begin(), m_world.cities().end(),
+                                               [&](const City& other) { return other.name == names[candidate]; });
+                if (!taken) {
+                    n = candidate;
+                    break;
+                }
+            }
             c.name = names[n];
-            m_world.set_city_name_index((n + 1) % static_cast<std::uint32_t>(names.size()));
+            m_world.set_city_name_index((n + 1) % count);
         }  // else the name stays empty, and the game shows one in its language (MD-10)
         c.inhabitants.assign(classes, 0);
         c.satisfaction.assign(classes, 0);
@@ -1682,7 +1810,7 @@ public:
         c.warehouse_x = static_cast<std::uint16_t>(x);
         c.warehouse_y = static_cast<std::uint16_t>(y);
         m_world.add_city(std::move(c));
-        // 0x00468DD2: the city of a human or a computer shows its island to its founder; that the
+        // The city of a human or a computer shows its island to its founder; that the
         // original shows it to every player too (all eight discovery bits) is the game setting
         // Rules::reveal, which the simulation applies (World::reveal_islands). Natives and pirates
         // leave the island as it was.
@@ -1699,7 +1827,7 @@ public:
         return index;
     }
 
-    /// Restores the original ground under a removed building (0x00464B40): the ground layer, or
+    /// Restores the original ground under a removed building: the ground layer, or
     /// meadow where it was forest (the forest ground itself when the data has no meadow).
     void restore_ground(const Footprint& f, std::uint8_t city) {
         IslandMap& m = map();
@@ -1742,7 +1870,7 @@ public:
         }
     }
 
-    /// Destroys a building to ruins (0x00463F40): one ruin of the same size, else 1x1 ruins with
+    /// Destroys a building to ruins: one ruin of the same size, else 1x1 ruins with
     /// a random variant; without a ruin record the ground comes back.
     void destroy(const BuildingAt& b) {
         const Footprint f{b.origin.x, b.origin.y, b.width, b.height};
@@ -1768,7 +1896,7 @@ public:
         };
         if (ruin->size_x == b.type->size_x && ruin->size_y == b.type->size_y) {
             // One ruin over the whole footprint, the beach variant by the origin's ground; it is
-            // registered as a building of the city (0x00463FD0): a destroyed Kontor stays the
+            // registered as a building of the city: a destroyed Kontor stays the
             // city's Kontor and holds its land (S-018), until another player builds over it.
             const assets::BuildingType* r = m_buildings.ruin_record(b.type->ruin, on_beach(b.origin.x, b.origin.y));
             if (r == nullptr || r->size_x != ruin->size_x || r->size_y != ruin->size_y) {
@@ -1798,8 +1926,8 @@ public:
         }
     }
 
-    /// Re-checks the territory of the island after markets, Kontors or towers changed
-    /// (0x00482120): every city tile must lie in a circle of a market or Kontor of its city or
+    /// Re-checks the territory of the island after markets, Kontors or towers changed:
+    /// every city tile must lie in a circle of a market or Kontor of its city or
     /// within 8 tiles of a tower of its owner; otherwise it goes to another covering city of the
     /// same owner or becomes free, and what stands on it falls to ruins. A city without its
     /// Kontor is dissolved.
@@ -1822,7 +1950,7 @@ public:
                 lose_tile(x, y, covering_city(m_world, m_island, cell.city, bits));
             }
         }
-        // Cities without their Kontor are dissolved (0x00468ED0).
+        // Cities without their Kontor are dissolved.
         std::vector<std::uint8_t> dissolve;
         for (const City& c : m_world.cities()) {
             if (c.island == m_island && !c.warehouse_x) {
@@ -1873,7 +2001,7 @@ public:
         h.city = next;
     }
 
-    /// What falls to ruins when its land is lost (0x00480B70): buildings, roads, piers and crop
+    /// What falls to ruins when its land is lost: buildings, roads, piers and crop
     /// fields; not grass, trees, fish or terrain.
     bool ruinable(const assets::BuildingType& b) const { return territory_building(m_buildings, b); }
 
@@ -1906,6 +2034,34 @@ public:
         e.city = index;
         emit(e);
         services_of(index);
+    }
+
+    /// A market of city `to` took the place of a destroyed market of city `from` (Open1602): the
+    /// tiles `from` no longer holds that `to` now reaches go to `to`, with what stands on them;
+    /// what `from` no longer holds otherwise is lost as usual (finish()).
+    void capture_land(std::uint8_t from, std::uint8_t to) {
+        IslandMap& m = map();
+        const std::uint32_t w = m.width();
+        const std::vector<std::uint8_t> covered = territory_coverage(m_world, m_buildings, m_island, {});
+        if (from >= kCitySlotsPerIsland || to >= kCitySlotsPerIsland) {
+            return;
+        }
+        for (std::uint32_t y = 0; y < m.height(); ++y) {
+            for (std::uint32_t x = 0; x < w; ++x) {
+                if (m.top(x, y).city != from) {
+                    continue;
+                }
+                const std::uint8_t bits = covered[std::size_t{y} * w + x];
+                if ((bits >> from & 1U) == 0 && (bits >> to & 1U) != 0) {
+                    lose_tile(x, y, to);
+                }
+            }
+        }
+        m_territory = true;
+        m_storage_cities.insert(from);
+        m_storage_cities.insert(to);
+        services_of(from);
+        services_of(to);
     }
 
     /// After the changes: territory, services and warehouse room.
@@ -1969,6 +2125,62 @@ void fit_connection(World& world, const assets::BuildingTable& buildings, std::u
     builder.fit(x, y);
 }
 
+namespace {
+
+/// Game setting: a share of a building's costs comes back when it goes (the original gives nothing).
+/// Goods go into the city's warehouse while there is room; what does not fit is lost.
+void refund(World& world, const assets::BuildingTable& buildings, std::uint16_t island, PlayerId player,
+            const assets::BuildingType& type, std::uint8_t city_index, std::uint32_t percent, BuildBill& given) {
+    const assets::BuildingTable::Materials& m = buildings.materials();
+    const auto& cost = ordered_cost(buildings, type);
+    const auto share = [&](std::uint32_t amount) {
+        return static_cast<std::uint32_t>(std::uint64_t{amount} * percent / 100);
+    };
+    if (City* city = world.city(island, city_index)) {
+        const auto give = [&](std::uint8_t ware, std::uint32_t amount, std::uint32_t& booked) {
+            if (amount == 0) {
+                return;
+            }
+            city->ensure_ware(ware);
+            std::uint32_t room = amount;
+            if (city->capacity != 0) {
+                room = city->capacity > city->goods[ware] ? city->capacity - city->goods[ware] : 0;
+            }
+            const std::uint32_t added = std::min(amount, room);
+            city->goods[ware] += added;
+            city->book(ware, GoodsFlow::Returned, added);
+            booked += added;
+        };
+        give(m.tools, share(cost.tools), given.tools);
+        give(m.wood, share(cost.wood), given.wood);
+        give(m.bricks, share(cost.bricks), given.bricks);
+        give(m.cannons, share(cost.cannons), given.cannons);
+    }
+    if (Player* p = world.player(player); p != nullptr && cost.money > 0) {
+        const auto gold = static_cast<std::int32_t>(std::int64_t{cost.money} * percent / 100);
+        p->money = money_plus(p->money, std::int64_t{gold});
+        given.money += gold;
+    }
+}
+
+/// Takes the goods of a bill from the city's warehouse.
+void take_from_city(City& city, const assets::BuildingTable& buildings, const BuildBill& bill) {
+    const assets::BuildingTable::Materials& m = buildings.materials();
+    const auto take = [&](std::uint8_t ware, std::uint32_t amount) {
+        if (ware < city.goods.size()) {
+            const std::uint32_t taken = std::min(city.goods[ware], amount);
+            city.goods[ware] -= taken;
+            city.book(ware, GoodsFlow::Construction, taken);
+        }
+    };
+    take(m.tools, bill.tools);
+    take(m.wood, bill.wood);
+    take(m.bricks, bill.bricks);
+    take(m.cannons, bill.cannons);
+}
+
+}  // namespace
+
 BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, const BuildOrder& order,
                         const std::vector<std::string>& city_names, std::vector<ConstructionEvent>* events) {
     BuildPlan plan = plan_build(world, buildings, order);
@@ -1998,7 +2210,7 @@ BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, co
         // A treasure in the ground (deposit SCHATZ) goes to the builder, on every computer (M-008).
         std::optional<assets::IslandHeader::Deposit> treasure;
         auto& deposits = world.island(order.island).header.deposits;
-        for (auto it = deposits.begin(); it != deposits.end(); ++it) {
+        for (auto it = deposits.begin(); it != deposits.end() && !order.free; ++it) {
             if (it->ware == ware::kTreasure && f.contains(it->x, it->y)) {
                 if (Player* p = world.player(order.player)) {
                     p->money = money_plus(p->money, std::int64_t{it->amount});
@@ -2019,7 +2231,7 @@ BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, co
                                               static_cast<std::uint16_t>(item.y));
         builder.emit(e);
         if (treasure) {
-            // 0x004084D0 shows "+1000" over the building and posts message 0x2E at the treasure.
+            // The original shows "+1000" over the building and posts message 0x2E at the treasure.
             ConstructionEvent t = e;
             t.kind = ConstructionEvent::Kind::TreasureFound;
             t.production.reset();
@@ -2029,8 +2241,11 @@ BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, co
             builder.emit(t);
         }
     }
+    if (plan.captured_city != MapCell::kNoCity && city != MapCell::kNoCity) {
+        builder.capture_land(plan.captured_city, city);
+    }
     if (plan.takeover && city != MapCell::kNoCity) {
-        // City_ChangeOwner: every tile of the city, and the city with its goods, go to the builder.
+        // Every tile of the city, and the city with its goods, go to the builder.
         IslandMap& map = world.island(order.island).map;
         for (std::uint32_t y = 0; y < map.height(); ++y) {
             for (std::uint32_t x = 0; x < map.width(); ++x) {
@@ -2051,7 +2266,9 @@ BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, co
     }
     // Pay what was built: goods from the city (or the ship), gold from the player.
     const assets::BuildingTable::Materials& m = buildings.materials();
-    if (Ship* found = order.ship ? world.ship(*order.ship) : nullptr) {
+    if (order.free) {
+        // The editor's order: nothing to pay.
+    } else if (Ship* found = order.ship ? world.ship(*order.ship) : nullptr) {
         Ship& ship = *found;
         const auto take = [&](std::uint8_t ware, std::uint32_t amount) {
             for (CargoSlot& c : ship.cargo) {
@@ -2072,20 +2289,12 @@ BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, co
         take(m.wood, plan.bill.wood);
         take(m.bricks, plan.bill.bricks);
     } else if (City* c = world.city(order.island, city)) {
-        const auto take = [&](std::uint8_t ware, std::uint32_t amount) {
-            if (ware < c->goods.size()) {
-                const std::uint32_t taken = std::min(c->goods[ware], amount);
-                c->goods[ware] -= taken;
-                c->book(ware, GoodsFlow::Construction, taken);
-            }
-        };
-        take(m.tools, plan.bill.tools);
-        take(m.wood, plan.bill.wood);
-        take(m.bricks, plan.bill.bricks);
-        take(m.cannons, plan.bill.cannons);
+        take_from_city(*c, buildings, plan.bill);
     }
     if (Player* p = world.player(order.player)) {
-        p->money = money_plus(p->money, -std::int64_t{plan.bill.money});
+        if (!order.free) {
+            p->money = money_plus(p->money, -std::int64_t{plan.bill.money});
+        }
         // Counted limits; castle and cathedral raise the satisfaction of their city.
         const auto pride = [&] {
             if (City* c = world.city(order.island, city)) {
@@ -2107,12 +2316,12 @@ BuildPlan execute_build(World& world, const assets::BuildingTable& buildings, co
                     pride();
                     break;
                 case kInfraArch:
-                    // Op 0x4D 0x1000: the level holds while allowances are left.
+                    // The level holds while allowances are left.
                     add_count(p->arches_built, 1);
                     p->set_unlocked(kInfraArch, p->arches_allowed > p->arches_built);
                     break;
                 case kInfraMonument:
-                    add_count(p->monuments_built, 1);  // op 0x4D 0x2000
+                    add_count(p->monuments_built, 1);
                     p->set_unlocked(kInfraMonument, p->monuments_allowed > p->monuments_built);
                     break;
                 default:
@@ -2139,6 +2348,9 @@ std::vector<TilePos> plan_demolish(const World& world, const assets::BuildingTab
     // Origins already looked at, one bit per tile of the island (MS-3: a rectangle over a whole
     // island visits every tile; a set of pairs made that several times slower).
     std::vector<bool> seen(drag ? std::size_t{map.width()} * map.height() : 0);
+    // The houses a rectangle passes over: they go only when nothing else in it would (Open1602;
+    // the original leaves them standing, so a block of houses could only be cleared click by click).
+    std::vector<TilePos> houses;
     for (std::int32_t y = y0; y <= y1; ++y) {
         for (std::int32_t x = x0; x <= x1; ++x) {
             const auto b = building_at(world, buildings, order.island, {x, y});
@@ -2197,15 +2409,18 @@ std::vector<TilePos> plan_demolish(const World& world, const assets::BuildingTab
                 }
             }
             if (drag) {
-                // A rectangle leaves real buildings standing (0x00464AE0).
+                // A rectangle leaves real buildings standing.
                 if (std::find(kRealBuildings.begin(), kRealBuildings.end(), t.kind) != kRealBuildings.end()) {
+                    if (t.prod_kind == prod::kHouse) {
+                        houses.push_back(b->origin);
+                    }
                     continue;
                 }
             }
             result.push_back(b->origin);
         }
     }
-    return result;
+    return result.empty() ? houses : result;
 }
 
 DemolishLoss demolish_loss(const World& world, const assets::BuildingTable& buildings, const DemolishOrder& order) {
@@ -2261,7 +2476,6 @@ DemolishResult execute_demolish(World& world, const assets::BuildingTable& build
         return result;
     }
     refund_percent = std::min<std::uint32_t>(refund_percent, 100);
-    const assets::BuildingTable::Materials& m = buildings.materials();
     Builder builder(world, buildings, order.island, events);
     for (const TilePos& o : origins) {
         const auto b = building_at(world, buildings, order.island, o);
@@ -2269,37 +2483,7 @@ DemolishResult execute_demolish(World& world, const assets::BuildingTable& build
             continue;
         }
         if (refund_percent != 0) {
-            // Game setting: a share of the costs comes back (the original gives nothing). Goods
-            // go into the city's warehouse while there is room; what does not fit is lost.
-            const auto& cost = ordered_cost(buildings, *b->type);
-            const auto share = [&](std::uint32_t amount) {
-                return static_cast<std::uint32_t>(std::uint64_t{amount} * refund_percent / 100);
-            };
-            if (City* city = world.city(order.island, b->city)) {
-                const auto give = [&](std::uint8_t ware, std::uint32_t amount, std::uint32_t& booked) {
-                    if (amount == 0) {
-                        return;
-                    }
-                    city->ensure_ware(ware);
-                    std::uint32_t room = amount;
-                    if (city->capacity != 0) {
-                        room = city->capacity > city->goods[ware] ? city->capacity - city->goods[ware] : 0;
-                    }
-                    const std::uint32_t added = std::min(amount, room);
-                    city->goods[ware] += added;
-                    city->book(ware, GoodsFlow::Returned, added);
-                    booked += added;
-                };
-                give(m.tools, share(cost.tools), result.refund.tools);
-                give(m.wood, share(cost.wood), result.refund.wood);
-                give(m.bricks, share(cost.bricks), result.refund.bricks);
-                give(m.cannons, share(cost.cannons), result.refund.cannons);
-            }
-            if (Player* p = world.player(order.player); p != nullptr && cost.money > 0) {
-                const auto gold = static_cast<std::int32_t>(std::int64_t{cost.money} * refund_percent / 100);
-                p->money = money_plus(p->money, std::int64_t{gold});
-                result.refund.money += gold;
-            }
+            refund(world, buildings, order.island, order.player, *b->type, b->city, refund_percent, result.refund);
         }
         const Footprint f{o.x, o.y, b->width, b->height};
         builder.remove(*b);
@@ -2307,6 +2491,195 @@ DemolishResult execute_demolish(World& world, const assets::BuildingTable& build
         ++result.removed;
     }
     builder.finish();
+    return result;
+}
+
+MovablePiece movable_at(const World& world, const assets::BuildingTable& buildings, PlayerId player,
+                        std::uint16_t island, TilePos tile) {
+    MovablePiece piece;
+    if (island >= world.islands().size()) {
+        return piece;
+    }
+    const auto b = building_at(world, buildings, island, tile);
+    const City* city = b ? world.city(island, b->city) : nullptr;
+    if (city == nullptr || city->owner != player) {
+        return piece;
+    }
+    piece.type = b->type;
+    piece.origin = b->origin;
+    piece.rotation = b->rotation;
+    piece.city = b->city;
+    piece.width = b->width;
+    piece.height = b->height;
+    const IslandMap& map = world.islands()[island].map;
+    if (map.contains(b->origin.x, b->origin.y)) {
+        piece.anim_phase =
+            map.top(static_cast<std::uint32_t>(b->origin.x), static_cast<std::uint32_t>(b->origin.y)).anim_phase;
+    }
+    const assets::BuildingType& t = *b->type;
+    static constexpr std::array<std::int32_t, 5> kMovable = {kind::kBuilding, kind::kBeachHouse, kind::kMine,
+                                                             kind::kMill, kind::kHarbour};
+    const auto ox = static_cast<std::uint16_t>(b->origin.x);
+    const auto oy = static_cast<std::uint16_t>(b->origin.y);
+    if (t.destroyed) {
+        piece.refusal = MoveRefusal::NoBuilding;
+    } else if (t.prod_kind == prod::kKontor || t.prod_kind == prod::kMarket || t.prod_kind == prod::kTower ||
+               t.prod_kind == prod::kMilitary || t.kind == kind::kHq || t.kind == kind::kTower ||
+               t.kind == kind::kTowerBeach) {
+        piece.refusal = MoveRefusal::Holds;
+    } else if (std::find(kMovable.begin(), kMovable.end(), t.kind) == kMovable.end()) {
+        piece.refusal = MoveRefusal::NoBuilding;
+    } else if (std::any_of(world.disasters().begin(), world.disasters().end(),
+                           [&](const Disaster& d) { return d.island == island && d.x == ox && d.y == oy; })) {
+        piece.refusal = MoveRefusal::Disaster;
+    } else if (std::any_of(world.cost_buildings().begin(), world.cost_buildings().end(), [&](const CostBuilding& c) {
+                   return c.island == island && c.x == ox && c.y == oy && c.kind == CostBuilding::Kind::Shipyard &&
+                          (c.order != CostBuilding::kNoOrder || c.repair_ship != 0);
+               })) {
+        piece.refusal = MoveRefusal::Busy;
+    } else {
+        piece.refusal = MoveRefusal::None;
+    }
+    return piece;
+}
+
+BuildOrder move_build_order(const MovablePiece& piece, const MoveOrder& order) {
+    BuildOrder build;
+    build.player = order.player;
+    build.island = order.island;
+    build.orient_to_road = order.orient_to_road;
+    if (piece.type != nullptr) {
+        build.items.push_back(BuildItem{piece.type->id, order.x, order.y, order.rotation, piece.anim_phase});
+    }
+    return build;
+}
+
+BuildPlan plan_move(World& world, const assets::BuildingTable& buildings, const MoveOrder& order, bool pay) {
+    BuildPlan plan;
+    const MovablePiece piece = movable_at(world, buildings, order.player, order.island, order.from);
+    if (!piece.ok()) {
+        plan.items.assign(1, PlannedBuild{});
+        plan.items[0].refusal = BuildRefusal::Immovable;
+        plan.items[0].type = piece.type;
+        plan.items[0].x = order.x;
+        plan.items[0].y = order.y;
+        plan.items[0].rotation = static_cast<std::uint8_t>(order.rotation & 3U);
+        return plan;
+    }
+    // The building is lifted off its tiles while planning, so that it may go where it stands now,
+    // and put back as it was.
+    IslandMap& map = world.island(order.island).map;
+    std::vector<MapCell> lifted;
+    lifted.reserve(std::size_t{piece.width} * piece.height);
+    const auto each_tile = [&](auto&& f) {
+        for (std::uint32_t j = 0; j < piece.height; ++j) {
+            for (std::uint32_t i = 0; i < piece.width; ++i) {
+                f(static_cast<std::uint32_t>(piece.origin.x) + i, static_cast<std::uint32_t>(piece.origin.y) + j);
+            }
+        }
+    };
+    each_tile([&](std::uint32_t x, std::uint32_t y) {
+        lifted.push_back(map.top(x, y));
+        map.restore_ground(x, y);
+    });
+    plan_order(world, buildings, move_build_order(piece, order), plan, PlanOptions{.pay = pay, .move = true});
+    std::size_t next = 0;
+    each_tile([&](std::uint32_t x, std::uint32_t y) { map.set_top_cell(x, y, lifted[next++]); });
+    // Only within its own city: its people, goods and roads are there.
+    if (!plan.items.empty() && plan.items[0].ok() && plan.city != piece.city) {
+        plan.items[0].refusal = BuildRefusal::Territory;
+        plan.placed = 0;
+        plan.bill = BuildBill{};
+    }
+    return plan;
+}
+
+MoveResult execute_move(World& world, const assets::BuildingTable& buildings, const MoveOrder& order, bool pay,
+                        std::uint32_t refund_percent, std::vector<ConstructionEvent>* events) {
+    MoveResult result;
+    const BuildPlan plan = plan_move(world, buildings, order, pay);
+    if (plan.items.size() != 1 || !plan.items[0].ok()) {
+        return result;
+    }
+    const MovablePiece piece = movable_at(world, buildings, order.player, order.island, order.from);
+    const auto old = building_at(world, buildings, order.island, piece.origin);
+    if (!old) {
+        return result;
+    }
+    const PlannedBuild& item = plan.items[0];
+    const std::uint8_t city = piece.city;
+    const auto ox = static_cast<std::uint16_t>(piece.origin.x);
+    const auto oy = static_cast<std::uint16_t>(piece.origin.y);
+    const auto nx = static_cast<std::uint16_t>(item.x);
+    const auto ny = static_cast<std::uint16_t>(item.y);
+    // What the building holds and takes along: its inhabitants, and an idle shipyard's material.
+    std::optional<House> house;
+    if (const House* h = world.house(order.island, ox, oy)) {
+        house = *h;
+    }
+    std::optional<CostBuilding> cost_building;
+    for (const CostBuilding& c : world.cost_buildings()) {
+        if (c.island == order.island && c.x == ox && c.y == oy) {
+            cost_building = c;
+        }
+    }
+    if (pay) {
+        refund(world, buildings, order.island, order.player, *piece.type, city,
+               std::min<std::uint32_t>(refund_percent, 100), result.refund);
+    }
+    Builder builder(world, buildings, order.island, events);
+    const std::optional<Production> kept = builder.remove(*old);
+    builder.restore_ground(Footprint{piece.origin.x, piece.origin.y, piece.width, piece.height}, city);
+    (void)builder.unregister(footprint_of(*item.type, item.x, item.y, item.rotation));
+    const std::uint32_t rnd = world.random(RandomStream::Construction).below(32);
+    // Its production state goes along as with an upgrade (stock, raw material, the running cycle).
+    builder.register_building(*item.type, item.x, item.y, city, rnd, kept);
+    if (house) {
+        if (House* h = world.house(order.island, nx, ny)) {
+            const std::uint32_t added = h->inhabitants();
+            House moved = *house;
+            moved.island = order.island;
+            moved.x = nx;
+            moved.y = ny;
+            moved.city = city;
+            *h = moved;
+            if (City* c = world.city(order.island, city);
+                c != nullptr && moved.resident_class < c->inhabitants.size()) {
+                std::uint32_t& count = c->inhabitants[moved.resident_class];
+                count = count - std::min(count, added) + moved.inhabitants();
+            }
+        }
+    }
+    if (cost_building) {
+        for (CostBuilding& c : world.cost_buildings()) {
+            if (c.island == order.island && c.x == nx && c.y == ny) {
+                CostBuilding moved = *cost_building;
+                moved.x = nx;
+                moved.y = ny;
+                c = std::move(moved);
+            }
+        }
+    }
+    builder.write(*item.type, item.x, item.y, item.rotation, item.anim_phase, city);
+    ConstructionEvent e;
+    e.kind = ConstructionEvent::Kind::Placed;
+    e.x = item.x;
+    e.y = item.y;
+    e.city = city;
+    e.type = item.type;
+    e.production = world.production_index(order.island, nx, ny);
+    builder.emit(e);
+    if (pay) {
+        if (City* c = world.city(order.island, city)) {
+            take_from_city(*c, buildings, plan.bill);
+        }
+        if (Player* p = world.player(order.player)) {
+            p->money = money_plus(p->money, -std::int64_t{plan.bill.money});
+        }
+        result.paid = plan.bill;
+    }
+    builder.finish();
+    result.moved = true;
     return result;
 }
 
@@ -2322,16 +2695,73 @@ bool destroy_building(World& world, const assets::BuildingTable& buildings, std:
     const MapCell& cell =
         world.islands()[island].map.top(static_cast<std::uint32_t>(origin.x), static_cast<std::uint32_t>(origin.y));
     const bool natives = b->city != MapCell::kNoCity && world.acts_as(cell.owner, FactionBehaviour::Natives);
+    const Player* owner = world.player(cell.owner);
+    const bool computer = b->city != MapCell::kNoCity && owner != nullptr && owner->role == PlayerRole::Computer &&
+                          world.acts_as(cell.owner, FactionBehaviour::Settlers);
     Builder builder(world, buildings, island, events);
     builder.destroy(*b);
-    if (natives && !world.original_bugs().native_land && native_village_gone(world, buildings, island, b->city)) {
-        // Open1602: a village without its chief's house, market and huts is gone, and its land is
-        // free for anybody's market; as in the original (OriginalBugs::native_land) the ruin of the
-        // chief's house holds it like a destroyed Kontor.
+    // Open1602: a village without its chief's house, market and huts is gone, and so is a computer
+    // player's city without Kontor, market, tower and houses: its land is free for anybody's
+    // Kontor or market. As in the original (OriginalBugs::native_land) the ruin of the chief's
+    // house or of the Kontor holds it.
+    if (!world.original_bugs().native_land && ((natives && native_village_gone(world, buildings, island, b->city)) ||
+                                               (computer && computer_city_gone(world, buildings, island, b->city)))) {
         builder.dissolve_city(b->city);
     }
     builder.finish();
     return true;
+}
+
+bool computer_city_gone(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
+                        std::uint8_t city) {
+    if (island >= world.islands().size() || world.city(island, city) == nullptr ||
+        !city_defenceless(world, buildings, island, city)) {
+        return false;
+    }
+    const IslandMap& map = world.islands()[island].map;
+    for (std::uint32_t y = 0; y < map.height(); ++y) {
+        for (std::uint32_t x = 0; x < map.width(); ++x) {
+            const MapCell& c = map.top(x, y);
+            if (c.empty() || c.city != city) {
+                continue;
+            }
+            const assets::BuildingType* t = buildings.by_sprite(c.sprite);
+            if (t != nullptr && t->prod_kind == prod::kHouse && !t->destroyed) {
+                return false;  // people still live there
+            }
+        }
+    }
+    return true;
+}
+
+std::size_t give_up_razed_cities(World& world, const assets::BuildingTable& buildings,
+                                 std::vector<ConstructionEvent>* events) {
+    if (world.original_bugs().native_land) {
+        return 0;
+    }
+    std::vector<std::pair<std::uint16_t, std::uint8_t>> gone;
+    for (const City& c : world.cities()) {
+        // Cheap first: only a city whose Kontor lies in ruins is given up.
+        if (!c.warehouse_x || !c.warehouse_y) {
+            continue;
+        }
+        const auto kontor = building_at(world, buildings, c.island, {*c.warehouse_x, *c.warehouse_y});
+        if (!kontor || !kontor->type->destroyed) {
+            continue;
+        }
+        const Player* owner = world.player(c.owner);
+        if (owner != nullptr && owner->role == PlayerRole::Computer &&
+            world.acts_as(c.owner, FactionBehaviour::Settlers) &&
+            computer_city_gone(world, buildings, c.island, c.index)) {
+            gone.emplace_back(c.island, c.index);
+        }
+    }
+    for (const auto& [island, city] : gone) {
+        Builder builder(world, buildings, island, events);
+        builder.dissolve_city(city);
+        builder.finish();
+    }
+    return gone.size();
 }
 
 bool native_village_gone(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,

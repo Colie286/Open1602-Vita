@@ -2,9 +2,13 @@
 #include "o1602/sim/faction.hpp"
 
 #include <algorithm>
+#include <limits>
+#include <optional>
+#include <string>
 #include <utility>
 
 #include "o1602/core/data_file.hpp"
+#include "o1602/core/text.hpp"
 
 namespace o1602::sim {
 
@@ -67,8 +71,41 @@ const char* behaviour_name(FactionBehaviour behaviour) noexcept {
     return "?";
 }
 
+namespace {
+
+/// The behaviour of a base faction by its name in factions.toml.
+std::optional<FactionBehaviour> behaviour_of(std::string_view name) noexcept {
+    for (const Faction& f : base_factions()) {
+        if (f.id.substr(kBaseFactionPackage.size() + 1) == name) {
+            return f.behaviour;
+        }
+    }
+    return std::nullopt;
+}
+
+/// "name" of `package`, or an id with its package as it is.
+std::string full_id(std::string_view package, std::string_view name) {
+    if (name.find(':') != std::string_view::npos) {
+        return std::string(name);
+    }
+    std::string id(package);
+    id += ':';
+    id += name;
+    return id;
+}
+
+}  // namespace
+
+std::optional<FactionId> find_faction(const std::vector<Faction>& factions, std::string_view id) {
+    const auto it = std::find_if(factions.begin(), factions.end(), [&](const Faction& f) { return f.id == id; });
+    if (it == factions.end()) {
+        return std::nullopt;
+    }
+    return static_cast<FactionId>(it - factions.begin());
+}
+
 void apply_faction_file(std::vector<Faction>& factions, std::string_view package, std::string_view utf8,
-                        std::vector<std::string>& warnings) {
+                        std::vector<std::string>& warnings, std::vector<FactionReplacement>* replacements) {
     const std::string where = std::string(package) + "/" + std::string(kFactionFile);
     auto tables = core::parse_data_file(utf8);
     if (!tables) {
@@ -81,18 +118,94 @@ void apply_faction_file(std::vector<Faction>& factions, std::string_view package
                                "fields before the first [faction] belong to none and are passed over");
             continue;
         }
-        const std::string id =
-            table.name.find(':') == std::string::npos ? std::string(package) + ":" + table.name : table.name;
-        const auto it = std::find_if(factions.begin(), factions.end(), [&](const Faction& f) { return f.id == id; });
-        if (it == factions.end()) {
-            // A faction of its own needs slots in the game and a behaviour of its own (M8).
-            warnings.push_back(line_of(where, table.line) + "there is no faction " + id +
-                               " to change (factions of a package's own are not supported yet)");
-            continue;
+        const std::string id = full_id(package, table.name);
+        const auto entry = [&](std::string_view key) -> const core::DataEntry* {
+            const auto e = std::find_if(table.entries.begin(), table.entries.end(),
+                                        [&](const core::DataEntry& d) { return d.key == key; });
+            return e != table.entries.end() ? &*e : nullptr;
+        };
+        std::optional<FactionId> index = find_faction(factions, id);
+        const bool own = id.size() > package.size() && id.starts_with(package) && id[package.size()] == ':';
+        if (!index) {
+            // A faction of the package's own: it acts as one of the base game's.
+            const core::DataEntry* b = entry("behaviour");
+            const std::string* name = b != nullptr ? b->value.string() : nullptr;
+            const auto behaviour = name != nullptr ? behaviour_of(*name) : std::nullopt;
+            if (!own) {
+                warnings.push_back(line_of(where, table.line) + "there is no faction " + id +
+                                   " to change; a package adds factions only under its own name");
+                continue;
+            }
+            if (!behaviour) {
+                warnings.push_back(line_of(where, table.line) + "the new faction " + id +
+                                   " needs 'behaviour': settlers, trader, pirates or natives");
+                continue;
+            }
+            if (factions.size() >= kMaxFactions) {
+                warnings.push_back(line_of(where, table.line) + "there are " + std::to_string(kMaxFactions) +
+                                   " factions already; " + id + " is passed over");
+                continue;
+            }
+            Faction f = base_factions()[base_faction(*behaviour)];
+            f.id = id;
+            factions.push_back(std::move(f));
+            index = static_cast<FactionId>(factions.size() - 1);
         }
+        Faction& faction = factions[*index];
         for (const core::DataEntry& e : table.entries) {
             const std::string at = line_of(where, e.value.line);
-            std::uint16_t* field = number_field(*it, e.key);
+            if (e.key == "behaviour") {
+                const std::string* name = e.value.string();
+                if (name == nullptr || behaviour_of(*name) != faction.behaviour) {
+                    warnings.push_back(at + "'behaviour' is given when a faction is added and stays as it is");
+                }
+                continue;
+            }
+            if (e.key == "replaces") {
+                const std::string* name = e.value.string();
+                const auto replaced = name != nullptr ? find_faction(factions, full_id(package, *name)) : std::nullopt;
+                if (!own) {
+                    warnings.push_back(at + "'replaces' is for the package's own factions");
+                } else if (!replaced || *replaced == *index) {
+                    warnings.push_back(at + "'replaces' names no other faction");
+                } else if (factions[*replaced].behaviour != faction.behaviour) {
+                    warnings.push_back(at + "'replaces' names a faction of another behaviour");
+                } else if (replacements != nullptr) {
+                    replacements->push_back(FactionReplacement{factions[*replaced].id, faction.id});
+                }
+                continue;
+            }
+            if (e.key.starts_with("name.")) {
+                // A name to show (the editor's players): name.de = "Liga".
+                const std::string language = e.key.substr(5);
+                const std::string* text = e.value.string();
+                const bool code = !language.empty() && language.size() <= 16 &&
+                                  std::all_of(language.begin(), language.end(), [](char c) {
+                                      return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '-';
+                                  });
+                if (!code || text == nullptr || text->empty()) {
+                    warnings.push_back(at + "'" + e.key + "' must be name.<language> = \"a name\"");
+                } else {
+                    auto& names = faction.names;
+                    std::erase_if(names, [&](const auto& n) { return n.first == language; });
+                    names.emplace_back(language, core::utf8_to_cp1252(*text));
+                }
+                continue;
+            }
+            if (e.key == "scripted") {
+                const bool* on = e.value.boolean();
+                if (on == nullptr) {
+                    warnings.push_back(at + "'scripted' must be true or false");
+                } else if (*on && faction.behaviour != FactionBehaviour::Settlers &&
+                           faction.behaviour != FactionBehaviour::Pirates) {
+                    warnings.push_back(at + "'scripted' is for factions of settlers or pirates; the game steers " +
+                                       behaviour_name(faction.behaviour));
+                } else {
+                    faction.scripted = *on;
+                }
+                continue;
+            }
+            std::uint16_t* field = number_field(faction, e.key);
             const std::int64_t* n = e.value.integer();
             if (field == nullptr) {
                 warnings.push_back(at + "unknown field '" + e.key + "'");

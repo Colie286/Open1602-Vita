@@ -91,12 +91,13 @@ std::optional<std::string> order_question(const sim::World& world, const assets:
     if (!attack) {
         return std::nullopt;
     }
-    // An attack that means war (0x0044D540): not on the free trader, not at war already.
+    // An attack that means war: not on the free trader, not at war already. An open offer of peace
+    // (made or received after a declaration of war) is still war: no question either (Open1602).
     const sim::PlayerId other = target_owner(world, target);
     const sim::Player* p = world.player(other);
     const sim::Diplomacy& d = world.diplomacy();
     if (p == nullptr || other == local || world.behaviour(*p) == sim::FactionBehaviour::Trader || local >= d.size() ||
-        other >= d.size() || d.relation(local, other).peace == sim::Treaty::None) {
+        other >= d.size() || d.relation(local, other).peace != sim::Treaty::Signed) {
         return std::nullopt;
     }
     return ui::tr("dialog.declare_war", {player_name(*p)});

@@ -2,6 +2,7 @@
 #include "o1602/render/sprite_atlas.hpp"
 
 #include <algorithm>
+#include <array>
 #include <thread>
 #include <cstdio>
 #include <mutex>
@@ -643,6 +644,8 @@ void blit_draw_list(const std::vector<DrawCommand>& commands, const SpriteAtlas&
         const bool shadow = c.mode == DrawCommand::Mode::Shadow;
         const bool translucent = c.mode == DrawCommand::Mode::Translucent;
         const bool dimmed = c.mode == DrawCommand::Mode::Dimmed;
+        const bool tinted = c.mode == DrawCommand::Mode::Tinted;
+        const bool checkered = c.mode == DrawCommand::Mode::Checkered;
         const std::uint32_t alpha = c.tint.a;
         for (std::int32_t y = y0; y < y1; ++y) {
             const std::uint8_t* src = &page[((std::size_t{r.y} + static_cast<std::size_t>(y)) * ps + r.x) * 4];
@@ -661,10 +664,21 @@ void blit_draw_list(const std::vector<DrawCommand>& commands, const SpriteAtlas&
                     for (int k = 0; k < 3; ++k) {
                         d[k] = static_cast<std::uint8_t>((d[k] * (255 - alpha) + s[k] * alpha) / 255);
                     }
+                } else if (tinted) {
+                    const std::array<std::uint32_t, 3> t{c.tint.r, c.tint.g, c.tint.b};
+                    for (std::size_t k = 0; k < 3; ++k) {
+                        const std::uint32_t coloured = s[k] * t[k] / 255;
+                        d[k] = static_cast<std::uint8_t>((d[k] * (255 - alpha) + coloured * alpha) / 255);
+                    }
                 } else if (dimmed) {
                     d[0] = static_cast<std::uint8_t>(s[0] * c.tint.r / 255);
                     d[1] = static_cast<std::uint8_t>(s[1] * c.tint.g / 255);
                     d[2] = static_cast<std::uint8_t>(s[2] * c.tint.b / 255);
+                    d[3] = s[3];
+                } else if (checkered && hatch_pixel(c.x + x, c.y - r.height + y)) {
+                    d[0] = c.tint.r;
+                    d[1] = c.tint.g;
+                    d[2] = c.tint.b;
                     d[3] = s[3];
                 } else {
                     std::copy_n(s, 4, d);

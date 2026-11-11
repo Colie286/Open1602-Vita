@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// State of the computer players (docs/re/ai.md). The original keeps one context of 0x11E88 bytes per
-// player slot (0x006337C0) and rebuilds it from the world after every load (0x0040F580); Open1602
-// keeps the same fields, saves them with the game and rebuilds them only for games of the original.
-// Field comments name the original's offset in the context (C+...) or the per-city record (R+...).
+// State of the computer players. The original rebuilds it from the world after every load;
+// Open1602 saves it with the game and rebuilds it only for games of the original.
 #pragma once
 
 #include <array>
@@ -13,19 +11,23 @@
 #include <unordered_map>
 #include <vector>
 
+#include "o1602/assets/resident_classes.hpp"
 #include "o1602/sim/player.hpp"
 
 namespace o1602::sim::ai {
 
 /// Version of the saved state of the computer players. 2 dropped what nothing read (GB-5): the
 /// attack plans and the islands' state byte. 3 added the deferred yard request (GB-2). 4 added the
-/// target of a search (Search::target_x/target_y, task kClaimLand). Every version from
-/// kFirstStateVersion on loads.
-inline constexpr std::uint32_t kStateVersion = 4;
+/// target of a search (Search::target_x/target_y, task kClaimLand). 5 added the slots of the
+/// packages' producers (kSlots and up, ai_chains.hpp). Every version from kFirstStateVersion on loads.
+inline constexpr std::uint32_t kStateVersion = 6;
+inline constexpr std::uint32_t kStateWithPackageSlots = 5;
+/// Version 6: a city record's flags and a search's service as 64 bits, for the public buildings of a
+/// kind of their own above the second. The computers write it only when one of those needs it.
+inline constexpr std::uint32_t kStateWithWideFlags = 6;
 inline constexpr std::uint32_t kFirstStateVersion = 1;
 
-/// Task ids of the original's dispatcher (AI_RunTask 0x00429AA0). The numbers are kept so the
-/// documentation and the analysis of the original can be compared directly.
+/// Task ids of the computer players, numbered as in the original.
 enum Task : std::uint8_t {
     kRoot = 0x00,  ///< empty stack: city round robin, colonisation, giving up
     kSettleArea = 0x02,
@@ -87,9 +89,13 @@ enum Task : std::uint8_t {
     kDenkmal = 0x3C,
     /// Open1602: a market that brings a deposit the city wants into its land (Engine::claim_land).
     kClaimLand = 0x3D,
+    /// Open1602: the public buildings of a kind of their own (slots.toml `kind = "public"`), the
+    /// j-th kOwnPublicFirst + j (computer_slots.hpp, own_public_slot), up to kOwnPublicLast.
+    kOwnPublicFirst = 0x3E,
+    kOwnPublicLast = 0x3E + assets::kMaxOwnServices - 1,
 };
 
-/// Building slots of a city record (R+0x34 + 6k): what the city has of each kind of building.
+/// Building slots of a city record: what the city has of each kind of building.
 enum Slot : std::uint8_t {
     kSlotKontor = 0x00,  ///< the Kontor's level 1..4, not a count
     kSlotWoodcutter = 0x01,
@@ -147,25 +153,34 @@ enum Slot : std::uint8_t {
     kSlotDenkmal = 0x36,
 };
 inline constexpr std::size_t kSlots = 0x37;
+/// Slots of a city record with those of the packages' producers (kSlots and up, ai_chains.hpp): one
+/// for every value of a slot number, so no slot number reaches past the record.
+inline constexpr std::size_t kAllSlots = 0x100;
 
-/// Flags of a city record (R+0x30).
+/// Flags of a city record.
 namespace city_flag {
-inline constexpr std::uint32_t kAbandon = 0x0001;   ///< give the city up (task 0x2E)
-inline constexpr std::uint32_t kSurveyed = 0x0002;  ///< task 8 ran this visit: the sweep may work
-inline constexpr std::uint32_t kKlinik = 0x0004;    ///< "covered" bits of the public buildings
-inline constexpr std::uint32_t kKapelle = 0x0008;
-inline constexpr std::uint32_t kMarket = 0x0010;
-inline constexpr std::uint32_t kWirt = 0x0020;
-inline constexpr std::uint32_t kSchule = 0x0040;
-inline constexpr std::uint32_t kKirche = 0x0080;
-inline constexpr std::uint32_t kBadehaus = 0x0100;
-inline constexpr std::uint32_t kHochschule = 0x0200;
-inline constexpr std::uint32_t kTheater = 0x0400;
-inline constexpr std::uint32_t kGalgen = 0x0800;
-inline constexpr std::uint32_t kBrunnen = 0x1000;
+inline constexpr std::uint64_t kAbandon = 0x0001;   ///< give the city up (task 0x2E)
+inline constexpr std::uint64_t kSurveyed = 0x0002;  ///< task 8 ran this visit: the sweep may work
+inline constexpr std::uint64_t kKlinik = 0x0004;    ///< "covered" bits of the public buildings
+inline constexpr std::uint64_t kKapelle = 0x0008;
+inline constexpr std::uint64_t kMarket = 0x0010;
+inline constexpr std::uint64_t kWirt = 0x0020;
+inline constexpr std::uint64_t kSchule = 0x0040;
+inline constexpr std::uint64_t kKirche = 0x0080;
+inline constexpr std::uint64_t kBadehaus = 0x0100;
+inline constexpr std::uint64_t kHochschule = 0x0200;
+inline constexpr std::uint64_t kTheater = 0x0400;
+inline constexpr std::uint64_t kGalgen = 0x0800;
+inline constexpr std::uint64_t kBrunnen = 0x1000;
+/// Open1602: the "covered" bit of the j-th public building of a kind of its own (slots.toml
+/// `kind = "public"`), bits 13 to 62.
+[[nodiscard]] constexpr std::uint64_t own_public(std::size_t j) noexcept {
+    return std::uint64_t{1} << (13 + j);
+}
+static_assert(13 + assets::kMaxOwnServices <= 64);
 }  // namespace city_flag
 
-/// Development stages of a city (R+0x10; switch of task 5, 0x00428E70).
+/// Development stages of a city (switch of task 5).
 namespace stage {
 inline constexpr std::uint8_t kFounded = 0x00;
 inline constexpr std::uint8_t kColony = 0x01;  ///< a city that grows raw materials (terminal)
@@ -190,34 +205,35 @@ struct SlotState {
     std::uint16_t count = 0;
     std::uint16_t attempts = 0;
     std::uint16_t fail_level = 0;
+    friend bool operator==(const SlotState&, const SlotState&) = default;
 };
 
-/// A market of the city that soldiers guard (R+0x188).
+/// A market of the city that soldiers guard.
 struct GuardPost {
     std::uint16_t x = 0;
     std::uint16_t y = 0;
 };
 
-/// What the computer knows and wants of one of its cities (R = C+0x3E80 + 0x298 * city).
+/// What the computer knows and wants of one of its cities.
 struct CityPlan {
     std::uint16_t island = 0;   ///< index into World::islands()
     std::uint8_t city = 0;      ///< city number on the island
-    std::uint16_t sweep_x = 0;  ///< R+0x00/+0x04: cursor of the maintenance sweep
+    std::uint16_t sweep_x = 0;  ///< cursor of the maintenance sweep
     std::uint16_t sweep_y = 0;
-    std::uint16_t tower_ring = 0;    ///< R+0x08: ring around the Kontor the towers search
-    std::uint16_t paving_ring = 0;   ///< R+0x0C: ring around the Kontor the paving searches
-    std::uint8_t stage = 0;          ///< R+0x10
-    std::uint64_t stage_ms = 0;      ///< R+0x14: game time the stage began
-    std::uint32_t land = 0;          ///< R+0x1C: usable land of the city, tiles
-    std::uint32_t land_percent = 0;  ///< R+0x18
-    std::uint32_t flags = 0;         ///< R+0x30, city_flag
-    std::array<SlotState, kSlots> slots{};
-    std::optional<std::pair<std::uint16_t, std::uint16_t>> doctor;  ///< R+0x28/+0x2C: tile of the Klinik
-    std::vector<GuardPost> posts;                                   ///< R+0x188: the city's markets
-    std::uint8_t post_cursor = 0;                                   ///< R+0x184
+    std::uint16_t tower_ring = 0;   ///< ring around the Kontor the towers search
+    std::uint16_t paving_ring = 0;  ///< ring around the Kontor the paving searches
+    std::uint8_t stage = 0;
+    std::uint64_t stage_ms = 0;  ///< game time the stage began
+    std::uint32_t land = 0;      ///< usable land of the city, tiles
+    std::uint32_t land_percent = 0;
+    std::uint64_t flags = 0;  ///< city_flag
+    std::array<SlotState, kAllSlots> slots{};
+    std::optional<std::pair<std::uint16_t, std::uint16_t>> doctor;  ///< tile of the Klinik
+    std::vector<GuardPost> posts;                                   ///< the city's markets
+    std::uint8_t post_cursor = 0;
 };
 
-/// A straight run of road of the current city (C+0x1DF4; task 7, 0x00417C80).
+/// A straight run of road of the current city (task 7).
 struct Segment {
     std::int32_t x0 = 0;  ///< first coordinate (the walking end of the cursor)
     std::int32_t y0 = 0;
@@ -230,34 +246,34 @@ struct Segment {
     bool open = false;        ///< the run ends at a tile that is no road (a dead end)
 };
 
-/// The one building site search of a player (C+0x1D14..+0x1DA7; 0x004159F0).
+/// The one building site search of a player.
 struct Search {
-    std::int32_t segment = 0;  ///< +0x1D14
-    std::int32_t x = 0;        ///< +0x1D18: cursor on the road
+    std::int32_t segment = 0;
+    std::int32_t x = 0;  ///< cursor on the road
     std::int32_t y = 0;
-    std::int32_t remaining = 0;  ///< +0x1D20
-    std::int32_t ref_x = 0;      ///< +0x1D24: reference point for the parity
+    std::int32_t remaining = 0;
+    std::int32_t ref_x = 0;  ///< reference point for the parity
     std::int32_t ref_y = 0;
-    std::uint8_t radius = 0;     ///< +0x1D2C
-    std::uint32_t building = 0;  ///< +0x1D30: Id of the building to place
-    std::uint32_t service = 0;   ///< +0x1D48: public buildings, the service bit they bring
-    std::uint8_t slot = 0;       ///< +0x1D4C
-    std::int32_t phase = 0;      ///< +0x1D50
-    std::int32_t best_x0 = 0;    ///< +0x1D54..+0x1D60
+    std::uint8_t radius = 0;
+    std::uint32_t building = 0;       ///< Id of the building to place
+    assets::ServiceBits service = 0;  ///< public buildings, the service bit they bring
+    std::uint8_t slot = 0;
+    std::int32_t phase = 0;
+    std::int32_t best_x0 = 0;
     std::int32_t best_y0 = 0;
     std::int32_t best_x1 = 0;
     std::int32_t best_y1 = 0;
-    std::int32_t best = 0;      ///< +0x1D64: best score, 0 = nothing found
-    std::int32_t extra = 0;     ///< +0x1D68
-    std::int32_t rotation = 0;  ///< +0x1D6C
-    std::int32_t stub_x = -1;   ///< +0x1D70/+0x1D74: road tile to connect a farm, -1 none
+    std::int32_t best = 0;  ///< best score, 0 = nothing found
+    std::int32_t extra = 0;
+    std::int32_t rotation = 0;
+    std::int32_t stub_x = -1;  ///< road tile to connect a farm, -1 none
     std::int32_t stub_y = -1;
     /// Open1602, task kClaimLand: the tile the new market should bring into the city's land, -1 none.
     std::int32_t target_x = -1;
     std::int32_t target_y = -1;
 };
 
-/// Money and building material taken from a city while a building is planned (C+0x1D34..+0x1D44).
+/// Money and building material taken from a city while a building is planned.
 /// The original takes them when it plans and gives them back right before the real build; Open1602
 /// also gives them back when the plan is dropped.
 struct Reservation {
@@ -273,7 +289,7 @@ struct Reservation {
     }
 };
 
-/// A connected area of free land found by the settlement scan (0x00415AF0, C+0x510 + 0x18 k).
+/// A connected area of free land found by the settlement scan.
 struct Region {
     std::int32_t x0 = 0;
     std::int32_t y0 = 0;
@@ -282,28 +298,28 @@ struct Region {
     std::int32_t area = 0;
 };
 
-/// Founding a city (C+0x28, +0x2C, +0x30, +0x4E4, +0x1DA8..+0x1DD4).
+/// Founding a city.
 struct Settlement {
-    bool active = false;             ///< +0x2C: looking for an island
-    bool failed = false;             ///< +0x28: no island found
-    std::uint64_t last_ms = 0;       ///< +0x30: last settlement event
-    std::int32_t need = 1800;        ///< +0x4E4: free land the island must have, tiles
-    std::int32_t floor = 300;        ///< +0x4E8
-    std::uint32_t ship = 0;          ///< +0x1DAC: Ship::id, 0 = none
-    std::uint16_t cursor = 0;        ///< +0x1DC8: island cursor
-    std::uint32_t pass = 0;          ///< pirates: size class allowed this pass
-    std::uint8_t crop = 0;           ///< +0x1DCC: crop (ware 45..51 or 2 for ore) the island must grow
-    std::uint8_t previous_crop = 0;  ///< +0x1DD0
-    std::int32_t island = -1;        ///< +0x1DD4/+0x1DB0: island under test
-    std::int32_t site_x = 0;         ///< +0x1DB4..+0x1DBC: where the Kontor goes
+    bool active = false;        ///< looking for an island
+    bool failed = false;        ///< no island found
+    std::uint64_t last_ms = 0;  ///< last settlement event
+    std::int32_t need = 1800;   ///< free land the island must have, tiles
+    std::int32_t floor = 300;
+    std::uint32_t ship = 0;    ///< Ship::id, 0 = none
+    std::uint16_t cursor = 0;  ///< island cursor
+    std::uint32_t pass = 0;    ///< pirates: size class allowed this pass
+    std::uint8_t crop = 0;     ///< crop (ware 45..51 or 2 for ore) the island must grow
+    std::uint8_t previous_crop = 0;
+    std::int32_t island = -1;  ///< island under test
+    std::int32_t site_x = 0;   ///< where the Kontor goes
     std::int32_t site_y = 0;
     std::uint8_t site_rotation = 0;
-    std::uint8_t retries = 0;     ///< +0x1DA8
+    std::uint8_t retries = 0;
     bool sailing = false;         ///< the ship sails to the site
     std::vector<Region> regions;  ///< result of the area scan
 };
 
-/// A castle the computer recruits in (C+0x440..+0x49C).
+/// A castle the computer recruits in.
 struct CastleEntry {
     std::uint16_t x = 0;
     std::uint16_t y = 0;
@@ -311,30 +327,30 @@ struct CastleEntry {
     std::uint16_t rally_y = 0;
 };
 
-/// An attack being planned against one owner (C+0x107C0 + 0x288 * owner). Open1602 never planned
+/// An attack being planned against one owner. Open1602 never planned
 /// one; state version 1 kept an empty list of them per computer, which a loader reads and drops.
 struct AttackPlan {
-    bool active = false;             ///< +0x268
-    std::uint16_t island = 0;        ///< +0x00
-    std::uint8_t city = 0;           ///< +0x04
-    std::uint32_t ship = 0;          ///< +0x08
-    std::vector<GuardPost> targets;  ///< +0x158: markets or the Kontor of the target city
-    std::uint8_t phase = 0;          ///< +0x26C
-    std::int32_t cursor = 0;         ///< +0x270
+    bool active = false;
+    std::uint16_t island = 0;
+    std::uint8_t city = 0;
+    std::uint32_t ship = 0;
+    std::vector<GuardPost> targets;  ///< markets or the Kontor of the target city
+    std::uint8_t phase = 0;
+    std::int32_t cursor = 0;
     struct Candidate {
         std::int32_t x = 0;  ///< world tile
         std::int32_t y = 0;
         std::uint8_t flag = 0;
     };
-    std::vector<Candidate> candidates;  ///< +0x18, at most 16
-    std::int32_t best_x = 0;            ///< +0x274
+    std::vector<Candidate> candidates;  ///< at most 16
+    std::int32_t best_x = 0;
     std::int32_t best_y = 0;
-    std::int32_t best_score = 10000;  ///< +0x280
-    std::uint8_t best_flag = 0;       ///< +0x284
+    std::int32_t best_score = 10000;
+    std::uint8_t best_flag = 0;
 };
 
-/// What a computer player has its ship doing (the original keeps it in the ship: +0x1AE mission,
-/// +0x1AC parameter or cooldown, +0x1A7 counter; SHIP4 +0x24, +0x3E, +0x40).
+/// What a computer player has its ship doing: mission, parameter or cooldown, counter (saved in
+/// SHIP4 +0x24, +0x3E, +0x40).
 struct ShipNote {
     std::uint32_t id = 0;       ///< Ship::id
     std::uint8_t mission = 0;   ///< 0 idle, 1 fetch troops, 2 go home, 3 shell an outpost, 5..9 attack
@@ -347,7 +363,7 @@ struct ShipNote {
     bool supply = false;         ///< on a supply run home: its goods are for the home city
 };
 
-/// Island clock of the soldier controller (0x006B1180 + 0x5A0 * island). State version 1 also had a
+/// Island clock of the soldier controller (* island). State version 1 also had a
 /// state byte that nothing read.
 struct IslandWatch {
     std::uint64_t next_ms = 0;
@@ -357,48 +373,48 @@ struct IslandWatch {
 struct AiPlayer {
     PlayerId player = kNoPlayer;
     bool pirates = false;
-    std::int32_t t_main = 0;          ///< +0x04: game ms to the next step
-    std::int32_t t_10s = 20000;       ///< +0x0C: logistics
-    std::int32_t t_6s = 3000;         ///< +0x14: recruiting; pirates: their own clock
-    std::uint64_t init_ms = 0;        ///< +0x08: game time of the last (re)initialisation
-    std::uint64_t refresh_ms = 0;     ///< +0x10: game time of the last refresh of task 5
-    std::uint32_t cities = 0;         ///< +0x18: own cities (at init, +1 founding, -1 abandoning)
-    std::uint32_t surveyed = 0;       ///< +0x20: cities surveyed by task 8 since the init
-    std::vector<std::uint8_t> stack;  ///< +0x24/+0x34: task ids, at most 256, no duplicates
-    std::int32_t budget = 0;          ///< +0x3E78: pushes left in this city visit
+    std::int32_t t_main = 0;          ///< game ms to the next step
+    std::int32_t t_10s = 20000;       ///< logistics
+    std::int32_t t_6s = 3000;         ///< recruiting; pirates: their own clock
+    std::uint64_t init_ms = 0;        ///< game time of the last (re)initialisation
+    std::uint64_t refresh_ms = 0;     ///< game time of the last refresh of task 5
+    std::uint32_t cities = 0;         ///< own cities (at init, +1 founding, -1 abandoning)
+    std::uint32_t surveyed = 0;       ///< cities surveyed by task 8 since the init
+    std::vector<std::uint8_t> stack;  ///< task ids, at most 256, no duplicates
+    std::int32_t budget = 0;          ///< pushes left in this city visit
     Settlement settle;
     bool colony_failed = false;  ///< the island search failed since the init (S-097)
-    // The current city (+0x1DDC/+0x1DE0/+0x1DE8/+0x10638).
-    bool has_city = false;  ///< +0x1DE8 != 0
+    // The current city.
+    bool has_city = false;
     std::uint16_t island = 0;
     std::uint8_t city = 0;
-    bool has_plan = false;          ///< +0x10638 != 0: some city was visited since the init
-    std::uint32_t city_cursor = 0;  ///< +0x1DE4: round robin over the world's cities
-    bool home_valid = false;        ///< +0x3E7C
+    bool has_plan = false;          ///< some city was visited since the init
+    std::uint32_t city_cursor = 0;  ///< round robin over the world's cities
+    bool home_valid = false;
     std::uint16_t home_island = 0;
     std::uint8_t home_city = 0;
-    bool skip_layout = false;            ///< +0x3E74
-    std::uint8_t max_stage = 0;          ///< +0x10640: highest stage any city reached
-    std::uint8_t score = 0;              ///< +0x1063C: development score 0..4
-    std::array<bool, kSlots> present{};  ///< +0x10644: the player has a building of slot k
-    std::vector<CityPlan> plans;         ///< the city records
+    bool skip_layout = false;
+    std::uint8_t max_stage = 0;             ///< highest stage any city reached
+    std::uint8_t score = 0;                 ///< development score 0..4
+    std::array<bool, kAllSlots> present{};  ///< the player has a building of slot k
+    std::vector<CityPlan> plans;            ///< the city records
     // Building
     Search search;
-    std::vector<Segment> segments;  ///< +0x1DF0/+0x1DF4
+    std::vector<Segment> segments;
     Reservation reserved;
-    // Own shipyard (+0x434..+0x43C)
+    // Own shipyard
     bool yard_valid = false;
     bool yard_wanted = false;  ///< Open1602 (GB-2): the 10-s logistics asked for a yard (state 3)
     std::uint16_t yard_island = 0;
     std::uint16_t yard_x = 0;
     std::uint16_t yard_y = 0;
-    // Military (+0x440..+0x4A0)
+    // Military
     std::optional<std::uint16_t> castle_island;
     std::vector<CastleEntry> castles;
-    std::uint8_t castle_cursor = 0;           ///< +0x44C
-    std::uint32_t recruit_cursor = 0;         ///< +0x4A0
-    std::uint32_t target_cursor = 0;          ///< +0x1DD8
-    std::vector<std::int32_t> previous_mood;  ///< +0x4A4: by player
+    std::uint8_t castle_cursor = 0;
+    std::uint32_t recruit_cursor = 0;
+    std::uint32_t target_cursor = 0;
+    std::vector<std::int32_t> previous_mood;  ///< by player
     std::uint32_t diplomacy_ms = 0;           ///< game time since the last diplomacy pass
     std::vector<std::uint8_t> seen_treaties;  ///< peace and trade towards each player at the last look
     bool diplomacy_due = false;               ///< a treaty changed: the next tick looks again
@@ -407,16 +423,16 @@ struct AiPlayer {
     /// Not saved: where Engine::note() last found a ship in `ships`, checked before it is used
     /// (`ships` may have been reordered or shortened since). Only looked up, never walked.
     std::unordered_map<std::uint32_t, std::uint32_t> ship_slots;
-    std::int32_t fleet_target = 0;    ///< +0x4DC; pirates: the last new ship is armed
-    std::int32_t ships_per_city = 1;  ///< +0x4E0
+    std::int32_t fleet_target = 0;  ///< pirates: the last new ship is armed
+    std::int32_t ships_per_city = 1;
 };
 
 /// Everything of all computer players.
 struct State {
     std::vector<AiPlayer> players;     ///< one per computer or pirate player
-    std::uint8_t max_score = 0;        ///< 0x006C2EEC: highest development score of all
+    std::uint8_t max_score = 0;        ///< highest development score of all
     std::vector<IslandWatch> islands;  ///< by island
-    std::uint32_t island_cursor = 0;   ///< 0x006C2EF0
+    std::uint32_t island_cursor = 0;
     bool initialised = false;
 };
 

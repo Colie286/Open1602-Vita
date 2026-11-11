@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The main menu and the screens before a game (docs/re/ui.md "Main menu"; Menu_OnClick 0x0048B590,
-// Menu_Redraw 0x0048ABD0): BASE (main menu), HOST (list of scenarios or savegames), MISSION
+// The main menu and the screens before a game: BASE (main menu), HOST (list of scenarios or savegames), MISSION
 // (briefing, choice of level or part, high scores) and FARBWAHL (name and banner), and for the
 // endless game Open1602's own start dialog with the game's settings (ADR 0008). The button
 // "Mehrspieler" opens Open1602's own multiplayer menu instead of the original's screens. The menu shows the screens and
@@ -12,6 +11,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -25,6 +25,7 @@
 #include "o1602/assets/gad.hpp"
 #include "o1602/assets/game_directory.hpp"
 #include "o1602/assets/high_scores.hpp"
+#include "o1602/assets/package_scenarios.hpp"
 #include "o1602/assets/scenario.hpp"
 #include "o1602/assets/text_table.hpp"
 #include "o1602/render/banner.hpp"
@@ -33,7 +34,7 @@
 
 namespace o1602::app {
 
-/// One entry of the scenario list (0x0048E710): the files of one name without trailing digits.
+/// One entry of the scenario list: the files of one name without trailing digits.
 struct MenuScenario {
     std::string name;            ///< base name in Windows-1252 (the fonts')
     std::filesystem::path base;  ///< the same as a file name without folder (for the .hss beside it)
@@ -42,7 +43,25 @@ struct MenuScenario {
     std::vector<std::pair<std::uint8_t, std::filesystem::path>> files;
     assets::ScenarioHeader header;
     bool separator = false;  ///< a heading line ("----Kampagnen----")
+    /// A package's scenario (docs/modding/scenarios.md): its id ("<package>:<name>") and its
+    /// briefing (Windows-1252, empty: the map's mission text). Empty for the game folder's.
+    std::string package_scenario;
+    std::string briefing;
+    /// A package's campaign: its id, and per part (the key of `files`) its scenario and that
+    /// scenario's briefing (empty: `briefing`, the campaign's).
+    std::string package_campaign;
+    struct Part {
+        std::string scenario;
+        std::string briefing;
+    };
+    std::vector<Part> package_parts;
 };
+
+/// The entries of the packages' campaigns and then their scenarios under their heading (`heading`,
+/// Windows-1252), in the packages' load order, in `language`; none without any.
+[[nodiscard]] std::vector<MenuScenario> package_scenario_list(std::span<const assets::PackageScenario> scenarios,
+                                                              std::span<const assets::PackageCampaign> campaigns,
+                                                              std::string_view language, std::string heading);
 
 /// The scenarios of the game folder in the menu's order: originals (tutorial, endless game,
 /// numbered missions by number), campaigns by stars and number, the other adventures by stars,
@@ -53,6 +72,19 @@ struct MenuScenario {
                                                       const std::array<std::string, 4>& headings,
                                                       const assets::GameDirectory* game = nullptr);
 
+/// The folder of the user data folder that holds the player's own scenarios, beside "mods"
+/// (docs/modding/scenarios.md, "Own scenarios").
+inline constexpr std::string_view kOwnScenariosFolder = "scenarios";
+
+/// The scenarios of Open1602's own scenario folder under one heading (`heading`, Windows-1252),
+/// in name order: scenarios of the original's format (.szs, files whose names differ only in their
+/// last digits make one entry as in the game folder) and games saved by Open1602 (.o1602). An entry
+/// whose name is one of `taken` (the game folder's list) is left out and its name added to
+/// `skipped`, as is a .o1602 file named like a .szs entry; nothing at all without any.
+[[nodiscard]] std::vector<MenuScenario> own_scenario_list(const std::filesystem::path& folder, std::string heading,
+                                                          std::span<const MenuScenario> taken,
+                                                          std::vector<std::string>* skipped = nullptr);
+
 /// A campaign part as the original records its win: the campaign of the menu's entry for the file
 /// (scenario_list) and the part, the digit of its name. Not the file's own header: Pirata1 and
 /// Feindliche Nachbarn1 say campaign 0 (D-015), and SZENE_RANKING is a part's stars, not its number.
@@ -62,6 +94,10 @@ struct CampaignPart {
 };
 /// Nothing for a file outside the campaigns or not in a scenario folder (a savegame).
 [[nodiscard]] std::optional<CampaignPart> campaign_part_of(const std::filesystem::path& file);
+
+/// The settings a scenario of the editor is made for (sim::ScenarioInfo::rules), from the head of
+/// its file; nothing for one without them or another kind of file.
+[[nodiscard]] std::optional<sim::Rules> scenario_rules_of(const std::filesystem::path& file);
 
 struct MenuEvent {
     enum class Kind : std::uint8_t {
@@ -78,6 +114,7 @@ struct MenuEvent {
         Mods,          ///< the screen "Mods" opened: its model is due (set_mods)
         ToggleMod,     ///< turn the package `name` (its id, UTF-8) in the folder `path` on or off
         AdoptMod,      ///< copy the received package `name` in the folder `path` into the mods folder
+        Editor,        ///< the editor (ADR 0013)
     };
     Kind kind = Kind::Quit;
     std::uint8_t level = 0;
@@ -89,8 +126,15 @@ struct MenuEvent {
     std::size_t slot = 0;
     /// The settings of the start dialog; for a scenario only its rules count.
     std::optional<EndlessSetup> setup{};
+    /// Scenario: `setup` began from the scenario's own settings (the editor's), so they are not the
+    /// player's to keep for the next scenario.
+    bool scenario_rules = false;
     /// Scenario: the chapter of the tutorial, nothing for another scenario.
     std::optional<std::uint8_t> tutorial_chapter{};
+    /// Scenario: the id of a package's scenario (`path` is its map), empty for another.
+    std::string package_scenario{};
+    /// Scenario: the package's campaign it is a part of (part `level`, from 0), empty for none.
+    std::string package_campaign{};
 };
 
 class MainMenu {
@@ -118,8 +162,21 @@ public:
     [[nodiscard]] const EndlessSetup& endless_setup() const noexcept { return m_endless; }
     /// The rules the start dialog of a scenario offers first (the last ones chosen).
     void set_scenario_setup(const EndlessSetup& setup) { m_scenario = setup; }
+    /// The scenarios of the packages new games use, listed after the game folder's.
+    void set_package_scenarios(std::vector<assets::PackageScenario> scenarios,
+                               std::vector<assets::PackageCampaign> campaigns) {
+        m_package_scenarios = std::move(scenarios);
+        m_package_campaigns = std::move(campaigns);
+    }
+    /// Open1602's own scenario folder (own_scenario_list), listed after the game folder's.
+    void set_own_scenario_folder(std::filesystem::path folder) { m_own_scenario_folder = std::move(folder); }
     [[nodiscard]] const EndlessSetup& scenario_setup() const noexcept { return m_scenario; }
     /// Colours of Open1602's own screens (the start dialog).
+    /// The preview of the world on the start dialog's page of the islands.
+    void set_preview_maker(GameSettingsMenu::PreviewMaker maker) { m_settings.set_preview_maker(std::move(maker)); }
+    void set_preview_colours(const GameSettingsMenu::PreviewColours& colours) {
+        m_settings.set_preview_colours(colours);
+    }
     void set_form_style(const ui::FormStyle& style) {
         m_settings.set_style(style);
         m_mods.set_style(style);
@@ -154,7 +211,7 @@ public:
     /// mission's briefing a line per notch, the mods a row per notch (Open1602; the original has
     /// only the arrows). False on a screen without a list.
     bool wheel(std::int32_t notches);
-    /// Escape (0x00409D70): one screen back; false in the main menu.
+    /// Escape: one screen back; false in the main menu.
     bool back();
     /// Where the credits play: the picture frame of the main menu, design units.
     [[nodiscard]] static ui::Rect video_frame() noexcept { return {500, 359, 453, 367}; }
@@ -207,13 +264,16 @@ private:
     std::int32_t m_briefing_line = 0;
     std::int32_t m_briefing_last = 0;  ///< the briefing's last first line, 0 while it fits
     std::int32_t m_briefing_rows = 0;  ///< lines its box shows
-    /// The briefing slider's range while it scrolls: lines + rows - 1 (0x0048B195).
+    /// The briefing slider's range while it scrolls: lines + rows - 1.
     [[nodiscard]] std::int32_t briefing_slider_range() const noexcept {
         return m_briefing_last + 2 * m_briefing_rows - 1;
     }
     SaveSlots m_slots;
     std::filesystem::path m_score_folder;
     std::filesystem::path m_progress_file;
+    std::filesystem::path m_own_scenario_folder;
+    /// The names of own scenarios left out the last time, to tell of each only once.
+    std::vector<std::string> m_own_skipped;
     assets::CampaignProgress m_progress;
     std::string m_name;
     GameSettingsMenu m_settings;
@@ -223,6 +283,10 @@ private:
     ui::Form m_base_form;
     EndlessSetup m_endless;
     EndlessSetup m_scenario;
+    /// The start dialog shows a scenario's own settings (sim::ScenarioInfo::rules), not m_scenario.
+    bool m_scenario_own_rules = false;
+    std::vector<assets::PackageScenario> m_package_scenarios;
+    std::vector<assets::PackageCampaign> m_package_campaigns;
     /// The banners in the hall of the colour screen (FARBWAHL.GAD), which show a further colour.
     struct HallBanner {
         std::int32_t flag = 0;     ///< its picture

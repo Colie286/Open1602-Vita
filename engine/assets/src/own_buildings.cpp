@@ -5,6 +5,7 @@
 #include <limits>
 #include <optional>
 
+#include "o1602/assets/building_looks.hpp"
 #include "o1602/assets/original_names.hpp"
 #include "o1602/assets/package_graphics.hpp"
 #include "o1602/assets/resident_classes.hpp"
@@ -43,7 +44,9 @@ const OwnBuilding* find_own_building(std::span<const OwnBuilding> own, std::stri
 void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& own, std::string_view package,
                               std::string_view utf8, std::vector<std::string>& warnings, const Goods& goods,
                               std::span<const ResidentClass> classes, std::span<const InfraLevel> levels,
-                              std::span<const PackageImage> images) {
+                              std::span<const PackageImage> images, const FigureTable* figures,
+                              std::span<const OwnFigure> own_figures, std::span<const PackageSound> sounds,
+                              std::span<const std::string> services) {
     const std::string where = std::string(package) + "/" + std::string(kOwnBuildingsFile);
     auto tables = core::parse_data_file(utf8);
     if (!tables) {
@@ -53,17 +56,27 @@ void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& ow
     std::size_t added = 0;
     for (const core::DataTable& t : *tables) {
         const std::string at = line_of(where, t.line);
-        if (!is_name(t.name)) {
+        // ["<package>:<name>"]: the building of an earlier package, replaced by this one's.
+        const bool replacing = t.name.find(':') != std::string::npos;
+        const OwnBuilding* replaced = nullptr;
+        if (replacing) {
+            replaced = find_own_building(own, t.name);
+            if (replaced == nullptr || t.name.starts_with(std::string(package) + ":")) {
+                warnings.push_back(at + "[" + t.name +
+                                   "]: names no building of an earlier package to replace (<package>:<name>)");
+                continue;
+            }
+        } else if (!is_name(t.name)) {
             warnings.push_back(at + "[" + t.name +
                                "]: a building's name holds only lower case letters, digits and '_'");
             continue;
         }
-        const std::string id = std::string(package) + ":" + t.name;
-        if (find_own_building(own, id) != nullptr) {
+        const std::string id = replacing ? t.name : std::string(package) + ":" + t.name;
+        if (!replacing && find_own_building(own, id) != nullptr) {
             warnings.push_back(at + id + " is declared twice; the second is passed over");
             continue;
         }
-        if (added >= kMaxOwnBuildings) {
+        if (!replacing && added >= kMaxOwnBuildings) {
             warnings.push_back(at + "a package declares at most " + std::to_string(kMaxOwnBuildings) +
                                " buildings; the rest are passed over");
             return;
@@ -78,7 +91,10 @@ void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& ow
         std::optional<std::uint8_t> raw2;
         std::optional<std::uint8_t> resident_class;
         std::optional<std::uint8_t> level;
+        std::optional<std::uint32_t> figure;
+        const PackageSound* build_sound = nullptr;
         const PackageImage* image = nullptr;
+        bool service = false;
         bool ok = true;
         for (const core::DataEntry& e : t.entries) {
             const std::string field = line_of(where, e.value.line) + "'" + e.key + "' ";
@@ -146,12 +162,41 @@ void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& ow
                                        "for always)");
                     ok = false;
                 }
+            } else if (e.key == "figure") {
+                // Its carriers or workers: a figure of the original's or one a package added.
+                const std::string* s = e.value.string();
+                if (s != nullptr && figures != nullptr) {
+                    figure = figure_number(own_figures, *figures, *s);
+                }
+                if (!figure) {
+                    warnings.push_back(field +
+                                       "names no single figure (anno1602:<name or number> or <package>:<name>)");
+                    ok = false;
+                }
+            } else if (e.key == "build_sound") {
+                const std::string* s = e.value.string();
+                build_sound = s != nullptr ? find_package_sound(sounds, *s) : nullptr;
+                if (build_sound == nullptr) {
+                    warnings.push_back(field + "names no sound of a package (sounds.toml, <package>:<name>)");
+                    ok = false;
+                }
+            } else if (e.key == "service") {
+                if (e.value.boolean() == nullptr) {
+                    warnings.push_back(field + "is true or false");
+                    ok = false;
+                } else {
+                    service = *e.value.boolean();
+                }
             } else {
                 warnings.push_back(field + "is no field of a building of a package and is passed over");
             }
         }
         if (!ok) {
             continue;
+        }
+        // A replacement starts from the building it replaces, unless it names another.
+        if (like == nullptr && replaced != nullptr) {
+            like = table.by_id(replaced->number);
         }
         if (like == nullptr) {
             warnings.push_back(at + id + " names no building to copy ('like')");
@@ -180,22 +225,46 @@ void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& ow
         if (ware) {
             b.ware = *ware;
         }
+        // A good it uses no more ("") takes no amount either: it makes its good from nothing.
         if (raw) {
             b.raw_ware = *raw;
+            if (*raw == 0) {
+                b.raw_amount = 0;
+            }
         }
         if (raw2) {
             b.raw2_ware = *raw2;
+            if (*raw2 == 0) {
+                b.raw2_amount = 0;
+            }
+        }
+        if (figure) {
+            b.worker_figure = static_cast<std::uint16_t>(*figure);
+        }
+        if (build_sound != nullptr) {
+            b.build_sound = build_sound->number;
+        }
+        // A service of its own: the place of its id among the services (own_services warned of more).
+        b.own_service = 0;
+        if (const auto it = std::find(services.begin(), services.end(), id);
+            service && it != services.end() && it - services.begin() < static_cast<std::ptrdiff_t>(kMaxOwnServices)) {
+            b.own_service = public_building::own(static_cast<std::size_t>(it - services.begin()));
         }
         // The image holds every sprite the building draws: its tiles, turned four ways, in every
         // frame of its animation (render::building_sprite).
         if (image != nullptr) {
-            const std::uint64_t needed = std::uint64_t{b.tile_count()} + std::uint64_t{b.rotate} * 3 +
-                                         (b.anim_count > 1 ? std::uint64_t{b.anim_add} * (b.anim_count - 1) : 0);
+            const std::uint64_t needed = building_sprite_count(b);
             if (needed > image->count) {
                 warnings.push_back(at + id + ": its image " + image->id + " holds " + std::to_string(image->count) +
                                    " sprites, the building draws " + std::to_string(needed));
                 continue;
             }
+        }
+        if (replaced != nullptr) {
+            if (auto status = table.replace(replaced->number, b); !status) {
+                warnings.push_back(at + id + ": " + status.error().message);
+            }
+            continue;
         }
         const auto number = table.add(b);
         if (!number) {
@@ -204,6 +273,34 @@ void apply_own_buildings_file(BuildingTable& table, std::vector<OwnBuilding>& ow
         }
         own.push_back(OwnBuilding{id, *number});
         ++added;
+    }
+}
+
+void own_services(std::vector<std::string>& services, std::string_view package, std::string_view utf8,
+                  std::vector<std::string>& warnings) {
+    auto tables = core::parse_data_file(utf8);
+    if (!tables) {
+        return;  // apply_own_buildings_file reports it
+    }
+    const std::string where = std::string(package) + "/" + std::string(kOwnBuildingsFile);
+    for (const core::DataTable& t : *tables) {
+        const auto service = std::find_if(t.entries.begin(), t.entries.end(), [](const core::DataEntry& e) {
+            return e.key == "service" && e.value.boolean() != nullptr && *e.value.boolean();
+        });
+        if (service == t.entries.end() || t.name.empty()) {
+            continue;
+        }
+        const std::string id = t.name.find(':') != std::string::npos ? t.name : std::string(package) + ":" + t.name;
+        if (std::find(services.begin(), services.end(), id) != services.end()) {
+            continue;
+        }
+        if (services.size() >= kMaxOwnServices) {
+            warnings.push_back(line_of(where, service->value.line) + id + ": a game has at most " +
+                               std::to_string(kMaxOwnServices) +
+                               " public buildings of a kind of their own; it counts as the building it copies");
+            continue;
+        }
+        services.push_back(id);
     }
 }
 

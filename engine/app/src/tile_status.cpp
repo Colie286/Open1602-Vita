@@ -3,13 +3,16 @@
 
 #include <array>
 #include <cstddef>
+#include <span>
 #include <string_view>
 #include <vector>
 
 #include "event_presenter.hpp"
 
+#include "o1602/sim/construction.hpp"
 #include "o1602/sim/game_data.hpp"
 #include "o1602/ui/build_menu.hpp"
+#include "o1602/ui/localization.hpp"
 #include "o1602/ui/text_format.hpp"
 
 namespace o1602::app {
@@ -27,7 +30,7 @@ constexpr std::size_t kLeisteNativeWarrior = 227;
 // [LANDSCHAFT] line of the natives' houses on a pirate island.
 constexpr std::size_t kLandscapeNativeHut = 2;
 
-/// The list the original keeps after the build menu's (0x00498610), named from [LANDSCHAFT].
+/// The list the original keeps after the build menu's, named from [LANDSCHAFT].
 constexpr auto kLandscapeIds = sim::id::kLandscape;
 
 std::string line(const assets::TextTable& texts, std::string_view section, std::size_t i) {
@@ -39,31 +42,49 @@ std::string name_of(const assets::BuildingType* b, const assets::TextTable& text
     return b != nullptr ? menu_name(b->id, texts) : std::string();
 }
 
-/// "Geeignet für: ..." with the climate's three crops (Text.cod GAME 22).
-std::string crops_line(const sim::WorldIsland& island, const assets::TextTable& texts) {
+/// "Geeignet für: ..." with the climate's three crops (Text.cod GAME 22). A climate of a package
+/// names itself first and lists its own crops in the same way.
+std::string crops_line(const sim::WorldIsland& island, std::span<const sim::Climate> climates,
+                       const assets::TextTable& texts) {
     const std::vector<std::string>& raw = texts.section("ROHST");
     const auto crop = [&](std::uint8_t ware) {
         const std::size_t i = std::size_t{ware} - sim::ware::kCornField;  // [ROHST] starts with grain
         return i < raw.size() ? std::string_view(raw[i]) : std::string_view();
     };
-    const auto crops = island_crops(island);
+    const auto crops = island_crops(island, climates);
     const std::string pattern = line(texts, "GAME", kGameSuited);
     if (pattern.empty()) {
         return {};
     }
-    return ui::format_text(pattern,
-                           {crop(crops[0].first), std::int64_t{crops[0].second}, crop(crops[1].first),
-                            std::int64_t{crops[1].second}, crop(crops[2].first), std::int64_t{crops[2].second}});
+    const sim::Climate* own = sim::island_climate(climates, island);
+    if (own == nullptr && crops.size() == 3) {
+        return ui::format_text(pattern,
+                               {crop(crops[0].first), std::int64_t{crops[0].second}, crop(crops[1].first),
+                                std::int64_t{crops[1].second}, crop(crops[2].first), std::int64_t{crops[2].second}});
+    }
+    // "Geeignet für: " and one "%s: %d%%" per crop, " - " between them, as the pattern has it.
+    const std::size_t first = pattern.find("%s");
+    const std::size_t next = first == std::string::npos ? first : pattern.find("%s", first + 2);
+    if (next == std::string::npos) {
+        return {};
+    }
+    const std::string one = pattern.substr(first, pattern.find(" - ", first) - first);
+    std::string text =
+        (own != nullptr ? own->name(ui::current_language()) + " - " : std::string()) + pattern.substr(0, first);
+    for (std::size_t i = 0; i < crops.size(); ++i) {
+        text += (i == 0 ? "" : " - ") + ui::format_text(one, {crop(crops[i].first), std::int64_t{crops[i].second}});
+    }
+    return text;
 }
 
 /// A raw material on the map (Kind ROHSTOFF, or the ripe record after a growing one).
-std::string raw_material(const assets::BuildingType& ripe, const sim::WorldIsland& island, sim::PlayerId local,
-                         const assets::TextTable& texts) {
+std::string raw_material(const assets::BuildingType& ripe, const sim::WorldIsland& island,
+                         std::span<const sim::Climate> climates, sim::PlayerId local, const assets::TextTable& texts) {
     const std::uint8_t w = ripe.ware;
     if (w == sim::ware::kGrass || w == sim::ware::kTree) {
         // Only who has explored the island learns what it grows; nothing to say otherwise.
-        return island.explored_by(local) && island.header.climate < sim::climate::kCount ? crops_line(island, texts)
-                                                                                         : std::string();
+        const bool known = island.header.climate < sim::climate::kCount || island.climate != 0;
+        return island.explored_by(local) && known ? crops_line(island, climates, texts) : std::string();
     }
     if (w == 0) {
         // The record after a withered field is the next crop's growing one, without a ware.
@@ -103,6 +124,9 @@ std::string unit_status(const sim::World& world, const ui::UnitRef& unit, const 
         if (s == nullptr) {
             return {};
         }
+        if (s->cart()) {
+            return ui::tr("unit.trade_cart");  // the game's texts have no line for it
+        }
         switch (behaviour(s->owner)) {
             case sim::FactionBehaviour::Pirates:
                 return line(texts, "LEISTE", kLeistePirateShip);
@@ -127,11 +151,12 @@ std::string unit_status(const sim::World& world, const ui::UnitRef& unit, const 
 }
 
 std::string tile_status(const sim::WorldIsland& island, std::int32_t x, std::int32_t y, sim::PlayerId local,
-                        const assets::BuildingTable& buildings, const assets::TextTable& texts) {
+                        const assets::BuildingTable& buildings, const assets::TextTable& texts,
+                        std::span<const sim::Climate> climates) {
     if (!island.map.contains(x, y)) {
         return {};
     }
-    // Who has not discovered the island sees its terrain only (island +0xAFC instead of +0xAF8).
+    // Who has not discovered the island sees its terrain only.
     const auto ux = static_cast<std::uint32_t>(x);
     const auto uy = static_cast<std::uint32_t>(y);
     const sim::MapCell& cell = island.discovered_by(local) ? island.map.top(ux, uy) : island.map.ground(ux, uy);
@@ -141,10 +166,10 @@ std::string tile_status(const sim::WorldIsland& island, std::int32_t x, std::int
     }
     switch (b->prod_kind) {
         case sim::prod::kRipe:
-            return raw_material(*b, island, local, texts);
+            return raw_material(*b, island, climates, local, texts);
         case sim::prod::kGrowing: {
             const assets::BuildingType* ripe = buildings.by_record(b->record + 1);
-            return ripe != nullptr ? raw_material(*ripe, island, local, texts) : std::string();
+            return ripe != nullptr ? raw_material(*ripe, island, climates, local, texts) : std::string();
         }
         case sim::prod::kHouse:
             return line(texts, "WOHNHAUS", 0);

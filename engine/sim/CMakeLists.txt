@@ -3,6 +3,7 @@
 
 add_library(o1602_sim
     src/ai/ai_build.cpp
+    src/ai/ai_chains.cpp
     src/ai/ai_core.cpp
     src/ai/ai_logistics.cpp
     src/ai/ai_military.cpp
@@ -10,6 +11,7 @@ add_library(o1602_sim
     src/ai/ai_settle.cpp
     src/ai/ai_sites.cpp
     src/ai/ai_world.cpp
+    src/blueprints.cpp
     src/construction.cpp
     src/carts.cpp
     src/castles.cpp
@@ -45,13 +47,18 @@ add_library(o1602_sim
     src/save/ships.cpp
     src/save/world.cpp
     src/savegame_extension.cpp
+    src/scenario_data.cpp
     src/score.cpp
     src/victory.cpp
     src/save_game.cpp
     src/savegame_writer.cpp
+    src/island_shapes.cpp
     src/island_templates.cpp
     src/world_generator.cpp
     src/world_plan.cpp
+    src/package_islands.cpp
+    src/package_landscapes.cpp
+    src/climates.cpp
     src/new_game.cpp
     src/sea_paths.cpp
     src/ship_orders.cpp
@@ -62,11 +69,14 @@ add_library(o1602_sim
     src/player.cpp
     src/faction.cpp
     src/balance.cpp
+    src/computer_orders.cpp
+    src/computer_slots.cpp
     src/production_cycle.cpp
     src/simulation.cpp
     src/soldiers.cpp
     src/volcanoes.cpp
     src/world.cpp
+    src/world_islands.cpp
 )
 add_library(o1602::sim ALIAS o1602_sim)
 

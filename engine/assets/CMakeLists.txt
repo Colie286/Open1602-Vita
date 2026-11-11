@@ -14,9 +14,16 @@ add_library(o1602_assets
     src/goods.cpp
     src/original_names.cpp
     src/own_buildings.cpp
+    src/package_scenarios.cpp
     src/package_graphics.cpp
+    src/package_sounds.cpp
     src/resident_classes.cpp
+    src/building_looks.cpp
+    src/package_arms.cpp
+    src/package_flags.cpp
+    src/package_interface.cpp
     src/figure_looks.cpp
+    src/own_figures.cpp
     src/figure_table.cpp
     src/gad.cpp
     src/high_scores.cpp

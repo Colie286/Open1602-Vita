@@ -25,10 +25,11 @@ namespace panel_detail {
 
 inline constexpr std::uint8_t kFirstTradeWare = sim::ware::kFirstTrade;
 inline constexpr std::uint8_t kLastTradeWare = sim::ware::kLastTrade;
-/// An empty hold or stock slot shows the ware "Leer" (GFXWARE + 0 = GFXWARELEER + 4: sand). The
-/// four pictures from GFXWARELEER are frames (green, yellow, black, wide yellow): the yellow one
-/// marks the chosen ware and is no picture of its own.
-inline constexpr std::int32_t kEmptyHold = 4;
+/// An empty hold or stock slot shows the water texture (GFXWARE + 1 = GFXWARELEER + 5), as in the
+/// History Edition; the ware "Leer" itself (GFXWARE + 0) is sand. The four pictures from GFXWARELEER
+/// are frames (green, yellow, black, wide yellow): the yellow one marks the chosen ware and is no
+/// picture of its own.
+inline constexpr std::int32_t kEmptyHold = 5;
 
 /// A help line (LEISTE section of Text.cod).
 inline std::string help_line(const PanelContext& c, std::size_t line) {
@@ -48,6 +49,35 @@ inline sim::ShipCommand mount_cannons(const sim::Ship& ship, std::size_t hold, c
         o.hold = static_cast<std::uint8_t>(hold);
     }
     return o;
+}
+
+/// A click on the mounted cannons (or the button that takes one off) of an own ship: one of them
+/// into a hold, with Shift as many as the holds have room for (Open1602), all in one command.
+inline sim::ShipCommand unmount_cannons(const sim::Ship& ship, const PanelContext& c) {
+    sim::ShipCommand o;
+    o.player = c.local;
+    o.ship = ship.id;
+    o.op = sim::ShipCommand::Op::UnmountCannon;
+    if (c.shift) {
+        o.count = sim::ShipCommand::kAllCannons;
+    }
+    return o;
+}
+
+/// The help line of the mounted cannons of a ship ("2 Kanonen"); with cannons on an own ship it
+/// tells that Shift+click takes them all off (Open1602).
+inline std::string mounted_cannons_help(const sim::Ship& ship, const PanelContext& c) {
+    if (ship.cannons == 0) {
+        return c.text("GAME", 24);
+    }
+    std::string text = ui::format_text(c.text("GAME", 23), {std::int64_t{ship.cannons}});
+    return ship.owner == c.local ? ui::tr("ship.cannons_mounted", {text}) : text;
+}
+
+/// The help line of the button that takes a mounted cannon off, with how Shift takes them all (Open1602).
+inline std::string unmount_cannon_help(const sim::Ship& ship, const PanelContext& c) {
+    std::string text = help_line(c, 119);
+    return ship.owner == c.local && ship.cannons > 0 ? ui::tr("ship.cannons_unmount", {text}) : text;
 }
 
 /// The help line of a hold of a ship: its goods ("10t Kanonen"), or empty. With `mounting` (a click
@@ -80,8 +110,18 @@ inline const sim::City* city_at(const Selection& s, const PanelContext& c) {
     return map.contains(s.x, s.y) ? c.world().city(s.island, map.top(s.x, s.y).city) : nullptr;
 }
 
-/// LAGER: the stock of a city, also the ware picker of the Kontor lists and the route editor
-/// (StockPanel_Refresh 0x00434810).
+/// Whether a city is a native village.
+inline bool natives_city(const sim::City& city, const PanelContext& c) {
+    const sim::Player* p = c.world().player(city.owner);
+    return p != nullptr && c.world().behaviour(*p) == sim::FactionBehaviour::Natives;
+}
+
+/// The name plate of a city in a window (every gadget of `panel` drawn with GFXOVERHEAD + 0, the
+/// house): the hut (GFXOVERHEAD + 4) for a native village, the house for any other city, as in the
+/// original.
+void set_city_plate(ui::Panel& panel, const sim::City& city, const PanelContext& c);
+
+/// LAGER: the stock of a city, also the ware picker of the Kontor lists and the route editor.
 class StockList {
 public:
     /// Minutes the goods trend is averaged over (the window "Warenbilanz" opens on the same).
@@ -119,7 +159,7 @@ private:
 };
 
 /// HANDEL: what a foreign Kontor wants (up to its limit) and offers (above what it keeps), also
-/// the ware picker of the route editor at a foreign city (ForeignKontorPanel_Refresh).
+/// the ware picker of the route editor at a foreign city.
 class TradeLists {
 public:
     static constexpr std::int32_t kDemandFrame = 53051;  ///< + row, 11 rows

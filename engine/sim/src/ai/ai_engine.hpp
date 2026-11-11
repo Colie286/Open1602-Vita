@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The machinery of the computer players (docs/re/ai.md). One Engine works on the shared State for
+// The machinery of the computer players. One Engine works on the shared State for
 // the duration of a call; the methods are spread over several files by subsystem:
 //   ai_core.cpp      scheduler, task stack, root task, (re)initialisation, saving
 //   ai_world.cpp     what the AI reads from the world (tiles, cities, land)
@@ -17,10 +17,13 @@
 #include <span>
 #include <vector>
 
+#include "ai_chains.hpp"
 #include "ai_state.hpp"
 
 #include "o1602/assets/building_table.hpp"
 #include "o1602/assets/figure_table.hpp"
+#include "o1602/sim/computer_orders.hpp"
+#include "o1602/sim/computer_slots.hpp"
 #include "o1602/sim/construction.hpp"
 #include "o1602/sim/game_data.hpp"
 #include "o1602/sim/ship.hpp"
@@ -46,6 +49,8 @@ namespace o1602::sim::ai {
 
 /// What the survey of a city (task 8) found to clear away: exhausted mines, and sheep farms and
 /// small weavers for when cotton grows on the island.
+struct Cheats;  // ai_tables.hpp
+
 struct SurveyFinds {
     std::vector<std::pair<std::int32_t, std::int32_t>> starved_mines;
     std::vector<std::pair<std::int32_t, std::int32_t>> sheep;
@@ -53,34 +58,8 @@ struct SurveyFinds {
 };
 
 /// One entry of the build order of a city's stage (run_stage): something the city may need, tried
-/// in the order of the stage's table.
-struct StageNeed {
-    enum class Kind : std::uint8_t {
-        Building,      ///< need(slot, n)
-        Market,        ///< need_market(n)
-        Houses,        ///< need_houses(n)
-        Public,        ///< need_public(slot, n, flag)
-        Kontor,        ///< need_kontor(n): the Kontor's level
-        Castle,        ///< need_castle()
-        Monument,      ///< need_denkmal()
-        Shipyard,      ///< need_shipyard()
-        Processing,    ///< processing()
-        IronTools,     ///< iron_tools()
-        Weapons,       ///< weapons()
-        Luxury,        ///< luxury(n, flag)
-        ColonyLuxury,  ///< colony_luxury(): one luxury field per n tiles of land
-        Tower,         ///< need_tower(1, n)
-        RoadsIfMason,  ///< roads_if_mason()
-        Colony,        ///< want_colony(n): n is the mode
-    };
-    /// A condition on the gold the player had when the stage ran.
-    enum class When : std::uint8_t { Never, Always, Gold4000, Gold5000, Gold8000 };
-    Kind kind = Kind::Building;
-    std::uint8_t slot = 0;
-    std::uint32_t n = 0;
-    When flag = When::Never;   ///< Public: `cov`; Luxury: `exclusive`
-    When when = When::Always;  ///< the entry is tried only then
-};
+/// in the order of the stage's list (computer_orders.hpp).
+using StageNeed = ComputerNeed;
 
 /// Game ms between two steps of a computer player (the original's 50 ms main timer).
 inline constexpr std::int32_t kStepMs = 50;
@@ -116,7 +95,7 @@ struct Tile {
     std::uint8_t raw = 0;
     std::uint8_t city = MapCell::kNoCity;
     PlayerId owner = kNoPlayer;
-    bool origin = false;  ///< the reference tile of its building (0x004633E0)
+    bool origin = false;  ///< the reference tile of its building
     std::int32_t ox = 0;  ///< origin of the building
     std::int32_t oy = 0;
     std::uint8_t growth = 0;  ///< Randwachs * 32 / 128
@@ -136,9 +115,9 @@ struct Acc {
 
 /// Which tiles a ring iterator visits.
 enum class RingFilter : std::uint8_t {
-    Own,       ///< tiles of the current city (0x00410A80)
-    OwnOrSea,  ///< and open sea (0x00410800)
-    Any,       ///< everything (0x00410C90)
+    Own,       ///< tiles of the current city
+    OwnOrSea,  ///< and open sea
+    Any,       ///< everything
 };
 
 /// How a city reaches a deposit of its island (Open1602, Engine::deposit_access): a mine needs a
@@ -149,7 +128,7 @@ enum class DepositAccess : std::uint8_t {
     Closed,  ///< every slope there belongs to another city
 };
 
-/// A Need of the stage handlers (0x0041FE60..0x00422610): what to build and when.
+/// A Need of the stage handlers: what to build and when.
 enum class NeedType : std::uint8_t { A, B, C, D };
 
 /// Summed-area table of a predicate over an island, for counts in rectangles.
@@ -202,6 +181,8 @@ public:
     /// Whether a state read from a save or a host's snapshot can be run on this world: every
     /// value a step uses as an index or a count is in range (HI-1).
     [[nodiscard]] bool accepts(const State& state) const;
+    /// The producers of the packages' goods the computers build (ai_chains.hpp).
+    [[nodiscard]] const std::vector<PackageNeed>& package_needs() const noexcept { return m_package_needs; }
 
 private:
     // ---- ai_core.cpp ----
@@ -244,33 +225,33 @@ private:
         return pl != nullptr ? *pl : m_nobody;
     }
     [[nodiscard]] std::uint32_t own_city_count(PlayerId owner) const;
-    /// Inhabitants of classes `from` and higher (0x0040F430 compares with it).
+    /// Inhabitants of classes `from` and higher (compares with it).
     [[nodiscard]] std::uint32_t population(const City& c, std::size_t from = 0) const;
     [[nodiscard]] bool has_population(const City& c, std::size_t from, std::uint32_t n) const {
         return population(c, from) >= n;
     }
-    /// Demand of a city for a consumer good, 1/32 t per minute (0x0047F7B0).
+    /// Demand of a city for a consumer good, 1/32 t per minute.
     [[nodiscard]] std::uint32_t demand(const City& c, std::uint8_t ware) const;
     [[nodiscard]] std::uint32_t kontor_level(const City& c) const;
     /// Tiles of the city's Kontor each way (its record's size).
     [[nodiscard]] std::int32_t kontor_size(const City& c) const;
-    /// Markets and Kontors of a city (city + 0x1FA) and all its buildings (city + 0x216).
+    /// Markets and Kontors of a city and all its buildings.
     [[nodiscard]] std::uint32_t market_count(const City& c) const;
     [[nodiscard]] std::uint32_t building_count(const City& c) const;
     /// Usable land of a city: the island's tiles minus those of other cities, coast, rock and
-    /// rivers (0x0040E8B0); `percent` out.
+    /// rivers; `percent` out.
     [[nodiscard]] std::uint32_t free_land(std::uint16_t island, std::uint8_t city, std::uint32_t* percent) const;
-    /// Civilisation level 0..4 (0x0040F3A0): highest of INFRA_STUFE_2D, 3C, 4B, 5A unlocked.
+    /// Civilisation level 0..4: highest of INFRA_STUFE_2D, 3C, 4B, 5A unlocked.
     [[nodiscard]] std::uint32_t civ_level(const AiPlayer& p) const;
     [[nodiscard]] bool unlocked(const AiPlayer& p, const assets::BuildingType& b) const;
-    /// Money and goods of the current city cover the building (0x0041D120).
+    /// Money and goods of the current city cover the building.
     [[nodiscard]] bool affordable(const AiPlayer& p, const City& c, const assets::BuildingType& b) const;
-    /// First producer of `ware` from `raw` (0x0040FE00): the table the original builds at AI_Init.
+    /// First producer of `ware` from `raw`: the table the original builds at AI_Init.
     [[nodiscard]] const assets::BuildingType* producer(std::uint8_t ware, std::uint8_t raw) const;
     [[nodiscard]] const assets::BuildingType* by_id(std::uint32_t id) const { return m_buildings.by_id(id); }
-    /// Fertility of an island for a crop or resource (0x0046AFF0): 0, 64 or 128.
+    /// Fertility of an island for a crop or resource: 0, 64 or 128.
     [[nodiscard]] std::uint32_t fertility(std::uint16_t island, std::uint8_t ware) const;
-    /// Crops of an island that grow fully among spices, tobacco, wine, cotton, cocoa, sugar (0x004224F0).
+    /// Crops of an island that grow fully among spices, tobacco, wine, cotton, cocoa, sugar.
     [[nodiscard]] std::uint32_t full_crops(std::uint16_t island) const;
     [[nodiscard]] std::uint8_t difficulty() const { return m_world.game_settings().difficulty; }
     [[nodiscard]] std::uint64_t now_ms() const { return m_world.time_ms(); }
@@ -284,13 +265,13 @@ private:
     /// Goods into or out of a city without a trade (building costs, subsidies).
     void add_goods(City& c, std::uint8_t ware, std::uint32_t amount);
     std::uint32_t remove_goods(City& c, std::uint8_t ware, std::uint32_t amount);
-    /// Behind the leading human (0x0040E9B0), threatened (0x0040F1D0).
+    /// Behind the leading human, threatened.
     [[nodiscard]] bool behind(const AiPlayer& p) const;
     [[nodiscard]] bool threatened(const AiPlayer& p) const;
-    /// A scenario keeps the computer from building while it is at peace with every human
-    /// (0x0040EEF0); ends the switch when it is not.
+    /// A scenario keeps the computer from building while it is at peace with every human;
+    /// ends the switch when it is not.
     bool peaceful(AiPlayer& p);
-    /// Task 5 in the tutorial: only the money (0x00428E30).
+    /// Task 5 in the tutorial: only the money.
     void tutorial_money(AiPlayer& p);
     /// The world is the tutorial (TIMERS +0xA5): its computers stay as they are.
     [[nodiscard]] bool tutorial() const noexcept { return m_world.game_settings().tutorial; }
@@ -329,12 +310,33 @@ private:
     void set_stage(AiPlayer& p, CityPlan& r, std::uint8_t s);
     void nothing_to_do(AiPlayer& p);
     void run_stage(AiPlayer& p, City& c, CityPlan& r);
-    bool first_need(AiPlayer& p, const City& c, const CityPlan& r, std::int32_t money,
-                    std::span<const StageNeed> needs);
+    /// Open1602: `n` grown with the free land of a city past the settlers (kGrowLand), so that a
+    /// computer fills a large island; `n` itself for the original's computers and smaller cities.
+    /// `any_stage`: for a colony too (its caps on fields and farms).
+    [[nodiscard]] std::uint32_t grown(const CityPlan& r, std::uint32_t n, bool any_stage = false) const;
+    /// Open1602: the houses of an order, `grown` only while at most an eighth of the city's houses
+    /// hold pioneers, so that a city grows tall before it grows wide.
+    [[nodiscard]] std::uint32_t houses_wanted(const City& c, const CityPlan& r, std::uint32_t n) const;
+    /// `grow`: with the numbers `grown` by the city's land (houses: `houses_wanted`).
+    bool first_need(AiPlayer& p, const City& c, const CityPlan& r, std::int32_t money, std::span<const StageNeed> needs,
+                    bool grow = false);
     void unload_ship(AiPlayer& p, City& c);
     bool colony_luxury(AiPlayer& p, const City& c, const CityPlan& r, std::uint32_t tiles_per_field);
     bool farm_animals(AiPlayer& p, const CityPlan& r);
     bool need(AiPlayer& p, std::uint8_t which, std::uint32_t n, bool cov = false);
+    /// The producers of the packages' goods the city lacks (ai_chains.hpp): true if one was planned.
+    bool package_chains(AiPlayer& p, const City& c, const CityPlan& r);
+    bool package_need(AiPlayer& p, const City& c, const CityPlan& r, const PackageNeed& n, std::uint32_t wanted);
+    /// An order's entry for the package's good `w`: `wanted` producers, if the computers build any.
+    bool package_order(AiPlayer& p, const City& c, const CityPlan& r, std::uint8_t w, std::uint32_t wanted);
+    /// The money and goods the computers get from nowhere, from the game's balance.
+    [[nodiscard]] Cheats cheats() const;
+    /// The slots of the game's city records (Balance::computer_slots, else the original's).
+    [[nodiscard]] const std::vector<ComputerSlot>& slots() const {
+        return computer_slots_of(m_world.balance().computer_slots);
+    }
+    /// The slot of the package's Need that makes `w`, if any.
+    [[nodiscard]] std::optional<std::uint8_t> package_slot(std::uint8_t w) const;
     bool need_houses(AiPlayer& p, std::uint32_t n);
     bool need_market(AiPlayer& p, std::uint32_t n);
     bool need_kontor(AiPlayer& p, std::uint32_t level);
@@ -404,7 +406,7 @@ private:
                                         std::uint8_t dir) const;
     bool farm_room(AiPlayer& p, const assets::BuildingType& b, std::int32_t x0, std::int32_t y0, std::int32_t x1,
                    std::int32_t y1);
-    [[nodiscard]] std::uint16_t house_services(std::uint16_t island, std::int32_t x, std::int32_t y) const;
+    [[nodiscard]] assets::ServiceBits house_services(std::uint16_t island, std::int32_t x, std::int32_t y) const;
 
     // ---- ai_logistics.cpp ----
     void logistics(AiPlayer& p);
@@ -425,6 +427,12 @@ private:
     std::optional<std::size_t> supply_source(AiPlayer& p, std::uint16_t home_island, std::uint8_t ware,
                                              std::uint16_t* price);
     bool home_supply_route(AiPlayer& p, Ship& s, City& home);
+    /// The wares a supply run brings to `home`, and how much of each it keeps (`target`).
+    [[nodiscard]] std::vector<std::uint8_t> supply_wares(const AiPlayer& p, const City& home,
+                                                         std::uint32_t* target) const;
+    /// Improved computers: each city's trade cart fetches a ware the city lacks from a partner's
+    /// city on its island.
+    void cart_supply(AiPlayer& p);
     void update_fleet_target(AiPlayer& p);
     void order_ship(AiPlayer& p);
     /// The original's: the cheapest offered ship, for a computer without ships or yard.
@@ -466,11 +474,21 @@ private:
     [[nodiscard]] std::vector<std::uint8_t> land_reach(PlayerId owner, std::uint16_t island,
                                                        const std::vector<std::uint32_t>& soldiers) const;
     /// Open1602: keeps the goals of an attack the soldiers can walk up to; with none of them, the
-    /// buildings of the city they can walk up to (its walls, gates and towers first), nearest to
-    /// the first goal first.
+    /// first obstacle on the cheapest way to one (`way_in`).
     void reachable_goals(const AiPlayer& a, std::uint16_t island, const City& hostile,
                          const std::vector<std::uint32_t>& soldiers,
                          std::vector<std::pair<std::int32_t, std::int32_t>>& goals) const;
+    /// Open1602: the tree, field, wall, gate or building of `hostile`'s owner that stands first on
+    /// the cheapest way from the tiles in `reach` to a tile with a goal (`goal_at` >= 0), by its
+    /// origin; none if no way leads there.
+    [[nodiscard]] std::optional<std::pair<std::int32_t, std::int32_t>> way_in(
+        const AiPlayer& a, std::uint16_t island, const City& hostile, const std::vector<std::uint8_t>& reach,
+        const std::vector<std::int16_t>& goal_at) const;
+    /// Open1602: sends the soldiers on `island` against the soldiers of `enemies` that stand in
+    /// one of its cities there; whether it gave an order.
+    bool defend(AiPlayer& a, std::uint16_t island, const std::vector<PlayerId>& enemies);
+    /// The island the soldier controller looks at next (the original: simply the next one).
+    [[nodiscard]] std::optional<std::uint16_t> next_watched_island();
     void island_controller();
     void diplomacy(AiPlayer& p);
     void pirate_step(AiPlayer& p);
@@ -507,6 +525,16 @@ private:
     /// False for a tile that is no building origin of the city (the survey has nothing there).
     bool survey_tile(AiPlayer& p, const City& c, CityPlan& r, std::uint32_t x, std::uint32_t y, SurveyFinds& finds);
     void sweep(AiPlayer& p);
+    /// Some human still in the game has no peace treaty with the computer.
+    [[nodiscard]] bool at_war_with_a_human(const AiPlayer& p) const;
+    /// The wall or gate the sweep puts on tile (x, y) of the current city, if any. At war: walls
+    /// on the border away from other cities and on the coast. At peace: walls on the border
+    /// towards other cities and on the coast, gates where a wall crosses a road. A road under a
+    /// new wall is demolished at once.
+    std::optional<BuildItem> wall_item(AiPlayer& p, const City& c, const Tile& t, std::int32_t x, std::int32_t y,
+                                       bool war);
+    /// A wall of the city with no coast within two tiles and no neighbour outside the city.
+    [[nodiscard]] bool inner_wall(AiPlayer& p, std::int32_t x, std::int32_t y);
     void kontor_restore(AiPlayer& p);
     std::size_t build(AiPlayer& p, std::vector<BuildItem> items, bool orient);
     std::int32_t road_line(AiPlayer& p, std::int32_t x, std::int32_t y, std::int32_t len, std::uint8_t dir, bool force);
@@ -529,8 +557,10 @@ private:
     const assets::BuildingTable& m_buildings;
     State& m_state;
     Player m_nobody;  ///< stands in for a player slot that is gone
-    /// Producers by ware (0x006C2B20): up to four records per ware, in file order.
+    /// Producers by ware: up to four records per ware, in file order.
     std::vector<std::vector<const assets::BuildingType*>> m_producers;
+    /// The producers of the packages' goods, slots kSlots and up (ai_chains.hpp).
+    std::vector<PackageNeed> m_package_needs;
 
     /// Soldiers and ships counted once per AI tick (TB-9): the computers ask for them per island
     /// and per player many times a tick. Used only inside tick(), where the units change only
@@ -547,6 +577,8 @@ private:
     };
     [[nodiscard]] const Census* census() const;
     mutable Census m_census;
+    /// Free land from which `grown` grows a stage's orders, during the grow pass of `run_stage`.
+    std::uint32_t m_grow_from = 0;  ///< 0: kGrowFrom
     /// The order and plan of can_place(), reused so that a site test allocates nothing.
     mutable BuildOrder m_place_order;
     mutable BuildPlan m_place_plan;
@@ -599,7 +631,7 @@ private:
     bool m_in_tick = false;
 };
 
-/// Ring iterator (0x00410A80 and relatives): ring d (Chebyshev distance d + 1) around the
+/// Ring iterator: ring d (Chebyshev distance d + 1) around the
 /// rectangle, top row, then the sides top to bottom, then the bottom row.
 template <class F>
 void Engine::rings(AiPlayer& p, RingFilter filter, std::int32_t x0, std::int32_t y0, std::int32_t x1, std::int32_t y1,

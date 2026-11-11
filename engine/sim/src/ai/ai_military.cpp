@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Military, diplomacy and the pirates' nest of the computer players (docs/re/ai.md, "Military and diplomacy"):
+// Military, diplomacy and the pirates' nest of the computer players:
 // recruiting and guards every 6 s, ship missions with the logistics every 10 s, a look at one
 // foreign city after every step, the soldiers on one island per tick, the treaties every 30 s.
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <functional>
+#include <limits>
+#include <optional>
+#include <queue>
 #include <span>
 
 #include "ai_engine.hpp"
@@ -16,14 +20,23 @@ namespace o1602::sim::ai {
 
 namespace {
 
-/// Guard posts kept per city (the original's list at R+0x188).
+/// Guard posts kept per city.
 constexpr std::size_t kMaxPosts = 64;
 
-/// The pirate nest's offer comes again after more than 42 s (0x1A4 tenths, task 5 at 0x00429DF0).
+/// The pirate nest's offer comes again after more than 42 s (0x1A4 tenths, task 5).
 constexpr std::uint64_t kNestOfferMs = 42'000;
 
-std::uint32_t family_index(std::uint32_t figure) {
+/// The index in figure::kUnitFamilies of a unit's family, for a unit of a package that of the
+/// original's unit of its kind (Kind, as its hold shows it); 0 for other figures.
+std::uint32_t family_index(const assets::FigureTable* figures, std::uint32_t figure) {
     const auto v = assets::FigureTable::unit_variant(figure);
+    if (!v && figures != nullptr) {
+        if (const auto own = figures->unit_of(figure)) {
+            if (const assets::FigureType* t = figures->get(own->family)) {
+                return static_cast<std::uint32_t>(std::clamp<std::int32_t>(t->kind, 1, 4) - 1);
+            }
+        }
+    }
     const std::uint32_t family = v ? v->family : figure;
     for (std::uint32_t i = 0; i < figure::kUnitFamilies.size(); ++i) {
         if (figure::kUnitFamilies[i] == family) {
@@ -40,7 +53,7 @@ std::uint32_t city_param(const City& c) {
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------
-// Armies (0x0040EAE0, 0x0040ED50)
+// Armies
 
 const Engine::Census* Engine::census() const {
     if (!m_in_tick) {
@@ -68,7 +81,7 @@ const Engine::Census* Engine::census() const {
             ++c.on_island[std::size_t{s.owner} * c.islands + s.island];
         }
         if (!s.dying()) {
-            ++c.army[s.owner][family_index(s.figure)];
+            ++c.army[s.owner][family_index(m_sim.m_figures, s.figure)];
         }
     }
     const auto& ships = m_world.ships();
@@ -79,7 +92,7 @@ const Engine::Census* Engine::census() const {
         }
         for (const CargoSlot& slot : s.cargo) {
             if (is_soldier_ware(slot.ware)) {
-                ++c.aboard[s.owner][family_index(unit_of_ware(slot.ware))];
+                ++c.aboard[s.owner][family_index(m_sim.m_figures, unit_of_ware(slot.ware))];
             }
         }
         if (!s.sinking) {
@@ -118,7 +131,7 @@ std::array<std::uint32_t, 4> Engine::army_counts(PlayerId owner) const {
     } else {
         for (const Soldier& s : m_world.soldiers()) {
             if (s.owner == owner && !s.dying()) {
-                ++n[family_index(s.figure)];
+                ++n[family_index(m_sim.m_figures, s.figure)];
             }
         }
     }
@@ -129,7 +142,7 @@ std::array<std::uint32_t, 4> Engine::army_counts(PlayerId owner) const {
         }
         for (const CastleSlot& slot : b.slots) {
             if (slot.figure != 0) {
-                ++n[family_index(slot.figure)];
+                ++n[family_index(m_sim.m_figures, slot.figure)];
             }
         }
     }
@@ -145,7 +158,7 @@ std::array<std::uint32_t, 4> Engine::army_counts(PlayerId owner) const {
         }
         for (const CargoSlot& c : s.cargo) {
             if (is_soldier_ware(c.ware)) {
-                ++n[family_index(unit_of_ware(c.ware))];
+                ++n[family_index(m_sim.m_figures, unit_of_ware(c.ware))];
             }
         }
     }
@@ -175,8 +188,8 @@ std::uint32_t Engine::weighted_army(PlayerId owner) const {
 }
 
 std::uint32_t Engine::army_target(const AiPlayer& p) const {
-    // A scenario can ask for a fixed strength instead: a hundred cannons' worth (player +0x70
-    // bit 5, 0x004257BF), on every level.
+    // A scenario can ask for a fixed strength instead: a hundred cannons' worth,
+    // on every level.
     if (player(p).scenario.has(scenario_flag::kFixedArmy)) {
         return unit_weights()[3] * 100;
     }
@@ -207,7 +220,7 @@ std::uint32_t Engine::army_target(const AiPlayer& p) const {
 }
 
 bool Engine::stronger(PlayerId a, PlayerId b) const {
-    // 0x0040ED50 compares the armies and the cannons of the fleets. The original takes b's fleet
+    // The original compares the armies and the cannons of the fleets. The original takes b's fleet
     // on both sides, so only the armies count (S-102).
     const auto w = unit_weights();
     const auto fleet = [&](PlayerId q) {
@@ -273,10 +286,10 @@ std::uint32_t Engine::free_holds(const Ship& s) const {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Recruiting and guards (0x00425580, every 6 s)
+// Recruiting and guards (every 6 s)
 
 void Engine::queue_unit(AiPlayer& p, const CastleEntry& castle, std::uint32_t family) {
-    // 0x00424E20: swordsmen and cavalry one at a time per castle, the others may stack.
+    // Swordsmen and cavalry one at a time per castle, the others may stack.
     const CostBuilding* b = nullptr;
     const std::uint16_t island = p.castle_island.value_or(0);
     for (const CostBuilding& c : m_world.cost_buildings()) {
@@ -287,9 +300,23 @@ void Engine::queue_unit(AiPlayer& p, const CastleEntry& castle, std::uint32_t fa
     if (b == nullptr) {
         return;
     }
-    const std::uint32_t t = family_index(family);
+    // Open1602: a soldier of a package of the same kind is trained as often as the original's
+    // (docs/modding/own-figures.md#soldiers); the original's computers know only theirs.
+    if (!classic() && m_sim.m_figures != nullptr) {
+        const std::uint32_t kind = family_index(m_sim.m_figures, family);
+        std::vector<std::uint32_t> choice;
+        for (const std::uint32_t f : m_sim.m_figures->unit_families()) {
+            if (family_index(m_sim.m_figures, f) == kind) {
+                choice.push_back(f);
+            }
+        }
+        if (choice.size() > 1) {
+            family = choice[rng().next() % choice.size()];
+        }
+    }
+    const std::uint32_t t = family_index(m_sim.m_figures, family);
     for (const CastleSlot& slot : b->slots) {
-        if (slot.figure != 0 && family_index(slot.figure) == t && t < 2) {
+        if (slot.figure != 0 && family_index(m_sim.m_figures, slot.figure) == t && t < 2) {
             return;
         }
     }
@@ -304,7 +331,7 @@ void Engine::queue_unit(AiPlayer& p, const CastleEntry& castle, std::uint32_t fa
 }
 
 bool Engine::guard_post(AiPlayer& p, City& c, CityPlan& r, std::int32_t& x, std::int32_t& y, bool& at_yard) {
-    // 0x00425460: the markets of the city in turn, then the own shipyard.
+    // The markets of the city in turn, then the own shipyard.
     const auto market_at = [&](std::int32_t mx, std::int32_t my) {
         const Tile t = tile(c.island, mx, my);
         return t.valid() && t.city == c.index && t.prod == prod::kMarket && !t.type->destroyed;
@@ -354,7 +381,7 @@ bool Engine::guard_post(AiPlayer& p, City& c, CityPlan& r, std::int32_t& x, std:
 }
 
 void Engine::guard(AiPlayer& p, City& c, std::int32_t x, std::int32_t y, std::uint32_t n, bool castle_island) {
-    // 0x004251A0: soldiers beyond the reserve at the Kontor go to the post.
+    // Soldiers beyond the reserve at the Kontor go to the post.
     std::vector<Soldier*> near = soldiers_near(p.player, c, 8, 16);
     const std::size_t reserve = castle_island ? 8 : 0;
     if (near.size() <= reserve) {
@@ -386,7 +413,7 @@ void Engine::guard(AiPlayer& p, City& c, std::int32_t x, std::int32_t y, std::ui
 }
 
 bool Engine::market_tower(AiPlayer& p, City& c, std::int32_t mx, std::int32_t my) {
-    // 0x00425030: one stone tower beside each market, on a wall or the beach if there is one.
+    // One stone tower beside each market, on a wall or the beach if there is one.
     const Tile m = tile(c.island, mx, my);
     const assets::BuildingType* tower = by_id(id::kStoneTower);
     if (!m.valid() || tower == nullptr) {
@@ -430,7 +457,7 @@ bool Engine::market_tower(AiPlayer& p, City& c, std::int32_t mx, std::int32_t my
 }
 
 void Engine::recruit(AiPlayer& p) {
-    // 0x00425580: one own city per call.
+    // One own city per call.
     const auto& cities = m_world.cities();
     if (cities.empty()) {
         return;
@@ -468,7 +495,8 @@ void Engine::recruit(AiPlayer& p) {
         // Room for better units: a swordsman goes when muskets are there (op 5 value 7).
         if (r.slots[kSlotMuskets].count != 0 && c->stock(ware::kMuskets) != 0) {
             for (const Soldier& s : m_world.soldiers()) {
-                if (s.owner == p.player && s.island == c->island && family_index(s.figure) == 0 && !s.away()) {
+                if (s.owner == p.player && s.island == c->island && family_index(m_sim.m_figures, s.figure) == 0 &&
+                    !s.away()) {
                     SoldierCommand cmd;
                     cmd.player = p.player;
                     cmd.soldier = s.id;
@@ -562,6 +590,24 @@ void Engine::recruit(AiPlayer& p) {
         guard(p, *c, px, py, static_cast<std::uint32_t>(r.posts.size()), false);
     }
     City* home_c = home_city(p);
+    if (home_c != nullptr && home_c != c && !classic()) {
+        // Open1602: a colony with enemy soldiers on its island and fewer of its own than they have
+        // gets troops from home at once; the original sends them only by the size of its army.
+        std::uint32_t threat = 0;
+        const std::vector<PlayerId> enemies = island_enemies(p, c->island);
+        for (const Soldier& o : m_world.soldiers()) {
+            threat += o.island == c->island && !o.away() &&
+                              std::find(enemies.begin(), enemies.end(), o.owner) != enemies.end()
+                          ? 1U
+                          : 0U;
+        }
+        if (threat != 0 && k < threat + threat / 4 + 1 && soldiers_near(p.player, *home_c, 8, 16).size() >= 4) {
+            if (Ship* ship = best_armed_ship(p, Target::city_of(home_c->island, home_c->index), 1)) {
+                ship_send(p, *ship, Target::city_of(home_c->island, home_c->index), 1, city_param(*c));
+                return;
+            }
+        }
+    }
     if (home_c != nullptr && army >= 8) {
         // k < (army - 8) * 0.006 * (40 or 15), in integers (ADR 0004: no floating point in the game's
         // decisions). Equal to the floating point form for every army below 433 units.
@@ -575,7 +621,7 @@ void Engine::recruit(AiPlayer& p) {
 }
 
 void Engine::buy_pirate_peace(AiPlayer& p) {
-    // 0x00428AF0: with more than 10,000 gold and a price above 1000.
+    // With more than 10,000 gold and a price above 1000.
     PlayerId pirates = kNoPlayer;
     for (std::size_t i = 0; i < m_world.players().size(); ++i) {
         if (m_world.behaviour(m_world.players()[i]) == FactionBehaviour::Pirates) {
@@ -594,10 +640,9 @@ void Engine::buy_pirate_peace(AiPlayer& p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Ships on missions (0x004238F0, with the logistics every 10 s)
+// Ships on missions (with the logistics every 10 s)
 
 void Engine::ship_send(AiPlayer& p, Ship& s, const Target& t, std::uint8_t mission, std::uint32_t param) {
-    // 0x0040F070
     ShipOrder order;
     order.player = p.player;
     order.ship = s.id;
@@ -612,7 +657,7 @@ void Engine::ship_send(AiPlayer& p, Ship& s, const Target& t, std::uint8_t missi
 }
 
 void Engine::mission_end(AiPlayer& p, Ship& s, ShipNote& n) {
-    // 0x0040F250: home with the troops, or stop.
+    // Home with the troops, or stop.
     if (n.mission == 3 || n.mission == 4) {
         ShipOrder stop;
         stop.player = p.player;
@@ -759,7 +804,7 @@ void Engine::missions(AiPlayer& p) {
 }
 
 void Engine::plan_landing(AiPlayer& p, Ship& s, ShipNote& n) {
-    // 0x00422EC0: a beach near the target's markets, away from its towers and soldiers.
+    // A beach near the target's markets, away from its towers and soldiers.
     const City* t = city(static_cast<std::uint16_t>(n.param >> 8), static_cast<std::uint8_t>(n.param & 0xFF));
     if (t == nullptr || t->owner == p.player || building_count(*t) <= 3 ||
         m_world.diplomacy().relation(p.player, t->owner).peace == Treaty::Signed ||
@@ -860,7 +905,7 @@ void Engine::plan_landing(AiPlayer& p, Ship& s, ShipNote& n) {
 }
 
 Ship* Engine::best_armed_ship(AiPlayer& p, const Target& ref, std::uint32_t max_same) {
-    // 0x00424260: an armed ship with room, healthy and well armed.
+    // An armed ship with room, healthy and well armed.
     (void)max_same;
     for (const ShipNote& n : p.ships) {
         const Ship* s = m_world.ship(n.id);
@@ -888,10 +933,10 @@ Ship* Engine::best_armed_ship(AiPlayer& p, const Target& ref, std::uint32_t max_
 }
 
 // ---------------------------------------------------------------------------------------------
-// Looking for a target (0x004298F0, after every step)
+// Looking for a target (after every step)
 
 bool Engine::defenceless(std::uint16_t island, std::uint8_t city) {
-    // The same as city_defenceless (0x0047F1B0), whose scan of the island answers for all its cities
+    // The same as city_defenceless, whose scan of the island answers for all its cities
     // as long as its tiles stay the same.
     if (island >= m_world.islands().size()) {
         return false;
@@ -925,7 +970,7 @@ bool Engine::defenceless(std::uint16_t island, std::uint8_t city) {
 }
 
 bool Engine::attack_ok(AiPlayer& p, const City& t) {
-    // 0x00429810. The original's conditions, the cheap ones first: none has a side effect, so the
+    // The original's conditions, the cheap ones first: none has a side effect, so the
     // answer is the same, but most targets fail before the island or the world is walked (TB-9).
     for (const ShipNote& n : p.ships) {
         if (n.mission >= 5 && n.mission <= 9) {
@@ -947,7 +992,6 @@ bool Engine::attack_ok(AiPlayer& p, const City& t) {
 }
 
 void Engine::start_attack(AiPlayer& p, const City& t) {
-    // 0x00429770
     if (m_world.diplomacy().relation(p.player, t.owner).peace == Treaty::Signed) {
         return;
     }
@@ -966,7 +1010,7 @@ void Engine::start_attack(AiPlayer& p, const City& t) {
 }
 
 void Engine::raid_outpost(AiPlayer& p, const City& t) {
-    // 0x004296B0 / 0x00429640: a warship shells the Kontor of a tiny outpost.
+    // A warship shells the Kontor of a tiny outpost.
     if (m_world.diplomacy().relation(p.player, t.owner).peace == Treaty::Signed || !t.warehouse_x || !t.warehouse_y) {
         return;
     }
@@ -1034,7 +1078,7 @@ void Engine::target_scan(AiPlayer& p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The soldiers on one island per tick (0x0042B430)
+// The soldiers on one island per tick
 
 std::vector<PlayerId> Engine::island_enemies(const AiPlayer& a, std::uint16_t island) const {
     // Hostile humans or natives here: soldiers of theirs or a city.
@@ -1269,59 +1313,47 @@ void Engine::reachable_goals(const AiPlayer& a, std::uint16_t island, const City
         return;
     }
     const std::vector<std::uint8_t> reach = land_reach(a.player, island, soldiers);
-    const IslandMap& map = island_of(island).map;
-    const auto w = static_cast<std::int32_t>(map.width());
-    const auto h = static_cast<std::int32_t>(map.height());
-    // The buildings with a tile next to one the soldiers reach, by their origin.
-    struct Near {
-        std::int32_t x = 0;
-        std::int32_t y = 0;
-        bool defence = false;  ///< a wall, gate or tower
-    };
-    std::vector<Near> near;
+    const WorldIsland& isl = island_of(island);
+    const auto w = static_cast<std::int32_t>(isl.map.width());
+    const auto h = static_cast<std::int32_t>(isl.map.height());
     const auto at = [w](std::int32_t x, std::int32_t y) {
         return static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x);
-    };
-    std::vector<std::uint8_t> listed(reach.size(), 0);  // by the building's origin
-    const auto known = [&](std::int32_t x, std::int32_t y) {
-        return x >= 0 && y >= 0 && x < w && y < h && listed[at(x, y)] != 0;
     };
     const auto reached = [&](std::int32_t x, std::int32_t y) {
         return x >= 0 && y >= 0 && x < w && y < h && reach[at(x, y)] != 0;
     };
+    // The tiles of the goals, by the goal's index; a goal is kept when one of its tiles lies next
+    // to one the soldiers reach.
+    constexpr std::int16_t kNone = -1;
+    std::vector<std::int16_t> goal_at(reach.size(), kNone);
+    std::vector<std::uint8_t> keep(goals.size(), 0);
     for (std::int32_t y = 0; y < h; ++y) {
         for (std::int32_t x = 0; x < w; ++x) {
             const Tile t = tile(island, x, y);
-            if (!t.valid() || t.city != hostile.index || t.owner != hostile.owner || !destroyable(*t.type, false) ||
-                known(t.ox, t.oy) ||
-                !(reached(x - 1, y) || reached(x + 1, y) || reached(x, y - 1) || reached(x, y + 1))) {
+            if (!t.valid() || t.city != hostile.index || t.owner != hostile.owner) {
                 continue;
             }
-            const bool defence = t.kind == kind::kWall || t.kind == kind::kWallBeach || t.kind == kind::kGate ||
-                                 t.kind == kind::kTower || t.kind == kind::kTowerBeach;
-            near.push_back({t.ox, t.oy, defence});
-            if (t.ox >= 0 && t.oy >= 0 && t.ox < w && t.oy < h) {
-                listed[at(t.ox, t.oy)] = 1;
+            for (std::size_t g = 0; g < goals.size(); ++g) {
+                if (goals[g].first != t.ox || goals[g].second != t.oy) {
+                    continue;
+                }
+                goal_at[at(x, y)] = static_cast<std::int16_t>(g);
+                if (reached(x - 1, y) || reached(x + 1, y) || reached(x, y - 1) || reached(x, y + 1)) {
+                    keep[g] = 1;
+                }
+                break;
             }
         }
     }
-    const auto [fx, fy] = goals.front();
     std::vector<std::pair<std::int32_t, std::int32_t>> kept;
-    for (const auto& g : goals) {
-        if (known(g.first, g.second)) {
-            kept.push_back(g);
+    for (std::size_t g = 0; g < goals.size(); ++g) {
+        if (keep[g] != 0) {
+            kept.push_back(goals[g]);
         }
     }
     if (kept.empty()) {
-        // A way in: what stands between them and the city, nearest to its first goal first.
-        std::stable_sort(near.begin(), near.end(), [fx, fy](const Near& l, const Near& r) {
-            if (l.defence != r.defence) {
-                return l.defence;
-            }
-            return std::abs(l.x - fx) + std::abs(l.y - fy) < std::abs(r.x - fx) + std::abs(r.y - fy);
-        });
-        for (std::size_t k = 0; k < near.size() && k < 4; ++k) {
-            kept.emplace_back(near[k].x, near[k].y);
+        if (const auto in = way_in(a, island, hostile, reach, goal_at)) {
+            kept.push_back(*in);
         }
     }
     if (!kept.empty()) {
@@ -1329,13 +1361,196 @@ void Engine::reachable_goals(const AiPlayer& a, std::uint16_t island, const City
     }
 }
 
+std::optional<std::pair<std::int32_t, std::int32_t>> Engine::way_in(const AiPlayer& a, std::uint16_t island,
+                                                                    const City& hostile,
+                                                                    const std::vector<std::uint8_t>& reach,
+                                                                    const std::vector<std::int16_t>& goal_at) const {
+    // The cheapest way from where the soldiers stand to a goal, over open land and through what
+    // they can knock down: trees and fields of nobody or of the enemy, and the enemy's buildings,
+    // walls, gates and towers. Each of those costs by its hit points (the sturdy kinds take only
+    // 51/128 of a hit without cannons), so a forest is cut through before a wall is broken and a
+    // short way round beats both. The answer is the first such obstacle on the way, by its origin.
+    const WorldIsland& isl = island_of(island);
+    const auto w = static_cast<std::int32_t>(isl.map.width());
+    const auto h = static_cast<std::int32_t>(isl.map.height());
+    const LandMap& land = m_sim.m_combat.land();
+    const auto at = [w](std::int32_t x, std::int32_t y) {
+        return static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x);
+    };
+    constexpr std::uint32_t kBlocked = 0;
+    // What entering tile (x, y) costs: 1 for open land, more for an obstacle, kBlocked for none.
+    const auto cost = [&](std::int32_t x, std::int32_t y) -> std::uint32_t {
+        if (land.tile(static_cast<std::int32_t>(isl.x) + x, static_cast<std::int32_t>(isl.y) + y, 0, nullptr,
+                      a.player) == LandMap::Cell::Walk) {
+            return 1;
+        }
+        const Tile t = tile(island, x, y);
+        if (!t.valid() || t.type->destroyed) {
+            return kBlocked;
+        }
+        const bool tree = t.kind == kind::kForest && (t.owner == kNoPlayer || t.owner == hostile.owner);
+        const bool building = t.owner == hostile.owner && destroyable(*t.type, false);
+        if (!tree && !building) {
+            return kBlocked;
+        }
+        const std::uint32_t hp = std::max<std::uint32_t>(1, t.type->max_health / 32);
+        return 1 + 2 * (building ? hp * 5 / 2 : hp);
+    };
+    constexpr std::uint32_t kFar = std::numeric_limits<std::uint32_t>::max();
+    std::vector<std::uint32_t> dist(reach.size(), kFar);
+    std::vector<std::int32_t> from(reach.size(), -1);
+    using Entry = std::pair<std::uint32_t, std::uint32_t>;  // cost, tile; ties go to the lower tile
+    std::priority_queue<Entry, std::vector<Entry>, std::greater<>> open;
+    for (std::size_t i = 0; i < reach.size(); ++i) {
+        if (reach[i] != 0) {
+            dist[i] = 0;
+            open.emplace(0, static_cast<std::uint32_t>(i));
+        }
+    }
+    constexpr std::array<std::pair<std::int32_t, std::int32_t>, 4> kSteps = {{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}};
+    while (!open.empty()) {
+        const auto [d, i] = open.top();
+        open.pop();
+        if (d != dist[i]) {
+            continue;
+        }
+        if (goal_at[i] >= 0) {
+            // Back along the way: the obstacle nearest to the soldiers.
+            auto k = static_cast<std::int32_t>(i);
+            auto first = k;
+            while (from[static_cast<std::size_t>(k)] >= 0) {
+                first = k;
+                k = from[static_cast<std::size_t>(k)];
+            }
+            const Tile t = tile(island, first % w, first / w);
+            return std::pair{t.ox, t.oy};
+        }
+        const auto x = static_cast<std::int32_t>(i % static_cast<std::uint32_t>(w));
+        const auto y = static_cast<std::int32_t>(i / static_cast<std::uint32_t>(w));
+        for (const auto& [dx, dy] : kSteps) {
+            const std::int32_t nx = x + dx;
+            const std::int32_t ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= w || ny >= h) {
+                continue;
+            }
+            const std::size_t n = at(nx, ny);
+            const std::uint32_t c = goal_at[n] >= 0 ? 1 : cost(nx, ny);
+            if (c == kBlocked || d + c >= dist[n]) {
+                continue;
+            }
+            dist[n] = d + c;
+            from[n] = static_cast<std::int32_t>(i);
+            open.emplace(d + c, static_cast<std::uint32_t>(n));
+        }
+    }
+    return std::nullopt;
+}
+
+bool Engine::defend(AiPlayer& a, std::uint16_t island, const std::vector<PlayerId>& enemies) {
+    // Open1602: enemy soldiers inside one of its cities come before everything else. The original
+    // meets only the enemy soldier nearest to the middle of its free soldiers, with a quarter more
+    // than the enemy has, and goes for a hostile city on the island first: its soldiers stand by or
+    // march off while the enemy burns its own city.
+    const WorldIsland& isl = island_of(island);
+    const auto mine_at = [&](const Soldier& s) {
+        const std::int32_t x = s.cell_x() / 2 - static_cast<std::int32_t>(isl.x);
+        const std::int32_t y = s.cell_y() / 2 - static_cast<std::int32_t>(isl.y);
+        if (!isl.map.contains(x, y)) {
+            return false;
+        }
+        const std::uint8_t c = isl.map.top(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y)).city;
+        const City* here = c != MapCell::kNoCity ? m_world.city(island, c) : nullptr;
+        return here != nullptr && here->owner == a.player;
+    };
+    std::vector<const Soldier*> intruders;
+    for (const Soldier& o : m_world.soldiers()) {
+        if (o.island == island && !o.away() && std::find(enemies.begin(), enemies.end(), o.owner) != enemies.end() &&
+            mine_at(o)) {
+            intruders.push_back(&o);
+        }
+    }
+    if (intruders.empty()) {
+        return false;
+    }
+    // Every soldier that is not fighting a unit already or on its way to the doctor: free ones,
+    // guards and those attacking enemy buildings come back. Each goes for the intruder nearest to it.
+    std::vector<SoldierOrder> orders;
+    for (const Soldier& s : m_world.soldiers()) {
+        if (s.owner != a.player || s.island != island || s.away() || s.target.kind == Target::Kind::Soldier) {
+            continue;
+        }
+        if (s.target.kind == Target::Kind::Building) {
+            const Tile t = tile(island, static_cast<std::int32_t>(s.target.x), static_cast<std::int32_t>(s.target.y));
+            if (t.valid() && t.owner == a.player) {
+                continue;  // healing
+            }
+        }
+        const Soldier* best = nullptr;
+        std::int64_t best_d = 0;
+        for (const Soldier* o : intruders) {
+            const std::int64_t d = std::abs(o->pos_x - s.pos_x) + std::abs(o->pos_y - s.pos_y);
+            if (best == nullptr || d < best_d) {
+                best = o;
+                best_d = d;
+            }
+        }
+        if (best == nullptr) {
+            break;  // not reached: there is an intruder
+        }
+        const Target target = Target::soldier(best->id);
+        auto it = std::find_if(orders.begin(), orders.end(), [&](const SoldierOrder& o) { return o.target == target; });
+        if (it == orders.end()) {
+            SoldierOrder order;
+            order.player = a.player;
+            order.attack = true;
+            order.target = target;
+            orders.push_back(order);
+            it = orders.end() - 1;
+        }
+        it->soldiers.push_back(s.id);
+    }
+    bool ordered = false;
+    for (const SoldierOrder& order : orders) {
+        ordered = execute(order).accepted || ordered;
+    }
+    return ordered;
+}
+
+std::optional<std::uint16_t> Engine::next_watched_island() {
+    const auto n = static_cast<std::uint32_t>(m_world.islands().size());
+    if (classic()) {
+        // The original looks at one island per step, whether anything stands there or not, so on a
+        // world with many islands its soldiers wait long for their orders.
+        m_state.island_cursor = (m_state.island_cursor + 1) % n;
+        return static_cast<std::uint16_t>(m_state.island_cursor);
+    }
+    // Open1602: the next island where a computer has soldiers and whose clock has run down.
+    std::vector<std::uint8_t> manned(n, 0);
+    for (const Soldier& s : m_world.soldiers()) {
+        const Player* pl = m_world.player(s.owner);
+        if (s.island < n && !s.away() && pl != nullptr && pl->role == PlayerRole::Computer) {
+            manned[s.island] = 1;
+        }
+    }
+    for (std::uint32_t k = 0; k < n; ++k) {
+        m_state.island_cursor = (m_state.island_cursor + 1) % n;
+        if (manned[m_state.island_cursor] != 0 && now_ms() >= m_state.islands[m_state.island_cursor].next_ms) {
+            return static_cast<std::uint16_t>(m_state.island_cursor);
+        }
+    }
+    return std::nullopt;
+}
+
 void Engine::island_controller() {
     const auto n = static_cast<std::uint32_t>(m_world.islands().size());
     if (n == 0 || m_state.islands.size() != n) {
         return;
     }
-    m_state.island_cursor = (m_state.island_cursor + 1) % n;
-    const auto island = static_cast<std::uint16_t>(m_state.island_cursor);
+    const std::optional<std::uint16_t> next = next_watched_island();
+    if (!next) {
+        return;
+    }
+    const std::uint16_t island = *next;
     IslandWatch& w = m_state.islands[island];
     if (now_ms() < w.next_ms) {
         return;
@@ -1356,13 +1571,20 @@ void Engine::island_controller() {
             continue;
         }
         conflict = true;
+        if (!classic() && defend(a, island, enemies)) {
+            ordered = true;
+            continue;
+        }
         ordered = attack_orders(a, island, enemies) || ordered;
     }
-    w.next_ms = now_ms() + (conflict && ordered ? 0 : conflict ? 3'000 : 8'000);
+    // After orders the original looks again at the island's next turn, one round over all islands
+    // later; Open1602 visits only manned islands, so it waits a second instead.
+    const std::uint64_t again = classic() ? 0 : 1'000;
+    w.next_ms = now_ms() + (conflict && ordered ? again : conflict ? 3'000 : 8'000);
 }
 
 // ---------------------------------------------------------------------------------------------
-// Diplomacy (0x00428B50, every 30 s or after a change)
+// Diplomacy (every 30 s or after a change)
 
 void Engine::diplomacy(AiPlayer& p) {
     if (p.cities < 1) {
@@ -1436,7 +1658,7 @@ void Engine::diplomacy(AiPlayer& p) {
             case Treaty::Received:
                 if (m > -20) {
                     order(DiplomacyOrder::Kind::Peace, Treaty::Signed);
-                    // Ships on missions against b come home (0x00423830).
+                    // Ships on missions against b come home.
                     for (ShipNote& n : p.ships) {
                         if (n.mission == 0) {
                             continue;
@@ -1480,7 +1702,7 @@ void Engine::diplomacy(AiPlayer& p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The pirates' nest (0x00429FD0, every 10 s; task 5 = 0x00429DF0)
+// The pirates' nest (every 10 s; task 5 =)
 
 void Engine::pirate_step(AiPlayer& p) {
     if (!pirates_enabled(m_world, m_sim.rules())) {
@@ -1510,7 +1732,7 @@ void Engine::pirate_step(AiPlayer& p) {
 }
 
 void Engine::pirate_develop(AiPlayer& p) {
-    // Pirate task 5 (0x00429DF0): every 42 s the nest offers its most valuable goods, and only then
+    // Pirate task 5: every 42 s the nest offers its most valuable goods, and only then
     // the pirates build: houses, a hunter, a fisher and four towers.
     pop(p);
     if (now_ms() - p.refresh_ms <= kNestOfferMs) {

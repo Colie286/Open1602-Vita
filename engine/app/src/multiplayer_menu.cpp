@@ -51,7 +51,7 @@ constexpr Id kListDown = 52;
 constexpr Id kFewerPlayers = 53;
 constexpr Id kMorePlayers = 54;
 constexpr Id kTakeOver = 55;
-constexpr Id kHostPauses = 56;
+constexpr Id kHostSpeed = 56;
 constexpr Id kSpectatorChat = 57;
 constexpr Id kListRow = 200;  ///< + row
 constexpr std::size_t kListRows = 11;
@@ -75,6 +75,16 @@ constexpr Id kLeave = 61;
 constexpr Id kReady = 62;
 constexpr Id kStart = 63;
 constexpr Id kWatch = 64;
+constexpr Id kStartNow = 65;
+constexpr Id kStartUp = 66;
+constexpr Id kStartDown = 67;
+constexpr Id kSeatsUp = 68;
+constexpr Id kSeatsDown = 69;
+/// Rows of the list of who is in the game while it starts; more are scrolled.
+constexpr std::size_t kStartRows = 10;
+/// Slots the lobby shows at once: all of sim::kMaxPlayers = 12; more (a higher kMaxPlayers) are
+/// scrolled like the list of who is in the starting game.
+constexpr std::size_t kSeatRows = 12;
 constexpr std::size_t kChatLines = 12;
 constexpr Rect kChatBox{48, 0, 604, 28};  ///< a row of the lobby's chat (x and width)
 // Connecting
@@ -95,7 +105,7 @@ constexpr std::int32_t kRowH = 32;
 
 std::uint32_t random_seed() {
     std::random_device device;
-    return device() % 100000;
+    return device() % kMultiplayerSeeds;
 }
 
 std::optional<std::uint32_t> number(std::string_view text) {
@@ -107,6 +117,22 @@ std::optional<std::uint32_t> number(std::string_view text) {
 // The lobby's setup: a first line with what is played, then the settings as settings.cfg has them.
 constexpr std::string_view kSetupScopeKey = "game = ";
 constexpr std::array<std::string_view, 4> kSetupScopes = {"endless", "multiplayer", "scenario", "savegame"};
+// A new endless game's world number and level, on lines of their own after the first.
+constexpr std::string_view kSetupSeedKey = "world_seed = ";
+constexpr std::string_view kSetupLevelKey = "level = ";
+
+/// The number on the line of the lobby's setup that starts with `key`.
+std::optional<std::uint32_t> lobby_value(std::string_view text, std::string_view key) {
+    while (!text.empty()) {
+        const std::size_t end = text.find('\n');
+        const std::string_view line = text.substr(0, end);
+        if (line.starts_with(key)) {
+            return number(line.substr(key.size()));
+        }
+        text = end == std::string_view::npos ? std::string_view{} : text.substr(end + 1);
+    }
+    return std::nullopt;
+}
 
 /// Open1602's defaults, the original's rules, or something else: in the words of the start dialog.
 std::string rules_summary(sim::Rules rules) {
@@ -136,16 +162,22 @@ SetupScope HostSetup::scope() const noexcept {
 
 EndlessSetup HostSetup::game_settings() const {
     EndlessSetup s = multiplayer_setup(settings, players);
+    s.world_seed = seed;  // the preview of the islands shows the world of this number
     if (!victory_offered(scope())) {
         s.rules.victory = {};
     }
     return s;
 }
 
-std::vector<std::uint8_t> lobby_setup(const EndlessSetup& settings, SetupScope scope) {
+std::vector<std::uint8_t> lobby_setup(const EndlessSetup& settings, SetupScope scope, std::uint8_t level) {
     std::string text(kSetupScopeKey);
     text += kSetupScopes[static_cast<std::size_t>(scope)];
     text += '\n';
+    if (scope == SetupScope::MultiplayerEndless) {
+        // The world's number and level, so that everyone's preview of the islands shows its world.
+        text += std::string(kSetupSeedKey) + std::to_string(settings.world_seed) + '\n';
+        text += std::string(kSetupLevelKey) + std::to_string(level) + '\n';
+    }
     text += write_setup(settings, "");
     return {text.begin(), text.end()};
 }
@@ -166,8 +198,17 @@ std::optional<std::pair<EndlessSetup, SetupScope>> read_lobby_setup(std::span<co
     EndlessSetup settings = EndlessSetup::defaults(scope);
     if (end != std::string_view::npos) {
         read_setup(settings, text.substr(end + 1), "");
+        if (const auto seed = lobby_value(text, kSetupSeedKey)) {
+            settings.world_seed = *seed;
+        }
     }
     return std::pair{settings, scope};
+}
+
+std::uint8_t read_lobby_level(std::span<const std::uint8_t> bytes) {
+    const std::string_view text(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    const auto level = lobby_value(text, kSetupLevelKey);
+    return level && *level < sim::NewGameOptions::kDifficulties ? static_cast<std::uint8_t>(*level) : 1;
 }
 
 bool may_block_seats(const net::Lobby& lobby) {
@@ -203,6 +244,12 @@ std::vector<sim::BannerId> player_banners() {
 std::string banner_name(std::string_view id) {
     const std::size_t colon = id.find(':');
     const std::string_view colour = colon == std::string_view::npos ? id : id.substr(colon + 1);
+    // A generated colour beyond the twelve with a name (render::BannerTable::add_more_players).
+    constexpr std::string_view kNumbered = "colour";
+    if (colour.size() > kNumbered.size() && colour.substr(0, kNumbered.size()) == kNumbered &&
+        std::all_of(colour.begin() + kNumbered.size(), colour.end(), [](char c) { return c >= '0' && c <= '9'; })) {
+        return ui::tr("net.colour.number", {std::string(colour.substr(kNumbered.size()))});
+    }
     const std::string key = "net.colour." + std::string(colour);
     const std::string& text = ui::tr(key);
     return text != key ? text : std::string(colour);
@@ -257,6 +304,8 @@ void MultiplayerMenu::show_lobby() {
     m_ready = false;
     m_banner_seat.reset();
     m_chat.clear();
+    m_chat_back = 0;
+    m_chat_newest = 0;
     m_form.set_focus(m_explicit_text_input ? std::nullopt : std::optional<Id>(kChat));
 }
 
@@ -287,6 +336,17 @@ bool MultiplayerMenu::wheel(const MultiplayerModel& model, std::int32_t notches)
                 notches);
             return true;
         case Screen::Lobby: {
+            if (m_seat_rows > 0 && m_seat_box.contains(m_mouse_x, m_mouse_y)) {
+                // The slots, when there are more than the lobby shows at once.
+                m_seat_first = ui::wheel_scroll(m_seat_first, m_seat_count, m_seat_rows, notches);
+                return true;
+            }
+            if (m_start_rows > 0 && m_start_box.contains(m_mouse_x, m_mouse_y)) {
+                // The list of who is in the starting game, under the mouse.
+                const std::size_t count = model.session != nullptr ? model.session->roster().size() : 0;
+                m_start_first = ui::wheel_scroll(m_start_first, count, m_start_rows, notches);
+                return true;
+            }
             // The chat, back to older rows and forward again (not while the colours are offered).
             if (m_banner_seat || m_chat_rows == 0) {
                 return true;
@@ -319,6 +379,9 @@ std::vector<MultiplayerEvent> MultiplayerMenu::mouse(const MultiplayerModel& mod
                 if (m_setup.players > sim::kOriginalPlayers) {
                     m_setup.settings.own_world = own_world;
                 }
+                // The world the preview showed: its number in the field.
+                m_setup.seed = static_cast<std::uint32_t>(m_settings.setup().world_seed);
+                m_seed_text = std::to_string(m_setup.seed);
             } else {
                 MultiplayerEvent e;
                 e.kind = MultiplayerEvent::Kind::Settings;
@@ -331,6 +394,8 @@ std::vector<MultiplayerEvent> MultiplayerMenu::mouse(const MultiplayerModel& mod
         }
         return out;
     }
+    m_mouse_x = static_cast<std::int32_t>(x / m_scale);
+    m_mouse_y = static_cast<std::int32_t>(y / m_scale);
     if (button != ui::MouseButton::Left) {
         return out;
     }
@@ -404,8 +469,11 @@ void MultiplayerMenu::layout(const MultiplayerModel& model) {
     }
 }
 
-void MultiplayerMenu::open_settings(const EndlessSetup& setup, SetupScope scope, GameSettingsMenu::Mode mode) {
+void MultiplayerMenu::open_settings(const EndlessSetup& setup, SetupScope scope, GameSettingsMenu::Mode mode,
+                                    std::uint8_t level, bool reroll) {
     m_settings.open(setup, scope, mode);
+    m_settings.set_level(level);
+    m_settings.allow_reroll(reroll);
     m_settings_from = m_screen;
     m_screen = Screen::Settings;
     m_form.set_focus(std::nullopt);  // the keys do not go to a field behind the dialog
@@ -621,7 +689,7 @@ void MultiplayerMenu::layout_create(const MultiplayerModel& model) {
             m_setup.spectators);
     f.check(kTakeOver, Rect{668, 398, 304, 30}, tr(MpText::ComputerTakesOver), m_setup.computer_takes_over);
     f.check(kDedicated, Rect{668, 430, 304, 30}, tr(MpText::HostOnly), m_setup.dedicated);
-    f.check(kHostPauses, Rect{668, 462, 304, 30}, tr(MpText::HostPausesOnly), m_setup.host_pauses_only);
+    f.check(kHostSpeed, Rect{668, 462, 304, 30}, tr(MpText::HostControlsSpeed), m_setup.host_controls_speed);
     if (m_setup.kind != HostSetup::Kind::Savegame) {
         // A savegame keeps the settings it was started with; the lobby shows them.
         settings_button(502, m_setup.game_settings(), true);
@@ -655,14 +723,135 @@ void MultiplayerMenu::layout_lobby(const MultiplayerModel& model) {
     }
     const net::Lobby& lobby = session->lobby();
     const sim::PlayerId me = session->local_seat();
-    f.label(kHeading, lobby.title, Align::Left, Tone::Heading);
-    f.label(Rect{560, 32, 424, 32},
-            model.public_session ? ui::tr("master.public")
-                                 : (model.hosting ? tr(MpText::HostPort, std::to_string(model.port)) : lobby.game),
+    // A game hosted without a title (from the command line) is "<host>'s game" in this computer's
+    // language; without a host in the roster, the menu's heading.
+    std::string title = lobby.title;
+    if (title.empty()) {
+        const auto host = std::find_if(session->roster().begin(), session->roster().end(),
+                                       [](const net::Member& m) { return m.host; });
+        title = host != session->roster().end() && !host->name.empty() ? tr(MpText::DefaultTitle, host->name)
+                                                                       : tr(MpText::Multiplayer);
+    }
+    f.label(kHeading, title, Align::Left, Tone::Heading);
+    f.label(Rect{560, 32, 424, 32}, model.public_session ? ui::tr("master.public") : (model.hosting ? tr(MpText::HostPort, std::to_string(model.port)) : lobby.game),
             Align::Right, Tone::Dim);
 
+    // While the game starts, who is in it and how far they are with it; before, the slots.
+    const bool starting = lobby.started && session->starting();
+    m_start_rows = 0;
+    m_seat_rows = 0;
+    const std::int32_t rows_end = starting ? layout_start_list(model) : layout_seats(model);
+    const std::int32_t chat_top = rows_end + 50;
+
+    // The chat, or the colours to choose from.
+    f.panel(Rect{40, chat_top, 620, 670 - chat_top});
+    if (m_banner_seat && !may_choose_banner(model, *m_banner_seat)) {
+        m_banner_seat.reset();  // the slot changed hands, or the game started
+    }
+    const auto chat_lines = static_cast<std::size_t>(std::max(0, (622 - 8 - (chat_top + 8)) / 28));
+    m_chat_rows = m_banner_seat ? 0 : std::min(kChatLines, chat_lines);
+    // Scrolled back (mouse wheel), the view holds still while new lines come in.
+    const std::vector<ChatRow>& wrapped = chat_rows(model);
+    const std::uint64_t newest = model.chat.empty() ? 0 : model.chat.back().serial;
+    if (newest < m_chat_newest) {
+        m_chat_back = 0;  // the chat was cleared
+    } else if (m_chat_back > 0) {
+        for (auto r = wrapped.rbegin(); r != wrapped.rend() && r->serial > m_chat_newest; ++r) {
+            ++m_chat_back;  // a row of a new line
+        }
+    }
+    m_chat_newest = newest;
+    const std::size_t visible = std::min(wrapped.size(), m_chat_rows);
+    m_chat_back = std::min(m_chat_back, wrapped.size() - visible);
+    if (m_banner_seat) {
+        layout_banner_choice(model, chat_top + 8);
+    }
+    for (std::size_t i = 0; i < visible; ++i) {
+        const ChatRow& row = wrapped[wrapped.size() - m_chat_back - visible + i];
+        const ChatLine& line = model.chat[row.line];
+        const std::int32_t y = chat_top + 8 + static_cast<std::int32_t>(i) * 28;
+        const Rect box{kChatBox.x, y, kChatBox.w, 28};
+        const Tone tone = line.whisper ? Tone::Heading : Tone::Normal;
+        if (line.name.empty()) {
+            f.label(box, row.text, Align::Left, Tone::Dim);
+        } else if (row.first && line.seat < lobby.seats.size() && row.text.starts_with(line.name)) {
+            // A player's name in the colour they chose; a spectator's in the line's.
+            f.speech(box, line.name, banner_text_colour(lobby.seats[line.seat].banner),
+                     row.text.substr(line.name.size()), tone);
+        } else {
+            f.label(box, row.text, Align::Left, tone);
+        }
+    }
+    f.field(kChat, Rect{52, 622, 596, 36}, m_chat);
+    if (m_chat.empty() && m_form.focus() != kChat) {
+        f.label(Rect{52, 622, 596, 36}, tr(MpText::ChatHint), Align::Left, Tone::Dim);
+    }
+
+    // What is played, and the hint.
+    f.panel(Rect{676, 84, 308, 586});
+    f.paragraph(Rect{684, 96, 292, 70}, lobby.game, Tone::Heading, 26);
+    const auto setting = [&](std::int32_t y, MpText name, bool on) {
+        f.entry(Rect{684, y, 292, 30}, tr(name), tr(on ? MpText::Yes : MpText::No), Tone::Dim);
+    };
+    setting(176, MpText::Password, lobby.password);
+    setting(208, MpText::AllowJoinRunning, lobby.join_running);
+    setting(240, MpText::AllowSpectators, lobby.spectators);
+    setting(272, MpText::AllowSpectatorChat, lobby.spectators && lobby.spectators_chat);
+    setting(304, MpText::ComputerTakesOver, lobby.computer_takes_over);
+    setting(336, MpText::HostControlsSpeed, lobby.host_controls_speed);
+    // The host's settings: the host changes them until the game starts, the others look at them.
+    std::int32_t y_free = 386;
+    if (const auto settings = read_lobby_setup(lobby.setup)) {
+        settings_button(372, settings->first,
+                        model.hosting && !lobby.started && settings->second != SetupScope::Savegame);
+        y_free = 452;
+    }
+    if (lobby.spectators && me != sim::kNoPlayer) {
+        f.button(kWatch, Rect{688, y_free, 284, 38}, tr(MpText::Watch));
+    }
+    if (model.hosting) {
+        // The host can send spectators away too (they hold no slot to kick).
+        m_watchers.clear();
+        const auto& roster = session->roster();
+        // As many rows as fit above the hint.
+        const auto rows = std::min(kWatcherRows, static_cast<std::size_t>((560 - y_free - 46) / 40));
+        for (std::size_t i = 1; i < roster.size() && m_watchers.size() < rows; ++i) {
+            if (roster[i].seat == sim::kNoPlayer) {
+                const std::int32_t y = y_free + 46 + static_cast<std::int32_t>(m_watchers.size()) * 40;
+                f.label(Rect{688, y, 130, 38}, roster[i].name, Align::Left, Tone::Dim);
+                f.button(kWatcherKick + static_cast<Id>(m_watchers.size()), Rect{822, y, 150, 38}, tr(MpText::Kick));
+                m_watchers.push_back({i, roster[i].name});
+            }
+        }
+    }
+    if (starting) {
+        f.paragraph(Rect{684, 560, 292, 30}, tr(MpText::Starting), Tone::Heading);
+        f.paragraph(Rect{684, 592, 292, 70}, tr(MpText::StartingHint), Tone::Dim);
+    } else if (model.join != net::ClientSession::JoinStage::None) {
+        layout_join_progress(model, Rect{684, 560, 292, 100});
+    } else {
+        f.paragraph(Rect{684, 560, 292, 100}, tr(model.hosting ? MpText::StartHint : MpText::WaitHostStart), Tone::Dim);
+    }
+
+    f.button(kLeave, Rect{40, kBottomY, 180, 44}, tr(MpText::Leave));
+    if (model.network.supported) f.button(kNetwork, Rect{240,kBottomY,280,44}, ui::tr("vita.net.info"));
+    if (!model.hosting && me != sim::kNoPlayer && !lobby.started) {
+        f.button(kReady, Rect{560, kBottomY, 200, 44}, tr(MpText::Ready), true, m_ready);
+    }
+    if (model.hosting && starting) {
+        f.button(kStartNow, Rect{764, kBottomY, 220, 44}, tr(MpText::StartNow));
+    } else if (model.hosting) {
+        f.button(kStart, Rect{764, kBottomY, 220, 44}, tr(MpText::Start), model.everyone_ready, true);
+    }
+}
+
+std::int32_t MultiplayerMenu::layout_seats(const MultiplayerModel& model) {
     // The slots of the players (the factions' are left out), closer together when there are many;
     // the chat below gets what they leave.
+    ui::Form& f = m_form;
+    const net::Session* session = model.session;
+    const net::Lobby& lobby = session->lobby();
+    const sim::PlayerId me = session->local_seat();
     std::vector<std::size_t> shown;
     for (std::size_t s = 0; s < lobby.seats.size() && s < kMaxSeats; ++s) {
         if (lobby.seats[s].kind != net::LobbySeat::Kind::Reserved) {
@@ -670,11 +859,14 @@ void MultiplayerMenu::layout_lobby(const MultiplayerModel& model) {
         }
     }
     const std::int32_t row_h = shown.size() <= 8 ? 36 : 30;
-    const auto rows_end = static_cast<std::int32_t>(96 + shown.size() * static_cast<std::size_t>(row_h));
-    const std::int32_t chat_top = rows_end + 50;
-    f.panel(Rect{40, 84, 620, chat_top - 96});
-    for (std::size_t r = 0; r < shown.size(); ++r) {
-        const std::size_t s = shown[r];
+    m_seat_count = shown.size();
+    m_seat_rows = std::min(shown.size(), kSeatRows);
+    m_seat_first = std::min(m_seat_first, shown.size() - m_seat_rows);
+    const auto rows_end = static_cast<std::int32_t>(96 + m_seat_rows * static_cast<std::size_t>(row_h));
+    m_seat_box = Rect{40, 84, 620, rows_end - 46};
+    f.panel(m_seat_box);
+    for (std::size_t r = 0; r < m_seat_rows; ++r) {
+        const std::size_t s = shown[m_seat_first + r];
         const net::LobbySeat& seat = lobby.seats[s];
         const auto y = static_cast<std::int32_t>(96 + r * static_cast<std::size_t>(row_h));
         const std::int32_t h = row_h - 2;
@@ -736,104 +928,87 @@ void MultiplayerMenu::layout_lobby(const MultiplayerModel& model) {
             watchers += (watchers.empty() ? "" : ", ") + m.name;
         }
     }
-    f.label(Rect{48, rows_end + 4, 600, 30}, tr(MpText::Watchers, watchers.empty() ? tr(MpText::Nobody) : watchers),
-            Align::Left, Tone::Dim);
-
-    // The chat, or the colours to choose from.
-    f.panel(Rect{40, chat_top, 620, 670 - chat_top});
-    if (m_banner_seat && !may_choose_banner(model, *m_banner_seat)) {
-        m_banner_seat.reset();  // the slot changed hands, or the game started
+    const bool scrolled = m_seat_rows < m_seat_count;
+    f.label(Rect{48, rows_end + 4, scrolled ? 520 : 600, 30},
+            tr(MpText::Watchers, watchers.empty() ? tr(MpText::Nobody) : watchers), Align::Left, Tone::Dim);
+    if (m_seat_first > 0) {
+        f.button(kSeatsUp, Rect{576, rows_end + 4, 36, 30}, "-");
     }
-    const auto chat_lines = static_cast<std::size_t>(std::max(0, (622 - 8 - (chat_top + 8)) / 28));
-    m_chat_rows = m_banner_seat ? 0 : std::min(kChatLines, chat_lines);
-    // Scrolled back (mouse wheel), the view holds still while new lines come in.
-    const std::vector<ChatRow>& wrapped = chat_rows(model);
-    const std::uint64_t newest = model.chat.empty() ? 0 : model.chat.back().serial;
-    if (newest < m_chat_newest) {
-        m_chat_back = 0;  // the chat was cleared
-    } else if (m_chat_back > 0) {
-        for (auto r = wrapped.rbegin(); r != wrapped.rend() && r->serial > m_chat_newest; ++r) {
-            ++m_chat_back;  // a row of a new line
+    if (m_seat_first + m_seat_rows < m_seat_count) {
+        f.button(kSeatsDown, Rect{616, rows_end + 4, 36, 30}, "+");
+    }
+    return rows_end;
+}
+
+std::int32_t MultiplayerMenu::layout_start_list(const MultiplayerModel& model) {
+    ui::Form& f = m_form;
+    const net::Session* session = model.session;
+    const net::Lobby& lobby = session->lobby();
+    const sim::PlayerId me = session->local_seat();
+    const std::vector<net::Member>& roster = session->roster();
+    const std::size_t count = roster.size();
+    // Closer together when there are many, and beyond kStartRows scrolled.
+    const std::int32_t row_h = count <= 8 ? 36 : 30;
+    m_start_rows = std::min(count, kStartRows);
+    m_start_first = std::min(m_start_first, count - m_start_rows);
+    const auto rows_end = static_cast<std::int32_t>(96 + m_start_rows * static_cast<std::size_t>(row_h));
+    m_start_box = Rect{40, 84, 620, rows_end - 46};
+    f.panel(m_start_box);
+    std::size_t ready = 0;
+    std::size_t players = 0;
+    for (const net::Member& m : roster) {
+        if (m.seat != sim::kNoPlayer) {
+            ++players;
+            ready += m.state != net::Member::State::Loading ? 1U : 0U;
         }
     }
-    m_chat_newest = newest;
-    const std::size_t visible = std::min(wrapped.size(), m_chat_rows);
-    m_chat_back = std::min(m_chat_back, wrapped.size() - visible);
-    if (m_banner_seat) {
-        layout_banner_choice(model, chat_top + 8);
-    }
-    for (std::size_t i = 0; i < visible; ++i) {
-        const ChatRow& row = wrapped[wrapped.size() - m_chat_back - visible + i];
-        const ChatLine& line = model.chat[row.line];
-        const std::int32_t y = chat_top + 8 + static_cast<std::int32_t>(i) * 28;
-        const Rect box{kChatBox.x, y, kChatBox.w, 28};
-        const Tone tone = line.whisper ? Tone::Heading : Tone::Normal;
-        if (line.name.empty()) {
-            f.label(box, row.text, Align::Left, Tone::Dim);
-        } else if (row.first && line.seat < lobby.seats.size() && row.text.starts_with(line.name)) {
-            // A player's name in the colour they chose; a spectator's in the line's.
-            f.speech(box, line.name, banner_text_colour(lobby.seats[line.seat].banner),
-                     row.text.substr(line.name.size()), tone);
+    for (std::size_t r = 0; r < m_start_rows; ++r) {
+        const net::Member& m = roster[m_start_first + r];
+        const auto y = static_cast<std::int32_t>(96 + r * static_cast<std::size_t>(row_h));
+        const std::int32_t h = row_h - 2;
+        const bool player = m.seat != sim::kNoPlayer && m.seat < lobby.seats.size();
+        if (player) {
+            f.swatch(Rect{52, y + 4, 22, h - 8}, banner_colour(lobby.seats[m.seat].banner));
+        }
+        std::string who = m.name;
+        if ((me != sim::kNoPlayer && m.seat == me) || (me == sim::kNoPlayer && m.host && model.hosting)) {
+            who += " " + tr(MpText::You);
+        } else if (m.host) {
+            who += " " + tr(MpText::Host);
+        } else if (!player) {
+            who += " " + tr(MpText::Spectator);
+        }
+        f.label(Rect{80, y, 250, h}, who, Align::Left, player ? Tone::Normal : Tone::Dim);
+        // How far it is: this computer's own from what it has, the others' as the host last heard.
+        double done = m.loaded / 100.0;
+        std::string state;
+        if (m.state != net::Member::State::Loading) {
+            done = 1.0;
+            state = tr(MpText::Ready);
+        } else if (m.seat == me && !model.hosting && model.join == net::ClientSession::JoinStage::Receiving &&
+                   model.join_total > 0) {
+            done = static_cast<double>(model.join_received) / static_cast<double>(model.join_total);
+            state = tr(MpText::LoadPercent, std::to_string(static_cast<int>(done * 100.0)));
+        } else if (m.loaded >= 100 || (m.seat == me && model.join == net::ClientSession::JoinStage::Loading)) {
+            done = 1.0;
+            state = tr(MpText::LoadLoading);
+        } else if (m.loaded == 0) {
+            state = tr(MpText::LoadWaiting);
         } else {
-            f.label(box, row.text, Align::Left, tone);
+            state = tr(MpText::LoadPercent, std::to_string(m.loaded));
         }
+        f.progress(Rect{338, y + 8, 190, h - 16}, done);
+        f.label(Rect{538, y, 114, h}, state, Align::Left, done >= 1.0 ? Tone::Normal : Tone::Dim);
     }
-    f.field(kChat, Rect{52, 622, 596, 36}, m_chat);
-    if (m_chat.empty() && m_form.focus() != kChat) {
-        f.label(Rect{52, 622, 596, 36}, tr(MpText::ChatHint), Align::Left, Tone::Dim);
+    f.label(Rect{48, rows_end + 4, 500, 30},
+            mp_text(MpText::StartingCount, std::to_string(ready), std::to_string(players)), Align::Left, Tone::Dim);
+    if (m_start_first > 0) {
+        f.button(kStartUp, Rect{576, rows_end + 4, 36, 30}, "-");
     }
-
-    // What is played, and the hint.
-    f.panel(Rect{676, 84, 308, 586});
-    f.paragraph(Rect{684, 96, 292, 70}, lobby.game, Tone::Heading, 26);
-    const auto setting = [&](std::int32_t y, MpText name, bool on) {
-        f.entry(Rect{684, y, 292, 30}, tr(name), tr(on ? MpText::Yes : MpText::No), Tone::Dim);
-    };
-    setting(176, MpText::Password, lobby.password);
-    setting(208, MpText::AllowJoinRunning, lobby.join_running);
-    setting(240, MpText::AllowSpectators, lobby.spectators);
-    setting(272, MpText::AllowSpectatorChat, lobby.spectators && lobby.spectators_chat);
-    setting(304, MpText::ComputerTakesOver, lobby.computer_takes_over);
-    setting(336, MpText::HostPausesOnly, lobby.host_pauses_only);
-    // The host's settings: the host changes them until the game starts, the others look at them.
-    std::int32_t y_free = 386;
-    if (const auto settings = read_lobby_setup(lobby.setup)) {
-        settings_button(372, settings->first,
-                        model.hosting && !lobby.started && settings->second != SetupScope::Savegame);
-        y_free = 452;
+    if (m_start_first + m_start_rows < count) {
+        f.button(kStartDown, Rect{616, rows_end + 4, 36, 30}, "+");
     }
-    if (lobby.spectators && me != sim::kNoPlayer) {
-        f.button(kWatch, Rect{688, y_free, 284, 38}, tr(MpText::Watch));
-    }
-    if (model.hosting) {
-        // The host can send spectators away too (they hold no slot to kick).
-        m_watchers.clear();
-        const auto& roster = session->roster();
-        // As many rows as fit above the hint.
-        const auto rows = std::min(kWatcherRows, static_cast<std::size_t>((560 - y_free - 46) / 40));
-        for (std::size_t i = 1; i < roster.size() && m_watchers.size() < rows; ++i) {
-            if (roster[i].seat == sim::kNoPlayer) {
-                const std::int32_t y = y_free + 46 + static_cast<std::int32_t>(m_watchers.size()) * 40;
-                f.label(Rect{688, y, 130, 38}, roster[i].name, Align::Left, Tone::Dim);
-                f.button(kWatcherKick + static_cast<Id>(m_watchers.size()), Rect{822, y, 150, 38}, tr(MpText::Kick));
-                m_watchers.push_back({i, roster[i].name});
-            }
-        }
-    }
-    if (model.join != net::ClientSession::JoinStage::None) {
-        layout_join_progress(model, Rect{684, 560, 292, 100});
-    } else {
-        f.paragraph(Rect{684, 560, 292, 100}, tr(model.hosting ? MpText::StartHint : MpText::WaitHostStart), Tone::Dim);
-    }
-
-    f.button(kLeave, Rect{40, kBottomY, 180, 44}, tr(MpText::Leave));
-    if(model.network.supported)f.button(kNetwork,Rect{240,kBottomY,280,44},ui::tr("vita.net.info"));
-    if (!model.hosting && me != sim::kNoPlayer) {
-        f.button(kReady, Rect{560, kBottomY, 200, 44}, tr(MpText::Ready), true, m_ready);
-    }
-    if (model.hosting) {
-        f.button(kStart, Rect{764, kBottomY, 220, 44}, tr(MpText::Start), model.everyone_ready, true);
-    }
+    return rows_end;
 }
 
 bool MultiplayerMenu::may_choose_banner(const MultiplayerModel& model, std::size_t seat) {
@@ -1053,12 +1228,16 @@ void MultiplayerMenu::click(const MultiplayerModel& model, Id id, std::vector<Mu
                 m_setup.spectators_chat = !m_setup.spectators_chat;
             } else if (id == kTakeOver) {
                 m_setup.computer_takes_over = !m_setup.computer_takes_over;
-            } else if (id == kHostPauses) {
-                m_setup.host_pauses_only = !m_setup.host_pauses_only;
+            } else if (id == kHostSpeed) {
+                m_setup.host_controls_speed = !m_setup.host_controls_speed;
             } else if (id == kDedicated) {
                 m_setup.dedicated = !m_setup.dedicated;
             } else if (id == kSettings && m_setup.kind != Kind::Savegame) {
-                open_settings(m_setup.game_settings(), m_setup.scope(), GameSettingsMenu::Mode::Apply);
+                // The world of the number typed so far; "Another world" types a new one.
+                HostSetup typed = m_setup;
+                typed.seed = number(m_seed_text).value_or(m_setup.seed);
+                open_settings(typed.game_settings(), m_setup.scope(), GameSettingsMenu::Mode::Apply, m_setup.level,
+                              true);
             } else if (id == kListUp) {
                 m_list_first -= std::min(m_list_first, kListRows);
             } else if (id == kListDown) {
@@ -1110,11 +1289,22 @@ void MultiplayerMenu::click(const MultiplayerModel& model, Id id, std::vector<Mu
                 event(MultiplayerEvent::Kind::Ready)->ready = m_ready;
             } else if (id == kStart) {
                 event(MultiplayerEvent::Kind::Start);
+            } else if (id == kStartNow) {
+                event(MultiplayerEvent::Kind::StartNow);
+            } else if (id == kSeatsUp) {
+                m_seat_first -= std::min(m_seat_first, m_seat_rows);
+            } else if (id == kSeatsDown) {
+                m_seat_first += m_seat_rows;  // kept within the list by the next layout
+            } else if (id == kStartUp) {
+                m_start_first -= std::min(m_start_first, m_start_rows);
+            } else if (id == kStartDown) {
+                m_start_first += m_start_rows;  // kept within the list by the next layout
             } else if (id == kSettings && session != nullptr) {
                 if (const auto settings = read_lobby_setup(session->lobby().setup)) {
                     const bool change = model.hosting && !session->lobby().started;
                     open_settings(settings->first, settings->second,
-                                  change ? GameSettingsMenu::Mode::Apply : GameSettingsMenu::Mode::View);
+                                  change ? GameSettingsMenu::Mode::Apply : GameSettingsMenu::Mode::View,
+                                  read_lobby_level(session->lobby().setup), false);
                 }
             } else if (id == kWatch) {
                 event(MultiplayerEvent::Kind::TakeSeat)->seat = sim::kNoPlayer;
@@ -1314,6 +1504,7 @@ std::vector<MultiplayerEvent> MultiplayerMenu::key(const MultiplayerModel& model
                     e.kind = MultiplayerEvent::Kind::Say;
                     e.text = std::exchange(m_chat, {});
                     out.push_back(std::move(e));
+                    m_chat_back = 0;  // back to the newest lines, to see one's own
                 }
                 if (m_explicit_text_input) { m_form.set_focus(std::nullopt); }
                 break;

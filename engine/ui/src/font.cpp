@@ -10,10 +10,10 @@ namespace o1602::ui {
 
 namespace {
 
-constexpr std::uint8_t kBody = 1;
-constexpr std::uint8_t kShadow = 7;
+constexpr std::uint8_t kBody = kGlyphBody;
+constexpr std::uint8_t kShadow = kGlyphShadow;
 constexpr std::uint32_t kOverhang = 2;     // glyphs set pixels up to two columns right of their width
-constexpr std::uint32_t kNoWrap = 10'000;  // from this width on nothing is wrapped (0x00401610)
+constexpr std::uint32_t kNoWrap = 10'000;  // from this width on nothing is wrapped
 
 constexpr std::array<TextColour, kTextColours> kColours = {{
     {{255, 255, 255}, {0, 0, 0}},
@@ -318,7 +318,7 @@ std::vector<std::string> wrap_text(const Font& font, std::string_view text, std:
                 break;
             }
             if (line.empty()) {
-                // Wider than a whole line: as many characters as fit, at least one (0x004018A0).
+                // Wider than a whole line: as many characters as fit, at least one.
                 std::size_t n = 1;
                 while (n < word.size() && font.width(std::string(word.substr(0, n + 1))) <= max_width) {
                     ++n;

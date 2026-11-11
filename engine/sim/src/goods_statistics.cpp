@@ -5,11 +5,12 @@
 
 #include "o1602/sim/mission.hpp"
 #include "o1602/sim/production.hpp"
+#include "o1602/sim/production_cycle.hpp"
 
 namespace o1602::sim {
 
 std::optional<std::uint32_t> minutes_left(std::uint64_t stock, const FlowTotals& totals) noexcept {
-    const std::int64_t net = totals.net();
+    const std::int64_t net = totals.balance();
     if (net >= 0 || totals.minutes == 0) {
         return std::nullopt;
     }
@@ -158,6 +159,11 @@ std::uint64_t GoodsSample::out() const noexcept {
     return sum;
 }
 
+std::int64_t GoodsSample::balance() const noexcept {
+    return static_cast<std::int64_t>(in()) - static_cast<std::int64_t>(out()) +
+           static_cast<std::int64_t>(of(GoodsFlow::Withheld));
+}
+
 std::vector<GoodsSample> goods_history(const World& world, const GoodsScope& scope, std::uint8_t ware, bool quarters) {
     std::vector<GoodsSample> out;
     for (const City& c : world.cities()) {
@@ -205,6 +211,8 @@ std::vector<GoodsProducers> goods_producers(const World& world, const assets::Bu
             ++kind->off;
         } else if (p.rate != 0) {
             ++kind->working;
+        } else if (waits_for_room(p, *b, *city)) {
+            ++kind->waiting_for_room;
         } else if (world.goods().is_trade(b->raw_ware) && p.raw < b->raw_amount) {
             ++kind->short_of_raw;
         }

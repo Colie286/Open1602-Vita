@@ -13,7 +13,10 @@
 #include "o1602/assets/scenario.hpp"
 #include "o1602/core/file.hpp"
 #include "o1602/core/text.hpp"
+#include "o1602/sim/construction.hpp"
+#include "o1602/sim/game_data.hpp"
 #include "o1602/sim/savegame_extension.hpp"
+#include "o1602/sim/savegame_writer.hpp"
 
 namespace o1602::sim {
 
@@ -44,8 +47,8 @@ void put_name(std::vector<std::uint8_t>& record, std::string_view name) {
     std::copy_n(name.begin(), std::min(name.size(), kNameSize - 1), record.begin() + kNameOffset);
 }
 
-/// PLAYER4 after the reset (0x00474380), the gated load (0x00477911) and the start
-/// (0x00477520, 0x00474C70): slot 0 is the human with the chosen colour, slots 1-3 computers with
+/// PLAYER4 after the reset, the gated load and the start:
+/// slot 0 is the human with the chosen colour, slots 1-3 computers with
 /// the other colours in order and the names of their colours, then trader, pirates, natives.
 /// Money, unlocks and the relation bytes come from the file.
 std::vector<std::uint8_t> players(std::span<const std::uint8_t> data, const assets::TextTable& text,
@@ -103,8 +106,8 @@ std::vector<std::uint8_t> players(std::span<const std::uint8_t> data, const asse
     return out;
 }
 
-/// TIMERS after the reset (0x0040DFE0, 0x00469270): the file's values only where the gated loader
-/// reads them (0x00484D30), the rest as the new game sets it.
+/// TIMERS after the reset: the file's values only where the gated loader
+/// reads them, the rest as the new game sets it.
 std::vector<std::uint8_t> timers(std::span<const std::uint8_t> data, const NewGameOptions& options) {
     std::vector<std::uint8_t> t(kTimersSize, 0);
     std::copy_n(data.begin(), std::min(data.size(), kTimersSize), t.begin());
@@ -228,6 +231,47 @@ core::Result<assets::ChunkFile> new_game_scenario(const assets::ChunkFile& endle
     return assets::ChunkFile::from_bytes(out.take());
 }
 
+namespace {
+
+/// The packages' climates of a new own world and its islands that took one (GeneratedIsland::own_climate).
+void give_climates(World& world, const std::vector<Climate>& climates, const std::vector<GeneratedIsland>& islands) {
+    if (climates.empty()) {
+        return;
+    }
+    Balance balance = world.balance();
+    balance.climates = climates;
+    world.set_balance(balance);
+    for (const GeneratedIsland& g : islands) {
+        for (std::size_t i = 0; i < world.islands().size(); ++i) {
+            if (world.islands()[i].header.number == g.number) {
+                world.island(static_cast<std::uint16_t>(i)).climate = g.own_climate;
+            }
+        }
+    }
+}
+
+/// Rules::climate_crops and Rules::big_ore_veins on the islands of a new endless game.
+void enrich_islands(World& world, const WorldStart& start) {
+    constexpr std::uint16_t kBigIron = 0x1E00;  // 240 t, as the world plan gives a big vein
+    for (std::size_t i = 0; i < world.islands().size(); ++i) {
+        assets::IslandHeader& header = world.island(static_cast<std::uint16_t>(i)).header;
+        if (start.climate_crops) {
+            // The crops a climate grows at least half (see island_fertility) now grow fully.
+            header.fertility |= climate_crops(world.balance().climates, world.islands()[i]);
+        }
+        if (start.big_ore_veins) {
+            for (assets::IslandHeader::Deposit& d : header.deposits) {
+                if (d.ware == ware::kOre && d.kind != 0) {
+                    d.kind = 0;
+                    d.amount = std::max(d.amount, kBigIron);
+                }
+            }
+        }
+    }
+}
+
+}  // namespace
+
 core::Result<World> start_new_game(const assets::GameDirectory& game, const assets::BuildingTable& buildings,
                                    const assets::TextTable& text, const NewGameOptions& options,
                                    std::vector<std::string>* warnings) {
@@ -247,13 +291,17 @@ core::Result<World> start_new_game(const assets::GameDirectory& game, const asse
         return scenario.error();
     }
     if (!options.custom) {
-        return load_world(*scenario, buildings, game, warnings, options.world);
+        auto world = load_world(*scenario, buildings, game, warnings, options.world);
+        if (world) {
+            enrich_islands(*world, options.world);
+        }
+        return world;
     }
     // An own world: plan it, put the players' ships at their starts, make the islands.
     WorldSettings settings = *options.custom;
     settings.difficulty = options.difficulty;
     settings.seed = options.world.seed;
-    const std::vector<TemplateInfo> templates = island_templates(game, buildings);
+    const std::vector<TemplateInfo> templates = island_templates(game, buildings, options.world.package_islands);
     auto plan = plan_world(settings, templates, warnings);
     if (!plan) {
         return plan.error();
@@ -268,6 +316,9 @@ core::Result<World> start_new_game(const assets::GameDirectory& game, const asse
     if (!generated) {
         return generated.error();
     }
+    if (start.stopped()) {
+        return core::make_error(core::ErrorCode::Cancelled, "the world is no longer wanted");
+    }
     auto world = load_world(generated->file, buildings, game, warnings, start);
     if (!world) {
         return world.error();
@@ -275,7 +326,87 @@ core::Result<World> start_new_game(const assets::GameDirectory& game, const asse
     if (auto status = add_players(*world, *plan, settings.players); !status) {
         return status.error();
     }
+    give_climates(*world, start.climates, generated->islands);
+    enrich_islands(*world, start);
     return world;
+}
+
+WorldPreview preview_of(const World& world, const assets::BuildingTable& buildings) {
+    using Tile = WorldPreview::Tile;
+    namespace bk = assets::kind;
+    WorldPreview out;
+    out.width = world.width();
+    out.height = world.height();
+    out.islands = static_cast<std::uint32_t>(world.islands().size());
+    out.tiles.assign(std::size_t{out.width} * out.height, Tile::Sea);
+    for (std::uint32_t y = 0; y < out.height; ++y) {
+        for (std::uint32_t x = 0; x < out.width; ++x) {
+            const World::Cell& c = world.cell(x, y);
+            if (c.island == World::kSea) {
+                continue;
+            }
+            const MapCell& top = world.islands()[c.island].map.top(c.local_x, c.local_y);
+            const assets::BuildingType* b = top.empty() ? nullptr : buildings.by_sprite(top.sprite);
+            Tile t = Tile::Ground;
+            switch (b != nullptr ? b->kind : bk::kSea) {
+                case bk::kSea:
+                    t = Tile::Sea;
+                    break;
+                case bk::kSurf:
+                case bk::kSurfCorner:
+                case bk::kRiverMouth:
+                    t = Tile::Surf;
+                    break;
+                case bk::kBeach:
+                case bk::kBeachMouth:
+                case bk::kBeachOuter:
+                case bk::kBeachInner:
+                case bk::kBeachVariant:
+                    t = Tile::Beach;
+                    break;
+                case bk::kForest:
+                    t = Tile::Forest;
+                    break;
+                case bk::kRock:
+                case bk::kSlope:
+                case bk::kSlopeCorner:
+                case bk::kSlopeSpring:
+                case bk::kMine:
+                    t = Tile::Mountain;
+                    break;
+                case bk::kBuilding:
+                case bk::kBeachHouse:
+                case bk::kSquare:
+                case bk::kRoad:
+                case bk::kHq:
+                    t = Tile::Settlement;
+                    break;
+                default:
+                    break;
+            }
+            out.tiles[std::size_t{y} * out.width + x] = t;
+            out.land += t == Tile::Sea || t == Tile::Surf ? 0U : 1U;
+        }
+    }
+    for (const Ship& ship : world.ships()) {
+        const auto x = static_cast<std::uint32_t>(ship.x);
+        const auto y = static_cast<std::uint32_t>(ship.y);
+        const bool known = std::any_of(out.starts.begin(), out.starts.end(),
+                                       [&](const WorldPreview::Start& s) { return s.x == x && s.y == y; });
+        if (!known) {
+            out.starts.push_back({x, y});
+        }
+    }
+    return out;
+}
+
+core::Result<WorldPreview> preview_world(const assets::GameDirectory& game, const assets::BuildingTable& buildings,
+                                         const assets::TextTable& text, const NewGameOptions& options) {
+    auto world = start_new_game(game, buildings, text, options);
+    if (!world) {
+        return world.error();
+    }
+    return preview_of(*world, buildings);
 }
 
 core::Status add_players(World& world, const WorldPlan& plan, std::uint8_t players) {
@@ -312,6 +443,7 @@ core::Status add_players(World& world, const WorldPlan& plan, std::uint8_t playe
         Ship s = ship;
         s.id = 0;
         s.owner = player_slot(n);
+        s.name.clear();  // not the copied ship's name: Simulation::offer_names gives it one of its own
         s.place(plan.starts[n].x, plan.starts[n].y);
         world.add_ship(std::move(s));
     }
@@ -370,6 +502,100 @@ core::Result<assets::ChunkFile> own_world_scenario(const assets::ChunkFile& scen
         out.add(kMapChunk, encode_map_size(plan.width, plan.height));
     }
     return assets::ChunkFile::from_bytes(out.take());
+}
+
+core::Result<World> roll_planned_islands(const World& world, const assets::GameDirectory& game,
+                                         const assets::BuildingTable& buildings, const WorldStart& start,
+                                         std::vector<std::string>* warnings) {
+    const auto& planned = world.planned_islands();
+    if (!planned) {
+        return core::make_error(core::ErrorCode::InvalidFormat, "the world plans no islands");
+    }
+    if (world.source() == nullptr) {
+        return core::make_error(core::ErrorCode::NotFound,
+                                "the islands of the plan need the scenario of the original it came from");
+    }
+    if (const auto problems = check_planned_islands(*planned, world.width(), world.height()); !problems.empty()) {
+        return core::make_error(core::ErrorCode::InvalidFormat, "world plan: " + problems.front());
+    }
+    // The world as the editor left it, in the original's chunks (its islands, cities, players and
+    // ships), with the plan as it is now: the generator then makes only the islands no island of the
+    // world has the number of, and the loader the world around them. A world the original's
+    // chunks cannot hold starts from the scenario of the original it came from instead, with the
+    // plan as it is now.
+    std::vector<std::uint8_t> table;
+    if (planned->table) {
+        for (const std::uint16_t v : *planned->table) {
+            table.push_back(static_cast<std::uint8_t>(v));
+            table.push_back(static_cast<std::uint8_t>(v >> 8U));
+        }
+    }
+    const assets::ChunkFile& source = *world.source();
+    std::span<const std::uint8_t> szene;
+    for (const assets::Chunk& c : source.chunks()) {
+        if (c.name == "SZENE") {
+            szene = source.payload(c);
+        }
+    }
+    assets::ChunkWriter out;
+    bool planned_added = false;
+    const auto add_plan = [&] {
+        out.add("SZENE", assets::write_scenario_plan(szene, planned->plan));
+        if (!table.empty()) {
+            out.add("RANDTAB", table);
+        }
+        planned_added = true;
+    };
+    auto saved = write_savegame(world, buildings);
+    auto saved_file = saved ? assets::ChunkFile::from_bytes(std::move(saved).value())
+                            : core::Result<assets::ChunkFile>(saved.error());
+    if (saved_file) {
+        // The plan before WIFF, where the original's chunks end; Open1602's own after it. Its chunk
+        // of what the original cannot hold names the chunks before as they were, which the islands
+        // made change: it stays out (what is beyond the original's limits does not start).
+        for (const assets::Chunk& c : saved_file->chunks()) {
+            if (c.name == "SZENE" || c.name == "RANDTAB" || c.name == kExtensionChunk) {
+                continue;
+            }
+            if (c.name == "WIFF" && !planned_added) {
+                add_plan();
+            }
+            out.add(c.name, saved_file->payload(c));
+        }
+    } else {
+        if (warnings != nullptr) {
+            warnings->push_back("the world starts from the original's scenario: " + saved_file.error().message);
+        }
+        for (const assets::Chunk& c : source.chunks()) {
+            if (c.name != "SZENE" && c.name != "RANDTAB") {
+                out.add(c.name, source.payload(c));
+            }
+        }
+    }
+    if (!planned_added) {
+        add_plan();
+    }
+    auto file = assets::ChunkFile::from_bytes(out.take());
+    if (!file) {
+        return file.error();
+    }
+    WorldStart roll = start;
+    roll.keep_plan = false;
+    if (!planned->table) {
+        roll.draws = WorldStart::Draws::Seeded;
+    }
+    auto rolled = load_world(*file, buildings, game, warnings, roll);
+    if (!rolled) {
+        return rolled.error();
+    }
+    // What the editor added, which the original's chunks do not hold.
+    rolled->set_scenario_info(world.scenario_info());
+    rolled->set_markers(world.markers());
+    rolled->set_scenario_script(world.scenario_script());
+    if (const auto problems = check_markers(rolled->markers(), rolled->width(), rolled->height()); !problems.empty()) {
+        return core::make_error(core::ErrorCode::InvalidFormat, "scenario: " + problems.front());
+    }
+    return rolled;
 }
 
 }  // namespace o1602::sim

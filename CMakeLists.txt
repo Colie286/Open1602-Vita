@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 cmake_minimum_required(VERSION 3.25)
-project(Open1602 VERSION 0.3.1 LANGUAGES C CXX)
+project(Open1602 VERSION 0.5.0 LANGUAGES C CXX)
 if(PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
     message(FATAL_ERROR "Use a separate build directory")
 endif()
@@ -31,7 +31,9 @@ add_subdirectory(third_party/enet)
 add_subdirectory(third_party/stb_vorbis)
 add_subdirectory(third_party/dr_flac)
 add_subdirectory(third_party/lua)
-set_target_properties(o1602_enet o1602_lua o1602_stb_vorbis o1602_dr_flac
+add_subdirectory(third_party/dav1d)
+add_subdirectory(third_party/opus)
+set_target_properties(o1602_enet o1602_lua o1602_stb_vorbis o1602_dr_flac o1602_dav1d o1602_opus
     PROPERTIES POSITION_INDEPENDENT_CODE OFF)
 add_subdirectory(engine)
 add_subdirectory(platform/vita)

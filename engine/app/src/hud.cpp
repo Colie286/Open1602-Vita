@@ -44,9 +44,12 @@ constexpr std::int32_t kFirstMode = 30011;  // build, military, info, options
 constexpr std::int32_t kStatusLine = 100001;
 constexpr std::int32_t kFirstEvent = 100011;
 constexpr std::size_t kEvents = 3;
-// Open1602: the offers of treaties not answered yet, after the message icons (+ 0..10), each the
-// treaty message icon in the colour of the partner who made it.
+// Open1602: the offers of treaties not answered yet, after the message icons (+ 0..kOfferIcons - 1),
+// each the treaty message icon in the colour of the partner who made it.
 constexpr std::int32_t kFirstOffer = 100101;
+/// Icons of open offers the status bar has room for: one per partner of twelve players; with more
+/// (a higher sim::kMaxPlayers) further offers show as soon as earlier ones are answered.
+constexpr std::size_t kOfferIcons = std::min<std::size_t>(diplomacy::kMaxPartners, 11);
 constexpr std::int32_t kOfferGap = 12;  // design pixels between the message icons and the offers
 constexpr std::uint8_t kTreatyIcon = 1;
 // TOOLS.INC: the compass (GFXMAP + 1 + rotation) and the message icons (GFXLEISTE).
@@ -59,7 +62,7 @@ constexpr std::int32_t kLeistTextX = 750;    // its line ends here, 18 before th
 constexpr std::int32_t kTutorArt = 111001;   // the mission window's art (drawn widened instead)
 constexpr std::int32_t kTutorText = 110002;  // its flowing text
 constexpr std::int32_t kDesignViewW = 768;   // game view, status bar and mission window at 1024 x 768
-constexpr std::uint64_t kEventMs = 45'000;   // an icon stays this long (449 time units of 0x00430F20)
+constexpr std::uint64_t kEventMs = 45'000;   // an icon stays this long (449 time units)
 constexpr std::uint64_t kMinimapMs = 500;    // the minimap texture is uploaded at most this often
 // TUTOR.GAD in the tutorial: six lines of text, the arrows back and forward, each a picture and
 // five parts to click.
@@ -135,7 +138,7 @@ std::optional<std::size_t> help_line(std::int32_t id) {
     return std::nullopt;
 }
 
-/// The icon of a message (Event_UpdateStatusIcons 0x0043AFA0): types 0..3 by colour (! event,
+/// The icon of a message: types 0..3 by colour (! event,
 /// scroll treaty or trade, swords attack, lips other players), 4..7 plague, fire, drought, volcano.
 /// Which message has which type is not documented; this follows the icons.
 /// The message icons of the four types drawn per colour: red, blue, yellow, white, (military
@@ -162,7 +165,7 @@ assets::GadgetLayout with_offer_icons(assets::GadgetLayout leist) {
     const assets::Gadget icon = *first;
     const std::int32_t step =
         leist.find(kFirstEvent + 1) != nullptr ? leist.find(kFirstEvent + 1)->pos[0] - icon.pos[0] : icon.size[0] + 3;
-    for (std::size_t k = 0; k < diplomacy::kMaxPartners; ++k) {
+    for (std::size_t k = 0; k < kOfferIcons; ++k) {
         assets::Gadget g = icon;
         g.id = kFirstOffer + static_cast<std::int32_t>(k);
         g.pos[0] =
@@ -265,7 +268,7 @@ Hud::Hud(SDL_Renderer* renderer, const assets::GameDirectory& game, const assets
     for (std::size_t i = 0; i < kEvents; ++i) {
         m_leist.set_hidden(kFirstEvent + static_cast<std::int32_t>(i), true);
     }
-    for (std::size_t k = 0; k < diplomacy::kMaxPartners; ++k) {
+    for (std::size_t k = 0; k < kOfferIcons; ++k) {
         m_leist.set_visible(kFirstOffer + static_cast<std::int32_t>(k), false);
     }
     m_leist.set_hidden(kLeistArt, true);
@@ -301,8 +304,36 @@ Hud::Hud(SDL_Renderer* renderer, const assets::GameDirectory& game, const assets
         m_multiplayer->explicit_text_input(true);
 #endif
         m_menu->set_form_style(style);
+        // The preview of a new world: sea, surf, beach, ground, forest, mountains, villages, starts.
+        constexpr std::array<std::array<std::uint8_t, 3>, sim::WorldPreview::kTiles + 1> kPreview = {{{30, 60, 110},
+                                                                                                      {60, 105, 160},
+                                                                                                      {220, 200, 140},
+                                                                                                      {125, 150, 70},
+                                                                                                      {45, 95, 40},
+                                                                                                      {125, 105, 85},
+                                                                                                      {190, 60, 40},
+                                                                                                      {255, 255, 255}}};
+        GameSettingsMenu::PreviewColours preview{};
+        for (std::size_t i = 0; i < kPreview.size(); ++i) {
+            preview[i] = ui::nearest_colour(palette, kPreview[i][0], kPreview[i][1], kPreview[i][2]);
+        }
+        m_menu->set_preview_colours(preview);
+        m_multiplayer->set_preview_colours(preview);
         m_display = std::make_unique<DisplayMenu>(style);
+        m_keys = std::make_unique<KeysMenu>(style);
+        m_question_form.set_style(style);
         m_chat = std::make_unique<ChatWindow>(style);
+        m_blueprint = std::make_unique<BlueprintWindow>(style);
+        m_templates = std::make_unique<TemplateWindow>(style);
+        m_editor = std::make_unique<EditorPanel>(style);
+        m_chrome = std::make_unique<EditorChrome>(style);
+        // The templates' views from above: land, buildings, houses, roads, fields, forest.
+        TemplateColours colours;
+        colours.ground = ui::nearest_colour(palette, 125, 150, 70);
+        colours.pieces = {ui::nearest_colour(palette, 150, 70, 45), ui::nearest_colour(palette, 215, 175, 110),
+                          ui::nearest_colour(palette, 120, 115, 110), ui::nearest_colour(palette, 230, 205, 90),
+                          ui::nearest_colour(palette, 35, 80, 35)};
+        m_templates->set_colours(colours);
         // The window "Warenbilanz" as a parchment: ink on sandstone, the grounds at half strength.
         GoodsStyle goods;
         goods.form.translucent = true;
@@ -323,9 +354,16 @@ Hud::Hud(SDL_Renderer* renderer, const assets::GameDirectory& game, const assets
         goods.red = ui::nearest_colour(palette, 170, 20, 10);
         goods.stock = ui::nearest_colour(palette, 150, 115, 70);
         goods.shadow = ui::nearest_colour(palette, 0, 0, 0);
-        // The lines of the charts: taxes or the first class green, then red, blue, ochre, purple, grey.
-        constexpr std::array<std::array<std::uint8_t, 3>, 6> kSeries = {
-            {{0, 120, 30}, {170, 20, 10}, {30, 60, 160}, {190, 130, 20}, {120, 40, 130}, {90, 90, 90}}};
+        // The lines of the charts: taxes or the first class green, then red, blue, ochre, purple, grey,
+        // and teal and brown for the classes of packages.
+        constexpr std::array<std::array<std::uint8_t, 3>, 8> kSeries = {{{0, 120, 30},
+                                                                         {170, 20, 10},
+                                                                         {30, 60, 160},
+                                                                         {190, 130, 20},
+                                                                         {120, 40, 130},
+                                                                         {90, 90, 90},
+                                                                         {0, 130, 130},
+                                                                         {120, 70, 20}}};
         for (std::size_t i = 0; i < kSeries.size(); ++i) {
             goods.series[i] = ui::nearest_colour(palette, kSeries[i][0], kSeries[i][1], kSeries[i][2]);
         }
@@ -354,21 +392,24 @@ Hud::Hud(SDL_Renderer* renderer, const assets::GameDirectory& game, const assets
         }
         m_goods_shadow = goods.shadow;
         m_goods_parchment = parchment_pixels(GoodsWindow::kWidth, GoodsWindow::kHeight);
-        // The banners of the slots in the palette's nearest colours, grey for any further one.
+        // The banners of the slots in exactly their colours (the palette has no pink and no violet),
+        // grey for any further one.
         render::BannerTable banners = render::BannerTable::original();
         banners.add_more_players();
         std::vector<MenuBanner> menu_banners;
-        std::vector<std::uint8_t> banner_colours;
+        std::vector<std::int32_t> banner_colours;
         // Names in a banner's colour stay readable on the menus' dark ground (4.5:1, as for text).
         const assets::Rgba ground = palette[ui::FormStyle{}.ground];
         for (const render::Banner& b : banners.banners()) {
-            const assets::Rgba text = ui::legible_on(b.colour, ground, 4.5);
-            menu_banners.push_back(MenuBanner{ui::nearest_colour(palette, b.colour.r, b.colour.g, b.colour.b), b.id,
-                                              ui::nearest_colour(palette, text.r, text.g, text.b)});
+            // In exactly that colour: the palette has no light shade of some banners (no violet).
+            menu_banners.push_back(
+                MenuBanner{ui::rgb_ink(b.colour), b.id, ui::rgb_ink(ui::legible_on(b.colour, ground, 4.5))});
             banner_colours.push_back(menu_banners.back().colour);
         }
         const std::uint8_t grey = ui::nearest_colour(palette, 128, 128, 128);
         m_multiplayer->set_banners(std::move(menu_banners), grey);
+        m_banner_palette = banner_colours;
+        m_other_banner_palette = grey;
         m_chat->set_banners(std::move(banner_colours), grey);
     }
     if (auto tutor = assets::load_gad(game, "TUTOR.GAD")) {
@@ -470,14 +511,24 @@ void Hud::draw_resources() {
             // the others (LC-5).
             const render::Banner* banner =
                 m_banners != nullptr ? m_banners->get(static_cast<sim::BannerId>(r.shield)) : nullptr;
-            const render::BannerArt art = render::BannerArt::at(m_gfx_baumat + 17);
+            const render::BannerArt art = render::BannerArt::arms_at(m_gfx_baumat + 17);
             const render::BannerArtSprite sprite =
                 banner != nullptr ? render::banner_art(art, banner)
                                   : render::BannerArtSprite{art.first + std::min(r.shield, 3), std::nullopt};
-            icon(sprite.gfx, 666);
-            if (sprite.tint) {
-                items.back().tint = ui::ColourTint{*sprite.tint, art.stride, art.variants, art.base, sprite.pattern};
+            if (const auto arms = package_arms_of(art, banner)) {
+                icon(*arms, 666);  // a package's coat of arms, as set_package_icon draws it
+                items.back().tint = ui::ColourTint{banner->colour, 1, 1, 0, 0};
+            } else {
+                icon(sprite.gfx, 666);
+                if (sprite.tint) {
+                    items.back().tint =
+                        ui::ColourTint{*sprite.tint, art.stride, art.variants, art.base, sprite.pattern};
+                }
             }
+        } else if (const auto native = r.natives ? ui::package_icon_sprite("open1602:native") : std::nullopt) {
+            // A native village: the native figure next to the number like the coat of arms, as in the
+            // History Edition.
+            icon(*native, 666);
         } else {
             icon(m_gfx_baumat + 15, 646);
         }
@@ -491,10 +542,11 @@ void Hud::draw_unit_arms(const std::vector<UnitArms>& marks, sim::BannerId banne
         return;
     }
     const render::Banner* b = m_banners != nullptr ? m_banners->get(banner) : nullptr;
-    const render::BannerArt art = render::BannerArt::at(m_gfx_baumat + 17);
+    const render::BannerArt art = render::BannerArt::arms_at(m_gfx_baumat + 17);
     const render::BannerArtSprite sprite =
         b != nullptr ? render::banner_art(art, b)
                      : render::BannerArtSprite{art.first + std::min<std::int32_t>(banner, 3), std::nullopt};
+    const std::optional<std::int32_t> package_arms = package_arms_of(art, b);
     constexpr std::uint8_t kPole = 28;  // dark brown, as the frames of the key overview
     std::vector<ui::DrawItem> items;
     items.reserve(2 * marks.size());
@@ -509,12 +561,14 @@ void Hud::draw_unit_arms(const std::vector<UnitArms>& marks, sim::BannerId banne
         items.push_back(pole);
         ui::DrawItem arms;
         arms.kind = ui::DrawItem::Kind::Sprite;
-        arms.gfx = sprite.gfx;
+        arms.gfx = package_arms.value_or(sprite.gfx);
         arms.x = m.arms.x;
         arms.y = m.arms.y;
         arms.w = m.arms.w;
         arms.h = m.arms.h;
-        if (sprite.tint) {
+        if (package_arms) {
+            arms.tint = ui::ColourTint{b->colour, 1, 1, 0, 0};  // a package's arms: as set_package_icon
+        } else if (sprite.tint) {
             arms.tint = ui::ColourTint{*sprite.tint, art.stride, art.variants, art.base, sprite.pattern};
         }
         items.push_back(std::move(arms));
@@ -532,6 +586,8 @@ SelectionPanel* Hud::selection_panel(std::optional<PanelContext>& context) {
         context->ctrl = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
         context->shift = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
         context->now_ms = platform::ticks_ms();
+        context->own_units = m_own_units;
+        context->own_ships = m_own_ships;
         return m_selection_panels->military_panel_for(*context);
     }
     if (m_mode != kModeInfo || m_selection.kind == Selection::Kind::None) {
@@ -542,6 +598,8 @@ SelectionPanel* Hud::selection_panel(std::optional<PanelContext>& context) {
     context->ctrl = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
     context->shift = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
     context->now_ms = platform::ticks_ms();
+    context->own_units = m_own_units;
+    context->own_ships = m_own_ships;
     return m_selection_panels->panel_for(m_selection, *context);
 }
 
@@ -648,6 +706,24 @@ bool Hud::back() {
         m_chat->close();
         return true;
     }
+    if (m_blueprint_at) {
+        m_blueprint_at.reset();
+        return true;
+    }
+    if (templates_open()) {
+        m_templates->close();
+        return true;
+    }
+    if (m_editing && m_chrome && !m_menu_active && m_chrome->close_menu()) {
+        return true;
+    }
+    if (m_editing && m_editor && !m_menu_active && m_editor->back()) {
+        return true;
+    }
+    if (keys_open()) {
+        m_keys_open = false;  // back to the window "Anzeige"
+        return true;
+    }
     if (m_display_open) {
         m_display_open = false;
         return true;
@@ -680,7 +756,7 @@ bool Hud::back() {
     if (m_mode == kModeInfo &&
         (m_selection.kind == Selection::Kind::ShipList || m_selection.kind == Selection::Kind::CityList ||
          m_selection.kind == Selection::Kind::Diplomacy)) {
-        // A page back (tribute -> treaties), else back to the player status (0x0040A0D6).
+        // A page back (tribute -> treaties), else back to the player status.
         std::optional<PanelContext> context;
         if (SelectionPanel* p = selection_panel(context); p != nullptr && p->back()) {
             return true;
@@ -699,6 +775,12 @@ std::optional<Hud::Action> Hud::build_tool_action() {
     }
     if (m_build->demolish()) {
         return Action{Action::Kind::Demolish};
+    }
+    if (m_build->copy()) {
+        return Action{Action::Kind::Copy};
+    }
+    if (m_build->moving()) {
+        return Action{Action::Kind::Move};
     }
     const BuildPanel::Available available =
         m_available ? m_available : BuildPanel::Available([](std::uint32_t) { return true; });
@@ -722,7 +804,9 @@ void Hud::found_kontor(std::uint32_t ship, std::uint32_t kontor) {
 }
 
 bool Hud::deselect_build_category() {
-    if(m_menu_active||m_mode!=kModeBuild||!m_build||m_founding_ship)return false;
+    if (m_menu_active || m_mode != kModeBuild || !m_build || m_founding_ship) {
+        return false;
+    }
     return m_build->deselect();
 }
 
@@ -739,9 +823,11 @@ std::optional<Hud::Action> Hud::set_mode(std::int32_t mode) {
     m_ctrl.set_selected(m_mode, true);
     if (m_build) {
         m_build->close_popup();
-        if(mode==kModeBuild)m_build->reselect();
+        if (mode == kModeBuild) {
+            m_build->reselect();
+        }
     }
-    // Hud_SetMode 0x0043B660: the build mode arms the remembered building again, the others put
+    // The build mode arms the remembered building again, the others put
     // the tool away.
     return mode == kModeBuild ? build_tool_action() : std::optional<Action>(Action{Action::Kind::ToolOff});
 }
@@ -752,7 +838,21 @@ ui::Rect Hud::layout(std::int32_t width, std::int32_t height, double ui_scale) {
     m_menu_scale =
         std::min(static_cast<double>(width) / ui::kDesignWidth, static_cast<double>(height) / ui::kDesignHeight);
     const double scale = std::isfinite(ui_scale) && ui_scale > 0.0 ? std::min(ui_scale, m_menu_scale) : m_menu_scale;
+    m_layout_w = width;
+    m_layout_h = height;
+    m_layout_scale = ui_scale;
     m_regions = ui::screen_regions(width, height, scale);
+    if (m_editing && m_chrome) {
+        // The editor's own frame: a wider column on the right, its own status line below the map;
+        // the menu and tool bars lie over the map's top and left edge.
+        const auto column = static_cast<std::int32_t>(EditorChrome::kColumn * scale);
+        const auto bar = static_cast<std::int32_t>(EditorChrome::kStatusH * scale);
+        m_regions.side_panel = {width - column, 0, column, height};
+        m_regions.status_bar = {0, height - bar, width - column, bar};
+        m_regions.tutor = {};
+        m_regions.game_view = {0, 0, width - column, height - bar};
+        m_chrome->set_screen(width, height, scale);
+    }
     m_ctrl.set_scale(scale);
     m_leist.set_scale(scale);
     if (m_build) {
@@ -773,8 +873,17 @@ ui::Rect Hud::layout(std::int32_t width, std::int32_t height, double ui_scale) {
     if (m_display) {
         m_display->set_scale(scale);
     }
+    if (m_keys) {
+        m_keys->set_scale(scale);
+    }
     if (m_chat) {
         m_chat->set_scale(scale);
+    }
+    if (m_blueprint) {
+        m_blueprint->set_scale(scale);
+    }
+    if (m_templates) {
+        m_templates->set_scale(scale);
     }
     if (m_goods) {
         m_goods->set_scale(scale);
@@ -787,11 +896,80 @@ ui::Rect Hud::layout(std::int32_t width, std::int32_t height, double ui_scale) {
 }
 
 bool Hud::covers(std::int32_t x, std::int32_t y) const noexcept {
-    // The mission's window takes the clicks inside it (0x0042D1C0); the menu and the window
+    // The mission's window takes the clicks inside it; the menu and the window
     // "Anzeige" all of them.
-    return m_menu_active || m_display_open || m_goods_open || m_chat_button_held || (chat_button_visible()&&chat_button_rect().contains(x,y)) || (chat_open() && chat_rect().contains(x, y)) ||
-           m_regions.side_panel.contains(x, y) || m_regions.status_bar.contains(x, y) ||
+    // A question takes all of them: nothing behind it answers the mouse.
+    if (m_editing && m_chrome && m_chrome->covers(x, y)) {
+        return true;
+    }
+    if (m_editing && m_editor && m_editor->dialog()) {
+        return true;  // a dialog of the editor takes every click
+    }
+    return m_chat_button_held || (chat_button_visible() && chat_button_rect().contains(x,y)) || m_menu_active || m_question.has_value() || m_display_open || m_goods_open ||
+           (chat_open() && chat_rect().contains(x, y)) || (m_blueprint_at && blueprint_rect().contains(x, y)) ||
+           (templates_open() && templates_rect().contains(x, y)) || m_regions.side_panel.contains(x, y) ||
+           m_regions.status_bar.contains(x, y) ||
            (m_options_model.mission_window && m_tutor && m_regions.tutor.contains(x, y));
+}
+
+void Hud::set_editing(bool on) {
+    const bool changed = m_editing != on;
+    m_editing = on;
+    if (changed && m_layout_w > 0) {
+        (void)layout(m_layout_w, m_layout_h, m_layout_scale);
+    }
+    if (m_chrome) {
+        (void)m_chrome->close_menu();
+    }
+    // The modes' buttons are greyed while the editor runs (clicks on them are ignored there).
+    for (const std::int32_t mode : {kModeBuild, kModeMilitary, kModeInfo, kModeOptions}) {
+        m_ctrl.set_disabled(mode, on);
+    }
+    if (m_editor) {
+        m_editor->show_document();
+    }
+    m_editor_requests.clear();
+}
+
+void Hud::place_editor_panel() {
+    if (!m_editor) {
+        return;
+    }
+    // Below the minimap at the column's top.
+    const double s = m_regions.scale;
+    const ui::Rect map = minimap_rect();
+    const std::int32_t top = map.w > 0 ? static_cast<std::int32_t>((map.y + map.h - m_regions.side_panel.y) / s) : 0;
+    const auto height = static_cast<std::int32_t>(m_regions.side_panel.h / std::max(s, 0.01));
+    m_editor->set_scale(s);
+    m_editor->set_room(top + 12, std::max(0, height - top - 20));
+    // The whole map's pages as dialogs in the window's middle.
+    const double unit = std::max(s, 0.01);
+    m_editor->set_screen(static_cast<std::int32_t>(m_layout_w / unit), static_cast<std::int32_t>(m_layout_h / unit),
+                         static_cast<std::int32_t>(m_regions.side_panel.x / unit));
+}
+
+void Hud::editor_tool(EditorTool tool) {
+    if (!m_editor || m_editor->typing()) {
+        return;
+    }
+    if (m_chrome) {
+        (void)m_chrome->close_menu();
+    }
+    if (auto r = m_editor->choose_tool(tool, m_editor_model)) {
+        m_editor_requests.push_back(std::move(*r));
+    }
+}
+
+void Hud::editor_command(EditorCommand command) {
+    if (!m_editor) {
+        return;
+    }
+    if (m_chrome) {
+        (void)m_chrome->close_menu();
+    }
+    if (auto r = m_editor->command(command, m_editor_model)) {
+        m_editor_requests.push_back(std::move(*r));
+    }
 }
 
 ui::Rect Hud::minimap_rect() const {
@@ -800,12 +978,19 @@ ui::Rect Hud::minimap_rect() const {
         return {};
     }
     const double s = m_regions.scale;
+    if (m_editing) {
+        // At the top of the editor's column, in its middle.
+        const auto w = static_cast<std::int32_t>(g->size[0] * s);
+        const auto h = static_cast<std::int32_t>(g->size[1] * s);
+        return {m_regions.side_panel.x + (m_regions.side_panel.w - w) / 2,
+                m_regions.side_panel.y + ui::to_pixels(12, s), w, h};
+    }
     return {m_regions.side_panel.x + ui::to_pixels(g->pos[0], s), m_regions.side_panel.y + ui::to_pixels(g->pos[1], s),
             static_cast<std::int32_t>(g->size[0] * s), static_cast<std::int32_t>(g->size[1] * s)};
 }
 
 ui::Rect Hud::minimap_image() const {
-    // As in the original (0x0042D5E0, 0x0043B0E0) the world always fills the whole parchment,
+    // As in the original the world always fills the whole parchment,
     // stretched as it comes (500 x 350 on 186 x 160).
     return m_world_w == 0 || m_world_h == 0 ? ui::Rect{} : minimap_rect();
 }
@@ -836,43 +1021,103 @@ void Hud::draw_question() {
     if (!m_question) {
         return;
     }
+    const ui::Rect r = layout_question();
+    m_renderer->draw(m_question_form.draw(m_renderer->fonts(m_question_form.scale())), r.x, r.y,
+                     m_question_form.scale());
+}
+
+namespace {
+
+// The question's window in design units, built as the settings' windows (ui::Form): a heading,
+// buttons 44 high, the answer of Enter highlighted.
+constexpr std::int32_t kQuestionButtonW = 320;
+constexpr std::int32_t kQuestionButtonH = 44;
+constexpr std::int32_t kQuestionGap = 8;
+constexpr std::int32_t kQuestionSwatch = 28;
+constexpr std::int32_t kQuestionMargin = 24;
+constexpr std::int32_t kQuestionTextY = 54;  ///< the question's lines after the first
+constexpr std::int32_t kQuestionLine = 22;
+constexpr std::int32_t kYesNoW = 180;
+constexpr ui::Form::Id kQuestionYes = 1;
+constexpr ui::Form::Id kQuestionNo = 2;
+constexpr ui::Form::Id kQuestionOption = 10;
+
+}  // namespace
+
+ui::Rect Hud::layout_question() {
     const double s = m_menu_active ? m_menu_scale : m_regions.scale;
-    // Centred on the main menu's window, in the game on the map.
     const ui::Rect& v = m_menu_active ? m_regions.full : m_regions.game_view;
-    const auto px = [&](double d) { return static_cast<std::int32_t>(d * s); };
-    const ui::Rect box{v.x + (v.w - px(520)) / 2, v.y + (v.h - px(130)) / 2, px(520), px(130)};
-    constexpr std::uint8_t kGold = 215;  // (202, 172, 52) in STADTFLD.COL
-    constexpr std::uint8_t kDark = 28;   // (35, 23, 12)
-    m_renderer->fill(ui::Rect{box.x - px(3), box.y - px(3), box.w + px(6), box.h + px(6)}, kGold);
-    m_renderer->fill(box, kDark);
-    m_yes = ui::Rect{box.x + px(90), box.y + px(80), px(140), px(34)};
-    m_no = ui::Rect{box.x + box.w - px(230), box.y + px(80), px(140), px(34)};
-    std::vector<ui::DrawItem> items;
-    const auto text = [&](const std::string& t, std::int32_t x, std::int32_t y) {
-        ui::DrawItem d;
-        d.kind = ui::DrawItem::Kind::Text;
-        d.block = 0;
-        d.colour = 4;
-        d.align = ui::Align::Centre;
-        d.x = x;
-        d.y = y;
-        d.text = t;
-        items.push_back(d);
-    };
-    // Up to two lines, broken at '\n'.
+    // Yes and no side by side; options one under the other, in two columns when there are more
+    // than seven.
+    const std::size_t n = m_choices.size();
     const std::string& q = *m_question;
     const std::size_t nl = q.find('\n');
-    text(q.substr(0, nl), box.w / 2, px(36));
+    const auto more_lines =
+        nl == std::string::npos ? 0 : static_cast<std::int32_t>(std::count(q.begin(), q.end(), '\n'));
+    const std::int32_t top = std::max(100, kQuestionTextY + more_lines * kQuestionLine + 2 * kQuestionGap);
+    const std::int32_t columns = n > 7 ? 2 : 1;
+    const auto rows = n == 0 ? 1
+                             : static_cast<std::int32_t>((n + static_cast<std::size_t>(columns) - 1) /
+                                                         static_cast<std::size_t>(columns));
+    const std::int32_t cell = kQuestionSwatch + kQuestionGap + kQuestionButtonW;
+    const std::int32_t row_width = columns * cell + (columns - 1) * 2 * kQuestionGap;
+    const std::int32_t width = std::max(560, row_width + 2 * kQuestionMargin);
+    const std::int32_t height = top + rows * (kQuestionButtonH + kQuestionGap) - kQuestionGap + kQuestionMargin;
+    ui::Form& f = m_question_form;
+    f.set_scale(s);
+    f.clear();
+    f.panel(ui::Rect{0, 0, width, height});
+    f.label(ui::Rect{kQuestionMargin, 14, width - 2 * kQuestionMargin, 40}, q.substr(0, nl), ui::Align::Left,
+            ui::Form::Tone::Heading);
     if (nl != std::string::npos) {
-        text(q.substr(nl + 1), box.w / 2, px(62));
+        f.paragraph(ui::Rect{kQuestionMargin, kQuestionTextY, width - 2 * kQuestionMargin, more_lines * kQuestionLine},
+                    q.substr(nl + 1), ui::Form::Tone::Normal, kQuestionLine);
     }
-    for (const ui::Rect* b : {&m_yes, &m_no}) {
-        m_renderer->fill(*b, kGold);
-        m_renderer->fill(ui::Rect{b->x + px(2), b->y + px(2), b->w - px(4), b->h - px(4)}, kDark);
+    if (n == 0) {
+        // Enter answers yes: that button is highlighted.
+        const std::int32_t y = top;
+        const std::int32_t gap = 40;
+        const std::int32_t x = (width - 2 * kYesNoW - gap) / 2;
+        f.button(kQuestionYes, ui::Rect{x, y, kYesNoW, kQuestionButtonH}, ui::tr("dialog.yes"), true, true);
+        f.button(kQuestionNo, ui::Rect{x + kYesNoW + gap, y, kYesNoW, kQuestionButtonH}, ui::tr("dialog.no"));
     }
-    text(ui::tr("dialog.yes"), m_yes.x - box.x + m_yes.w / 2, m_yes.y - box.y + px(28));
-    text(ui::tr("dialog.no"), m_no.x - box.x + m_no.w / 2, m_no.y - box.y + px(28));
-    m_renderer->draw(items, box.x, box.y, s);
+    const std::int32_t left = (width - row_width) / 2;
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto column = static_cast<std::int32_t>(i / static_cast<std::size_t>(rows));
+        const auto row = static_cast<std::int32_t>(i % static_cast<std::size_t>(rows));
+        const std::int32_t x = left + column * (cell + 2 * kQuestionGap);
+        const std::int32_t y = top + row * (kQuestionButtonH + kQuestionGap);
+        // Enter takes the first option: it is highlighted. The banner's colour is a field at the
+        // left end of the button, so that a click on it chooses the option too.
+        f.button(kQuestionOption + static_cast<ui::Form::Id>(i), ui::Rect{x, y, cell, kQuestionButtonH},
+                 m_choices[i].text, true, i == 0);
+        if (const auto& banner = m_choices[i].banner) {
+            const std::int32_t colour =
+                *banner < m_banner_palette.size() ? m_banner_palette[*banner] : m_other_banner_palette;
+            f.swatch(ui::Rect{x + kQuestionGap + 2, y + 10, kQuestionSwatch, kQuestionButtonH - 20}, colour);
+        }
+    }
+    const auto w = static_cast<std::int32_t>(width * s);
+    const auto h = static_cast<std::int32_t>(height * s);
+    return {v.x + std::max(0, (v.w - w) / 2), v.y + std::max(0, (v.h - h) / 2), w, h};
+}
+
+std::optional<Hud::Action> Hud::question_mouse(std::int32_t x, std::int32_t y, bool down) {
+    const ui::Rect r = layout_question();
+    const auto id = m_question_form.mouse(x - r.x, y - r.y, down);
+    if (!id) {
+        return std::nullopt;
+    }
+    Action a{Action::Kind::Answer};
+    if (*id == kQuestionYes || *id == kQuestionNo) {
+        a.step = *id == kQuestionYes ? 1 : 0;
+    } else if (*id >= kQuestionOption && static_cast<std::size_t>(*id - kQuestionOption) < m_choices.size()) {
+        a.step = *id - kQuestionOption;
+    } else {
+        return std::nullopt;
+    }
+    close_question();
+    return a;
 }
 
 ui::Rect Hud::display_rect() const {
@@ -882,6 +1127,26 @@ ui::Rect Hud::display_rect() const {
     // Over the main menu in the middle of the window, else over the map.
     const ui::Rect& v = m_menu_active ? m_regions.full : m_regions.game_view;
     return {v.x + std::max(0, (v.w - w) / 2), v.y + std::max(0, (v.h - h) / 2), w, h};
+}
+
+ui::Rect Hud::keys_rect() const {
+    const double s = m_keys ? m_keys->scale() : m_regions.scale;
+    const auto w = static_cast<std::int32_t>(KeysMenu::kWidth * s);
+    const auto h = static_cast<std::int32_t>(KeysMenu::kHeight * s);
+    // In the middle of the window: wider than the map's part of it.
+    const ui::Rect& v = m_regions.full;
+    return {v.x + std::max(0, (v.w - w) / 2), v.y + std::max(0, (v.h - h) / 2), w, h};
+}
+
+void Hud::draw_display() {
+    if (keys_open()) {
+        const ui::Rect r = keys_rect();
+        m_renderer->draw(m_keys->draw(m_keys_model, m_renderer->fonts(m_keys->scale())), r.x, r.y, m_keys->scale());
+    } else if (m_display_open && m_display) {
+        const ui::Rect r = display_rect();
+        m_renderer->draw(m_display->draw(m_display_model, m_renderer->fonts(m_display->scale())), r.x, r.y,
+                         m_display->scale());
+    }
 }
 
 ui::Rect Hud::chat_rect() const {
@@ -900,6 +1165,25 @@ bool Hud::chat_button_visible() const noexcept {
 ui::Rect Hud::chat_button_rect() const noexcept {
     const auto& v=m_regions.game_view;
     return {v.x+8,v.y+std::max(0,v.h-38),34,28};
+}
+
+ui::Rect Hud::blueprint_rect() const {
+    // Over the upper left of the map, where it hides little of what the player builds.
+    const double s = m_blueprint ? m_blueprint->scale() : m_regions.scale;
+    const auto gap = static_cast<std::int32_t>(8 * s);
+    const ui::Rect& v = m_regions.game_view;
+    return {v.x + gap, v.y + gap, static_cast<std::int32_t>(BlueprintWindow::kWidth * s),
+            static_cast<std::int32_t>(BlueprintWindow::kHeight * s)};
+}
+
+ui::Rect Hud::templates_rect() const {
+    // Over the upper right of the map, by the side panel and its tools.
+    const double s = m_templates ? m_templates->scale() : m_regions.scale;
+    const auto gap = static_cast<std::int32_t>(8 * s);
+    const auto w = static_cast<std::int32_t>(TemplateWindow::kWidth * s);
+    const auto h = static_cast<std::int32_t>((m_templates ? m_templates->height(m_templates_model) : 0) * s);
+    const ui::Rect& v = m_regions.game_view;
+    return {std::max(v.x, v.x + v.w - w - gap), v.y + gap, w, h};
 }
 
 bool Hud::open_chat() {
@@ -945,11 +1229,7 @@ void Hud::draw_menu() {
                          m_menu_scale);
     } else if (m_menu) {
         m_renderer->draw(m_menu->draw(m_renderer->fonts(m_menu_scale)), ox, oy, m_menu_scale);
-        if (m_display_open && m_display) {
-            const ui::Rect r = display_rect();
-            m_renderer->draw(m_display->draw(m_display_model, m_renderer->fonts(m_display->scale())), r.x, r.y,
-                             m_display->scale());
-        }
+        draw_display();
     }
     draw_question();
     draw_help();
@@ -1007,7 +1287,7 @@ void Hud::draw_mission(const sim::World& world) {
     if (mission == nullptr && !world.missions().empty()) {
         mission = &world.missions().front();  // the endless game: one mission without owner, only its text
     }
-    // The window of the original (region above the status bar, 0x0043B53F): its art, the text
+    // The window of the original (region above the status bar): its art, the text
     // flowing in 110002; the lines and buttons of the tutorial stay hidden.
     m_tutor->set_scale(m_regions.scale);
     // As wide as the game view (the original's art is 768 wide): the art widened, the text wider,
@@ -1020,7 +1300,7 @@ void Hud::draw_mission(const sim::World& world) {
     m_tutor->set_size(kTutorText, m_tutor_text_size[0] + extra, m_tutor_text_size[1]);
     m_renderer->draw_widened(0, m_gfx_tutor, window, m_regions.scale);
     if (m_tutorial) {
-        // The tutorial (0x00430FF0): six lines of its page instead of the mission's text, „weiter“
+        // The tutorial: six lines of its page instead of the mission's text, „weiter“
         // only where the chapter pages forward by hand, never "back".
         m_tutor->set_visible(kTutorText, false);
         const auto first = static_cast<std::size_t>(m_tutorial->page()) * Tutorial::kLinesPerPage;
@@ -1072,7 +1352,7 @@ void Hud::reset_game() {
     m_events.clear();
     m_offers.clear();
     m_selection = Selection{};
-    m_question.reset();
+    close_question();
     m_help.reset();
     m_goods_open = false;
     m_modal_press = ModalPress::None;
@@ -1345,9 +1625,17 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
     std::optional<Action> action;
     // Over the main menu too: open_menu() closes the game's, so one open there came from its
     // "Options".
+    if (m_display_open && !m_end_active && !multiplayer_open() && !m_question && !m_help && keys_open()) {
+        const ui::Rect r = keys_rect();
+        keys_result(m_keys->mouse(x - r.x, y - r.y, down, m_keys_model, button));
+        return std::nullopt;
+    }
     if (m_display_open && !m_end_active && !multiplayer_open() && !m_question && !m_help) {
         const ui::Rect r = display_rect();
         switch (m_display->mouse(x - r.x, y - r.y, down, m_display_model, button)) {
+            case DisplayMenu::Result::Keys:
+                m_keys_requested = true;
+                break;
             case DisplayMenu::Result::Changed:
                 m_display_changed = true;
                 break;
@@ -1361,8 +1649,21 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
     }
     if (m_goods_open && !m_menu_active && !m_question && !m_help) {
         const ui::Rect r = goods_rect();
-        if (m_goods->mouse(x - r.x, y - r.y, down, button) == GoodsWindow::Result::Close) {
-            m_goods_open = false;
+        switch (m_goods->mouse(x - r.x, y - r.y, down, button)) {
+            case GoodsWindow::Result::Close:
+                m_goods_open = false;
+                break;
+            case GoodsWindow::Result::Ship:
+                // A ship of the tab "Routes": the window closes and the ship is selected and looked at.
+                if (const auto ship = m_goods->take_ship()) {
+                    m_goods_open = false;
+                    Action a{Action::Kind::SelectShip, ship->x, ship->y};
+                    a.ship = ship->id;
+                    return a;
+                }
+                break;
+            case GoodsWindow::Result::None:
+                break;
         }
         return std::nullopt;
     }
@@ -1371,6 +1672,29 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
         else{const bool activate=std::exchange(m_chat_button_held,false)&&chat_button_visible()&&chat_button_rect().contains(x,y);if(activate)(void)open_chat();}
         return std::nullopt;
     }
+    if (m_blueprint_at && m_blueprint && !m_menu_active && !m_question && !m_help && button == ui::MouseButton::Left) {
+        // The blueprint's window takes the clicks on it; the map beside it stays usable.
+        const ui::Rect r = blueprint_rect();
+        const BlueprintWindow::Result result = m_blueprint->mouse(x - r.x, y - r.y, down, m_blueprint_model);
+        if (result == BlueprintWindow::Result::Close) {
+            m_blueprint_at.reset();
+        } else if (result != BlueprintWindow::Result::None) {
+            m_blueprint_clicks.push_back(result);
+        }
+        if (r.contains(x, y)) {
+            return std::nullopt;
+        }
+    }
+    if (templates_open() && !m_question && !m_help && button == ui::MouseButton::Left) {
+        // The templates' window takes the clicks on it; the map beside it stays usable.
+        const ui::Rect r = templates_rect();
+        if (auto request = m_templates->mouse(x - r.x, y - r.y, down, m_templates_model)) {
+            m_template_requests.push_back(std::move(*request));
+        }
+        if (r.contains(x, y)) {
+            return std::nullopt;
+        }
+    }
     if (chat_open() && !m_menu_active && !m_question && !m_help && button == ui::MouseButton::Left) {
         // The chat takes the clicks on it; the map beside it stays usable.
         const ui::Rect r = chat_rect();
@@ -1378,6 +1702,35 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
         if (r.contains(x, y)) {
             return std::nullopt;
         }
+    }
+    if (m_editing && m_chrome && !m_menu_active && !m_help && !m_question && !m_end_active) {
+        // The editor's bars first: their buttons, and an open menu that a press beside closes.
+        if (button == ui::MouseButton::Left) {
+            bool taken = false;
+            const std::optional<EditorTool> active = m_editor ? m_editor->active_tool(m_editor_model) : std::nullopt;
+            const EditorChrome::Result r = m_chrome->mouse(x, y, down, m_editor_model, m_chrome_model, active, taken);
+            if (r.tool) {
+                editor_tool(*r.tool);
+            }
+            if (r.command) {
+                editor_command(*r.command);
+            }
+            if (taken) {
+                return std::nullopt;
+            }
+        } else if (m_chrome->covers(x, y)) {
+            return std::nullopt;
+        }
+    }
+    if (button != ui::MouseButton::Left && m_editing && !m_menu_active && !m_help && !m_question && !m_end_active &&
+        m_editor) {
+        // The right button goes back through the values of the editor's panel, and does nothing else.
+        place_editor_panel();
+        const ui::Rect& side = m_regions.side_panel;
+        if (auto r = m_editor->mouse(x - side.x, y - side.y, down, m_editor_model, button)) {
+            m_editor_requests.push_back(std::move(*r));
+        }
+        return std::nullopt;
     }
     if (button != ui::MouseButton::Left && (m_help || m_question || m_end_active || !m_menu_active || !m_menu)) {
         return std::nullopt;  // the right button only goes through the values of the menus' dialogs
@@ -1403,9 +1756,9 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
         }
         return std::nullopt;
     }
-    if (!m_menu_active && m_options_model.mission_window && m_tutor && m_regions.tutor.contains(x, y)) {
+    if (!m_menu_active && !m_editing && m_options_model.mission_window && m_tutor && m_regions.tutor.contains(x, y)) {
         // The mission's window: X closes it, the arrows scroll its text. In the tutorial X ends the
-        // chapter and „weiter“ turns the page (0x004326E0).
+        // chapter and „weiter“ turns the page.
         for (const ui::PanelEvent& e : m_tutor->mouse(x - m_regions.tutor.x, y - m_regions.tutor.y, down)) {
             if (e.kind != ui::PanelEvent::Kind::Clicked) {
                 continue;
@@ -1435,26 +1788,7 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
     if (m_question) {
         // The question takes every click until it is answered: pressed and released on the same
         // button (as the original's buttons), so passing over "Ja" answers nothing.
-        const ModalPress at = m_yes.contains(x, y)  ? ModalPress::Yes
-                              : m_no.contains(x, y) ? ModalPress::No
-                                                    : ModalPress::Elsewhere;
-        if (down) {
-            if (m_modal_press == ModalPress::None) {
-                m_modal_press = at;
-            }
-            return std::nullopt;
-        }
-        const ModalPress pressed = std::exchange(m_modal_press, ModalPress::None);
-        if (pressed == ModalPress::None) {
-            return std::nullopt;  // the pointer only moved
-        }
-        if (at == pressed && at != ModalPress::Elsewhere) {
-            Action a{Action::Kind::Answer};
-            a.step = at == ModalPress::Yes ? 1 : 0;
-            m_question.reset();
-            return a;
-        }
-        return std::nullopt;
+        return question_mouse(x, y, down);
     }
     if (m_end_active) {
         std::int32_t ox = 0;
@@ -1486,7 +1820,14 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
     const ui::Rect& panel = m_regions.side_panel;
     const ui::Rect& bar = m_regions.status_bar;
     // The mode's panel first: an open pop-up takes every press on the side panel.
-    if (m_mode == kModeBuild && m_build) {
+    if (m_editing) {
+        if (m_editor) {
+            place_editor_panel();
+            if (auto r = m_editor->mouse(x - panel.x, y - panel.y, down, m_editor_model)) {
+                m_editor_requests.push_back(std::move(*r));
+            }
+        }
+    } else if (m_mode == kModeBuild && m_build) {
         const BuildPanel::Available available =
             m_available ? m_available : BuildPanel::Available([](std::uint32_t) { return true; });
         const bool popup = m_build->popup_open();
@@ -1500,6 +1841,18 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
                     break;
                 case BuildPanel::Action::Kind::Demolish:
                     action = Action{Action::Kind::Demolish};
+                    break;
+                case BuildPanel::Action::Kind::Copy:
+                    action = Action{Action::Kind::Copy};
+                    break;
+                case BuildPanel::Action::Kind::Move:
+                    action = Action{Action::Kind::Move};
+                    break;
+                case BuildPanel::Action::Kind::Blueprint:
+                    action = Action{Action::Kind::Blueprint};
+                    break;
+                case BuildPanel::Action::Kind::Templates:
+                    action = Action{Action::Kind::Templates};
                     break;
                 case BuildPanel::Action::Kind::Off:
                     action = Action{Action::Kind::ToolOff};
@@ -1566,8 +1919,9 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
             m_option_events.push_back(std::move(e));
         }
     }
-    const auto ctrl = m_ctrl.mouse(x - panel.x, y - panel.y, down);
-    const auto leist = m_leist.mouse(x - bar.x, y - bar.y, down);
+    // The editor's column has no compass, zoom, modes or messages of the game.
+    const auto ctrl = m_editing ? decltype(m_ctrl.mouse(0, 0, false)){} : m_ctrl.mouse(x - panel.x, y - panel.y, down);
+    const auto leist = m_editing ? decltype(m_leist.mouse(0, 0, false)){} : m_leist.mouse(x - bar.x, y - bar.y, down);
     for (const ui::PanelEvent& e : ctrl) {
         if (e.kind != ui::PanelEvent::Kind::Clicked) {
             continue;
@@ -1586,7 +1940,7 @@ std::optional<Hud::Action> Hud::mouse(std::int32_t x, std::int32_t y, bool down,
                 action = Action{Action::Kind::ZoomOut};
                 break;
             default:
-                if (e.id >= kModeBuild && e.id <= kModeOptions) {
+                if (e.id >= kModeBuild && e.id <= kModeOptions && !m_editing) {
                     action = set_mode(e.id);
                 }
                 break;
@@ -1621,7 +1975,7 @@ void Hud::message(MessageId id, sim::BannerId banner, std::optional<std::pair<do
                   std::uint64_t now_ms, std::string_view text) {
     // A text of the message's own (a mod's) in the language of the game, else the original's.
     std::string shown = text.empty() ? m_messages->text(id, ui::current_language()) : std::string(text);
-    // Event_Post 0x00430D50: the same message at the same place only refreshes its time; a new one
+    // The same message at the same place only refreshes its time; a new one
     // pushes the oldest out.
     for (Event& e : m_events) {
         if (e.id == id && e.tile == tile && e.text == shown) {
@@ -1655,7 +2009,7 @@ std::optional<render::MinimapTracker::Colour> minimap_owner_colour(const sim::Pl
 }
 
 /// The colour of a world tile on the minimap. An island `local` has not discovered shows its ground
-/// without owners, like the map (0x00489C90). The sea is left out (alpha 0): the parchment shows
+/// without owners, like the map. The sea is left out (alpha 0): the parchment shows
 /// there, as in the original.
 std::array<std::uint8_t, 4> minimap_colour(const sim::World& world, const assets::BuildingTable& buildings,
                                            const render::BannerTable& banners, const sim::World::Cell& c,
@@ -1671,7 +2025,7 @@ std::array<std::uint8_t, 4> minimap_colour(const sim::World& world, const assets
     const assets::BuildingType* b = top.empty() ? nullptr : buildings.by_sprite(top.sprite);
     const std::int32_t kind = b != nullptr ? b->kind : sim::building_kind::kSea;
     namespace bk = sim::building_kind;
-    // Ground kinds 19 to 22 are water to the original's minimap (0x0042D5E0), the river mouth too:
+    // Ground kinds 19 to 22 are water to the original's minimap, the river mouth too:
     // alpha 1 marks an island's water, which counts against its land when the picture is shrunk.
     if (kind == bk::kSea || kind == bk::kSurf || kind == bk::kSurfCorner || kind == bk::kRiverMouth) {
         rgb[3] = 1;
@@ -1745,25 +2099,29 @@ void Hud::shrink_minimap(std::int32_t w, std::int32_t h) {
     m_minimap_h = h;
     const auto pixels = static_cast<std::size_t>(w) * static_cast<std::size_t>(h);
     m_minimap_small.assign(pixels * 4, 0);
-    // As the original (0x0042D5E0): a tile lands on pixel (x * step) >> 8 with the step in 8.8
-    // fixed point, cut off; a pixel shows land when more of its island tiles are land than water
-    // (the open sea does not count), in the colour of its last land tile. A world smaller than the
-    // parchment spreads each tile over the pixels up to the next one's.
-    const std::uint64_t step_x = (std::uint64_t{static_cast<std::uint32_t>(w)} << 8U) / m_world_w;
-    const std::uint64_t step_y = (std::uint64_t{static_cast<std::uint32_t>(h)} << 8U) / m_world_h;
+    // As the original: a tile lands on pixel (x * step) >> shift with the step in fixed point, cut
+    // off; a pixel shows land when more of its island tiles are land than water (the open sea does
+    // not count), in the colour of its last land tile. A world smaller than the parchment spreads
+    // each tile over the pixels up to the next one's. The original's step has 8 bits of fraction;
+    // on a large world that cut-off step shrinks the land towards the top left, away from the
+    // ships, the view frame and the clicks, which use the exact scale (on 4000 tiles by up to 8 %), so
+    // Open1602 keeps 16 bits.
+    constexpr unsigned kShift = 16U;
+    const std::uint64_t step_x = (std::uint64_t{static_cast<std::uint32_t>(w)} << kShift) / m_world_w;
+    const std::uint64_t step_y = (std::uint64_t{static_cast<std::uint32_t>(h)} << kShift) / m_world_h;
     std::vector<std::int32_t> balance(pixels, 0);  // land tiles minus water tiles
     std::vector<std::size_t> colour(pixels, 0);    // the land tile that gives the colour
     for (std::uint32_t y = 0; y < m_world_h; ++y) {
-        const std::uint64_t y0 = (y * step_y) >> 8U;
-        const std::uint64_t y1 = std::max(y0 + 1, ((y + 1) * step_y) >> 8U);
+        const std::uint64_t y0 = (y * step_y) >> kShift;
+        const std::uint64_t y1 = std::max(y0 + 1, ((y + 1) * step_y) >> kShift);
         for (std::uint32_t x = 0; x < m_world_w; ++x) {
             const std::size_t i = (std::size_t{y} * m_world_w + x) * 4;
             const std::uint8_t alpha = m_minimap[i + 3];
             if (alpha == 0) {
                 continue;  // the open sea
             }
-            const std::uint64_t x0 = (x * step_x) >> 8U;
-            const std::uint64_t x1 = std::max(x0 + 1, ((x + 1) * step_x) >> 8U);
+            const std::uint64_t x0 = (x * step_x) >> kShift;
+            const std::uint64_t x1 = std::max(x0 + 1, ((x + 1) * step_x) >> kShift);
             for (std::uint64_t py = y0; py < y1 && py < static_cast<std::uint64_t>(h); ++py) {
                 for (std::uint64_t px = x0; px < x1 && px < static_cast<std::uint64_t>(w); ++px) {
                     const std::size_t o = static_cast<std::size_t>(py * static_cast<std::uint64_t>(w) + px);
@@ -1793,7 +2151,10 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
 #endif
     core::profile::Scope timer(core::profile::HudDraw);
     const double s = m_regions.scale;
-    {core::profile::Scope resources(core::profile::HudResourcesDraw);draw_resources();}
+    if (!m_editing) {
+        core::profile::Scope resources(core::profile::HudResourcesDraw);
+        draw_resources();
+    }
     // Black under the art where the window is larger than it.
     m_renderer->fill(m_regions.side_panel, 0);
     m_renderer->fill(m_regions.status_bar, 0);
@@ -1818,7 +2179,8 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
         const auto picture =
             def != nullptr && !def->picture.empty() ? ui::package_icon_sprite(def->picture) : std::nullopt;
         if (picture) {
-            m_leist.set_graphic(id, *picture, 0);  // a package's icon, as it is drawn
+            // A package's icon: as drawn, or a template in the colour of the player it is about.
+            set_package_icon(m_leist, id, *picture, banners.get(e.banner));
         } else if (type < 4) {
             set_banner_graphic(m_leist, id, message_icon_art(type), banners.get(e.banner), 6);
         } else {
@@ -1833,7 +2195,7 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
     }
     // Offers not answered yet stay until they are (Open1602): the treaty icon in the partner's colour.
     m_offers = m_simulation != nullptr ? diplomacy::open_offers(world, m_local) : std::vector<diplomacy::Offer>{};
-    for (std::size_t k = 0; k < diplomacy::kMaxPartners; ++k) {
+    for (std::size_t k = 0; k < kOfferIcons; ++k) {
         const auto id = kFirstOffer + static_cast<std::int32_t>(k);
         const sim::Player* from = k < m_offers.size() ? world.player(m_offers[k].from) : nullptr;
         m_leist.set_visible(id, from != nullptr);
@@ -1845,13 +2207,29 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
             status = diplomacy::offer_text(m_offers[k], player_name(*from));
         }
     }
+    if (m_editing && m_chrome) {
+        // The editor's column instead of the game's panel: its own ground under the minimap.
+        m_renderer->draw(m_chrome->draw_back(m_renderer->fonts(s), minimap_rect()), 0, 0, s);
+    } else {
     m_ctrl.set_graphic(kCompass, kGfxCompass + m_rotation, 0);
     m_renderer->opaque_panel(m_ctrl.draw(m_renderer->fonts(s)),m_regions.side_panel,s,kGfxTafel,5);
+    }
     // The mode's panel below the head, and its help texts.
     {core::profile::Scope panels(core::profile::HudPanelDraw);
     const BuildPanel::Available available =
         m_available ? m_available : BuildPanel::Available([](std::uint32_t) { return true; });
-    if (m_mode == kModeBuild && m_build) {
+    if (m_editing) {
+        if (m_editor) {
+            place_editor_panel();
+            if (!m_editor->dialog()) {  // a dialog goes over the minimap and the bars, at the end
+                m_renderer->draw(m_editor->draw(m_editor_model, m_renderer->fonts(s)), m_regions.side_panel.x,
+                                 m_regions.side_panel.y, s);
+            }
+            if (!m_editor_model.notice.empty()) {
+                status = m_editor_model.notice;
+            }
+        }
+    } else if (m_mode == kModeBuild && m_build) {
         m_build->refresh(
             buildings, available, static_cast<std::uint8_t>((m_rotation + m_building_rotation) & 3U),
             [this](std::int32_t block, std::int32_t gfx) { return m_renderer->sprite_size(block, gfx); },
@@ -1890,12 +2268,14 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
             status = *text;
         }
     }
-    // The name being typed ends with its window (or its ship or city).
-    if (auto c = m_names.end_frame(world)) {
-        m_commands.push_back(std::move(*c));
+    if (!m_editing) {
+        // The name being typed ends with its window (or its ship or city).
+        if (auto c = m_names.end_frame(world)) {
+            m_commands.push_back(std::move(*c));
+        }
+        step_tutorial(available, now_ms);
+        draw_mission(world);
     }
-    step_tutorial(available, now_ms);
-    draw_mission(world);
     }
     {core::profile::Scope minimap(core::profile::HudMinimapDraw);
     // The minimap on the parchment.
@@ -1929,7 +2309,7 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
     }
     if (const ui::Rect at = minimap_image(); at.w > 0) {
         // Each pixel of the parchment shows land when more of its tiles are land than sea, the sea
-        // not at all (0x0042D5E0).
+        // not at all.
         if (m_minimap_upload || at.w != m_minimap_w || at.h != m_minimap_h) {
             shrink_minimap(at.w, at.h);
             m_minimap_upload = true;
@@ -1941,8 +2321,10 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
         const float unit = std::max(1.0F, std::round(static_cast<float>(s)));
         const SDL_Rect clip{at.x, at.y, at.w, at.h};
         SDL_SetRenderClipRect(m_sdl, &clip);
-        // The visible part of the map as in the original (0x0043B0E0): each edge dashed, two pixels
-        // on and two off (0x00498010), white over a blue shadow one pixel lower.
+        // The visible part of the map, each edge dashed two pixels on and two off as in the
+        // original. The original draws its single pixels white over a blue shadow one pixel lower,
+        // which hardly shows on the blue sea and the light islands; Open1602 draws the dashes as
+        // squares of the interface's scale, white with a black border all round.
         std::array<SDL_FPoint, 4> corners{};
         for (std::size_t i = 0; i < 4; ++i) {
             corners[i] = SDL_FPoint{static_cast<float>(at.x + view[i].first * fx),
@@ -1961,16 +2343,22 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
                 }
             }
         }
-        std::vector<SDL_FPoint> shadow = dashes;
-        for (SDL_FPoint& p : shadow) {
-            p.y += unit;
+        std::vector<SDL_FRect> border;
+        std::vector<SDL_FRect> marks;
+        border.reserve(dashes.size());
+        marks.reserve(dashes.size());
+        for (const SDL_FPoint& p : dashes) {
+            const float x = std::floor(p.x - unit / 2.0F);
+            const float y = std::floor(p.y - unit / 2.0F);
+            border.push_back(SDL_FRect{x - 1.0F, y - 1.0F, unit + 2.0F, unit + 2.0F});
+            marks.push_back(SDL_FRect{x, y, unit, unit});
         }
-        SDL_SetRenderDrawColor(m_sdl, 0, 0, 255, 255);
-        SDL_RenderPoints(m_sdl, shadow.data(), static_cast<int>(shadow.size()));
+        SDL_SetRenderDrawColor(m_sdl, 0, 0, 0, 255);
+        SDL_RenderFillRects(m_sdl, border.data(), static_cast<int>(border.size()));
         SDL_SetRenderDrawColor(m_sdl, 255, 255, 255, 255);
-        SDL_RenderPoints(m_sdl, dashes.data(), static_cast<int>(dashes.size()));
-        // The own ships, and in military mode the own land units, as blue squares of 2 x 2 pixels
-        // (0x0045D1E0, 0x0045D2B0); nothing of the other players.
+        SDL_RenderFillRects(m_sdl, marks.data(), static_cast<int>(marks.size()));
+        // The own ships, and in military mode the own land units, as blue squares of 2 x 2 pixels;
+        // nothing of the other players.
         SDL_SetRenderDrawColor(m_sdl, 0, 0, 255, 255);
         const auto unit_square = [&](double tx, double ty) {
             const SDL_FRect r{static_cast<float>(at.x + std::floor(tx * fx)),
@@ -1994,6 +2382,22 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
         }
         SDL_SetRenderClipRect(m_sdl, nullptr);
     }
+    }
+    if (m_editing && m_chrome) {
+        // The editor's bars over the map's edges, its status line below it.
+        EditorChromeModel chrome = m_chrome_model;
+        chrome.status = m_editor_model.notice.empty() ? m_status : m_editor_model.notice;
+        chrome.status_error = !m_editor_model.notice.empty() && m_editor_model.notice_is_error;
+        const std::optional<EditorTool> active = m_editor ? m_editor->active_tool(m_editor_model) : std::nullopt;
+        if (m_editor && m_editor->dialog()) {
+            // Over the minimap, below an open menu of the bar.
+            m_renderer->draw(m_editor->draw(m_editor_model, m_renderer->fonts(s)), m_regions.side_panel.x,
+                             m_regions.side_panel.y, s);
+        }
+        m_renderer->draw(m_chrome->draw(m_editor_model, chrome, active, m_renderer->fonts(s)), 0, 0, s);
+        draw_question();
+        draw_help();
+        return;
     }
     {core::profile::Scope status_draw(core::profile::HudStatusDraw);
     // A status bar wider than its art (wide windows): the art widened, the line at its right end.
@@ -2027,11 +2431,17 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
         }
     }
     }
-    if (m_display_open && m_display) {
-        const ui::Rect r = display_rect();
-        m_renderer->draw(m_display->draw(m_display_model, m_renderer->fonts(m_display->scale())), r.x, r.y,
-                         m_display->scale());
+    if (m_blueprint_at && m_blueprint && m_blueprint_model.valid) {
+        const ui::Rect r = blueprint_rect();
+        m_renderer->draw(m_blueprint->draw(m_blueprint_model, m_renderer->fonts(m_blueprint->scale())), r.x, r.y,
+                         m_blueprint->scale());
     }
+    if (templates_open()) {
+        const ui::Rect r = templates_rect();
+        m_renderer->draw(m_templates->draw(m_templates_model, m_renderer->fonts(m_templates->scale())), r.x, r.y,
+                         m_templates->scale());
+    }
+    draw_display();
     if (m_goods_open && m_goods && m_figure_table != nullptr) {
         const ui::Rect r = goods_rect();
         // A shadow at the lower right, the parchment, then the window's ink.

@@ -97,19 +97,29 @@ struct SessionConfig {
     /// it again. Without: the slot gives no orders until its player is back.
     bool computer_takes_over = true;
     std::uint32_t take_over_ms = 60'000;
-    /// (Host, also after a host migration) Only the host's player pauses and resumes the game; the
-    /// others' pauses are not carried out (MS-20: one player could keep the game paused).
-    bool host_pauses_only = false;
+    /// (Host, also after a host migration) Only the host's player pauses, resumes and sets the
+    /// speed of the game; the others' speed orders are not carried out (MS-20: one player could
+    /// keep the game paused). Without it, every player may do all three.
+    bool host_controls_speed = false;
     /// (Host, also after a host migration) How long, in real time, a game for a computer that
     /// joins or resyncs may pack on a worker while the game goes on before the host waits for it
     /// (TB-26). 0 waits at once, as a test that steps time faster than it passes needs; the game
     /// gives a few seconds.
     std::uint32_t pack_wait_ms = 0;
+    /// (Host) After start(), the game's first frame waits until every player of the lobby has the
+    /// game loaded, so that all begin together; meanwhile everyone sees how far each one is
+    /// (Member::loaded). A player whose game made no progress for this long is no longer waited
+    /// for: it catches up as one that joins a running game. 0: the game runs at once and the
+    /// others catch up.
+    std::uint32_t start_wait_ms = 0;
     /// Desyncs of one computer within this many fingerprints after it got the game anew: it
     /// cannot follow the host (another build?) and is sent away.
     std::uint32_t max_resyncs = 2;
     /// (Host) Computers must give it to come in; empty: anyone may.
     std::string password;
+    /// (Host, also after a host migration) The player ID of this computer's person (Hello::player):
+    /// the game keeps who plays the host's slot (sim::Player::owner) as it does for the others.
+    std::uint64_t player = 0;
     /// Chat lines one computer may send per second; more are dropped.
     std::uint32_t max_chat_per_second = 5;
     /// (Host, also after a host migration) Spectators may write in the chat, to everyone; without,
@@ -163,8 +173,11 @@ struct SessionEvent {
         Chat,          ///< `seat` (`name`) said `text`, to everyone or privately (`everyone`, `to`, `missed`)
         Dropped,       ///< `count` commands of this computer's player were not carried out (too many at once)
         Reconnecting,  ///< (computer) the connection to the host broke; it tries to get back in
-        PauseRefused,  ///< (computer) only the host pauses and resumes this game (Lobby::host_pauses_only)
+        SpeedRefused,  ///< (computer) only the host pauses, resumes and sets the speed of this game
+                       ///< (Lobby::host_controls_speed)
         PackageKept,   ///< (computer) a package the host sent was kept (packages[0])
+        Started,       ///< the first frame of the game runs: every player has it loaded, or the host
+                       ///< stopped waiting (Session::starting())
     };
     Kind kind = Kind::Joined;
     Seat seat = sim::kNoPlayer;
@@ -204,8 +217,8 @@ public:
     /// to the players in `to` (only players say something privately, to other players). A
     /// spectator's line goes out only if the game lets spectators write (Lobby::spectators_chat).
     virtual void say(std::string text, std::vector<Seat> to = {}) = 0;
-    /// This computer's player may pause and resume the game (the host always may).
-    [[nodiscard]] virtual bool may_pause() const noexcept { return true; }
+    /// This computer's player may pause, resume and set the speed of the game (the host always may).
+    [[nodiscard]] virtual bool may_change_speed() const noexcept { return true; }
 
     /// The player this computer plays, kNoPlayer while it only watches or is not in yet.
     [[nodiscard]] Seat local_seat() const noexcept { return m_seat; }
@@ -223,6 +236,9 @@ public:
     /// Who carries the game on if the host leaves (kNoPlayer: nobody), and where the others then
     /// connect (Roster::successor).
     [[nodiscard]] Seat successor() const noexcept { return m_successor; }
+    /// The game has started, but its first frame waits until every player has it loaded
+    /// (SessionConfig::start_wait_ms): the players see how far each one is (Member::loaded).
+    [[nodiscard]] bool starting() const noexcept { return m_starting; }
     [[nodiscard]] const std::string& successor_address() const noexcept { return m_successor_address; }
     [[nodiscard]] bool ended() const noexcept { return m_ended; }
     [[nodiscard]] EndReason end_reason() const noexcept { return m_end_reason; }
@@ -262,6 +278,7 @@ protected:
     std::vector<Member> m_roster;
     Seat m_successor = sim::kNoPlayer;
     std::string m_successor_address;
+    bool m_starting = false;
     Lobby m_lobby;
     std::vector<SessionEvent> m_events;
 };
@@ -323,8 +340,11 @@ public:
     void kick_member(std::size_t member, Seat seat, std::string_view name);
     /// Every human slot of another computer is ready (the host starts when it wants).
     [[nodiscard]] bool everyone_ready() const;
-    /// Begins the game made from the lobby: every computer in the lobby gets it.
+    /// Begins the game made from the lobby: every computer in the lobby gets it. With
+    /// SessionConfig::start_wait_ms, its first frame waits for the players to have it (starting()).
     void start(sim::Simulation& simulation, const assets::BuildingTable& buildings);
+    /// Stops waiting for the players still loading the game at the start: it runs now, they catch up.
+    void start_now();
 
     /// Frames complete so far (all frames below this one).
     [[nodiscard]] std::uint64_t closed() const noexcept { return m_closed; }
@@ -346,6 +366,11 @@ private:
     void hello(Peer& peer, const Hello& m);
     void commands(Peer& peer, CommandBatch& m);
     void progress(Peer& peer, const Progress& m);
+    void load_progress(Peer& peer, const LoadProgress& m);
+    /// While the game starts (m_starting): whether its first frame still waits for a player; once
+    /// it no longer does, the game runs (Started).
+    bool wait_for_start(std::uint32_t real_ms);
+    void stop_starting();
     void take_seat(Peer& peer, Seat seat);
     void ready(Peer& peer, bool ready);
     void chat(Peer& peer, const Chat& m);
@@ -416,6 +441,8 @@ private:
     void forget_token(Seat seat);
     /// A kicked computer's address: no newcomer from there for the rest of the session (MS-12).
     void ban(const std::string& address);
+    /// A kicked person: not back into their slot by their player ID (seat_of_owner).
+    void ban_owner(std::uint64_t owner);
     /// Keeps a person's slot from newcomers for `ms`, for its player to come back with the token.
     void reserve(Seat seat, std::uint32_t ms);
     [[nodiscard]] bool reserved(Seat seat) const;
@@ -424,7 +451,13 @@ private:
     /// Tells the successor what it needs to carry the game on, if that changed (Standby).
     void hand_over();
     [[nodiscard]] Peer* peer_of(LinkId link);
-    [[nodiscard]] Seat free_seat(Seat wanted) const;
+    /// A slot for a computer that comes in: `wanted` if it is free, else the first free one,
+    /// leaving those of other people (owner_of) to them while another is free.
+    [[nodiscard]] Seat free_seat(Seat wanted, std::uint64_t owner = 0) const;
+    /// The person who played a slot (sim::Player::owner; in the lobby, the savegame's).
+    [[nodiscard]] std::uint64_t owner_of(Seat seat) const;
+    /// The free slot the person `owner` played before, kNoPlayer if none.
+    [[nodiscard]] Seat seat_of_owner(std::uint64_t owner) const;
     [[nodiscard]] bool seat_taken(Seat seat) const;
     /// A person's slot was left: the computer takes it over after a while (m_vacant).
     void vacate(Seat seat);
@@ -494,10 +527,15 @@ private:
     std::uint64_t m_matched = 0;
     std::vector<LinkId> m_roster_links;    ///< the link of each roster() entry (unused for the host's own)
     std::vector<std::string> m_banned;     ///< addresses of computers kicked: not taken in again (MS-12)
+    std::vector<std::uint64_t> m_kicked;   ///< owners of slots kicked: not back into them by their ID
     std::optional<LinkId> m_standby_link;  ///< the successor, as last told
     Standby m_standby;                     ///< what it was told
     bool m_standby_changed = true;
     bool m_roster_changed = true;
+    /// Only how far computers are with the game on its way changed: the roster goes out with the
+    /// next change, or after m_roster_wait_ms.
+    bool m_loading_changed = false;
+    std::uint32_t m_roster_wait_ms = 0;
     bool m_lobby_changed = true;
     std::uint32_t m_chat_ms = 0;        ///< into the current second of the chat limit
     std::uint32_t m_lobby_wait_ms = 0;  ///< before the lobby may be sent again (MS-16)
@@ -508,6 +546,11 @@ private:
 class ClientSession final : public Session {
 public:
     using Loader = std::function<sim::Simulation*(std::span<const std::uint8_t> save)>;
+    /// Loading a game in two steps (load_in_background()): `Prepare` gets the savegame on a worker
+    /// thread and does what takes long and touches nothing of the program (reading and unpacking
+    /// it); the `Finish` it returns makes the running game of it on the game thread, as a Loader.
+    using Finish = std::function<sim::Simulation*()>;
+    using Prepare = std::function<Finish(std::vector<std::uint8_t> save)>;
     /// A connection to the successor (nullptr if none can be made now).
     using Connect = std::function<std::unique_ptr<Transport>()>;
     /// Keeps a package the host sent (its files, in package_hash order): false if it cannot, which
@@ -524,7 +567,7 @@ public:
     void submit(sim::Command command) override;
     void update(std::uint32_t real_ms, const sim::Simulation::BeforeTick& before_tick = {}) override;
     void say(std::string text, std::vector<Seat> to = {}) override;
-    [[nodiscard]] bool may_pause() const noexcept override { return !m_lobby.host_pauses_only; }
+    [[nodiscard]] bool may_change_speed() const noexcept override { return !m_lobby.host_controls_speed; }
     /// In the lobby: asks for an open slot, or kNoPlayer to watch.
     void take_seat(Seat seat);
     /// In the lobby: ready to start, or not.
@@ -539,6 +582,10 @@ public:
     /// Where the packages go that the host sends when the Hello asks for them (Hello::fetch_packages),
     /// before the game that uses them is loaded. Without, a computer that gets one ends the session.
     void keep_packages_with(KeepPackage keep) { m_keep_package = std::move(keep); }
+    /// Loads the games from the host in two steps, the long one on a worker thread (in place of the
+    /// Loader): the program goes on meanwhile and the connection stays alive, also for a large
+    /// world on a slow computer; what comes from the host meanwhile waits until the game is there.
+    void load_in_background(Prepare prepare) { m_prepare = std::move(prepare); }
 
     /// Taken in by the host (in the lobby or the game).
     [[nodiscard]] bool welcomed() const noexcept { return m_welcomed; }
@@ -581,10 +628,17 @@ private:
     /// One event of the transport, as update() takes them in turn.
     void handle(TransportEvent& e);
     void load(Snapshot& m);
+    /// The game of `head` (Snapshot without its bytes) is loaded as `simulation` (nullptr: it could not be).
+    void loaded(sim::Simulation* simulation, const Snapshot& head);
+    /// While a game is prepared on a worker (m_pending): keeps the connection alive; once it is
+    /// ready, finishes it. False while it is still being prepared.
+    bool finish_pending();
     void turn(Turn& m);
     void package_files(PackageFiles& m);
     void run(std::uint32_t real_ms, const sim::Simulation::BeforeTick& before_tick);
     void report(std::uint32_t real_ms);
+    /// Tells the host how much of the game on its way this computer has (LoadProgress).
+    void report_loading(std::uint32_t real_ms);
     /// Sends what the host would admit now of m_outgoing.
     void send_commands();
     /// The connection to the host broke: back into the slot with the token (m_reconnect).
@@ -595,6 +649,13 @@ private:
     static constexpr LinkId kHost = 0;
     Hello m_hello;
     Loader m_load;
+    Prepare m_prepare;  ///< load_in_background()
+    /// A game being prepared on a worker (load_in_background()), and its snapshot without the bytes.
+    struct Pending {
+        std::future<Finish> finish;
+        Snapshot head;
+    };
+    std::optional<Pending> m_pending;
     sim::Simulation* m_simulation = nullptr;
     bool m_connected = false;
     bool m_welcomed = false;
@@ -617,8 +678,11 @@ private:
     /// run since the last sending, so that the host does not have to drop any.
     std::uint32_t m_send_commands = 0;
     std::uint64_t m_send_owed = 0;
-    std::uint64_t m_reported = 0;      ///< frames last told the host
-    std::uint32_t m_since_report = 0;  ///< ms
+    std::uint64_t m_reported = 0;                  ///< frames last told the host
+    std::uint32_t m_since_report = 0;              ///< ms
+    std::uint8_t m_load_reported = kNoLoadReport;  ///< LoadProgress::percent last told the host
+    std::uint32_t m_since_load_report = 0;         ///< ms
+    static constexpr std::uint8_t kNoLoadReport = 0xff;
     std::optional<Standby> m_standby;  ///< from the host, if it named this computer its successor
     Connect m_connect;                 ///< following a successor: connects again after a failure
     Connect m_reconnect;               ///< to the host, after a broken connection (reconnect_with())

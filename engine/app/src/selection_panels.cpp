@@ -6,6 +6,7 @@
 #include <cmath>
 #include <utility>
 
+#include "banner_graphic.hpp"
 #include "panel_common.hpp"
 #include "production_utilisation.hpp"
 
@@ -76,7 +77,17 @@ const assets::BuildingType* building_at(const Selection& s, const PanelContext& 
     return top.empty() ? nullptr : c.buildings.by_sprite(top.sprite);
 }
 
-/// The name of a building as the build menu calls it (Haus_GetMenuName 0x0042D230).
+/// Tells the buildings apart for a PendingSwitch.
+constexpr std::uint64_t switch_key(const Selection& s) noexcept {
+    return (std::uint64_t{s.island} << 32U) | (std::uint64_t{s.x} << 16U) | s.y;
+}
+
+/// Tells the cities apart for a PendingSwitch.
+constexpr std::uint64_t city_key(const sim::City& city) noexcept {
+    return (std::uint64_t{city.island} << 8U) | city.index;
+}
+
+/// The name of a building as the build menu calls it.
 std::string building_name(const assets::BuildingType& b, const PanelContext& c) {
     if (const ui::BuildCategory* cat = ui::build_menu().category_of(b.id)) {
         return c.texts != nullptr ? cat->name(cat->index_of(b.id).value_or(0), c.texts->section(cat->names))
@@ -89,7 +100,7 @@ std::int64_t utilisation(const sim::Production& p, const assets::BuildingType& b
     return production_utilisation(p, b, c.figures);
 }
 
-/// What remains of a raw material beside the share the running cycle already took (0x0047D540).
+/// What remains of a raw material beside the share the running cycle already took.
 std::int64_t free_stock(std::uint16_t stock, std::uint32_t per_cycle, std::uint8_t rate) {
     const std::int64_t used = (std::int64_t{per_cycle} * rate) >> 7;
     return std::max<std::int64_t>(0, std::int64_t{stock} - used);
@@ -151,8 +162,8 @@ public:
         m_panel.set_text(m_ids.util_value, ui::format_text(c.text("GAME", kGamePercent), {utilisation(*p, *b, c)}));
         m_panel.set_text(m_ids.cost_label, c.text("GAME", kGameRunningCost));
         m_panel.set_text(m_ids.cost_value, std::to_string(p->enabled ? b->running_cost : b->idle_cost));
-        m_panel.set_selected(m_ids.stop, !p->enabled);
-        m_panel.set_selected(m_ids.pickup, p->no_pickup());
+        m_panel.set_selected(m_ids.stop, m_stop.shown(switch_key(s), !p->enabled, c.now_ms));
+        m_panel.set_selected(m_ids.pickup, m_pickup.shown(switch_key(s), p->no_pickup(), c.now_ms));
 
         const std::string tons = c.text("GAME", kGameTons);
         const auto show = [&](const auto& group, bool on) {
@@ -201,12 +212,16 @@ public:
         sw.x = s.x;
         sw.y = s.y;
         if (id == m_ids.stop) {
+            const bool off = m_stop.next(switch_key(s), !p->enabled, c.now_ms);
+            m_stop.clicked(switch_key(s), off, c.now_ms);
             sw.op = sim::ProductionSwitch::Op::Enable;
-            sw.on = !p->enabled;
+            sw.on = !off;
             out.emplace_back(sw);
         } else if (id == m_ids.pickup) {
+            const bool banned = m_pickup.next(switch_key(s), p->no_pickup(), c.now_ms);
+            m_pickup.clicked(switch_key(s), banned, c.now_ms);
             sw.op = sim::ProductionSwitch::Op::Pickup;
-            sw.on = p->no_pickup();
+            sw.on = !banned;
             out.emplace_back(sw);
         }
     }
@@ -251,6 +266,8 @@ public:
 private:
     ProductionIds m_ids;
     std::int32_t m_gfx_ware;
+    PendingSwitch m_stop;
+    PendingSwitch m_pickup;
 };
 
 // ---- Public buildings ----------------------------------------------------------------------------
@@ -270,7 +287,7 @@ public:
         m_panel.set_text(62006, building_name(*b, c));
         m_panel.set_text(62003, c.text("GAME", kGameRunningCost));
         m_panel.set_text(62004, std::to_string(b->running_cost));
-        // The building's icon of the build menu (Haus_GetMenuIcon 0x0042D3A0).
+        // The building's icon of the build menu.
         const ui::BuildCategory* cat = ui::build_menu().category_of(b->id);
         if (const ui::BuildButton* button =
                 cat != nullptr ? cat->button_at(cat->index_of(b->id).value_or(0)) : nullptr) {
@@ -326,8 +343,7 @@ constexpr std::int32_t kKSlots = 11;
 constexpr std::int32_t kPriceSteps = 1024;
 
 /// STADT (the city), KONTOR (the buy or sell list, with the LAGER layout as the ware picker) and
-/// LAGER (the stock) (CityPanel_Refresh 0x00434640, KontorPanel_Refresh 0x00434B40,
-/// StockPanel_Refresh 0x00434810).
+/// LAGER (the stock).
 class CityPanel final : public SelectionPanel {
 public:
     CityPanel(assets::GadgetLayout stadt, assets::GadgetLayout kontor, assets::GadgetLayout lager)
@@ -410,7 +426,7 @@ public:
                 return;
             }
             if (e.id == city_ids::kTitle) {
-                c.start_rename(NameTarget::of(*city), out);  // 0x0043CE00 → 0x00409910(2, …)
+                c.start_rename(NameTarget::of(*city), out);  //(2, …)
             } else if (e.id == city_ids::kSell || e.id == city_ids::kBuy) {
                 m_page = Page::Kontor;
                 m_sell = e.id == city_ids::kSell;
@@ -419,12 +435,23 @@ public:
             } else if (e.id == city_ids::kStock) {
                 m_page = Page::Stock;
             } else if (e.id == city_ids::kTrader) {
-                // 0x0043CE00: with a cart on the island the view jumps to it and selects it, else
-                // the next click on the map sends one out from the Kontor (0x004894E0 with 4).
-                if (const sim::Ship* cart = sim::trade_cart_of(c.world(), c.local, city->island)) {
-                    m_request = Request{Request::Kind::SelectShip, cart->id};
-                } else {
+                // With a cart on the island the view jumps to it and selects it, else the next
+                // click on the map sends one out of this Kontor or market. Open1602: Shift asks for
+                // another while the player has fewer than its Kontors and markets there
+                // (Rules::more_carts), and with several carts each click jumps to the next one,
+                // nearest to this building first.
+                const auto carts = sim::trade_carts_of(c.world(), c.local, city->island);
+                const bool another = c.shift && !carts.empty() && c.simulation.rules().more_carts &&
+                                     carts.size() < sim::cart_places(c.world(), c.buildings, c.local, city->island);
+                if (carts.empty() || another) {
                     m_cart_pick = true;
+                    m_cart_another = another;
+                } else {
+                    const sim::Ship* cart = next_cart(carts, s, c);
+                    Request r{Request::Kind::SelectShip, cart->id};
+                    r.x = cart->x;
+                    r.y = cart->y;
+                    m_request = r;
                 }
             } else if (e.id == city_ids::kMaterialLock) {
                 sim::CityOrder o;
@@ -432,7 +459,8 @@ public:
                 o.island = city->island;
                 o.city = city->index;
                 o.op = sim::CityOrder::Op::MaterialLock;
-                o.on = !city->material_lock;
+                o.on = m_material_lock.next(city_key(*city), city->material_lock, c.now_ms);
+                m_material_lock.clicked(city_key(*city), o.on, c.now_ms);
                 out.emplace_back(o);
             }
             return;
@@ -483,7 +511,7 @@ public:
             return;
         }
         if (e.kind == ui::PanelEvent::Kind::Clicked && e.id == city_ids::kKTitle) {
-            c.start_rename(NameTarget::of(*city), out);  // 0x0043CE00, gadget 34002
+            c.start_rename(NameTarget::of(*city), out);  // gadget 34002
             return;
         }
         const std::vector<std::uint8_t> list = wares(*city, c.world().goods());
@@ -560,8 +588,15 @@ public:
                 case city_ids::kMaterialLock:
                     return line(154 + (city->material_lock ? 1 : 0));
                 case city_ids::kTrader:
-                    // "Fahrenden Händler anfordern" / "Zum fahrenden Händler springen".
-                    return line(sim::trade_cart_of(c.world(), c.local, city->island) != nullptr ? 157 : 156);
+                    // "Fahrenden Händler anfordern" / "Zum fahrenden Händler springen"; Open1602 names
+                    // the Shift click while another cart is allowed (Rules::more_carts).
+                    if (const auto carts = sim::trade_carts_of(c.world(), c.local, city->island); carts.empty()) {
+                        return line(156);
+                    } else if (c.simulation.rules().more_carts &&
+                               carts.size() < sim::cart_places(c.world(), c.buildings, c.local, city->island)) {
+                        return ui::tr("city.cart_more", {help_line(c, 157)});
+                    }
+                    return line(157);
                 default:
                     return std::nullopt;
             }
@@ -617,14 +652,46 @@ public:
                 std::vector<sim::Command>& out) override {
         m_cart_pick = false;
         if (const sim::City* city = city_at(s, c)) {
-            out.emplace_back(sim::CartRequest{c.local, city->island, city->index, static_cast<std::uint16_t>(x),
-                                              static_cast<std::uint16_t>(y)});
+            // Out of the building whose window asked: the Kontor, or a market of the city.
+            sim::CartRequest r{c.local, city->island, city->index, static_cast<std::uint16_t>(x),
+                               static_cast<std::uint16_t>(y)};
+            r.another = std::exchange(m_cart_another, false);
+            if (s.kind == Selection::Kind::Building && s.island < c.world().islands().size()) {
+                const sim::WorldIsland& isl = c.world().islands()[s.island];
+                r.from_x = static_cast<std::uint16_t>(isl.x + s.x);
+                r.from_y = static_cast<std::uint16_t>(isl.y + s.y);
+            }
+            out.emplace_back(r);
         }
     }
     bool back() override { return std::exchange(m_cart_pick, false); }
 
 private:
     enum class Page : std::uint8_t { City, Kontor, Stock };
+
+    /// The cart a click on the cart button jumps to: the one nearest to the selected building on
+    /// the first click, the next nearest on each further click of the same selection, round.
+    const sim::Ship* next_cart(std::vector<const sim::Ship*> carts, const Selection& s, const PanelContext& c) {
+        if (s.serial != m_cart_serial || carts.size() != m_cart_count) {
+            m_cart_serial = s.serial;
+            m_cart_count = carts.size();
+            m_cart_next = 0;
+        }
+        std::int64_t bx = 0;
+        std::int64_t by = 0;
+        if (s.island < c.world().islands().size()) {
+            bx = c.world().islands()[s.island].x + s.x;
+            by = c.world().islands()[s.island].y + s.y;
+        }
+        const auto distance = [&](const sim::Ship* ship) {
+            const std::int64_t dx = std::int64_t{ship->x} - bx;
+            const std::int64_t dy = std::int64_t{ship->y} - by;
+            return dx * dx + dy * dy;
+        };
+        std::stable_sort(carts.begin(), carts.end(),
+                         [&](const sim::Ship* a, const sim::Ship* b) { return distance(a) < distance(b); });
+        return carts[m_cart_next++ % carts.size()];
+    }
 
     [[nodiscard]] sim::TradeSetting::Mode mode() const noexcept {
         return m_sell ? sim::TradeSetting::Mode::Sell : sim::TradeSetting::Mode::Buy;
@@ -679,8 +746,9 @@ private:
             m_stadt.set_text(label + 1, std::to_string(rows[i].second));
         }
         m_stadt.set_graphic(city_ids::kBalanceIcon, m_balance_icon + (balance < 0 ? 1 : 0), 0);
-        m_stadt.set_selected(city_ids::kMaterialLock, city.material_lock);
-        // The trade cart: requested or jumped to (two pictures, 0x00448B70 finds the cart).
+        m_stadt.set_selected(city_ids::kMaterialLock,
+                             m_material_lock.shown(city_key(city), city.material_lock, c.now_ms));
+        // The trade cart: requested or jumped to (two pictures, finds the cart).
         const bool cart = sim::trade_cart_of(c.world(), c.local, city.island) != nullptr;
         m_stadt.set_graphic(city_ids::kTrader, m_cart_icon + (cart ? kCartIconJump : 0), 0);
         m_stadt.set_selected(city_ids::kTrader, m_cart_pick);
@@ -715,7 +783,7 @@ private:
         for (const std::int32_t id : {city_ids::kKName, city_ids::kKPrice}) {
             m_kontor.set_visible(id, chosen);
         }
-        // The original fades all of 0x84D5 .. 0x84E8 while no ware is chosen (0x004073C0).
+        // The original fades all of 0x84D5 .. 0x84E8 while no ware is chosen.
         for (std::int32_t id = city_ids::kKLimit; id <= city_ids::kKPriceSlider; ++id) {
             m_kontor.set_faded(id, !chosen);
         }
@@ -762,17 +830,21 @@ private:
     /// The picture of the trade cart button while the city has one, after "anfordern"'s.
     static constexpr std::int32_t kCartIconJump = 2;
     bool m_cart_pick = false;
+    bool m_cart_another = false;  ///< the cart being picked for is another one (Shift)
+    std::uint32_t m_cart_serial = 0;
+    std::size_t m_cart_count = 0;  ///< the carts on the island at the last jump
+    std::size_t m_cart_next = 0;   ///< how often the cart button jumped since
     Page m_page = Page::City;
     bool m_sell = true;
     bool m_picker = false;
     std::int32_t m_slot = 0;
     SelectionPages m_pages;
+    PendingSwitch m_material_lock;
 };
 
 // ---- Houses --------------------------------------------------------------------------------------
 
-/// SIEDLER: the class of a house, its city's supply and the public buildings it lacks
-/// (HousePanel_Refresh 0x00438A30).
+/// SIEDLER: the class of a house, its city's supply and the public buildings it lacks.
 class SettlerPanel final : public SimplePanel {
 public:
     explicit SettlerPanel(assets::GadgetLayout layout) : SimplePanel(std::move(layout)) {
@@ -1052,18 +1124,17 @@ private:
         {sim::panel_service::kTheater, 4, 68},
     }};
 
-    /// What a class needs of public buildings (Class_RequiredServices 0x0047F320).
-    /// A class a package added needs what the original's class it looks like needs.
+    /// What a class needs of public buildings.
+    /// A class a package added needs what classes.toml gives it, else what the original's class it
+    /// looks like needs.
     static std::uint32_t required(const PanelContext& c, std::uint32_t cls) {
-        return cls <= 255
-                   ? sim::required_panel_services(sim::service_class(c.buildings, static_cast<std::uint8_t>(cls)))
-                   : 0;
+        return cls <= 255 ? sim::required_panel_services(c.buildings, static_cast<std::uint8_t>(cls)) : 0;
     }
     /// Goods a next class asks for only once their level is reached (sim::infra::ware_level).
     static bool ware_unlocked(std::uint8_t w, const sim::Player* owner) {
         return owner != nullptr && owner->unlocked(sim::infra::ware_level(w));
     }
-    /// Sign of the growth rate: 1 grows, 0 stays, -1 shrinks a little, -2 a lot (0x0047B3B0).
+    /// Sign of the growth rate: 1 grows, 0 stays, -1 shrinks a little, -2 a lot.
     static int growth_state(const sim::City& city, const sim::House& house) {
         const std::int32_t rate = sim::growth_rate(city, house);
         return rate > 0 ? 1 : rate == 0 ? 0 : rate >= -64 ? -1 : -2;
@@ -1071,7 +1142,7 @@ private:
     static std::uint8_t tax_of(const sim::City& city, std::uint8_t cls) {
         return cls < city.tax_rate.size() ? city.tax_rate[cls] : std::uint8_t{128};
     }
-    /// Taxes of one class per minute (City_ClassTax 0x0047F370).
+    /// Taxes of one class per minute.
     static std::int64_t class_tax(const sim::City& city, const assets::ResidentClass& rc, std::uint8_t cls,
                                   std::uint8_t tax) {
         const std::int64_t n = cls < city.inhabitants.size() ? city.inhabitants[cls] : 0;
@@ -1099,8 +1170,7 @@ const sim::CostBuilding* cost_building_at(const Selection& s, const PanelContext
     return nullptr;
 }
 
-/// WERFT (the yard and its order) and BAUSHIP (the choice of the ship type)
-/// (ShipyardPanel_Refresh 0x00435B40, ShipTypePanel_Refresh 0x00435EF0).
+/// WERFT (the yard and its order) and BAUSHIP (the choice of the ship type).
 class ShipyardPanel final : public SelectionPanel {
 public:
     ShipyardPanel(assets::GadgetLayout werft, assets::GadgetLayout bauship)
@@ -1108,7 +1178,8 @@ public:
         m_gfx_ware = m_werft.layout().constant("GFXWARE").value_or(192);
         for (std::int32_t k = 0; k < 4; ++k) {
             if (const assets::Gadget* g = m_bauship.layout().find(kType + k)) {
-                m_type_x[static_cast<std::size_t>(k)] = g->offset[0];
+                m_type_pos[static_cast<std::size_t>(k)] = g->pos;
+                m_type_gfx[static_cast<std::size_t>(k)] = g->gfx;
             }
         }
     }
@@ -1136,12 +1207,14 @@ public:
         };
         if (m_choose) {
             m_bauship.set_text(60002, city != nullptr ? city_name(*city) : std::string());
-            // A small yard (three tiles wide) builds the small types only, moved to the middle.
+            // A small yard (three tiles wide) builds the small types only, moved to the middle:
+            // picture and click area together (moving only the picture left the click area behind).
             const bool small = b->size_x == 3;
             for (std::int32_t k = 0; k < 4; ++k) {
                 const bool big = k == 1 || k == 3;
+                const std::array<std::int32_t, 2>& at = m_type_pos[static_cast<std::size_t>(k)];
                 m_bauship.set_visible(kType + k, !(small && big));
-                m_bauship.set_offset(kType + k, m_type_x[static_cast<std::size_t>(k)] + (small && !big ? 40 : 0), 0);
+                m_bauship.set_position(kType + k, at[0] + (small && !big ? 40 : 0), at[1]);
             }
             // The original keeps a large type chosen at a large yard; its order then builds it in the
             // small one too (S-005, brought back by OriginalBugs::small_yard_warships).
@@ -1150,8 +1223,22 @@ public:
             }
             for (std::int32_t k = 0; k < 4; ++k) {
                 m_bauship.set_selected(kType + k, k == m_type);
+                // The button of the chosen type shows a package's ship by its icon.
+                const assets::OwnShip* own = k == m_type ? assets::find_own_ship(c.own_ships, m_figure) : nullptr;
+                const auto icon =
+                    own != nullptr && !own->icon.empty() ? ui::package_icon_sprite(own->icon) : std::nullopt;
+                bool& shown = m_type_icon[static_cast<std::size_t>(k)];
+                if (icon) {
+                    set_package_icon(m_bauship, kType + k, *icon, c.banner(c.local));
+                } else if (shown) {
+                    m_bauship.set_graphic(kType + k, m_type_gfx[static_cast<std::size_t>(k)], 0);
+                }
+                shown = icon.has_value();
             }
-            if (const assets::FigureType* f = c.figures.get(sim::figure::ship_figure(m_type))) {
+            if (m_figure != 0 && c.figures.ship_type_of(m_figure) != m_type) {
+                m_figure = 0;  // the packages changed
+            }
+            if (const assets::FigureType* f = c.figures.get(chosen_ship())) {
                 m_bauship.set_text(60015, ui::format_text(tons, {std::int64_t{f->ship.cargo_slots} * 50}));
                 m_bauship.set_text(60017, std::to_string(f->ship.max_cannons));
                 m_bauship.set_text(60019, ui::format_text(c.text("GAME", 47), {std::int64_t{f->speed / 20}}));
@@ -1177,9 +1264,9 @@ public:
         }
         m_werft.set_visible(39016, !(order));
         m_werft.set_visible(39017, order);
-        m_werft.set_selected(39018, !yard->enabled);
+        m_werft.set_selected(39018, m_stop.shown(switch_key(s), !yard->enabled, c.now_ms));
         if (order) {
-            const assets::FigureType* f = c.figures.get(sim::figure::ship_figure(yard->order));
+            const assets::FigureType* f = c.figures.get(sim::yard_ship(*yard));
             const std::uint32_t need = f != nullptr ? std::max<std::uint32_t>(f->ship.build_amount, 1) : 1;
             m_werft.set_slider(
                 39012, 1,
@@ -1207,10 +1294,29 @@ public:
         o.y = s.y;
         if (m_choose) {
             if (e.id >= kType && e.id < kType + 4) {
-                m_type = static_cast<std::uint8_t>(e.id - kType);
+                // Open1602: a click on the chosen type again picks the next ship of a package of
+                // that type, and after the last the original's again.
+                const auto type = static_cast<std::uint8_t>(e.id - kType);
+                std::uint32_t next = 0;
+                if (type == m_type) {
+                    bool after = m_figure == 0;
+                    for (const assets::OwnShip& own : c.own_ships) {
+                        if (own.type != type) {
+                            continue;
+                        }
+                        if (after) {
+                            next = own.figure;
+                            break;
+                        }
+                        after = own.figure == m_figure;
+                    }
+                }
+                m_type = type;
+                m_figure = next;
             } else if (e.id == 60022) {
                 o.op = sim::ShipyardOrder::Op::Build;
                 o.ship_type = m_type;
+                o.figure = m_figure;
                 out.emplace_back(o);
                 m_choose = false;
             }
@@ -1220,16 +1326,20 @@ public:
             case 39016:  // order a ship: the type choice, the first type picked
                 m_choose = true;
                 m_type = 0;
+                m_figure = 0;
                 break;
             case 39017:
                 o.op = sim::ShipyardOrder::Op::Cancel;
                 out.emplace_back(o);
                 break;
-            case 39018:
+            case 39018: {
+                const bool off = m_stop.next(switch_key(s), !yard->enabled, c.now_ms);
+                m_stop.clicked(switch_key(s), off, c.now_ms);
                 o.op = sim::ShipyardOrder::Op::Enable;
-                o.on = !yard->enabled;
+                o.on = !off;
                 out.emplace_back(o);
                 break;
+            }
             default:
                 break;
         }
@@ -1241,6 +1351,11 @@ public:
         const sim::CostBuilding* yard = cost_building_at(s, c, sim::CostBuilding::Kind::Shipyard);
         if (m_choose) {
             if (id >= kType && id < kType + 4) {
+                if (const assets::OwnShip* own =
+                        id - kType == m_type ? assets::find_own_ship(c.own_ships, m_figure) : nullptr) {
+                    return own->name(ui::current_language()) + "\n" +
+                           help_line(c, static_cast<std::size_t>(95 + id - kType));
+                }
                 return line(static_cast<std::size_t>(95 + id - kType));
             }
             switch (id) {
@@ -1297,19 +1412,28 @@ public:
     }
 
 private:
+    /// The ship the type choice shows: a package's or the original's of m_type.
+    [[nodiscard]] std::uint32_t chosen_ship() const noexcept {
+        return m_figure != 0 ? m_figure : sim::figure::ship_figure(m_type);
+    }
+
     static constexpr std::int32_t kType = 60003;
     ui::Panel m_werft;
     ui::Panel m_bauship;
     std::int32_t m_gfx_ware = 192;
-    std::array<std::int32_t, 4> m_type_x{};
+    std::array<std::array<std::int32_t, 2>, 4> m_type_pos{};
+    std::array<std::int32_t, 4> m_type_gfx{};  ///< the type buttons' own pictures
+    std::array<bool, 4> m_type_icon{};         ///< a button shows a package's icon instead
+    PendingSwitch m_stop;
     bool m_choose = false;
     std::uint8_t m_type = 0;
+    std::uint32_t m_figure = 0;  ///< a package's ship of m_type, 0: the original's
     SelectionPages m_pages;
 };
 
 // ---- Castles -------------------------------------------------------------------------------------
 
-/// MILITAR: training places, the unit to train, its pay and weapons (CastlePanel_Refresh 0x004385E0).
+/// MILITAR: training places, the unit to train, its pay and weapons.
 class CastlePanel final : public SimplePanel {
 public:
     explicit CastlePanel(assets::GadgetLayout layout) : SimplePanel(std::move(layout)) {
@@ -1318,6 +1442,11 @@ public:
         m_gfx_empty = l.constant("GFXWARELEER").value_or(188) + kEmptyHold;
         if (const assets::Gadget* g = l.find(40007)) {
             m_weapon_icon = g->gfx;
+        }
+        for (std::int32_t u = 0; u < 4; ++u) {
+            if (const assets::Gadget* g = l.find(40021 + u)) {
+                m_unit_gfx[static_cast<std::size_t>(u)] = g->gfx;
+            }
         }
     }
 
@@ -1350,8 +1479,16 @@ public:
             }
             const sim::CastleSlot& slot = castle->slots[static_cast<std::size_t>(k)];
             const assets::FigureType* f = c.figures.get(slot.figure);
-            // The soldier icons are the wares of the units (wSOLDAT1 ...), in their colours.
-            m_panel.set_graphic(40031 + k, m_gfx_ware + sim::unit_ware(slot.figure), 0);
+            // The soldier icons are the wares of the units (wSOLDAT1 ...), in their colours; a
+            // package's unit shows its icon, or the original's unit it stands beside.
+            const assets::OwnUnit* own = assets::find_own_unit(c.own_units, slot.figure);
+            const auto icon = own != nullptr && !own->icon.empty() ? ui::package_icon_sprite(own->icon) : std::nullopt;
+            if (icon) {
+                set_package_icon(m_panel, 40031 + k, *icon, c.banner(city->owner));
+            } else {
+                m_panel.set_graphic(40031 + k, m_gfx_ware + sim::unit_ware(own != nullptr ? own->like : slot.figure),
+                                    0);
+            }
             m_panel.set_disabled(40031 + k, slot.training);
             m_panel.set_text(40071 + k, std::to_string(std::min<std::uint32_t>(slot.progress, 320) * 10 / 320));
             const std::uint32_t max = f != nullptr ? std::max<std::uint32_t>(f->combat.max_health, 1) : 1;
@@ -1360,6 +1497,16 @@ public:
         }
         for (std::int32_t u = 0; u < 4; ++u) {
             m_panel.set_selected(40021 + u, u == m_unit);
+            // The button of the chosen unit shows a package's unit by its icon.
+            const assets::OwnUnit* own = u == m_unit ? assets::find_own_unit(c.own_units, m_family) : nullptr;
+            const auto icon = own != nullptr && !own->icon.empty() ? ui::package_icon_sprite(own->icon) : std::nullopt;
+            bool& shown = m_unit_icon[static_cast<std::size_t>(u)];
+            if (icon) {
+                set_package_icon(m_panel, 40021 + u, *icon, c.banner(city->owner));
+            } else if (shown) {
+                m_panel.set_graphic(40021 + u, m_unit_gfx[static_cast<std::size_t>(u)], 0);
+            }
+            shown = icon.has_value();
         }
         const assets::FigureType* unit = c.figures.get(unit_figure(colour));
         if (unit != nullptr) {
@@ -1396,7 +1543,26 @@ public:
             return;
         }
         if (e.id >= 40021 && e.id <= 40024) {
-            m_unit = e.id - 40021;
+            // Open1602: a click on the chosen unit again picks the next unit of a package that
+            // stands beside it, and after the last the original's again.
+            const std::int32_t u = e.id - 40021;
+            const std::uint32_t original = sim::figure::unit_figure(static_cast<std::size_t>(u), 0);
+            std::uint32_t next = original;
+            if (u == m_unit) {
+                bool after = m_family == original;
+                for (const assets::OwnUnit& own : c.own_units) {
+                    if (own.like != original) {
+                        continue;
+                    }
+                    if (after) {
+                        next = own.family;
+                        break;
+                    }
+                    after = own.family == m_family;
+                }
+            }
+            m_unit = u;
+            m_family = next;
             return;
         }
         sim::CastleOrder o;
@@ -1460,6 +1626,10 @@ public:
                 break;
         }
         if (id >= 40021 && id <= 40024) {
+            if (const assets::OwnUnit* own =
+                    id - 40021 == m_unit ? assets::find_own_unit(c.own_units, m_family) : nullptr) {
+                return own->name(ui::current_language()) + "\n" + help_line(c, 82);
+            }
             return line(82);
         }
         const sim::CostBuilding* castle = cost_building_at(s, c, sim::CostBuilding::Kind::Castle);
@@ -1501,23 +1671,30 @@ public:
     }
 
 private:
-    /// SOLDAT1, KAVALERIE1, MUSKETIER1, KANONIER1 (the chosen family) of a colour.
+    /// SOLDAT1, KAVALERIE1, MUSKETIER1, KANONIER1 or a package's unit beside it (the chosen family)
+    /// of a colour.
     [[nodiscard]] std::uint16_t unit_figure(std::int32_t colour) const noexcept {
-        return sim::figure::unit_figure(static_cast<std::size_t>(m_unit), colour);
+        const std::uint16_t original = sim::figure::unit_figure(static_cast<std::size_t>(m_unit), colour);
+        if (m_family == 0 || original == 0) {
+            return original;
+        }
+        return static_cast<std::uint16_t>(m_family + static_cast<std::uint32_t>(colour));
     }
     std::int32_t m_gfx_ware = 192;
     std::int32_t m_gfx_empty = 192;
     std::int32_t m_weapon_icon = 432;
     std::int32_t m_slot = 0;
     std::int32_t m_unit = 0;
+    std::uint32_t m_family = 0;                ///< red figure of the chosen unit, 0: the original's of m_unit
+    std::array<std::int32_t, 4> m_unit_gfx{};  ///< the unit buttons' own pictures
+    std::array<bool, 4> m_unit_icon{};         ///< a button shows a package's icon instead
     bool m_picking = false;
     bool m_all = false;  ///< the pick sends every trained unit (Shift on the send-out arrow)
 };
 
 // ---- A foreign Kontor --------------------------------------------------------------------------
 
-/// HANDEL: what a foreign Kontor with a trade treaty wants and offers (ForeignKontorPanel_Refresh
-/// 0x004357D0).
+/// HANDEL: what a foreign Kontor with a trade treaty wants and offers.
 class ForeignKontorPanel final : public SelectionPanel {
 public:
     explicit ForeignKontorPanel(assets::GadgetLayout layout) : m_lists(std::move(layout)) {}
@@ -1677,7 +1854,7 @@ SelectionPanel* SelectionPanels::panel_for(const Selection& s, const PanelContex
         }
         return nullptr;
     }
-    // Panel_UpdateSelection 0x0043AA00: the building's HAUS_PRODTYP Kind decides.
+    // The building's HAUS_PRODTYP Kind decides.
     switch (b->prod_kind) {
         case sim::prod::kWorkshop:
             return c.world().production(s.island, s.x, s.y) != nullptr ? get("PROD") : nullptr;

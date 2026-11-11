@@ -11,7 +11,9 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include "o1602/sim/package_landscapes.hpp"
 #include "o1602/sim/rules.hpp"
 #include "o1602/sim/world_plan.hpp"
 
@@ -25,6 +27,10 @@ enum class SetupScope : std::uint8_t {
     Savegame,            ///< a saved game: its rules, to look at only (the game keeps its own)
 };
 
+/// A multiplayer game's world numbers: 0 .. kMultiplayerSeeds - 1, short enough to type and to
+/// tell the others.
+inline constexpr std::uint32_t kMultiplayerSeeds = 100000;
+
 struct EndlessSetup {
     sim::Rules rules = sim::Rules::open1602();
     bool own_world = false;      ///< a world of its own (`world`) instead of the level's map
@@ -33,6 +39,10 @@ struct EndlessSetup {
     /// original's 500 x 350 for four or fewer, more sea and land for more; `world`'s size is then
     /// not used. The islands follow the area.
     bool auto_size = true;
+    /// The world's number (sim::WorldSettings::seed, sim::WorldStart::seed): 0 a new one for every
+    /// game; the page of the islands sets one for its preview, so that the game gets the world it
+    /// showed. Not in settings.cfg, and not compared: the dialog's presets do not touch it.
+    std::uint64_t world_seed = 0;
 
     /// Open1602's rules on the original's maps. A multiplayer game's own world, if it gets one,
     /// has all starts at one place, as the original's multiplayer maps.
@@ -49,17 +59,26 @@ struct EndlessSetup {
 enum class SetupItem : std::uint8_t {
     // Economy
     Refund,
+    Moving,  ///< Rules::moving
     TraderPrices,
     TraderReach,
     OreVeins,
-    BreadChain,
+    TradeCarts,  ///< Rules::more_carts
     // Limits
     Ships,
     Units,
     GameSpeed,
-    // Disasters
+    // Nature
+    FertileFields,  ///< Rules::fertile_fields
+    // Disasters (a page of their own; disaster_item)
     Droughts,
     Volcanoes,
+    Plagues,  ///< Rules::plagues
+    Fires,    ///< Rules::fires
+    // Open1602's changes to the balance (a page of their own; balance_item), each on its own
+    BalanceBread,    ///< Rules::revised_bread
+    BalanceHunting,  ///< Rules::wider_hunting
+    BalanceShips,    ///< Rules::large_ship_holds
     // World
     Map,
     WorldSize,
@@ -78,6 +97,23 @@ enum class SetupItem : std::uint8_t {
     Pirates,
     PirateNests,
     Reveal,
+    Cheats,  ///< Rules::cheats
+    // Islands (a page of their own with a preview of the world, endless games only;
+    // sim::WorldSettings::shapes and ::landscape)
+    IslandPreset,  ///< sets the items below at once: the original's islands or a kind of world
+    IslandShapes,
+    Coast,
+    Outline,
+    LandShare,
+    SmallestIsland,
+    LargestIsland,
+    SizeSpread,
+    IslandGap,
+    Forest,
+    OreMountains,
+    ClimateCrops,     ///< Rules::climate_crops
+    BigOreVeins,      ///< Rules::big_ore_veins
+    RevealResources,  ///< Rules::reveal_resources
     // Victory conditions (a page of their own, endless games only; sim::VictoryConditions)
     WinInhabitants,
     WinClass,
@@ -111,6 +147,35 @@ enum class SetupItem : std::uint8_t {
 [[nodiscard]] constexpr bool victory_item(SetupItem item) noexcept {
     return item >= SetupItem::WinInhabitants && item <= SetupItem::WinComputers;
 }
+/// Whether an item is on the page of the disasters.
+[[nodiscard]] constexpr bool disaster_item(SetupItem item) noexcept {
+    return item >= SetupItem::Droughts && item <= SetupItem::Fires;
+}
+/// The rules of the page of the disasters as in the original, the others as in `rules`.
+[[nodiscard]] sim::Rules original_disasters(sim::Rules rules) noexcept;
+/// The page of the disasters in a few words: as in the original, or how many differ.
+[[nodiscard]] std::string disasters_summary(const sim::Rules& rules);
+/// Whether an item is on the page of the balance changes.
+[[nodiscard]] constexpr bool balance_item(SetupItem item) noexcept {
+    return item >= SetupItem::BalanceBread && item <= SetupItem::BalanceShips;
+}
+/// The rules of the page of the balance changes as in the original (all off), the others as in `rules`.
+[[nodiscard]] sim::Rules original_balance(sim::Rules rules) noexcept;
+/// The rules of the page of the balance changes all on (Open1602's), the others as in `rules`.
+[[nodiscard]] sim::Rules open1602_balance(sim::Rules rules) noexcept;
+/// The page of the balance changes in a few words: all on, as in the original, or how many are on.
+[[nodiscard]] std::string balance_summary(const sim::Rules& rules);
+/// Whether an item is on the page of the islands.
+[[nodiscard]] constexpr bool island_item(SetupItem item) noexcept {
+    return item >= SetupItem::IslandPreset && item <= SetupItem::OreMountains;
+}
+/// Whether an item shapes the islands of a world of islands of their own shape and size (the
+/// page's items after the shapes).
+[[nodiscard]] constexpr bool landscape_item(SetupItem item) noexcept {
+    return item >= SetupItem::Coast && item <= SetupItem::OreMountains;
+}
+/// The page of the islands in a few words: the preset it matches, or "own settings".
+[[nodiscard]] std::string islands_summary(const EndlessSetup& setup);
 /// Whether an item is on the page "Original settings". The computer players (ClassicAi) are a bug of
 /// the original too, but have their row with the opponents; the page's presets switch them as well.
 [[nodiscard]] constexpr bool bug_item(SetupItem item) noexcept {
@@ -163,6 +228,9 @@ void choose_previous(EndlessSetup& setup, SetupItem item);
 /// residents only with a number of them, how the conditions are combined only with two or more.
 [[nodiscard]] bool setup_item_used(const EndlessSetup& setup, SetupItem item) noexcept;
 
+/// The localisation key of an item's label; its explanation (the dialog's tooltip) is the key
+/// with ".tip".
+[[nodiscard]] std::string_view setup_label_key(SetupItem item);
 /// The item's name and a value's text in the language of the interface (Windows-1252).
 [[nodiscard]] std::string setup_label(SetupItem item);
 [[nodiscard]] std::string setup_value(SetupItem item, std::size_t choice);
@@ -180,5 +248,17 @@ bool read_setup_line(EndlessSetup& setup, std::string_view key, std::string_view
 /// Reads "<prefix><key> = value" lines, as write_setup writes them, into `setup`; other lines are
 /// left out. For the lobby, which passes the host's setup on as such text.
 void read_setup(EndlessSetup& setup, std::string_view text, std::string_view prefix = "endless.");
+
+/// The kinds of island world of the packages (landscapes.toml), offered after Open1602's presets
+/// on the page of the islands. Main thread only.
+void set_package_island_presets(std::vector<sim::PackageLandscape> presets);
+
+/// The kinds of island world a new map may have, as the page of the islands offers them: the
+/// original's island templates (0), Open1602's presets, then the packages'. Main thread only.
+[[nodiscard]] std::size_t landscape_choices();
+/// The name of choice `choice` (Windows-1252); a choice past the last is the last.
+[[nodiscard]] std::string landscape_choice_name(std::size_t choice);
+/// `w` with the islands of choice `choice`: the templates, or islands of their own shape.
+void apply_landscape_choice(sim::WorldSettings& w, std::size_t choice);
 
 }  // namespace o1602::app

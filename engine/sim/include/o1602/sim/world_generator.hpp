@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The islands of a scenario that makes them at the start (docs/re/worldgen.md): the endless games
+// The islands of a scenario that makes them at the start: the endless games
 // of the original carry no islands but a world plan (SZENE) with each island's number, place, size
 // class and climate. When the game starts, the original draws for each island one of the island
 // templates of its climate and size, puts native villages on a few of them, hands out the
@@ -14,7 +14,11 @@
 #pragma once
 
 #include <array>
+#include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -24,6 +28,8 @@
 #include "o1602/assets/island.hpp"
 #include "o1602/assets/scenario.hpp"
 #include "o1602/core/result.hpp"
+#include "o1602/sim/climates.hpp"
+#include "o1602/sim/package_islands.hpp"
 #include "o1602/sim/random.hpp"
 #include "o1602/sim/world_plan.hpp"
 
@@ -37,11 +43,47 @@ struct WorldStart {
     };
     Draws draws = Draws::Table;
     std::uint64_t seed = 0;
+    /// Island templates of the game's packages (package_islands.hpp). An own world draws them
+    /// with the original's (island_templates), and the generator keeps their tiles in the world.
+    std::vector<PackageIsland> package_islands;
+    /// The packages' climates (Balance::climates): an own world gives each its share of the islands
+    /// of its `like` (not the homes), with its crops and, on islands of their own shape, its forest.
+    std::vector<Climate> climates;
     /// Rules::guarantee_resources (S-019): after the original's passes, every crop of a climate,
     /// iron and gold that the plan asks for but did not get is placed on an island that can
     /// take it. Off: the world as the original makes it.
     bool guarantee_resources = false;
+    /// Rules::climate_crops: every island of a new endless game grows its climate's crops fully.
+    bool climate_crops = false;
+    /// Rules::big_ore_veins: every iron vein of a new endless game is a big one.
+    bool big_ore_veins = false;
+    /// load_world keeps a world plan instead of making its islands (the editor, ADR 0013): the
+    /// world has no islands yet and holds the plan (World::planned_islands); roll_planned_islands()
+    /// makes them when a game of it starts.
+    bool keep_plan = false;
+    /// Set when the islands are no longer wanted (a preview of settings since changed): the
+    /// generator then gives up between islands with ErrorCode::Cancelled. None: never.
+    std::shared_ptr<const std::atomic<bool>> stop;
+
+    [[nodiscard]] bool stopped() const noexcept { return stop && stop->load(std::memory_order_relaxed); }
 };
+
+/// The plan of a world whose islands are made when its game starts (section PLAN, ADR 0013).
+struct PlannedIslands {
+    static constexpr std::size_t kMaxIslands = 50;  ///< as many as the original's plan holds
+    assets::ScenarioPlan plan;
+    /// The scenario's RANDTAB the islands are drawn from (WorldStart::Draws::Table); none: Open1602's
+    /// generator draws them from the game's seed.
+    std::optional<std::array<std::uint16_t, 512>> table;
+
+    friend bool operator==(const PlannedIslands&, const PlannedIslands&) = default;
+};
+
+/// What is wrong with `planned` in a world of `width` x `height` tiles, one line each: too many
+/// islands, an island number twice, a climate or size class the generator does not know, an island
+/// outside the world.
+[[nodiscard]] std::vector<std::string> check_planned_islands(const PlannedIslands& planned, std::uint32_t width,
+                                                             std::uint32_t height);
 
 /// The draws of the generator: `below(n)` is a number in 0..n-1.
 class PlanRandom {
@@ -50,7 +92,7 @@ public:
         : m_table(table), m_index(start & 511U) {}
     explicit PlanRandom(std::uint64_t seed) noexcept : m_seeded(true), m_random(seed, 0x1602'5EEDULL) {}
 
-    /// The original takes Rnd() % n (0x0048C570), slightly favouring small numbers.
+    /// The original takes Rnd() % n, slightly favouring small numbers.
     [[nodiscard]] std::uint32_t below(std::uint32_t n) noexcept;
     [[nodiscard]] std::uint32_t draws() const noexcept { return m_draws; }
 
@@ -70,8 +112,11 @@ private:
 struct GeneratedIsland {
     std::uint8_t number = 0;
     std::uint8_t climate = 0;
+    std::uint8_t own_climate = 0;  ///< a climate of WorldStart::climates (WorldIsland::climate), 0: none
     std::uint8_t size = 0;
-    std::uint16_t template_number = 0;
+    std::uint16_t template_number = 0;  ///< assets::IslandHeader::kNoTemplate: a shape of its own
+    std::uint16_t width = 0;            ///< in tiles
+    std::uint16_t height = 0;
     bool natives = false;
     std::uint32_t fertility = 0;  ///< INSEL5 +0x5C
     std::vector<assets::IslandHeader::Deposit> deposits;

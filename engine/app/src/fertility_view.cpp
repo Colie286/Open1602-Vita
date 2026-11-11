@@ -12,6 +12,19 @@ namespace {
     return ware >= assets::ware::kCornField && ware <= assets::ware::kCocoaField;
 }
 
+/// Whether `player` holds any tile of the island.
+[[nodiscard]] bool holds_land(const sim::IslandMap& map, sim::PlayerId player) noexcept {
+    for (std::uint32_t y = 0; y < map.height(); ++y) {
+        for (std::uint32_t x = 0; x < map.width(); ++x) {
+            const sim::MapCell& cell = map.top(x, y);
+            if (!cell.empty() && cell.owner == player) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 std::uint8_t fertility_crop(const assets::BuildingTable& buildings, const assets::BuildingType& type) {
@@ -27,7 +40,12 @@ void fertility_marks(const sim::World& world, const assets::BuildingTable& build
     if (island >= world.islands().size() || !checked_crop(crop)) {
         return;
     }
-    const sim::IslandMap& map = world.islands()[island].map;
+    const sim::WorldIsland& isl = world.islands()[island];
+    const sim::IslandMap& map = isl.map;
+    // What grows where is learnt only by exploring the island with a ship, or by settling on it.
+    if (!isl.explored_by(player) && !holds_land(map, player)) {
+        return;
+    }
     for (std::uint32_t y = 0; y < map.height(); ++y) {
         for (std::uint32_t x = 0; x < map.width(); ++x) {
             const sim::MapCell& cell = map.top(x, y);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The ship's window (docs/re/ui.md#auswahlfenster): the ship, transfer with the own Kontor, trade
+// The ship's window: the ship, transfer with the own Kontor, trade
 // with a foreign one.
 #include <algorithm>
 #include <array>
@@ -13,6 +13,7 @@
 #include "banner_graphic.hpp"
 #include "panel_common.hpp"
 
+#include "o1602/sim/construction.hpp"
 #include "o1602/sim/diplomacy.hpp"
 #include "o1602/sim/ships.hpp"
 #include "o1602/ui/localization.hpp"
@@ -213,9 +214,7 @@ assets::GadgetLayout with_route_row(assets::GadgetLayout route, const std::optio
 }
 
 /// SHIP (the ship), TRANSFER (with the own Kontor), TRADE (with a foreign one), ROUTE (the trade
-/// route, with LAGER and HANDEL as ware pickers) and PIRAT/PIRATORD (dealing with the pirates)
-/// (ShipPanel_Refresh 0x00436170, TransferPanel_Refresh 0x004372C0, TradePanel_Refresh 0x004377F0,
-/// RoutePanel_Refresh 0x00436E60, PiratePanel_Refresh 0x00436C10).
+/// route, with LAGER and HANDEL as ware pickers) and PIRAT/PIRATORD (dealing with the pirates).
 class ShipPanel final : public SelectionPanel {
 public:
     explicit ShipPanel(ShipLayouts l)
@@ -313,17 +312,18 @@ public:
             return;
         }
         if (copy) {
-            if (const sim::Ship* from = route_source_near(*ship, c, x, y)) {
+            // The selected ship's stops go to the ship clicked on: copy here, paste there.
+            if (const sim::Ship* to = route_target_near(*ship, c, x, y)) {
                 sim::RouteEdit o;
                 o.player = c.local;
-                o.ship = ship->id;
+                o.ship = to->id;
                 o.op = sim::RouteEdit::Op::CopyFrom;
-                o.target = sim::Target::other_ship(from->id);
+                o.target = sim::Target::other_ship(ship->id);
                 out.emplace_back(o);
             }
             return;
         }
-        // Route_PickStopAt 0x00440B30: the city of the tile, any owner; no city ends the pick.
+        // The city of the tile, any owner; no city ends the pick.
         const sim::World& w = c.world();
         if (x >= w.width() || y >= w.height()) {
             return;
@@ -360,7 +360,7 @@ public:
         }
         m_is_cart = ship->cart();
         const Context k = context(*ship, c);
-        // Transfer, trade and the pirates end when the ship sails off (0x0043AA00); the route
+        // Transfer, trade and the pirates end when the ship sails off; the route
         // editor stays. With S-012 brought back (OriginalBugs::remote_trade) transfer and trade
         // stay open and go on with the Kontor they were opened at.
         const bool remote = c.world().original_bugs().remote_trade && m_city.has_value();
@@ -446,6 +446,10 @@ public:
             return std::nullopt;
         }
         const auto line = [&](std::size_t n) { return std::optional<std::string>(help_line(c, n)); };
+        // The name frame: the game's line names a ship, a trade cart has its own.
+        const auto name_line = [&]() {
+            return ship->cart() ? std::optional<std::string>(ui::tr("cart.name_help")) : line(10);
+        };
         // Holds: their goods, the soldiers' kind, or empty.
         const auto hold_text = [&](std::size_t h) -> std::optional<std::string> {
             if (h >= ship->cargo.size()) {
@@ -457,7 +461,7 @@ public:
             // TRADER.GAD (LEISTE 166 to 169; the route switch as the ship's).
             switch (id) {
                 case kCartName:
-                    return line(10);
+                    return name_line();
                 case kCartTrade:
                     return line(167);
                 case kCartTransfer:
@@ -487,10 +491,9 @@ public:
                 case kTrade:
                     return line(108);
                 case kCannonsDown:
-                    return line(119);
+                    return unmount_cannon_help(*ship, c);
                 case kCannons:
-                    return ship->cannons > 0 ? ui::format_text(c.text("GAME", 23), {std::int64_t{ship->cannons}})
-                                             : c.text("GAME", 24);
+                    return mounted_cannons_help(*ship, c);
                 case kHealthHover:
                     return line(121);
                 case kPriceSlider:
@@ -543,7 +546,7 @@ public:
                 case 45008:
                     return line(165);
                 case 45122:
-                    return line(10);
+                    return name_line();
                 case 45124:
                     return line(11);
                 default:
@@ -578,7 +581,7 @@ public:
             case 33002:
                 return line(natives ? 48 : 46);
             case 33122:
-                return line(10);
+                return name_line();
             case 33124:
                 return line(11);
             default:
@@ -718,7 +721,7 @@ private:
     static constexpr std::int32_t kCostLabel = 55005;
     static constexpr std::int32_t kCost = 55006;
 
-    /// What the ship can do where it lies (Ship_ContextActions 0x0044E630).
+    /// What the ship can do where it lies.
     struct Context {
         bool foreign = true;  ///< not the local player's ship
         bool moving = false;
@@ -727,7 +730,7 @@ private:
         bool found = false;                     ///< land within 4 tiles on an island without an own city
         std::optional<sim::CostBuilding> yard;  ///< an own shipyard in reach
         sim::ExploreState explore = sim::ExploreState::NotAllowed;
-        bool pirates = false;                                        ///< at the pirates' Kontor
+        bool pirates = false;                                        ///< at the pirates' Kontor (and trade)
         std::optional<std::pair<std::uint16_t, std::uint8_t>> city;  ///< the Kontor's city
     };
 
@@ -746,10 +749,11 @@ private:
         // sails off from the yard, and is repaired on the way.
         const bool remote_repair = c.world().original_bugs().remote_repair;
         if (ship.cart()) {
-            // A trade cart within 2 tiles of a market or Kontor: its own city's first, else one it
-            // may trade with (TRADER.GAD 59004, 59003).
+            // A trade cart on a tile touching a market or Kontor: its own city's first, else one it
+            // may trade with (TRADER.GAD 59004, 59003), as in the original.
             if (!k.moving) {
-                for (const std::size_t index : sim::cities_near_cart(w, c.buildings, ship.x, ship.y)) {
+                for (const std::size_t index :
+                     sim::cities_near_cart(w, c.buildings, ship.x, ship.y, sim::kCartHandReach)) {
                     const sim::City& city = w.cities()[index];
                     if (city.owner == ship.owner) {
                         k.city = std::make_pair(city.island, city.index);
@@ -779,13 +783,27 @@ private:
             } else if (city.owner == ship.owner) {
                 k.own_kontor = true;
             } else if (owner != nullptr && w.behaviour(*owner) == sim::FactionBehaviour::Pirates) {
+                // Dealing with the pirates, and with a trade treaty (players start with one) trading
+                // at their Kontor as at any other (both buttons, as in the original).
                 k.pirates = true;
+                k.foreign_kontor = w.diplomacy().may_trade(ship.owner, city.owner);
             } else if (w.diplomacy().may_trade(ship.owner, city.owner)) {  // natives too: by treaty
                 k.foreign_kontor = true;
             }
+            // The destroyed Kontor of a defenceless city of another human or computer player can be
+            // built over with a Kontor of one's own, which takes the city over: the ship offers it.
+            // With a trade treaty the ship trades there instead, as in the original.
+            const auto kontor =
+                city.warehouse_x && city.warehouse_y
+                    ? sim::building_at(w, c.buildings, city.island, {*city.warehouse_x, *city.warehouse_y})
+                    : std::nullopt;
+            k.found = !k.foreign_kontor && kontor && kontor->type->destroyed && city.owner != ship.owner &&
+                      owner != nullptr &&
+                      (owner->role == sim::PlayerRole::Human || owner->role == sim::PlayerRole::Computer) &&
+                      sim::city_defenceless(w, c.buildings, city.island, city.index);
         } else if (const auto site = sim::kontor_site_near(w, c.buildings, ship.x, ship.y)) {
             // Land within 4 tiles of a ship in an island's rectangle where the player has no city
-            // yet (0x00448EF0).
+            // yet.
             k.found = std::none_of(w.cities().begin(), w.cities().end(), [&](const sim::City& ct) {
                 return ct.island == site->island && ct.owner == ship.owner;
             });
@@ -848,7 +866,7 @@ private:
     }
 
     void refresh_root(const sim::Ship& ship, const Context& k, const PanelContext& c) {
-        // The name: a click on it types a new one (own ships that are not sinking, 0x00436170).
+        // The name: a click on it types a new one (own ships that are not sinking).
         m_ship.set_text(kName, c.shown_name(NameTarget::of(ship), ship_name(ship)));
         m_ship.set_no_select(kName, !can_rename(c.world(), c.local, NameTarget::of(ship)));
         const bool own = !k.foreign;
@@ -891,7 +909,7 @@ private:
         m_ship.set_slider(kHealth, 0, static_cast<std::int32_t>(std::uint64_t{health} * 1000 / max_health), 1000);
         m_ship.set_text(kCannons, std::to_string(ship.cannons));
         m_ship.set_disabled(kCannonsDown, ship.cannons == 0);
-        m_ship.set_visible(kRoute, own && !ship.for_sale);  // also without stops (0x00436887)
+        m_ship.set_visible(kRoute, own && !ship.for_sale);  // also without stops
         m_ship.set_visible(kRouteEditor, own && !ship.for_sale);
         m_ship.set_visible(kScuttle, own && !ship.for_sale);
         m_ship.set_visible(kPirates, idle && k.pirates);
@@ -1039,7 +1057,13 @@ private:
             }
             case kCannonsDown:
                 if (ship.cannons > 0) {
-                    out.emplace_back(ship_command(ship, c, sim::ShipCommand::Op::UnmountCannon));
+                    out.emplace_back(unmount_cannons(ship, c));
+                }
+                break;
+            case kCannons:
+                // Open1602: Shift+click on the mounted cannons takes them all off.
+                if (c.shift && ship.cannons > 0) {
+                    out.emplace_back(unmount_cannons(ship, c));
                 }
                 break;
             case kTrade:
@@ -1054,7 +1078,7 @@ private:
                 break;
             case kFound: {
                 m_request = Request{Request::Kind::FoundKontor, ship.id};
-                // The island is asked at the same time: a computer with a city there answers (0x0043CE00).
+                // The island is asked at the same time: a computer with a city there answers.
                 sim::DiplomacyOrder ask;
                 ask.player = c.local;
                 ask.kind = sim::DiplomacyOrder::Kind::AskFounding;
@@ -1072,7 +1096,7 @@ private:
                 }
                 break;
             case kRouteEditor:
-                // 0x0044EEC0: opening the editor drops the stops that are no city (patrol points).
+                // Opening the editor drops the stops that are no city (patrol points).
                 for (std::uint8_t stop = 0; stop < sim::TradeRoute::kStops; ++stop) {
                     const sim::Target& t = ship.route.stops[stop].target;
                     if (!t.empty() && t.kind != sim::Target::Kind::City) {
@@ -1097,7 +1121,7 @@ private:
                     }
                     const sim::CargoSlot& slot = ship.cargo[h];
                     if (sim::is_soldier_ware(slot.ware) && slot.amount != 0) {
-                        // Soldiers in the hold go ashore (0x00448F90).
+                        // Soldiers in the hold go ashore.
                         sim::UnloadOrder o;
                         o.player = c.local;
                         o.ship = ship.id;
@@ -1185,10 +1209,13 @@ private:
         const auto cap = static_cast<std::int32_t>(std::max<std::uint32_t>(city->capacity, 1));
         for (std::int32_t k = 0; k < 4; ++k) {
             const std::uint8_t w = kontor_ware(k);
-            m_transfer.set_visible(45011 + k, w != 0);
+            // A slot the goods group leaves free shows the empty slot (water), without a bar or a button.
+            m_transfer.set_visible(45011 + k, true);
             m_transfer.set_visible(45031 + k, w != 0);
             m_transfer.set_visible(45131 + k, w != 0);
             if (w == 0) {
+                m_transfer.set_graphic(45011 + k, m_gfx_empty, 0);
+                m_transfer.set_disabled(45011 + k, false);
                 continue;
             }
             m_transfer.set_graphic(45011 + k, ui::ware_sprite(m_gfx_ware, c.world().goods(), w), 0);
@@ -1286,6 +1313,7 @@ private:
             return;
         }
         const bool natives = is_natives(*city, c);
+        set_city_plate(m_trade, *city, c);
         m_trade.set_text(33122, ship_name(ship));
         m_trade.set_text(33124, city_name(*city));
         const assets::BuildingType* kontor = sim::kontor_of(c.world(), c.buildings, *city);
@@ -1513,21 +1541,26 @@ private:
         return m_route_row && !m_is_cart ? sim::TradeRoute::kStops / kStopsShown : 1;  // a cart has four stops
     }
     /// Another own ship with a route of cities by the tile clicked (ships stand out of their tile).
-    [[nodiscard]] static const sim::Ship* route_source_near(const sim::Ship& ship, const PanelContext& c,
+    /// Whether the route has a city to copy (patrol points and ships to meet are not copied).
+    [[nodiscard]] static bool has_city_stop(const sim::Ship& ship) {
+        return std::ranges::any_of(ship.route.stops,
+                                   [](const sim::RouteStop& st) { return st.target.kind == sim::Target::Kind::City; });
+    }
+
+    /// The own ship (or cart, for a cart) nearest to the clicked tile that takes the copied route.
+    [[nodiscard]] static const sim::Ship* route_target_near(const sim::Ship& ship, const PanelContext& c,
                                                             std::uint32_t x, std::uint32_t y) {
         constexpr std::int32_t kReach = 2;
         const sim::Ship* best = nullptr;
         std::int32_t best_distance = kReach + 1;
         for (const sim::Ship& other : c.world().ships()) {
-            if (other.id == ship.id || other.owner != ship.owner || other.sinking) {
+            if (other.id == ship.id || other.owner != ship.owner || other.sinking || other.cart() != ship.cart()) {
                 continue;
             }
-            const bool cities = std::ranges::any_of(
-                other.route.stops, [](const sim::RouteStop& st) { return st.target.kind == sim::Target::Kind::City; });
             const std::int32_t d =
                 std::max(std::abs(static_cast<std::int32_t>(other.x) - static_cast<std::int32_t>(x)),
                          std::abs(static_cast<std::int32_t>(other.y) - static_cast<std::int32_t>(y)));
-            if (cities && d < best_distance) {
+            if (d < best_distance) {
                 best = &other;
                 best_distance = d;
             }
@@ -1576,8 +1609,9 @@ private:
             m_route.set_selected(kStopName + s, m_pick_stop == stop);
             m_route.set_graphic(kStopSymbol + s, m_gfx_stop + (city != nullptr ? 0 : 1), 0);
             if (city != nullptr) {
-                set_banner_graphic(m_route, kStopArms + s, render::BannerArt::at(m_gfx_arms), c.banner(city->owner));
-                set_banner_graphic(m_route, kStopArmsShadow + s, render::BannerArt::at(m_gfx_arms),
+                set_banner_graphic(m_route, kStopArms + s, render::BannerArt::arms_at(m_gfx_arms),
+                                   c.banner(city->owner));
+                set_banner_graphic(m_route, kStopArmsShadow + s, render::BannerArt::arms_at(m_gfx_arms),
                                    c.banner(city->owner));
             }
             if (m_route_row && !m_stop_page) {
@@ -1625,6 +1659,7 @@ private:
         if (m_route_row) {
             if (m_stop_page) {
                 m_route.set_text(kRouteCopy, ui::tr("route.back"));
+                m_route.set_disabled(kRouteCopy, false);
                 m_route.set_disabled(kRouteUp, !neighbour_stop(ship, c, *m_stop_page, -1));
                 m_route.set_disabled(kRouteDown, !neighbour_stop(ship, c, *m_stop_page, 1));
                 m_route.set_selected(kRouteCopy, false);
@@ -1632,6 +1667,11 @@ private:
                 m_route.set_text(kRouteCopy, ui::tr("route.copy"));
                 m_route.set_disabled(kRouteUp, m_route_page == 0);
                 m_route.set_disabled(kRouteDown, m_route_page + 1 >= route_pages());
+                const bool can_copy = has_city_stop(ship);
+                if (!can_copy) {
+                    m_pick_copy = false;
+                }
+                m_route.set_disabled(kRouteCopy, !can_copy);
                 m_route.set_selected(kRouteCopy, m_pick_copy);
             }
         }
@@ -1670,8 +1710,8 @@ private:
                         m_pick_stop.reset();
                         return;
                     }
-                    // Waits for a click on another own ship on the map, whose stops this one takes.
-                    m_pick_copy = !m_pick_copy;
+                    // Waits for a click on another own ship on the map, which takes this ship's stops.
+                    m_pick_copy = !m_pick_copy && has_city_stop(ship);
                     m_pick_stop.reset();
                     return;
                 default:
@@ -1810,7 +1850,7 @@ private:
             if (entry.ware == 0) {
                 return std::nullopt;
             }
-            // RoutePanel_EntryText 0x00430B80: own city load/unload, another's buy/sell.
+            // Own city load/unload, another's buy/sell.
             const bool own = city->owner == c.local;
             const std::size_t line = own ? (entry.unload ? 53 : 51) : (entry.unload ? 55 : 54);
             return ui::format_text(c.text("GAME", line),
@@ -1844,7 +1884,7 @@ private:
             if (!w) {
                 return;  // the original ignores clicks beside the list
             }
-            // 50 t; delivered if the own Kontor buys the ware, taken if it sells it (0x0043C600).
+            // 50 t; delivered if the own Kontor buys the ware, taken if it sells it.
             v.ware = *w;
             v.amount = *w != 0 ? sim::hold_capacity(ship) : 0;
             if (const sim::City::Trade* t = city->trade_of(*w); t != nullptr && *w != 0) {
@@ -1906,7 +1946,7 @@ private:
     }
 
     void refresh_pirates(const PanelContext& c) {
-        // The other human and computer players still in the game (0x00436C70).
+        // The other human and computer players still in the game.
         m_opponents.clear();
         const auto& players = c.world().players();
         for (std::size_t p = 0; p < players.size(); ++p) {
@@ -1917,7 +1957,7 @@ private:
             }
         }
         if (m_page == Page::Pirates) {
-            // Hiring them needs at least two players beside the pirates (0x00474D40).
+            // Hiring them needs at least two players beside the pirates.
             m_pirat.set_visible(kHire, m_opponents.size() + 1 >= 2);
             return;
         }
@@ -1938,7 +1978,7 @@ private:
             m_piratord.set_visible(kPirateChoice + k, shown);
             m_piratord.set_selected(kPirateChoice + k, o == m_hire_choice);
             if (shown) {
-                set_banner_graphic(m_piratord, kPirateArms + k, render::BannerArt::at(m_gfx_pirate_arms),
+                set_banner_graphic(m_piratord, kPirateArms + k, render::BannerArt::arms_at(m_gfx_pirate_arms),
                                    c.banner(m_opponents[static_cast<std::size_t>(o)]));
             }
         }
@@ -2013,7 +2053,7 @@ private:
     std::int32_t m_gfx_arrow = 605;
     std::int32_t m_gfx_pirate_arms = 548;
     std::optional<std::uint8_t> m_pick_stop;  ///< the stop whose city a click on the map chooses
-    bool m_pick_copy = false;                 ///< a click on the map chooses the ship to copy from
+    bool m_pick_copy = false;                 ///< a click on the map chooses the ship that takes the route
     bool m_route_row = false;                 ///< the editor has Open1602's row (copy, pages)
     std::size_t m_route_page = 0;             ///< stops 1-4 or 5-8 in the editor
     std::optional<std::uint8_t> m_stop_page;  ///< the stop whose page of wares the editor shows

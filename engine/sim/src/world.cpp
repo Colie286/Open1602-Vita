@@ -2,7 +2,9 @@
 #include "o1602/sim/world.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <map>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -28,7 +30,31 @@ bool valid_name(std::string_view name, std::size_t max_length) noexcept {
 World::World(std::uint32_t width, std::uint32_t height)
     : m_width(width), m_height(height), m_cells(std::size_t{width} * height) {}
 
-core::Status World::add_island(WorldIsland island) {
+core::Status World::add_island(WorldIsland island, const assets::BuildingTable* buildings) {
+    static_assert(kMaxIslands <= kSea, "the sea's number is no island's");
+    if (m_islands.size() >= kMaxIslands) {  // named limit instead of the original's 255 (L-003)
+        return make_error(ErrorCode::LimitExceeded, "more than " + std::to_string(kMaxIslands) + " islands");
+    }
+    const auto index = static_cast<std::uint16_t>(m_islands.size());
+    std::vector<bool> taken;
+    if (auto status = claim_cells(island, buildings, taken); !status) {
+        return status;
+    }
+    const std::uint32_t w = island.map.width();
+    for (std::uint32_t ly = 0; ly < island.map.height(); ++ly) {
+        for (std::uint32_t lx = 0; lx < w; ++lx) {
+            if (taken[std::size_t{ly} * w + lx]) {
+                m_cells[std::size_t{island.y + ly} * m_width + island.x + lx] =
+                    Cell{index, static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(ly)};
+            }
+        }
+    }
+    m_islands.push_back(std::move(island));
+    return core::Ok{};
+}
+
+core::Status World::claim_cells(const WorldIsland& island, const assets::BuildingTable* buildings,
+                                std::vector<bool>& taken) const {
     const std::uint32_t w = island.map.width();
     const std::uint32_t h = island.map.height();
     // In 64 bits: a position near 2^32 from a file must not wrap around into the map.
@@ -40,26 +66,33 @@ core::Status World::add_island(WorldIsland island) {
     if (w == 0 || h == 0) {  // no save could hold it (IO-5, HI-15)
         return make_error(ErrorCode::InvalidFormat, "island " + std::to_string(island.header.number) + " has no tiles");
     }
-    static_assert(kMaxIslands <= kSea, "the sea's number is no island's");
-    if (m_islands.size() >= kMaxIslands) {  // named limit instead of the original's 255 (L-003)
-        return make_error(ErrorCode::LimitExceeded, "more than " + std::to_string(kMaxIslands) + " islands");
-    }
+    // As in the original, the rectangles of two islands may overlap where at least one of them has
+    // sea: such a tile belongs to the island with land there, else to the one added first.
+    const auto sea = [buildings](const IslandMap& map, std::uint32_t x, std::uint32_t y) {
+        if (buildings == nullptr) {
+            return false;
+        }
+        const MapCell& c = map.top(x, y);
+        const assets::BuildingType* b = c.empty() ? nullptr : buildings->by_sprite(c.sprite);
+        return b != nullptr && b->kind == assets::kind::kSea;
+    };
+    taken.assign(std::size_t{w} * h, false);  // tiles the island takes over
     for (std::uint32_t ly = 0; ly < h; ++ly) {
         for (std::uint32_t lx = 0; lx < w; ++lx) {
-            if (m_cells[std::size_t{island.y + ly} * m_width + island.x + lx].island != kSea) {
+            const Cell& c = m_cells[std::size_t{island.y + ly} * m_width + island.x + lx];
+            if (c.island == kSea) {
+                taken[std::size_t{ly} * w + lx] = true;
+                continue;
+            }
+            const bool new_sea = sea(island.map, lx, ly);
+            const bool old_sea = sea(m_islands[c.island].map, c.local_x, c.local_y);
+            if (!new_sea && !old_sea) {
                 return make_error(ErrorCode::InvalidFormat,
                                   "island " + std::to_string(island.header.number) + " overlaps another island");
             }
+            taken[std::size_t{ly} * w + lx] = !new_sea;
         }
     }
-    const auto index = static_cast<std::uint16_t>(m_islands.size());
-    for (std::uint32_t ly = 0; ly < h; ++ly) {
-        for (std::uint32_t lx = 0; lx < w; ++lx) {
-            m_cells[std::size_t{island.y + ly} * m_width + island.x + lx] =
-                Cell{index, static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(ly)};
-        }
-    }
-    m_islands.push_back(std::move(island));
     return core::Ok{};
 }
 
@@ -109,6 +142,18 @@ void World::reveal_islands(Reveal reveal, std::uint16_t island) {
     }
 }
 
+void World::explore_islands() {
+    for (WorldIsland& isl : m_islands) {
+        for (std::size_t p = 0; p < m_players.size(); ++p) {
+            const auto id = static_cast<PlayerId>(p);
+            isl.explore(id);
+            for (auto& d : isl.header.deposits) {
+                d.mask.insert(p);
+            }
+        }
+    }
+}
+
 void World::set_cities(std::vector<City> cities) {
     m_cities = std::move(cities);
     index_cities();
@@ -129,6 +174,21 @@ void World::set_factions(std::vector<Faction> factions) {
     for (Player& p : m_players) {
         if (p.faction >= m_factions.size()) {
             p.faction = faction::kSettlers;
+        }
+    }
+}
+
+void World::replace_factions(const std::vector<FactionReplacement>& replacements) {
+    for (const FactionReplacement& r : replacements) {
+        const auto replaced = find_faction(m_factions, r.replaced);
+        const auto by = find_faction(m_factions, r.by);
+        if (!replaced || !by) {
+            continue;
+        }
+        for (Player& p : m_players) {
+            if (p.faction == *replaced) {
+                p.faction = *by;
+            }
         }
     }
 }
@@ -296,6 +356,44 @@ std::uint8_t ware_of_producer(const assets::BuildingTable& buildings, std::uint3
     return b != nullptr ? b->ware : std::uint8_t{0};
 }
 
+/// The open sea tile nearest to (x, y) clamped into the world, a tile off its edge and free of
+/// other ships, or nothing within `reach` tiles. Some maps keep a player's ships far beyond the map
+/// (Seeschlacht: the third player's two warships at x 4090 and 4095); the original loads them
+/// there, where nobody can see or reach them.
+std::optional<std::pair<std::uint32_t, std::uint32_t>> open_sea_near(const World& world, std::uint32_t x,
+                                                                     std::uint32_t y) {
+    constexpr std::int32_t kReach = 64;
+    constexpr std::int32_t kMargin = 2;
+    const auto w = static_cast<std::int32_t>(world.width());
+    const auto h = static_cast<std::int32_t>(world.height());
+    if (w <= 2 * kMargin || h <= 2 * kMargin) {
+        return std::nullopt;
+    }
+    const std::int32_t cx =
+        std::clamp(static_cast<std::int32_t>(std::min<std::uint32_t>(x, 0x7FFF)), kMargin, w - 1 - kMargin);
+    const std::int32_t cy =
+        std::clamp(static_cast<std::int32_t>(std::min<std::uint32_t>(y, 0x7FFF)), kMargin, h - 1 - kMargin);
+    const auto free = [&](std::int32_t tx, std::int32_t ty) {
+        if (tx < kMargin || ty < kMargin || tx >= w - kMargin || ty >= h - kMargin ||
+            world.cell(static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(ty)).island != World::kSea) {
+            return false;
+        }
+        return std::none_of(world.ships().begin(), world.ships().end(),
+                            [&](const Ship& s) { return s.x == tx && s.y == ty; });
+    };
+    // Ring by ring around the clamped tile, the first free one.
+    for (std::int32_t r = 0; r <= kReach; ++r) {
+        for (std::int32_t dy = -r; dy <= r; ++dy) {
+            for (std::int32_t dx = -r; dx <= r; ++dx) {
+                if (std::max(std::abs(dx), std::abs(dy)) == r && free(cx + dx, cy + dy)) {
+                    return std::pair{static_cast<std::uint32_t>(cx + dx), static_cast<std::uint32_t>(cy + dy)};
+                }
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 /// SHIP4 and HANDLER: after the cities, so that route stops can name them.
 template <typename Warn>
 void load_ships(World& world, const assets::ChunkFile& file, const assets::BuildingTable& buildings, Warn&& warn) {
@@ -315,9 +413,20 @@ void load_ships(World& world, const assets::ChunkFile& file, const assets::Build
     constexpr std::uint8_t kFlagForSale = 1U << 2;
     constexpr std::uint8_t kFlagRepair = 1U << 4;
     for (const auto& s : *records) {
+        std::uint32_t at_x = s.x;
+        std::uint32_t at_y = s.y;
         if (!world.contains(s.x, s.y)) {
-            warn("ship '" + s.name + "' outside the world map");
-            continue;
+            // A ship beyond the map goes to the nearest open sea, so that its player has it; a
+            // trade cart (on land) or a ship with no sea near the edge is left out.
+            const auto sea = s.kind != kKindCart ? open_sea_near(world, s.x, s.y) : std::nullopt;
+            if (!sea) {
+                warn("ship '" + s.name + "' outside the world map");
+                continue;
+            }
+            warn("ship '" + s.name + "' outside the world map: moved to the sea at " + std::to_string(sea->first) +
+                 ", " + std::to_string(sea->second));
+            at_x = sea->first;
+            at_y = sea->second;
         }
         Ship ship;
         ship.id = ship_id_of_slot(s.slot);
@@ -326,7 +435,7 @@ void load_ships(World& world, const assets::ChunkFile& file, const assets::Build
         }
         ship.source_slot = s.slot;
         ship.name = s.name;
-        ship.place(s.x, s.y);
+        ship.place(at_x, at_y);
         // Kind 5 is a player's trade cart on land (TRADER1), kept in the ship table.
         ship.figure = s.kind == kKindCart ? figure::kTradeCart : s.figure;
         ship.owner = player_from_original(s.owner);
@@ -337,8 +446,16 @@ void load_ships(World& world, const assets::ChunkFile& file, const assets::Build
         ship.cargo.resize(s.cargo.size());
         std::size_t next = 0;
         for (const auto& c : s.cargo) {
-            // Cargo names the good by its producer, like the warehouse chunk KONTOR2.
-            const std::uint8_t ware = ware_of_producer(buildings, c.producer);
+            // Cargo names the good by its producer, like the warehouse chunk KONTOR2; a unit by its
+            // own code (the soldiers aboard at the start of a scenario).
+            std::uint8_t ware = ware_of_producer(buildings, c.producer);
+            if (ware == 0 && c.producer >= 20000U + ware::kSoldierCargoCode + ware::kFirstSoldier &&
+                c.producer <= 20000U + ware::kSoldierCargoCode + ware::kLastSoldier) {
+                // The unit's colour variant becomes its family, as for the soldiers on land.
+                const auto figure = assets::unit_of_ware(c.producer - 20000U - ware::kSoldierCargoCode);
+                const auto variant = assets::FigureTable::unit_variant(figure);
+                ware = assets::unit_ware(variant ? variant->family : figure);
+            }
             if (ware != 0 && c.amount != 0) {
                 if (next == ship.cargo.size()) {
                     ship.cargo.emplace_back();
@@ -566,6 +683,55 @@ PlayerId first_human_player(const World& world) noexcept {
     return kNoPlayer;
 }
 
+PlayerId take_single_player(World& world, std::uint64_t owner) {
+    const auto& players = world.players();
+    PlayerId own = kNoPlayer;
+    if (owner != 0) {
+        for (std::size_t i = 0; i < players.size() && i < kNoPlayer; ++i) {
+            if (players[i].role == PlayerRole::Human && players[i].owner == owner) {
+                own = static_cast<PlayerId>(i);
+                break;
+            }
+        }
+    }
+    if (own == kNoPlayer) {
+        own = first_human_player(world);
+    }
+    if (own != kNoPlayer) {
+        take_player(world, own, owner);
+    }
+    return own;
+}
+
+void take_player(World& world, PlayerId own, std::uint64_t owner) {
+    const Player* chosen = world.player(own);
+    if (chosen == nullptr || chosen->role != PlayerRole::Human) {
+        return;
+    }
+    for (std::size_t i = 0; i < world.players().size() && i < kNoPlayer; ++i) {
+        Player* p = world.player(static_cast<PlayerId>(i));
+        if (p == nullptr) {
+            continue;
+        }
+        if (i == own) {
+            p->owner = owner != 0 ? owner : p->owner;
+        } else if (p->role == PlayerRole::Human) {
+            p->role = PlayerRole::Computer;  // keeps its owner: that person gets it back in a multiplayer game
+        }
+    }
+}
+
+std::vector<PlayerId> human_players(const World& world) {
+    std::vector<PlayerId> out;
+    const auto& players = world.players();
+    for (std::size_t i = 0; i < players.size() && i < kNoPlayer; ++i) {
+        if (players[i].role == PlayerRole::Human && players[i].active()) {
+            out.push_back(static_cast<PlayerId>(i));
+        }
+    }
+    return out;
+}
+
 namespace {
 
 /// Collects the warnings of a load, if the caller asked for them.
@@ -607,7 +773,7 @@ void add_islands(World& world, const std::vector<assets::Island>& islands, const
         }
         WorldIsland wi{island.header, IslandMap::from_island(island, buildings, warnings, base), island.header.pos_x,
                        island.header.pos_y};
-        if (auto status = world.add_island(std::move(wi)); !status) {
+        if (auto status = world.add_island(std::move(wi), &buildings); !status) {
             warn(status.error().message);
         }
     }
@@ -631,7 +797,7 @@ void add_players(World& world, const std::vector<assets::PlayerRecord>& players)
         player.ships_sunk = p.ships_sunk;
         player.ships_lost = p.ships_lost;
         if (p.kind == assets::PlayerKind::Human || p.kind == assets::PlayerKind::Computer) {
-            // The loader 0x00477911 takes the scenario's switches for these slots only.
+            // The takes the scenario's switches for these slots only.
             player.scenario = {p.scenario_flags, p.rival_inhabitants, p.own_inhabitants, p.own_development,
                                p.rival_development};
         }
@@ -684,7 +850,7 @@ void load_cities(World& world, const assets::GameState& state, const WarningSink
         city.owner = player_from_original(c.owner);
         city.name = c.name;
         city.inhabitants.assign(c.inhabitants.begin(), c.inhabitants.end());
-        // The loader of the original (0x00484C6C, 0x00484C13) turns a stored 0 into 128 in the
+        // The loader of the original turns a stored 0 into 128 in the
         // satisfaction, the tax rate and the food supply.
         const auto loaded = [](std::uint8_t v) { return v == 0 ? std::uint8_t{128} : v; };
         for (const std::uint8_t v : c.satisfaction) {
@@ -726,7 +892,7 @@ void load_cities(World& world, const assets::GameState& state, const WarningSink
 void load_houses(World& world, const assets::GameState& state, const assets::BuildingTable& buildings,
                  const WarningSink& warn) {
     // Only on a dwelling (HAUS_PRODTYP Kind WOHNUNG); the class is the building's, as in the loader
-    // of the original (0x00483EE0).
+    // of the original.
     for (const auto& r : state.houses) {
         const auto island = world.island_index(r.island);
         if (!island || !world.islands()[*island].map.contains(r.x, r.y)) {
@@ -788,7 +954,7 @@ void load_island_states(World& world, const assets::ChunkFile& file, const asset
             }
         }
         // Craters: the list of the savegame. The original searches them when it builds a world from
-        // a scenario (SZENE chunk, 0x0048C5C0), whose list may be empty (Bündnispolitik), and for
+        // a scenario (SZENE chunk), whose list may be empty (Bündnispolitik), and for
         // islands without a list (INSEL3/4).
         constexpr std::size_t kCraterFields = 0x4C;
         if (island.header.raw.size() >= kCraterFields && !scenario) {
@@ -822,7 +988,7 @@ void load_volcanoes(World& world, const assets::GameState& state, const WarningS
     }
     if (state.running_volcano) {
         // The original keeps no lava in its savegames and starts a running eruption anew, with a
-        // new pattern and without the message (0x0048C0F0, S-062).
+        // new pattern and without the message (S-062).
         if (const auto ref = crater_ref(*state.running_volcano)) {
             const auto seed = static_cast<std::uint16_t>(world.random(RandomStream::Islands).below(0x8000));
             if (!erupt(world, *ref, seed, false, nullptr)) {
@@ -840,7 +1006,7 @@ void load_timers(World& world, const assets::GameState& state) {
                                                     state.tutorial.value_or(0) != 0});
     }
     if (state.next_drought) {
-        // A stored 0 becomes 60 minutes, as in the original's loader (0x00484E3C).
+        // A stored 0 becomes 60 minutes, as in the original's loader.
         const std::uint32_t next = *state.next_drought != 0 ? *state.next_drought : 36'000U;
         world.set_next_drought_ms(std::uint64_t{next} * 100);
     }
@@ -1070,7 +1236,7 @@ void load_growth(World& world, const assets::GameState& state, const assets::Bui
 /// AUFTRAG4: the missions, with a slot for each one a player names.
 void load_missions(World& world, const assets::ChunkFile& file, const std::vector<assets::PlayerRecord>& players,
                    std::vector<std::string>* warnings, const WarningSink& warn) {
-    // docs/re/missions.md: the record of slot s goes to mission s; players name theirs by slot.
+    // The record of slot s goes to mission s; players name theirs by slot.
     if (auto records = assets::load_missions(file); !records) {
         warn(records.error().message);
     } else {
@@ -1109,7 +1275,7 @@ void load_player_states(World& world, const std::vector<assets::PlayerRecord>& p
         }
         Player& p = *pp;
         p.status = status_from_original(r.kind);
-        // Only humans and computers have missions (Player_Tick reads the slot for controller 0, 0x0C).
+        // Only humans and computers have missions (controllers 0 and 0x0C).
         if (r.mission < world.missions().size() && (p.role == PlayerRole::Human || p.role == PlayerRole::Computer)) {
             p.mission = r.mission;
         } else if (r.mission != 0xFF && (p.role == PlayerRole::Human || p.role == PlayerRole::Computer)) {
@@ -1117,7 +1283,7 @@ void load_player_states(World& world, const std::vector<assets::PlayerRecord>& p
         }
         p.opponents_defeated = r.arches_allowed;
         p.bankrupt_checks = static_cast<std::uint8_t>(std::min<std::uint16_t>(r.defeat_counter, 39));
-        // A human or computer with no city and no ship is a slot nobody plays (0x0048C0F0).
+        // A human or computer with no city and no ship is a slot nobody plays.
         if (p.status == PlayerStatus::Playing && (p.role == PlayerRole::Human || p.role == PlayerRole::Computer) &&
             !owns_city(world, static_cast<PlayerId>(i)) && !owns_ship(world, static_cast<PlayerId>(i))) {
             p.status = PlayerStatus::Absent;
@@ -1142,7 +1308,7 @@ void load_extension(World& world, const assets::ChunkFile& file, const assets::B
 
 /// Clears the trade settings of each player city that trades more wares than its Kontor allows.
 void trim_all_trade_settings(World& world, const assets::BuildingTable& buildings) {
-    // 0x00481EE0 on loading: such a city loses all its trade settings.
+    // The original on loading: such a city loses all its trade settings.
     for (const City& c : world.cities()) {
         const Player* owner = world.player(c.owner);
         const assets::BuildingType* kontor = kontor_of(world, buildings, c);
@@ -1158,8 +1324,9 @@ void trim_all_trade_settings(World& world, const assets::BuildingTable& building
 core::Result<World> load_world(const assets::ChunkFile& file, const assets::BuildingTable& buildings,
                                const assets::GameDirectory& game, std::vector<std::string>* warnings,
                                const WorldStart& start) {
-    if (plans_islands(file)) {
-        // The SZENE handler of the original makes the islands while the scenario loads (0x0048C5C0).
+    const bool keep_plan = start.keep_plan && plans_islands(file);
+    if (!keep_plan && plans_islands(file)) {
+        // The SZENE handler of the original makes the islands while the scenario loads.
         auto generated = generate_islands(file, game, buildings, start, warnings);
         if (!generated) {
             return generated.error();
@@ -1217,6 +1384,13 @@ core::Result<World> load_world(const assets::ChunkFile& file, const assets::Buil
     trim_all_trade_settings(world, buildings);
     if (auto status = validate(world); !status) {
         return status.error();
+    }
+    if (keep_plan) {
+        auto plan = assets::load_scenario_plan(file);
+        if (!plan) {
+            return plan.error();
+        }
+        world.set_planned_islands(PlannedIslands{std::move(**plan), assets::load_random_table(file)});
     }
     world.set_source(std::make_shared<const assets::ChunkFile>(file));
     return world;

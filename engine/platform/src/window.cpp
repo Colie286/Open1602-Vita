@@ -3,6 +3,7 @@
 #include "o1602/platform/window.hpp"
 
 #include <SDL3/SDL.h>
+#include <atomic>
 #include <cstdio>
 #include <filesystem>
 #include <string_view>
@@ -194,8 +195,35 @@ std::int32_t Window::max_texture_size() const {
     return static_cast<std::int32_t>(SDL_GetNumberProperty(props, SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER, 0));
 }
 
+namespace {
+
+// The fixed clock: its step (0 = the real clock) and where it stands. Set before the game starts
+// and advanced by its main loop; atomic so that a thread reading the clock meanwhile is safe.
+std::atomic<std::uint32_t> g_fixed_step_ms{0};
+std::atomic<std::uint64_t> g_fixed_now_ms{0};
+
+}  // namespace
+
 std::uint64_t ticks_ms() {
+    return g_fixed_step_ms.load(std::memory_order_relaxed) != 0 ? g_fixed_now_ms.load(std::memory_order_relaxed)
+                                                                : SDL_GetTicks();
+}
+
+std::uint64_t real_ticks_ms() {
     return SDL_GetTicks();
+}
+
+void use_fixed_clock(std::uint32_t step_ms) noexcept {
+    g_fixed_now_ms.store(0, std::memory_order_relaxed);
+    g_fixed_step_ms.store(step_ms, std::memory_order_relaxed);
+}
+
+bool fixed_clock() noexcept {
+    return g_fixed_step_ms.load(std::memory_order_relaxed) != 0;
+}
+
+void advance_fixed_clock() noexcept {
+    g_fixed_now_ms.fetch_add(g_fixed_step_ms.load(std::memory_order_relaxed), std::memory_order_relaxed);
 }
 
 void Window::set_fullscreen(bool on) {

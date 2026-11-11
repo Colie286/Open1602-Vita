@@ -2,7 +2,7 @@
 //
 // Carriers and carts of the logistics as the renderer sees them. The simulation moves them; here
 // only their walking animations run: empty or loaded (ANIM 1 / 0 of TRAEGER and KARREN), slower
-// on slow ground like in the original (0x0045D0B0 stretches a frame by Wegspeed / 32). Between two
+// on slow ground like in the original (stretches a frame by Wegspeed / 32). Between two
 // ticks they are drawn on their way (TickTrail).
 #pragma once
 

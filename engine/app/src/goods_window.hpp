@@ -5,9 +5,10 @@
 // in and went out per minute over a chosen time (1, 5, 15 or 60 game minutes) and how long the
 // stock lasts at that balance. A click on a good shows where it came from and went to, and its
 // last hour (or twelve hours) as a chart. Further tabs show the production buildings, the
-// inhabitants, the trade at the Kontor and the finances (goods_tabs.cpp). Only the local player's cities: allies and
-// trading partners never see each other's figures. The window only reads the world; the game goes on behind it. It is
-// drawn as a parchment in the original's style: the owner lays the parchment (parchment.hpp) under what draw() returns.
+// inhabitants, the trade at the Kontor, the player's trade routes and the finances (goods_tabs.cpp). Only the local
+// player's cities: allies and trading partners never see each other's figures. The window only reads the world; the
+// game goes on behind it. It is drawn as a parchment in the original's style: the owner lays the parchment
+// (parchment.hpp) under what draw() returns.
 #pragma once
 
 #include <array>
@@ -15,6 +16,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "o1602/assets/building_table.hpp"
@@ -37,15 +39,26 @@ struct GoodsStyle {
     std::uint8_t stock = 0;   ///< the stock in the chart (at half strength)
     std::uint8_t shadow = 0;  ///< the window's shadow (at half strength)
     /// The lines of the charts of the inhabitants and the finances, one per series.
-    std::array<std::uint8_t, 6> series{};
+    /// Eight: the taxes or the first class and one for each further class a game may have
+    /// (sim::kCityClasses).
+    std::array<std::uint8_t, 8> series{};
 };
 
 class GoodsWindow {
 public:
-    enum class Result : std::uint8_t { None, Close };
+    /// Close the window; or go to a ship (take_ship()) of the tab "Routes".
+    enum class Result : std::uint8_t { None, Close, Ship };
     /// The tabs, left to right.
-    enum class Tab : std::uint8_t { Goods, Producers, Population, Trade, Finances };
-    static constexpr std::size_t kTabs = 5;
+    enum class Tab : std::uint8_t { Goods, Producers, Population, Trade, Routes, Finances };
+    static constexpr std::size_t kTabs = 6;
+    /// The orders of the tab "Routes", chosen by a click on a column's heading.
+    enum class RouteOrder : std::uint8_t { Ship, From, Next, Problems };
+    /// A ship of the tab "Routes" to go to: its id and the world tile it is at.
+    struct ShipTarget {
+        std::uint32_t id = 0;
+        double x = 0.0;
+        double y = 0.0;
+    };
     /// The window's size in design units (it is centred over the map).
     static constexpr std::int32_t kWidth = 744;
     static constexpr std::int32_t kHeight = 690;
@@ -104,6 +117,11 @@ public:
     [[nodiscard]] std::optional<std::uint16_t> island() const noexcept { return m_island; }
     [[nodiscard]] std::optional<std::uint8_t> detail() const noexcept { return m_detail; }
     [[nodiscard]] Tab tab() const noexcept { return m_tab; }
+    [[nodiscard]] RouteOrder route_order() const noexcept { return m_route_order; }
+    /// The ships of the tab "Routes" as last laid out, in their order.
+    [[nodiscard]] const std::vector<ShipTarget>& route_ships() const noexcept { return m_route_ships; }
+    /// The ship clicked in the tab "Routes" (after Result::Ship), once.
+    [[nodiscard]] std::optional<ShipTarget> take_ship() noexcept { return std::exchange(m_ship, std::nullopt); }
     [[nodiscard]] const ui::Form& form() const noexcept { return m_form; }
 
     /// Tenths of a ton per minute as text, e.g. "12.5" ("12,5" in German): `units` 1/32 t over
@@ -125,6 +143,7 @@ private:
     void layout_population(const sim::World& world, const assets::BuildingTable& buildings, sim::PlayerId player,
                            Painter& below, Painter& above);
     void layout_trade(const sim::World& world, sim::PlayerId player, Painter& below, Painter& above);
+    void layout_routes(const sim::World& world, sim::PlayerId player, Painter& below, Painter& above);
     void layout_finances(const sim::World& world, const assets::BuildingTable& buildings,
                          const assets::FigureTable& figures, sim::PlayerId player, Painter& below, Painter& above);
     /// A line chart of the last hour (or twelve hours) at `top`, down to above the footer, with
@@ -162,6 +181,9 @@ private:
     bool m_long_chart = false;              ///< the page's chart over twelve hours instead of one
     std::vector<std::uint16_t> m_islands;   ///< the player's islands as last laid out
     std::vector<std::uint8_t> m_row_wares;  ///< the product of each row of the tab "Betriebe"
+    RouteOrder m_route_order = RouteOrder::Ship;
+    std::vector<ShipTarget> m_route_ships;  ///< the ship of each row of the tab "Routes"
+    std::optional<ShipTarget> m_ship;       ///< the ship clicked, for take_ship()
 };
 
 }  // namespace o1602::app

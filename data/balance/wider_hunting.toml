@@ -1,0 +1,8 @@
+# The building values of the rule "Hunter's hut: wider" (Rules::wider_hunting,
+# docs/modding/balance.md). A package's balance.toml that changes the same values wins.
+#
+# The original's hut reaches 8 tiles, where the deer of a town's land rarely stand; with 12 it
+# covers about twice the land.
+
+["anno1602:hunters_hut"]
+radius = 12

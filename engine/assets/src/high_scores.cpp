@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <charconv>
+#include <string>
+#include <system_error>
 
 namespace o1602::assets {
 
@@ -33,7 +35,7 @@ std::vector<std::int64_t> numbers(std::string_view s) {
 }  // namespace
 
 std::string write_high_scores(const std::vector<HighScore>& scores) {
-    // The layout of HighScore_Write (0x0048E7A0).
+    // The layout of the original's file.
     std::string out = "\n  Objekt:   HISCORE\n\n";
     for (std::size_t i = 0; i < std::max(scores.size(), kHighScoreLines); ++i) {
         const HighScore h = i < scores.size() ? scores[i] : HighScore{};
@@ -66,7 +68,7 @@ std::optional<std::size_t> insert_high_score(std::vector<HighScore>& scores, Hig
         scores.resize(kHighScoreLines);
     }
     const auto same = [&](const HighScore& h) { return h.game_id == entry.game_id && h.name == entry.name; };
-    // HighScore_Insert (0x0048E540): above the first line with as many points or fewer; a better
+    // Above the first line with as many points or fewer; a better
     // line of the same game and player stays.
     std::size_t at = 0;
     while (at < kHighScoreLines && (scores[at].name.empty() ? 0 : scores[at].points) > entry.points) {
@@ -95,7 +97,7 @@ std::optional<std::size_t> insert_high_score(std::vector<HighScore>& scores, Hig
 }
 
 bool CampaignProgress::record_win(std::uint32_t campaign, std::uint32_t part, std::uint32_t mission_number) {
-    // GameDat_Write (0x00487FB0): the numbered missions first, else the campaign.
+    // The numbered missions first, else the campaign.
     if (mission_number != kNoCampaign && numbered <= mission_number) {
         const std::uint32_t next = std::min(mission_number + 1, kLastNumbered);
         const bool changed = next != numbered;
@@ -112,9 +114,23 @@ bool CampaignProgress::record_win(std::uint32_t campaign, std::uint32_t part, st
     return false;
 }
 
+bool CampaignProgress::record_package_win(const std::string& campaign, std::uint32_t part) {
+    std::uint32_t& next = package_campaigns[campaign];
+    if (part + 1 > next) {
+        next = part + 1;
+        return true;
+    }
+    return false;
+}
+
+std::uint32_t CampaignProgress::package_parts_open(const std::string& campaign) const {
+    const auto it = package_campaigns.find(campaign);
+    return it != package_campaigns.end() ? it->second : 0;
+}
+
 bool CampaignProgress::ends_campaigns(std::uint32_t campaign, std::uint32_t part,
                                       std::uint32_t mission_number) const noexcept {
-    // GameDat_Write (0x00487FB0): in the campaign branch, campaign 5 with n = part + 1 > 3.
+    // In the campaign branch, campaign 5 with n = part + 1 > 3.
     constexpr std::uint32_t kLastCampaign = 5;
     constexpr std::uint32_t kLastParts = 3;
     const bool numbered_rule = mission_number != kNoCampaign && numbered <= mission_number;
@@ -136,6 +152,24 @@ CampaignProgress parse_progress(std::string_view text) {
             continue;
         }
         line.remove_prefix(first);
+        if (line.starts_with("package ")) {
+            // "package <n> <campaign id>": the id is the rest of the line and may hold spaces.
+            const std::string_view rest = line.substr(8);
+            const std::size_t space = rest.find(' ');
+            if (space == std::string_view::npos) {
+                continue;
+            }
+            std::uint32_t n = 0;
+            const auto [end_of_n, ec] = std::from_chars(rest.data(), rest.data() + space, n);
+            std::string_view id = rest.substr(space + 1);
+            while (!id.empty() && (id.back() == '\r' || id.back() == ' ')) {
+                id.remove_suffix(1);
+            }
+            if (ec == std::errc{} && end_of_n == rest.data() + space && !id.empty() && n <= 0xFFFF) {
+                p.package_campaigns[std::string(id)] = n;
+            }
+            continue;
+        }
         const std::vector<std::int64_t> v = numbers(line);
         const auto valid = [](std::int64_t x) { return x >= 0 && x <= 0xFFFF; };
         if (line.starts_with("campaign") && v.size() >= 2 && valid(v[0]) && valid(v[1])) {
@@ -153,6 +187,9 @@ std::string write_progress(const CampaignProgress& progress) {
     out += "numbered " + std::to_string(progress.numbered) + "\n";
     for (const auto& [campaign, next] : progress.campaigns) {
         out += "campaign " + std::to_string(campaign) + " " + std::to_string(next) + "\n";
+    }
+    for (const auto& [campaign, next] : progress.package_campaigns) {
+        out += "package " + std::to_string(next) + " " + campaign + "\n";
     }
     return out;
 }

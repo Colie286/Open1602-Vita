@@ -27,7 +27,8 @@ struct DisplayModel {
 
 class DisplayMenu {
 public:
-    enum class Result : std::uint8_t { None, Changed, Close };
+    /// Keys: the button "Tastenbelegung" opens the window of the keys (keys_menu.hpp).
+    enum class Result : std::uint8_t { None, Changed, Close, Keys };
     /// The rows, top to bottom.
     enum class Item : std::uint8_t {
         Mode,
@@ -41,17 +42,19 @@ public:
         GrabMouse,
         GoodsTrend,
         RivalWars,
+        EventSpeed,
         PlantFields,
         Graphics,
+        Autosave,
         VitaCpu,
         LeftStick,
         RightStick,
         ChatButton
     };
-    static constexpr std::size_t kItems = 17;
+    static constexpr std::size_t kItems = 19;
     /// The window's size in design units (it is centred over the map).
-    static constexpr std::int32_t kWidth = 560;
-    static constexpr std::int32_t kHeight = 720;
+    static constexpr std::int32_t kWidth = 640;
+    static constexpr std::int32_t kHeight = 756;  // fifteen rows, the hint and the button within 768
 
     explicit DisplayMenu(ui::FormStyle style = {}) : m_form(style) {}
 

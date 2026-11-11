@@ -15,7 +15,8 @@ namespace o1602::app {
 
 /// Where a game's high score list lives, relative to the scores folder: the scenario's name (a
 /// campaign part's label, [KAMPAGNE] line 5 * campaign + part), in "Eigene Szenarien" for the
-/// player's own scenarios, .hss for one player and .hsm for several. Empty without a name.
+/// player's own scenarios, .hss for one player and .hsm for several. Empty without a name and for
+/// a game changed in the editor (GameIdentity::edited).
 [[nodiscard]] std::filesystem::path high_score_file(const sim::GameIdentity& game,
                                                     const std::vector<std::string>& campaign_labels, bool multiplayer);
 /// A name of Windows-1252 as a file name (UTF-8), without characters a file system refuses.

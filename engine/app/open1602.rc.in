@@ -1,0 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Windows resources of open1602.exe: the icon Explorer, the task bar and shortcuts show.
+// The first icon in the file is the program's icon.
+IDI_OPEN1602 ICON "@O1602_ICON_FILE@"

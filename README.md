@@ -6,6 +6,9 @@
 
 This is a native Vita port of [Open1602](https://github.com/x4rd4s/open1602), the open-source engine for Anno 1602. It brings the familiar game interface and original graphics to the handheld, with controller and touchscreen support.
 
+The current source is based on **Open1602 0.5.0**. This update has passed PC and
+Vita3K regression tests; its real-hardware validation is still pending.
+
 **You need your own original game files. No commercial game assets are included in this repository or the VPK.**
 
 ## Features
@@ -148,7 +151,7 @@ master_server = off
 
 The server software and its instructions are available on the [masterserver branch](https://github.com/Colie286/Open1602-Vita/tree/masterserver).
 
-LAN, Ad-hoc and Direct-IP remain available without a master server. Use compatible Open1602 Vita builds and matching game data on all participating devices.
+LAN, Ad-hoc and Direct-IP remain available without a master server. Use compatible Open1602 Vita builds and matching game data on all participating devices. This source uses game protocol **27** and cannot join older protocol-19 Vita builds; update every player's client together.
 
 ## Settings and bug reports
 
@@ -183,11 +186,13 @@ This port builds on the work of the original [Open1602 project](https://github.c
 | zlib | zlib |
 | ENet | MIT |
 | Lua | MIT |
+| dav1d | BSD-2-Clause |
+| Opus | BSD-3-Clause |
 | stb_vorbis | MIT or Unlicense |
 | dr_flac | MIT-0 or Unlicense |
 | Librempeg-derived video decoder code | GPL-3.0-or-later |
 | FFmpeg-derived audio and transform code | LGPL-2.1-or-later, incorporated into this GPL port |
-| Upstream Open1602 window icons | CC0 1.0 |
+| Upstream Open1602 window and UI icons | CC0 1.0 |
 | Project logo and LiveArea artwork | Supplied for redistribution under GPL-3.0-or-later; see NOTICE |
 | SDK runtime components | Various licenses; see the bundled notices |
 | CapUnlocker, optional and not bundled | MIT |

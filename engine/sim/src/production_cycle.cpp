@@ -2,6 +2,7 @@
 #include "o1602/sim/production_cycle.hpp"
 
 #include <algorithm>
+#include <cstdint>
 
 #include "o1602/assets/savegame.hpp"
 #include "o1602/sim/game_data.hpp"
@@ -32,7 +33,7 @@ void emit(std::vector<ProductionEvent>* events, ProductionEvent::Kind kind, std:
     }
 }
 
-/// Which production kinds fetch their main raw material (the switch at 0x0047DF0B): workshops
+/// Which production kinds fetch their main raw material (the switch): workshops
 /// (carriers), farms and fishers between cycles (farmers, fishing boats), mines (from the deposit),
 /// cattle farms, markets and warehouses (carts) and two kinds that need city money.
 bool asks_for_main_raw(const assets::BuildingType& b, const Production& p) noexcept {
@@ -56,6 +57,43 @@ bool asks_for_main_raw(const assets::BuildingType& b, const Production& p) noexc
 
 }  // namespace
 
+std::uint32_t cycle_rate(const Production& p, const assets::BuildingType& b) noexcept {
+    // A building of a package that uses nothing (own_buildings.toml `raw = ""`) needs no raw material.
+    const bool from_nothing = b.raw_ware == 0 && b.raw_amount == 0 && b.raw2_amount == 0;
+    if ((p.raw == 0 && !from_nothing) || (p.flags & kSpecialFlag) != 0 || b.ware == 0) {
+        return 0;
+    }
+    std::uint32_t rate = b.raw_amount == 0 ? Production::kFullRate
+                                           : std::min<std::uint32_t>(Production::kFullRate, fill(p.raw, b.raw_amount));
+    if (b.raw2_amount != 0) {
+        rate = std::min(rate, fill(p.raw2, b.raw2_amount));
+    }
+    return rate < kMinRate ? 0 : rate;
+}
+
+std::uint32_t full_speed_seconds(const assets::BuildingType& b, const assets::FigureTable* figures) {
+    if (b.prod_kind != prod::kFarm && b.prod_kind != prod::kHunter && b.prod_kind != prod::kFisher) {
+        return b.interval;
+    }
+    const assets::FigureType* worker = figures != nullptr ? figures->get(b.worker_figure) : nullptr;
+    if (worker == nullptr || worker->speed == 0) {
+        return b.interval;
+    }
+    // The worker walks out to the edge of the catchment and back for each of the raw material's
+    // units of a ton: reach in tenths of a tile, speed in 1/10000 (0.005 * speed tiles a second).
+    const std::uint64_t reach = b.radius <= 1 ? 22 : b.radius == 2 ? 30 : b.radius == 3 ? 40 : 50;
+    const std::uint64_t walk = (reach * 20'000 / worker->speed + worker->work_time_ms) / 1000;
+    return static_cast<std::uint32_t>(std::min<std::uint64_t>(((walk * b.raw_amount) >> 5) + b.interval, UINT32_MAX));
+}
+
+bool waits_for_room(const Production& p, const assets::BuildingType& b, const City& city) noexcept {
+    if (!p.used || !p.enabled || p.working() || p.stock < b.max_stock || cycle_rate(p, b) == 0) {
+        return false;
+    }
+    // A cart sets out only with room for a ton in the warehouse, after what other carts bring.
+    return city.free_space(b.ware) < city.incoming_of(b.ware) + assets::kStockUnitsPerTon;
+}
+
 void finish_cycle(Production& p, const assets::BuildingType& b, std::uint32_t index,
                   std::vector<ProductionEvent>* events) {
     // End of the running cycle: take the raw material, store the product.
@@ -76,19 +114,11 @@ void finish_cycle(Production& p, const assets::BuildingType& b, std::uint32_t in
     std::uint16_t wait = kIdleWaitSeconds;
     std::uint32_t rate = 0;
     if (p.stock < b.max_stock) {
-        if (p.raw != 0 && (p.flags & kSpecialFlag) == 0 && b.ware != 0) {
-            rate = b.raw_amount == 0 ? Production::kFullRate
-                                     : std::min<std::uint32_t>(Production::kFullRate, fill(p.raw, b.raw_amount));
-            if (b.raw2_amount != 0) {
-                rate = std::min(rate, fill(p.raw2, b.raw2_amount));
-            }
-            if (rate < kMinRate) {
-                rate = 0;
-            } else {
-                wait = static_cast<std::uint16_t>((b.interval * rate) >> kRateShift);
-                p.produced = static_cast<std::uint16_t>(p.produced + scale(b.produce_amount, rate));
-                p.idle_cycles = 0;
-            }
+        rate = cycle_rate(p, b);
+        if (rate != 0) {
+            wait = static_cast<std::uint16_t>((b.interval * rate) >> kRateShift);
+            p.produced = static_cast<std::uint16_t>(p.produced + scale(b.produce_amount, rate));
+            p.idle_cycles = 0;
         }
         if (rate == 0 && p.idle_cycles < kMaxIdleCycles) {
             ++p.idle_cycles;
@@ -107,14 +137,13 @@ void finish_cycle(Production& p, const assets::BuildingType& b, std::uint32_t in
         p.produced = static_cast<std::uint16_t>(p.produced >> 1);
     }
 
-    // The doctor and the fire brigade look for work at the end of every cycle, i.e. every 11 s
-    // (0x0047DF07: 0x0044AF90, 0x0044B470).
+    // The doctor and the fire brigade look for work at the end of every cycle, i.e. every 11 s.
     if (b.prod_kind == prod::kKlinik || b.prod_kind == prod::kBrunnen) {
         emit(events, ProductionEvent::Kind::NeedsRawGoods, index, 0, 0);
         return;
     }
 
-    // What the building asks for (0x0047DE60 ff.): the second raw material if it is the one that
+    // What the building asks for (ff.): the second raw material if it is the one that
     // is shorter, otherwise the main one - the original dispatches carriers, farmers, miners or
     // market carts depending on the production kind.
     if (p.rate != 0 || p.stock < b.max_stock) {
@@ -136,7 +165,7 @@ namespace {
 /// What an ended cycle made and used, in its city's goods statistics (GoodsLedger). Markets and
 /// warehouses only pass goods on.
 void book_cycle(World& world, const Production& before, const Production& after, const assets::BuildingType& b,
-                std::uint8_t city_index) {
+                std::uint8_t city_index, const assets::FigureTable* figures) {
     if (!is_producer(b)) {
         return;
     }
@@ -153,11 +182,23 @@ void book_cycle(World& world, const Production& before, const Production& after,
     if (before.raw2 > after.raw2 && world.goods().is_trade(b.raw2_ware)) {
         city->book(b.raw2_ware, GoodsFlow::Workshops, before.raw2 - after.raw2);
     }
+    // Idle for want of room: what it would have made in the wait at full speed. Counted along the
+    // building's statistics window, so that the fractions of a unit add up over the waits.
+    if (world.goods().is_trade(b.ware) && waits_for_room(after, b, *city)) {
+        const std::uint64_t cycle = full_speed_seconds(b, figures);
+        if (cycle != 0) {
+            const std::uint64_t from = before.elapsed;
+            const std::uint64_t to = from + after.countdown;
+            const std::uint64_t amount = b.produce_amount * to / cycle - b.produce_amount * from / cycle;
+            city->book(b.ware, GoodsFlow::Withheld, static_cast<std::uint32_t>(amount));
+        }
+    }
 }
 
 }  // namespace
 
-void advance_production(World& world, const assets::BuildingTable& buildings, std::vector<ProductionEvent>* events) {
+void advance_production(World& world, const assets::BuildingTable& buildings, std::vector<ProductionEvent>* events,
+                        const assets::FigureTable* figures) {
     std::vector<Production>& list = world.productions();
     for (std::size_t i = 0; i < list.size(); ++i) {
         Production& p = list[i];
@@ -177,7 +218,7 @@ void advance_production(World& world, const assets::BuildingTable& buildings, st
         }
         const Production before = p;
         finish_cycle(p, *b, static_cast<std::uint32_t>(i), events);
-        book_cycle(world, before, p, *b, cell.city);
+        book_cycle(world, before, p, *b, cell.city, figures);
     }
 }
 

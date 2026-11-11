@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <map>
+#include <span>
 #include <string>
 
 #include "section_io.hpp"
@@ -387,7 +388,7 @@ core::Result<World> read_map(Reader& in, const assets::BuildingTable& buildings,
     const bool compact = version >= kCompactMap;
     const std::uint32_t islands = in.in().count(compact ? 49 : 54);
     // In version 2 a few bytes can describe a large island: the islands together may not cover
-    // more than the world before any of them is allocated (add_island refuses overlaps after).
+    // more than the world before any of them is allocated (add_island refuses overlapping land after).
     std::uint64_t area = 0;
     for (std::uint32_t i = 0; i < islands && in.ok(); ++i) {
         assets::IslandHeader header;
@@ -425,7 +426,7 @@ core::Result<World> read_map(Reader& in, const assets::BuildingTable& buildings,
             break;
         }
         WorldIsland island{std::move(header), std::move(map), x, y};
-        if (auto status = world.add_island(std::move(island)); !status) {
+        if (auto status = world.add_island(std::move(island), &buildings); !status) {
             return status.error();
         }
     }
@@ -473,8 +474,10 @@ std::vector<Decoded::TileOverride> read_tiles(Reader& in, const assets::Building
     return list;
 }
 
-/// FNV-1a over what makes the game's buildings (id, picture, size) for the META section.
-std::uint64_t buildings_fingerprint(const assets::BuildingTable& buildings) {
+namespace {
+
+/// FNV-1a over what makes the buildings (id, picture, size).
+std::uint64_t fingerprint_of(std::span<const assets::BuildingType> types) {
     std::uint64_t h = 0xCBF29CE484222325ULL;
     const auto mix = [&](std::uint32_t v) {
         for (int k = 0; k < 4; ++k) {
@@ -482,12 +485,23 @@ std::uint64_t buildings_fingerprint(const assets::BuildingTable& buildings) {
             h *= 0x100000001B3ULL;
         }
     };
-    for (const assets::BuildingType& b : buildings.types()) {
+    for (const assets::BuildingType& b : types) {
         mix(b.id);
         mix(b.gfx);
         mix(b.size_x | b.size_y << 16);
     }
     return h;
+}
+
+}  // namespace
+
+/// For the META section: the game's buildings, those the packages added included.
+std::uint64_t buildings_fingerprint(const assets::BuildingTable& buildings) {
+    return fingerprint_of(buildings.types());
+}
+
+std::uint64_t original_buildings_fingerprint(const assets::BuildingTable& buildings) {
+    return fingerprint_of(std::span(buildings.types()).first(buildings.original_count()));
 }
 
 }  // namespace o1602::sim::save

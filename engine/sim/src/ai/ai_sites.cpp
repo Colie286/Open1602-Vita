@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Building sites of the computer players (docs/re/ai.md, "Building sites and roads"): every search walks along
+// Building sites of the computer players: every search walks along
 // the straight road runs of the current city (task 7), places the footprint of the building
 // beside the road, checks it with the build rules and scores the surroundings ring by ring. One
 // candidate that fits is scored per AI step, so a search spans many steps; the best one is built
@@ -87,7 +87,7 @@ Site frame_rect(const Segment& s, std::int32_t cx, std::int32_t cy, std::int32_t
     return r;
 }
 
-/// 0x004122C0: a 2x2 building in one of two rows on each side of the road.
+/// A 2x2 building in one of two rows on each side of the road.
 Site gen_double_row(const Segment& s, std::int32_t cx, std::int32_t cy, std::int32_t side) {
     const std::int32_t off = side == 0 ? 1 : side == 1 ? 3 : side == -1 ? -2 : -4;
     Site r = frame_rect(s, cx, cy, -1, 0, off, off + 1);
@@ -95,7 +95,7 @@ Site gen_double_row(const Segment& s, std::int32_t cx, std::int32_t cy, std::int
     return r;
 }
 
-/// 0x004126A0 / 0x004123B0: a 2x2 farm beside the road or one row back with a road stub.
+/// A 2x2 farm beside the road or one row back with a road stub.
 Site gen_farm(const Segment& s, std::int32_t cx, std::int32_t cy, std::int32_t side, bool grain) {
     const std::int32_t off = side == 0 ? 1 : side == 1 ? 2 : side == -1 ? -2 : -3;
     const std::int32_t a0 = grain ? -2 : -3;
@@ -107,7 +107,7 @@ Site gen_farm(const Segment& s, std::int32_t cx, std::int32_t cy, std::int32_t s
     return r;
 }
 
-/// 0x00412000: one tile beside the road.
+/// One tile beside the road.
 Site gen_single(const Segment& s, std::int32_t cx, std::int32_t cy, std::int32_t side) {
     const std::int32_t off = side == 0 ? 1 : side == 1 ? 2 : side == -1 ? -1 : -2;
     Site r = frame_rect(s, cx, cy, 0, 0, off, off);
@@ -115,7 +115,7 @@ Site gen_single(const Segment& s, std::int32_t cx, std::int32_t cy, std::int32_t
     return r;
 }
 
-/// 0x004120F0: a w x h building ending at the cursor, turned for sides -2 and 1. Empty (x0 > x1)
+/// A w x h building ending at the cursor, turned for sides -2 and 1. Empty (x0 > x1)
 /// if it would reach past the start of the run.
 Site gen_sized(const Segment& s, std::int32_t cx, std::int32_t cy, std::int32_t side, std::int32_t w, std::int32_t h,
                std::int32_t remaining) {
@@ -140,7 +140,7 @@ Site gen_sized(const Segment& s, std::int32_t cx, std::int32_t cy, std::int32_t 
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------
-// Road runs (task 7, 0x00417C80)
+// Road runs (task 7)
 
 Engine::CityScans& Engine::city_scans(std::uint16_t island, std::uint8_t city) {
     const auto it = std::find_if(m_city_scans.begin(), m_city_scans.end(),
@@ -267,7 +267,7 @@ void Engine::build_segments(AiPlayer& p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Search state (0x004159F0, 0x00415A70) and walking along the runs
+// Search state and walking along the runs
 
 void Engine::start_search(AiPlayer& p, const assets::BuildingType& b, std::uint8_t slot, bool from_start) {
     Search s;
@@ -353,7 +353,6 @@ std::int32_t parity_penalty(std::int32_t score, std::int32_t parity, std::int32_
 }  // namespace
 
 bool Engine::search_houses(AiPlayer& p) {
-    // 0x004148E0 with callback 0x00414520.
     const assets::BuildingType* b = by_id(p.search.building);
     Search& s = p.search;
     if (b == nullptr) {
@@ -459,7 +458,6 @@ bool Engine::search_houses(AiPlayer& p) {
 }
 
 bool Engine::search_workshop(AiPlayer& p, bool cannons) {
-    // 0x004141C0 / 0x00414360 with callback 0x00414020.
     const assets::BuildingType* b = by_id(p.search.building);
     Search& s = p.search;
     if (b == nullptr) {
@@ -529,7 +527,6 @@ bool Engine::search_workshop(AiPlayer& p, bool cannons) {
 }
 
 bool Engine::search_stonemason(AiPlayer& p) {
-    // 0x004151E0 with callback 0x00415150.
     const assets::BuildingType* b = by_id(p.search.building);
     Search& s = p.search;
     if (b == nullptr) {
@@ -580,7 +577,6 @@ bool Engine::search_stonemason(AiPlayer& p) {
 }
 
 bool Engine::search_farm(AiPlayer& p, bool woodcutter) {
-    // 0x00413E40 (callback 0x00413C30) and 0x00412DE0 (callback 0x00412CB0).
     const assets::BuildingType* b = by_id(p.search.building);
     Search& s = p.search;
     if (b == nullptr) {
@@ -688,7 +684,6 @@ bool Engine::search_farm(AiPlayer& p, bool woodcutter) {
 }
 
 bool Engine::search_grain(AiPlayer& p) {
-    // 0x00413A80 with callback 0x00413900.
     const assets::BuildingType* b = by_id(p.search.building);
     Search& s = p.search;
     if (b == nullptr) {
@@ -760,7 +755,7 @@ bool Engine::search_grain(AiPlayer& p) {
 }
 
 bool Engine::search_hunter(AiPlayer& p) {
-    // 0x00412B20 with callback 0x004129A0: one road position per call.
+    // One road position per call.
     const assets::BuildingType* b = by_id(p.search.building);
     Search& s = p.search;
     if (b == nullptr || s.segment >= static_cast<std::int32_t>(p.segments.size())) {
@@ -815,7 +810,7 @@ bool Engine::search_hunter(AiPlayer& p) {
 }
 
 bool Engine::search_market(AiPlayer& p) {
-    // 0x00414F50 with callback 0x00414E20: as far from the other markets as their reach allows,
+    // As far from the other markets as their reach allows,
     // where most unclaimed land lies.
     const assets::BuildingType* b = by_id(p.search.building);
     Search& s = p.search;
@@ -1035,13 +1030,13 @@ bool Engine::farm_room(AiPlayer& p, const assets::BuildingType& b, std::int32_t 
     return n >= (b.ware == ware::kGrain ? 7 : 14);
 }
 
-std::uint16_t Engine::house_services(std::uint16_t island, std::int32_t x, std::int32_t y) const {
+assets::ServiceBits Engine::house_services(std::uint16_t island, std::int32_t x, std::int32_t y) const {
     const House* h = m_world.house(island, static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y));
     return h != nullptr ? h->services : 0;
 }
 
 bool Engine::search_public(AiPlayer& p) {
-    // 0x00414C20: the site that reaches the most houses without the service. Open1602 measures
+    // The site that reaches the most houses without the service. Open1602 measures
     // from the building's centre over its whole reach (the original measures from a corner and
     // only 16 rings, S-099).
     const assets::BuildingType* b = by_id(p.search.building);
@@ -1109,7 +1104,6 @@ bool Engine::search_public(AiPlayer& p) {
 }
 
 bool Engine::search_military(AiPlayer& p) {
-    // 0x004154B0 with callback 0x00415380 (base 1000).
     const assets::BuildingType* b = by_id(p.search.building);
     Search& s = p.search;
     if (b == nullptr) {
@@ -1168,7 +1162,7 @@ bool Engine::search_military(AiPlayer& p) {
 }
 
 bool Engine::search_denkmal(AiPlayer& p) {
-    // 0x004158A0: next to a road, where most house tiles lie within 8 rings.
+    // Next to a road, where most house tiles lie within 8 rings.
     const assets::BuildingType* b = by_id(p.search.building);
     Search& s = p.search;
     if (b == nullptr) {
@@ -1208,7 +1202,6 @@ bool Engine::search_denkmal(AiPlayer& p) {
 }
 
 bool Engine::search_pirate_houses(AiPlayer& p) {
-    // 0x004156E0 with callback 0x00415670 (base 4000).
     const assets::BuildingType* b = by_id(p.search.building);
     Search& s = p.search;
     if (b == nullptr) {
@@ -1253,7 +1246,7 @@ bool Engine::search_pirate_houses(AiPlayer& p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Coast and mountain walks (0x00410580, 0x0040FFA0)
+// Coast and mountain walks
 
 namespace {
 
@@ -1341,9 +1334,7 @@ std::int32_t Engine::mountain_walk(AiPlayer& p, std::int32_t x, std::int32_t y, 
                 if (!commit) {
                     return steps;
                 }
-                if (p.player < 32) {
-                    dep.mask |= 1U << p.player;
-                }
+                dep.mask.insert(p.player);
                 if (w == ware::kOre) {
                     const assets::BuildingType* deep = by_id(id::kOreMineDeep);
                     p.search.building =
@@ -1359,7 +1350,7 @@ std::int32_t Engine::mountain_walk(AiPlayer& p, std::int32_t x, std::int32_t y, 
 
 std::int32_t Engine::free_run(std::uint16_t island, std::uint8_t own, std::int32_t x, std::int32_t y,
                               std::uint8_t dir) const {
-    // 0x0040FE80: straight tiles of the city or of nobody that a road can take (single river
+    // Straight tiles of the city or of nobody that a road can take (single river
     // tiles may be bridged); 0 below two.
     const auto& d = kStep[dir & 3U];
     std::int32_t n = 0;
@@ -1389,7 +1380,7 @@ std::int32_t Engine::free_run(std::uint16_t island, std::uint8_t own, std::int32
 }
 
 bool Engine::search_fisher(AiPlayer& p) {
-    // 0x00413040: from the dead ends of the road to the beach, where fish are and no other fisher.
+    // From the dead ends of the road to the beach, where fish are and no other fisher.
     const assets::BuildingType* b = by_id(p.search.building);
     Search& s = p.search;
     if (b == nullptr) {
@@ -1457,7 +1448,7 @@ bool Engine::search_fisher(AiPlayer& p) {
 }
 
 bool Engine::search_shipyard(AiPlayer& p) {
-    // 0x00413590: the coast nearest to a road, with room for the yard; in Open1602 only at the open
+    // The coast nearest to a road, with room for the yard; in Open1602 only at the open
     // sea.
     const assets::BuildingType* b = by_id(p.search.building);
     Search& s = p.search;
@@ -1501,7 +1492,7 @@ bool Engine::search_shipyard(AiPlayer& p) {
                           rf == BuildRefusal::Wood || rf == BuildRefusal::Bricks)) {
                         continue;
                     }
-                    // Open1602: the open sea in front of the yard, as for the Kontor (0x00417220). The
+                    // Open1602: the open sea in front of the yard, as for the Kontor. The
                     // original takes any coast, also the shore of a lake inside the island, where the
                     // yard builds ships that never reach the sea.
                     if (!classic()) {
@@ -1609,7 +1600,7 @@ bool Engine::mine_path(AiPlayer& p, std::uint8_t w, std::vector<BuildItem>& road
 }
 
 bool Engine::search_mine(AiPlayer& p, std::uint8_t w) {
-    // 0x00410360: one road tile per call from the start of the runs; the first mountain reached
+    // One road tile per call from the start of the runs; the first mountain reached
     // within seven tiles ends the search.
     Search& s = p.search;
     for (std::int32_t k = 0; k < 4; ++k) {

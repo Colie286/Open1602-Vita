@@ -28,8 +28,8 @@ inline constexpr std::uint32_t kWarnClearMinutes = 10;
 /// Minutes a ledger must have before it warns (a game just loaded from the original's file).
 inline constexpr std::uint32_t kWarnMinMinutes = 2;
 
-/// Minutes the stock lasts at the balance `totals` (net per minute over its minutes); nothing if it
-/// does not fall.
+/// Minutes the stock lasts at the balance `totals` (FlowTotals::balance per minute over its
+/// minutes); nothing if it does not fall.
 [[nodiscard]] std::optional<std::uint32_t> minutes_left(std::uint64_t stock, const FlowTotals& totals) noexcept;
 
 /// The game minute ended: every city's ledger takes its sample, and the cities of human players
@@ -66,6 +66,8 @@ struct GoodsSample {
     [[nodiscard]] std::uint64_t of(GoodsFlow f) const noexcept { return flow[static_cast<std::size_t>(f)]; }
     [[nodiscard]] std::uint64_t in() const noexcept;
     [[nodiscard]] std::uint64_t out() const noexcept;
+    /// In minus out, with what was withheld for a full warehouse (FlowTotals::balance).
+    [[nodiscard]] std::int64_t balance() const noexcept;
 };
 /// The samples of the last hour (or, `quarters`, of the last twelve hours by quarters), oldest
 /// first; cities with a shorter history count from the newest end.
@@ -76,9 +78,10 @@ struct GoodsSample {
 struct GoodsProducers {
     std::uint32_t building = 0;  ///< the kind (HAUS Id)
     std::uint32_t count = 0;
-    std::uint32_t working = 0;       ///< in a cycle now
-    std::uint32_t short_of_raw = 0;  ///< switched on, idle, its raw material (a trade good) missing
-    std::uint32_t off = 0;           ///< switched off by the player
+    std::uint32_t working = 0;           ///< in a cycle now
+    std::uint32_t short_of_raw = 0;      ///< switched on, idle, its raw material (a trade good) missing
+    std::uint32_t waiting_for_room = 0;  ///< idle only because its store and the warehouse are full
+    std::uint32_t off = 0;               ///< switched off by the player
     /// What they made lately, 1/32 t per hour: each building's own statistics window (the last
     /// two to four minutes, as its window shows its productivity).
     std::uint64_t recent = 0;

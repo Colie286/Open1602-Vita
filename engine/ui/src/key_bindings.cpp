@@ -46,7 +46,10 @@ constexpr std::pair<KeyAction, std::string_view> kNames[] = {
     {KeyAction::RotateBuildingBack, "rotate_building_back"},
     {KeyAction::PickBuilding, "pick_building"},
     {KeyAction::DemolishTool, "demolish_tool"},
-    {KeyAction::NextBuilding, "next_building"},
+    {KeyAction::CopyTool, "copy_tool"},
+    {KeyAction::BlueprintMode, "blueprint_mode"},
+    {KeyAction::BuildBlueprints, "build_blueprints"},
+    {KeyAction::SaveTemplate, "save_template"},
     {KeyAction::PlantFields, "plant_fields"},
     {KeyAction::ToggleGates, "toggle_gates"},
     {KeyAction::GroupStore, "group_store"},
@@ -77,8 +80,42 @@ constexpr std::pair<KeyAction, std::string_view> kNames[] = {
     {KeyAction::ShowFps, "show_fps"},
     {KeyAction::ShowCoordinates, "show_coordinates"},
     {KeyAction::ShowUnitArms, "show_unit_arms"},
+    {KeyAction::ReloadPackages, "reload_packages"},
     {KeyAction::Fullscreen, "fullscreen"},
     {KeyAction::Quit, "quit"},
+    {KeyAction::EditorUndo, "editor_undo"},
+    {KeyAction::EditorRedo, "editor_redo"},
+    {KeyAction::EditorSave, "editor_save"},
+    {KeyAction::EditorNew, "editor_new"},
+    {KeyAction::EditorOpen, "editor_open"},
+    {KeyAction::EditorSaveAs, "editor_save_as"},
+    {KeyAction::EditorRotate, "editor_rotate"},
+    {KeyAction::EditorBrushBigger, "editor_brush_bigger"},
+    {KeyAction::EditorBrushSmaller, "editor_brush_smaller"},
+    {KeyAction::EditorTestPlay, "editor_test_play"},
+    {KeyAction::EditorBookmarkSet, "editor_bookmark_set"},
+    {KeyAction::EditorBookmarkGo, "editor_bookmark_go"},
+    {KeyAction::EditorFind, "editor_find"},
+    {KeyAction::EditorToolSelect, "editor_tool_select"},
+    {KeyAction::EditorToolIsland, "editor_tool_island"},
+    {KeyAction::EditorToolPlaceholder, "editor_tool_placeholder"},
+    {KeyAction::EditorToolLand, "editor_tool_land"},
+    {KeyAction::EditorToolWater, "editor_tool_water"},
+    {KeyAction::EditorToolCoast, "editor_tool_coast"},
+    {KeyAction::EditorToolBrush, "editor_tool_brush"},
+    {KeyAction::EditorToolRandom, "editor_tool_random"},
+    {KeyAction::EditorToolFill, "editor_tool_fill"},
+    {KeyAction::EditorToolReplace, "editor_tool_replace"},
+    {KeyAction::EditorToolPipette, "editor_tool_pipette"},
+    {KeyAction::EditorToolArea, "editor_tool_area"},
+    {KeyAction::EditorToolPaste, "editor_tool_paste"},
+    {KeyAction::EditorToolBuild, "editor_tool_build"},
+    {KeyAction::EditorToolTemplate, "editor_tool_template"},
+    {KeyAction::EditorToolShip, "editor_tool_ship"},
+    {KeyAction::EditorToolUnit, "editor_tool_unit"},
+    {KeyAction::EditorToolResource, "editor_tool_resource"},
+    {KeyAction::EditorToolRemove, "editor_tool_remove"},
+    {KeyAction::EditorToolMarker, "editor_tool_marker"},
 };
 
 }  // namespace
@@ -90,6 +127,21 @@ void KeyBindings::bind(KeyContext context, KeyChord chord, KeyAction action, std
 
 void KeyBindings::unbind(KeyAction action, std::uint8_t param) {
     std::erase_if(m_bindings, [&](const KeyBinding& b) { return b.action == action && b.param == param; });
+}
+
+void KeyBindings::unbind(KeyContext context, KeyAction action, std::uint8_t param) {
+    std::erase_if(m_bindings,
+                  [&](const KeyBinding& b) { return b.context == context && b.action == action && b.param == param; });
+}
+
+std::vector<KeyChord> KeyBindings::keys(KeyContext context, KeyAction action, std::uint8_t param) const {
+    std::vector<KeyChord> out;
+    for (const KeyBinding& b : m_bindings) {
+        if (b.context == context && b.action == action && b.param == param) {
+            out.push_back(b.chord);
+        }
+    }
+    return out;
 }
 
 std::optional<KeyBinding> KeyBindings::find(KeyContext context, const KeyChord& chord) const {
@@ -159,6 +211,7 @@ constexpr std::pair<KeyContext, std::string_view> kContexts[] = {
     {KeyContext::General, "general"},
     {KeyContext::Building, "building"},
     {KeyContext::Units, "units"},
+    {KeyContext::Editor, "editor"},
 };
 
 std::string_view trim(std::string_view s) {
@@ -266,6 +319,49 @@ std::string KeyBindings::write_text(const KeyName& key_name, bool as_comments) c
             out += ' ' + std::to_string(b.param);
         }
         out += " = " + chord_text(b.chord, key_name) + '\n';
+    }
+    return out;
+}
+
+std::string KeyBindings::write_changes(const KeyBindings& defaults, const KeyName& key_name) const {
+    struct Slot {
+        KeyContext context;
+        KeyAction action;
+        std::uint8_t param;
+    };
+    std::vector<Slot> slots;
+    for (const KeyBindings* table : {&defaults, this}) {
+        for (const KeyBinding& b : table->m_bindings) {
+            if (std::none_of(slots.begin(), slots.end(), [&](const Slot& s) {
+                    return s.context == b.context && s.action == b.action && s.param == b.param;
+                })) {
+                slots.push_back(Slot{b.context, b.action, b.param});
+            }
+        }
+    }
+    // The same keys in another order are no change.
+    const auto same = [](const std::vector<KeyChord>& a, const std::vector<KeyChord>& b) {
+        return a.size() == b.size() && std::all_of(a.begin(), a.end(), [&](const KeyChord& c) {
+                   return std::find(b.begin(), b.end(), c) != b.end();
+               });
+    };
+    std::string out;
+    for (const Slot& s : slots) {
+        const std::vector<KeyChord> mine = keys(s.context, s.action, s.param);
+        if (same(mine, defaults.keys(s.context, s.action, s.param))) {
+            continue;
+        }
+        std::string left = std::string(context_name(s.context)) + ' ' + std::string(name(s.action));
+        if (s.param != 0 || s.action == KeyAction::GroupStore || s.action == KeyAction::GroupAdd ||
+            s.action == KeyAction::GroupRecall) {
+            left += ' ' + std::to_string(s.param);
+        }
+        if (mine.empty()) {
+            out += left + " = none\n";
+        }
+        for (const KeyChord& c : mine) {
+            out += left + " = " + chord_text(c, key_name) + '\n';
+        }
     }
     return out;
 }

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Which video of the original plays when and where (docs/re/videos.md, ADR 0010): the waiting
+// Which video of the original plays when and where (ADR 0010): the waiting
 // videos, the one playing, and the pause video. Needs no platform, so that the tests have it;
 // VideoController plays what it decides.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <optional>
@@ -17,6 +18,12 @@ inline constexpr std::uint16_t kPauseVideo = 6;
 /// The first video of a fulfilled mission (0x5F: 2000); every later number ends a game.
 inline constexpr std::uint16_t kFirstMissionVideo = 2000;
 
+/// The video number of the packages' first video (a message's `video = "<file>"`,
+/// docs/modding/messages.md): far after the original's. A package's video plays as a message's.
+inline constexpr std::uint16_t kFirstPackageVideo = 60000;
+/// The videos of all packages' messages together.
+inline constexpr std::size_t kMaxPackageVideos = 1024;
+
 /// Whether a video plays in the minimap's window. Messages play there; the logos and the intro,
 /// the credits (10), the pause (6, looping) and the ends of the game (defeat 998, 1010, 2020;
 /// missions fulfilled 2000–2120 and from 2500, the end of the campaigns 2990) fill the screen and
@@ -25,7 +32,8 @@ inline constexpr std::uint16_t kFirstMissionVideo = 2000;
 /// else its sound would play without a picture.
 [[nodiscard]] constexpr bool video_plays_in_minimap(std::uint16_t number, bool loop, bool intro,
                                                     bool minimap_shown) noexcept {
-    const bool full = intro || loop || number == 10 || number == 998 || number == 1010 || number >= kFirstMissionVideo;
+    const bool full = intro || loop || number == 10 || number == 998 || number == 1010 ||
+                      (number >= kFirstMissionVideo && number < kFirstPackageVideo);
     return !full && minimap_shown;
 }
 
@@ -36,7 +44,7 @@ struct VideoRequest {
     bool intro = false;     ///< the logos and the intro: they queue after each other
     bool in_frame = false;  ///< in the picture frame of the main menu (the credits)
     /// Waits behind the videos before it instead of replacing them: the original's chain after the
-    /// running video (Video_Update 0x00492410, next video 0x005B7014), e.g. 2990 after the success.
+    /// running video (next video), e.g. 2990 after the success.
     bool follows = false;
     /// In the minimap's window while the game goes on (video_plays_in_minimap); set when the
     /// video starts, by whether there is a minimap on screen then.
@@ -46,7 +54,7 @@ struct VideoRequest {
 /// The videos waiting and the one playing.
 class VideoQueue {
 public:
-    /// Video_Request 0x00488C00: the latest request wins, it replaces the waiting ones; the logos
+    /// The latest request wins, it replaces the waiting ones; the logos
     /// and the intro (`intro`) and a chained video (`follows`) only queue after the others. True if
     /// the running video must stop for it. An identical active message keeps playing;
     /// `playing` must be false after end/skip, allowing a later replay.
@@ -57,7 +65,7 @@ public:
     void started(const VideoRequest& request, bool minimap_shown);
     /// The video playing, or the one played last.
     [[nodiscard]] const VideoRequest& now() const noexcept { return m_now; }
-    /// Escape: skipping a logo or the intro skips the whole start (0x00492690).
+    /// Escape: skipping a logo or the intro skips the whole start.
     void skip_start();
     [[nodiscard]] bool waiting() const noexcept { return !m_waiting.empty(); }
     void clear() { m_waiting.clear(); }

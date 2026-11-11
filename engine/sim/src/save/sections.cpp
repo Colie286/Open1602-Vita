@@ -13,8 +13,10 @@
 #include "o1602/assets/chunk_file.hpp"
 #include "o1602/assets/chunk_writer.hpp"
 #include "o1602/assets/figure_table.hpp"
+#include "o1602/assets/package_scenarios.hpp"
 #include "o1602/assets/resident_classes.hpp"
 #include "o1602/assets/unlock_levels.hpp"
+#include "o1602/sim/limits.hpp"
 #include "o1602/sim/simulation.hpp"
 
 namespace o1602::sim::save {
@@ -77,7 +79,10 @@ constexpr std::uint32_t kQueues = tag("QUEU");
 constexpr std::uint32_t kStances = tag("STNC");
 /// The tutorial flag of the world (TIMERS +0xA5), only written when set.
 constexpr std::uint32_t kTutorial = tag("TUTR");
-/// The ships that gave up their way to each Kontor (city + 0x252), only written when one did.
+/// A running game changed in the editor (World::GameSettings::edited), only written when it is;
+/// right after META, so that the lists of savegames find it in the head of the file.
+constexpr std::uint32_t kEdited = tag("EDTD");
+/// The ships that gave up their way to each Kontor, only written when one did.
 constexpr std::uint32_t kGiveUps = tag("CGUP");
 /// The goods statistics of the cities (City::ledger), only written when one has any.
 constexpr std::uint32_t kLedgers = tag("GLDG");
@@ -89,12 +94,18 @@ constexpr std::uint32_t kBalance = tag("BALA");
 constexpr std::uint32_t kBuildingValues = tag("BLDV");
 /// The changed values of figures (Balance::figures), only written when there are any.
 constexpr std::uint32_t kFigureValues = tag("FIGV");
+/// The computers' build orders a package changed (Balance::computer_orders), only written when
+/// there are any. Required: the computers would build otherwise.
+constexpr std::uint32_t kComputerOrders = tag("AIOR");
 /// The content packages the game uses (World::packages(), ADR 0007 section 7), only written when the
 /// world names them.
 constexpr std::uint32_t kPackages = tag("PACK");
 /// The buildings the packages added and their Ids (World::own_buildings()), only written when there
 /// are any. Required: the islands' tiles name those Ids.
 constexpr std::uint32_t kOwnBuildings = tag("OWNB");
+/// The figures the packages added and their numbers (World::own_figures()), only written when there
+/// are any. Required: the buildings' carriers and workers name those numbers.
+constexpr std::uint32_t kOwnFigures = tag("OWNF");
 /// The goods the packages added (World::goods(), goods.hpp), only written when there are any.
 /// Required: stocks, holds and buildings name their ware numbers.
 constexpr std::uint32_t kGoods = tag("GOOD");
@@ -105,9 +116,18 @@ constexpr std::uint32_t kGoodPictures = tag("GPIC");
 /// resident_classes.hpp), only written when they differ from haeuser.cod's. Required: houses name
 /// the classes, and their needs drive the economy.
 constexpr std::uint32_t kClasses = tag("CLAS");
+/// The public buildings classes.toml gave classes of their own (ResidentClass::public_needs), only
+/// written when a class has them. Required: they decide which houses rise.
+constexpr std::uint32_t kClassPublic = tag("CPUB");
+/// CPUB version 2: every choice as 64 bits, not 16, for the public buildings of packages' own kinds
+/// from bit 16 on (public_building::own); written only when a choice names one of those.
+constexpr std::uint16_t kWideClassPublic = 2;
 /// The unlock levels as packages changed and added them (World::infra_levels(), unlock_levels.hpp),
 /// only written when they differ from haeuser.cod's. Required: buildings name the levels.
 constexpr std::uint32_t kLevels = tag("LEVL");
+/// The messages levels.toml gave unlock levels (InfraLevel::message), only written when a level has
+/// one. Optional: without them the levels give the original's messages.
+constexpr std::uint32_t kLevelMessages = tag("LMSG");
 /// The levels after the original's 32 the players unlocked (Player::infra_more), only written when
 /// one did. Required: without them the players lose what they may build.
 constexpr std::uint32_t kUnlocked = tag("UNLK");
@@ -117,21 +137,160 @@ constexpr std::uint32_t kScripts = tag("SCRP");
 /// The groups the players stored (World::unit_groups()), only written when there are any and not
 /// for the game's fingerprint. Optional: without them the groups are empty.
 constexpr std::uint32_t kUnitGroups = tag("UGRP");
+/// The players' blueprints and the cities that build them by themselves (World::blueprints(),
+/// World::blueprint_auto()), only written when there are any. Optional: without them there are none.
+constexpr std::uint32_t kBlueprints = tag("BLUE");
+/// The scenario of a package the game was started from (World::package_scenario()), only written
+/// for one. Optional: without it the scenario's script does not run.
+constexpr std::uint32_t kScenario = tag("SCEN");
+/// The part of a package's campaign the game is (World::campaign_part()), only written for one.
+/// Optional: without it a won part opens no next part.
+constexpr std::uint32_t kCampaign = tag("CAMP");
+/// The description of an editor's scenario (World::scenario_info(), ADR 0013), only written for
+/// one, right after META so that a list of files finds it in the head. Optional: without it the file
+/// is an ordinary savegame.
+constexpr std::uint32_t kScenarioInfo = tag("SCNI");
+/// The game settings a scenario of the editor is made for (ScenarioInfo::rules), only written for
+/// one that has them, between META and SCNI so that the start dialog finds them in the head of the
+/// file. Optional: without them the player's own settings apply.
+constexpr std::uint32_t kScenarioRules = tag("SRUL");
+/// The scenario's named places and areas (World::markers()), only written when there are any.
+/// Optional: without them a script finds no marker.
+constexpr std::uint32_t kMarkers = tag("MARK");
+/// The scenario's own script (World::scenario_script()), only written when there is one. Required:
+/// the game would run without it.
+constexpr std::uint32_t kScenarioScript = tag("SLUA");
+/// The editor's own state (World::editor_state()), only written when there is any. Optional: the
+/// game ignores it.
+constexpr std::uint32_t kEditorState = tag("EDIT");
+/// The plan of islands still to be made when the game starts (World::planned_islands()), only
+/// written for such a world. Required: without it the game would have no islands.
+constexpr std::uint32_t kPlannedIslands = tag("PLAN");
+/// The packages' climates (Balance::climates) and the islands that have one (WorldIsland::climate),
+/// only written when there are any. Required: crops would grow otherwise.
+constexpr std::uint32_t kClimates = tag("CLIM");
+/// CLIM version 2: each climate's ground after its share, written only when a climate has ground.
+constexpr std::uint16_t kClimatesWithGround = 2;
+/// CLIM version 3: each climate's shares by kind of island world after its ground, written only
+/// when a climate has any.
+constexpr std::uint16_t kClimatesWithShares = 3;
+/// The computers' producers a package changed (Balance::computer_producers), only written when
+/// there are any. Required: the computers would build otherwise.
+constexpr std::uint32_t kComputerProducers = tag("AIPR");
+/// The slots of the computers' city records a package changed (Balance::computer_slots), only
+/// written when there are any. Required: the computers would build otherwise.
+constexpr std::uint32_t kComputerSlots = tag("SLOT");
+/// SLOT version 2: after the original's slots the public buildings of a kind of their own, each
+/// with its name, building and service after its fields; written only when there are any.
+constexpr std::uint16_t kSlotsWithPublic = 2;
+/// SLOT version 3: the service of such a building as 64 bits, not 16 (public_building::own); written
+/// only when one has a service above the low 16 bits.
+constexpr std::uint16_t kSlotsWithWideServices = 3;
+/// SCRP version 2: each script's table `campaign` after its table `state`.
+constexpr std::uint16_t kScriptsWithCampaign = 2;
+
+/// Upper limit of a package scenario's id: a package's id, ':' and a name of as many bytes.
+constexpr std::size_t kMaxScenarioIdLength = 2 * assets::kMaxPackageIdLength + 1;
 
 /// Every section this version reads; others are of a later version.
-constexpr std::array kKnownSections = {
-    kRules,           kWorld,        kIslands,   kTiles,     kPlayers,  kCities,    kProductions,    kHouses,
-    kGrowth,          kCosts,        kShips,     kSoldiers,  kAnimals,  kDisasters, kVolcanoes,      kSimulation,
-    kFleet,           kEpochs,       kArmy,      kDiplomacy, kExplored, kMap,       kWorld2,         kMeta,
-    kMissions,        kPlayerState,  kCityState, kOrigin,    kQueues,   kStances,   kScores,         kMaterialClocks,
-    kPopulationMarks, kTutorial,     kGiveUps,   kFactions,  kLedgers,  kBalance,   kBuildingValues, kPackages,
-    kFigureValues,    kOwnBuildings, kGoods,     kClasses,   kLevels,   kUnlocked,  kGoodPictures,   kScripts,
-    kUnitGroups};
+constexpr std::array kKnownSections = {kRules,
+                                       kWorld,
+                                       kIslands,
+                                       kTiles,
+                                       kPlayers,
+                                       kCities,
+                                       kProductions,
+                                       kHouses,
+                                       kGrowth,
+                                       kCosts,
+                                       kShips,
+                                       kSoldiers,
+                                       kAnimals,
+                                       kDisasters,
+                                       kVolcanoes,
+                                       kSimulation,
+                                       kFleet,
+                                       kEpochs,
+                                       kArmy,
+                                       kDiplomacy,
+                                       kExplored,
+                                       kMap,
+                                       kWorld2,
+                                       kMeta,
+                                       kMissions,
+                                       kPlayerState,
+                                       kCityState,
+                                       kOrigin,
+                                       kQueues,
+                                       kStances,
+                                       kScores,
+                                       kMaterialClocks,
+                                       kPopulationMarks,
+                                       kTutorial,
+                                       kEdited,
+                                       kGiveUps,
+                                       kFactions,
+                                       kLedgers,
+                                       kBalance,
+                                       kBuildingValues,
+                                       kPackages,
+                                       kFigureValues,
+                                       kOwnBuildings,
+                                       kGoods,
+                                       kClasses,
+                                       kLevels,
+                                       kUnlocked,
+                                       kGoodPictures,
+                                       kScripts,
+                                       kClassPublic,
+                                       kUnitGroups,
+                                       kScenario,
+                                       kCampaign,
+                                       kComputerOrders,
+                                       kOwnFigures,
+                                       kLevelMessages,
+                                       kBlueprints,
+                                       kScenarioInfo,
+                                       kScenarioRules,
+                                       kMarkers,
+                                       kScenarioScript,
+                                       kEditorState,
+                                       kPlannedIslands,
+                                       kClimates,
+                                       kComputerProducers,
+                                       kComputerSlots};
 
 /// Section flag (the u16 after the version): the section holds state the game cannot do without, so
 /// a reader that cannot read it (unknown identifier or later version) must not load the file. Other
 /// sections it skips with a warning. Files of earlier versions have no flags: all sections optional.
 constexpr std::uint16_t kRequired = 1;
+
+/// A slot of SLOT: its number and the fields slots.toml changes; the others are the original's.
+template <class A, class S>
+void slot_fields(A& a, S& s) {
+    a.u8(s.number);
+    a.boolean(s.removed);
+    a.u8(s.instead);
+    a.u8(s.instead_crop);
+    a.u8(s.instead_unlocked);
+    a.u8(s.single_below_stock);
+    a.u8(s.single_below_users);
+    a.u8(s.raw_stock);
+    a.u8(s.process_from);
+    a.u8(s.process_per);
+    a.boolean(s.process_round_up);
+    a.u8(s.process_rank);
+    a.u8(s.process_max);
+    a.u8(s.subsidy_ware);
+    a.u8(s.subsidy_tons);
+    a.u8(s.subsidy_above);
+    a.u8(s.subsidy_class);
+    a.u16(s.subsidy_people);
+    a.u8(s.after);
+    a.u8s(s.counts_goods);
+    a.i32(s.min_houses);
+    a.boolean(s.roads_on_fail);
+}
 
 /// Whether a section is required (kRequired) when written.
 enum class Need : std::uint8_t { Required, Optional };
@@ -139,10 +298,10 @@ enum class Need : std::uint8_t { Required, Optional };
 /// The highest version of a section this version reads.
 constexpr std::uint16_t max_version(std::uint32_t id) noexcept {
     if (id == kPlayerState) {
-        return kClosedGates;
+        return kPlayerCheats;
     }
     if (id == kFleet) {
-        return kWideDiscovered;
+        return kPackageShips;
     }
     if (id == kMap) {
         return kCompactMap;
@@ -156,8 +315,35 @@ constexpr std::uint16_t max_version(std::uint32_t id) noexcept {
     if (id == kScores) {
         return kWideScores;
     }
+    if (id == kLedgers) {
+        return kLedgerWithheld;
+    }
     if (id == kSimulation) {
         return kSectionedSimulation;
+    }
+    if (id == kScripts) {
+        return kScriptsWithCampaign;
+    }
+    if (id == kClimates) {
+        return kClimatesWithShares;
+    }
+    if (id == kComputerSlots) {
+        return kSlotsWithWideServices;
+    }
+    if (id == kHouses) {
+        return kWideServices;
+    }
+    if (id == kClassPublic) {
+        return kWideClassPublic;
+    }
+    if (id == kBalance) {
+        return kBalanceWithMoreStages;
+    }
+    if (id == kFactions) {
+        return kScriptedFactions;
+    }
+    if (id == kExplored) {
+        return kWideDepositKnowledge;
     }
     return id == kIslands || id == kVolcanoes ? kWideCoordinates : 1;
 }
@@ -233,6 +419,160 @@ core::Status for_each_section(std::span<const std::uint8_t> data, std::vector<st
     return core::Ok{};
 }
 
+/// SCNI: stars, flags (bit 0 the original's limits), the names, author, version and the briefings
+/// (names and briefings each a list of language and text, UTF-8). Stars and names come first, so
+/// that the head of a file read for a list (read_meta) holds them.
+void write_scenario_info(Writer& o, const ScenarioInfo& info) {
+    const auto texts = [&](const std::vector<ScenarioText>& list) {
+        o.list(list, 8, [&](const ScenarioText& t) {
+            o.string(t.language);
+            o.string(t.text);
+        });
+    };
+    o.u8(info.stars);
+    o.u8(info.original_limits ? std::uint8_t{1} : std::uint8_t{0});
+    texts(info.names);
+    o.string(info.author);
+    o.string(info.version);
+    texts(info.briefings);
+}
+
+void read_scenario_info(Reader& in, ScenarioInfo& info) {
+    const auto texts = [&](std::vector<ScenarioText>& list) {
+        in.list(list, 8, [&](ScenarioText& t) {
+            in.string(t.language);
+            in.string(t.text);
+        });
+    };
+    std::uint8_t flags = 0;
+    in.u8(info.stars);
+    in.u8(flags);
+    texts(info.names);
+    in.string(info.author);
+    in.string(info.version);
+    texts(info.briefings);
+    info.original_limits = (flags & 1U) != 0;
+    if ((flags & ~1U) != 0 || !check_scenario_info(info).empty()) {
+        in.fail();
+    }
+}
+
+/// MARK: per marker its name, shape, x, y, width and height.
+void write_markers(Writer& o, const std::vector<ScenarioMarker>& markers) {
+    o.list(markers, 21, [&](const ScenarioMarker& m) {
+        o.string(m.name);
+        o.enum8(m.shape, ScenarioMarker::Shape::Last);
+        o.u32(m.x);
+        o.u32(m.y);
+        o.u32(m.width);
+        o.u32(m.height);
+    });
+}
+
+/// The markers' places are checked against the world in apply_decoded().
+void read_markers(Reader& in, std::vector<ScenarioMarker>& markers) {
+    in.list(markers, 21, [&](ScenarioMarker& m) {
+        in.string(m.name);
+        in.enum8(m.shape, ScenarioMarker::Shape::Last);
+        in.u32(m.x);
+        in.u32(m.y);
+        in.u32(m.width);
+        in.u32(m.height);
+    });
+    if (markers.empty() || !check_markers(markers, kMaxWorldSide, kMaxWorldSide).empty()) {
+        in.fail();
+    }
+}
+
+/// PLAN: u8 flags (bit 0: a table follows), the plan's values, its islands, the table.
+void write_planned_islands(Writer& o, const PlannedIslands& planned) {
+    const assets::ScenarioPlan& plan = planned.plan;
+    o.u8(planned.table ? std::uint8_t{1} : std::uint8_t{0});
+    o.u32(plan.natives[0]);
+    o.u32(plan.natives[1]);
+    o.u32(plan.max_crops);
+    o.u32(plan.gold_min_size);
+    o.u32(plan.gold_max_size);
+    for (const auto& r : plan.ores) {
+        o.u32(r.building);
+        o.u16(r.count);
+        o.u32(r.type);
+    }
+    for (const auto& r : plan.crops) {
+        o.u32(r.building);
+        o.u16(r.count);
+        o.u32(r.type);
+    }
+    for (const auto& r : plan.treasures) {
+        o.u32(r.building);
+        o.u16(r.count);
+        o.u32(r.type);
+    }
+    o.list(plan.islands, 14, [&](const assets::ScenarioPlan::Island& e) {
+        o.u8(e.climate);
+        o.u8(e.size);
+        o.u8(e.flags);
+        o.u8(e.number);
+        o.u16(e.template_number);
+        o.u32(e.x);
+        o.u32(e.y);
+    });
+    if (planned.table) {
+        for (const std::uint16_t v : *planned.table) {
+            o.u16(v);
+        }
+    }
+}
+
+/// The islands' places are checked against the world in apply_decoded().
+void read_planned_islands(Reader& in, PlannedIslands& planned) {
+    assets::ScenarioPlan& plan = planned.plan;
+    std::uint8_t flags = 0;
+    in.u8(flags);
+    if ((flags & ~1U) != 0) {
+        in.fail();
+    }
+    in.u32(plan.natives[0]);
+    in.u32(plan.natives[1]);
+    in.u32(plan.max_crops);
+    in.u32(plan.gold_min_size);
+    in.u32(plan.gold_max_size);
+    for (auto& r : plan.ores) {
+        in.u32(r.building);
+        in.u16(r.count);
+        in.u32(r.type);
+    }
+    for (auto& r : plan.crops) {
+        in.u32(r.building);
+        in.u16(r.count);
+        in.u32(r.type);
+    }
+    for (auto& r : plan.treasures) {
+        in.u32(r.building);
+        in.u16(r.count);
+        in.u32(r.type);
+    }
+    in.list(plan.islands, 14, [&](assets::ScenarioPlan::Island& e) {
+        in.u8(e.climate);
+        in.u8(e.size);
+        in.u8(e.flags);
+        in.u8(e.number);
+        in.u16(e.template_number);
+        in.u32(e.x);
+        in.u32(e.y);
+    });
+    if ((flags & 1U) != 0) {
+        std::array<std::uint16_t, 512> table{};
+        for (std::uint16_t& v : table) {
+            in.u16(v);
+        }
+        planned.table = table;
+    }
+    if (!check_planned_islands(planned, kMaxWorldSide, kMaxWorldSide).empty()) {
+        in.fail();
+    }
+}
+
 }  // namespace
 
 core::Bytes encode_sections(const World& world, const assets::BuildingTable& buildings, const Simulation* simulation,
@@ -259,6 +599,15 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
                 o.string(p != nullptr ? p->name : std::string());
             },
             Need::Optional);
+        if (world.game_settings().edited) {
+            section(out, kEdited, [&](Writer& o) { o.u8(1); }, Need::Optional);
+        }
+        if (const auto& info = world.scenario_info(); info && info->rules) {
+            section(out, kScenarioRules, [&](Writer& o) { write_rules(o, *info->rules); }, Need::Optional);
+        }
+        if (const auto& info = world.scenario_info()) {
+            section(out, kScenarioInfo, [&](Writer& o) { write_scenario_info(o, *info); }, Need::Optional);
+        }
         section(
             out, kMap,
             [&](Writer& o) {
@@ -289,16 +638,26 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
     }
     section(out, kPlayers, [&](Writer& o) { write_players(o, world); });
     if (has_own_factions(world)) {
-        // Optional: a reader without it plays the base game's factions the role bytes give.
-        section(out, kFactions, [&](Writer& o) { write_factions(o, world); }, Need::Optional);
+        // Optional: a reader without it plays the base game's factions the role bytes give;
+        // required when scripts steer a faction, which such a reader would steer itself.
+        const std::uint16_t factions_at = factions_version(world);
+        section(
+            out, kFactions, [&](Writer& o) { write_factions(o, world, factions_at); },
+            factions_at >= kScriptedFactions ? Need::Required : Need::Optional, factions_at);
     }
     if (!original_numbers(world.balance())) {
         // Required: a reader without it would compute another game.
-        section(out, kBalance, [&](Writer& o) {
-            for (const BalanceField& f : kBalanceFields) {
-                o.u32(world.balance().*f.value);
-            }
-        });
+        const std::uint16_t version = balance_version(world.balance());
+        section(
+            out, kBalance,
+            [&](Writer& o) {
+                for (const BalanceField& f : kBalanceFields) {
+                    if (f.version <= version) {
+                        o.u32(world.balance().*f.value);
+                    }
+                }
+            },
+            Need::Required, version);
     }
     if (!world.balance().buildings.empty()) {
         // Required as well: the buildings would produce and cost otherwise.
@@ -319,6 +678,103 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
                 o.u32(v.value);
             });
         });
+    }
+    if (!world.balance().computer_orders.empty()) {
+        section(out, kComputerOrders, [&](Writer& o) {
+            o.list(world.balance().computer_orders, 5, [&](const ComputerOrder& order) {
+                o.u8(static_cast<std::uint8_t>(order.list));
+                o.list(order.needs, 8, [&](const ComputerNeed& n) {
+                    o.u8(static_cast<std::uint8_t>(n.kind));
+                    o.u8(n.slot);
+                    o.u32(n.n);
+                    o.u8(static_cast<std::uint8_t>(n.flag));
+                    o.u8(static_cast<std::uint8_t>(n.when));
+                });
+            });
+        });
+    }
+    if (!world.balance().computer_producers.empty()) {
+        section(out, kComputerProducers, [&](Writer& o) {
+            o.list(world.balance().computer_producers, 14, [&](const ComputerProducer& p) {
+                o.u8(p.slot);
+                // Which fields the package changed, bit by bit in the order that follows.
+                o.u8(static_cast<std::uint8_t>((p.building ? 1U : 0U) | (p.attempts ? 2U : 0U) | (p.fertile ? 4U : 0U) |
+                                               (p.after ? 8U : 0U) | (p.wait ? 16U : 0U)));
+                o.u32(p.building.value_or(0));
+                o.u8(p.attempts.value_or(0));
+                o.u8(p.fertile.value_or(0));
+                o.u8(p.after.value_or(0));
+                o.u8(static_cast<std::uint8_t>(p.wait.value_or(ProducerWait::None)));
+                o.u32s(p.counts);
+            });
+        });
+    }
+    if (!world.balance().computer_slots.empty()) {
+        const auto& slots = world.balance().computer_slots;
+        const bool added = slots.size() > original_computer_slots().size();
+        const bool wide = std::any_of(slots.begin(), slots.end(), [](const ComputerSlot& k) {
+            return computer_slot(original_computer_slots(), k.number) == nullptr && k.service > 0xFFFFU;
+        });
+        section(
+            out, kComputerSlots,
+            [&](Writer& o) {
+                o.list(slots, 28, [&](const ComputerSlot& k) {
+                    slot_fields(o, k);
+                    if (computer_slot(original_computer_slots(), k.number) == nullptr) {
+                        o.string(k.name);
+                        o.u32(k.building);
+                        if (wide) {
+                            o.u64(k.service);
+                        } else {
+                            o.u16(k.service);
+                        }
+                    }
+                });
+            },
+            Need::Required, wide ? kSlotsWithWideServices : (added ? kSlotsWithPublic : std::uint16_t{1}));
+    }
+    if (!world.balance().climates.empty()) {
+        const auto& climates = world.balance().climates;
+        const auto any = [&](auto has) { return std::any_of(climates.begin(), climates.end(), has); };
+        const std::uint16_t version = any([](const Climate& c) { return !c.landscape_shares.empty(); })
+                                          ? kClimatesWithShares
+                                      : any([](const Climate& c) { return !c.ground.empty(); }) ? kClimatesWithGround
+                                                                                                : std::uint16_t{1};
+        section(
+            out, kClimates,
+            [&](Writer& o) {
+                o.list(world.balance().climates, 16, [&](const Climate& c) {
+                    o.string(c.id);
+                    o.u8(c.like);
+                    o.list(c.names, 8, [&](const auto& name) {
+                        o.string(name.first);
+                        o.string(name.second);
+                    });
+                    o.u32(c.crops);
+                    o.u32s(c.forest);
+                    o.u8(c.share);
+                    if (version >= kClimatesWithGround) {
+                        o.u32s(c.ground);
+                    }
+                    if (version >= kClimatesWithShares) {
+                        o.list(c.landscape_shares, 5, [&](const auto& share) {
+                            o.string(share.first);
+                            o.u8(share.second);
+                        });
+                    }
+                });
+                std::vector<std::pair<std::uint16_t, std::uint8_t>> islands;
+                for (std::size_t i = 0; i < world.islands().size(); ++i) {
+                    if (world.islands()[i].climate != 0) {
+                        islands.emplace_back(static_cast<std::uint16_t>(i), world.islands()[i].climate);
+                    }
+                }
+                o.list(islands, 3, [&](const auto& island) {
+                    o.u16(island.first);
+                    o.u8(island.second);
+                });
+            },
+            Need::Required, version);
     }
     if (!world.goods().own_goods().empty()) {
         section(out, kGoods, [&](Writer& o) {
@@ -371,6 +827,35 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
             });
         });
     }
+    std::vector<std::uint8_t> own_public;
+    for (std::size_t c = 0; c < world.resident_classes().size(); ++c) {
+        if (world.resident_classes()[c].public_needs) {
+            own_public.push_back(static_cast<std::uint8_t>(c));
+        }
+    }
+    if (!own_public.empty()) {
+        bool wide = false;
+        for (const std::uint8_t c : own_public) {
+            for (const assets::ServiceBits any : *world.resident_classes()[c].public_needs) {
+                wide = wide || any > 0xFFFFU;
+            }
+        }
+        section(
+            out, kClassPublic,
+            [&](Writer& o) {
+                o.list(own_public, 5, [&](std::uint8_t c) {
+                    o.u8(c);
+                    o.list(*world.resident_classes()[c].public_needs, wide ? 8 : 2, [&](assets::ServiceBits any) {
+                        if (wide) {
+                            o.u64(any);
+                        } else {
+                            o.u16(any);
+                        }
+                    });
+                });
+            },
+            Need::Required, wide ? kWideClassPublic : std::uint16_t{1});
+    }
     if (!world.infra_levels().empty()) {
         section(out, kLevels, [&](Writer& o) {
             o.list(world.infra_levels(), 9, [&](const assets::InfraLevel& l) {
@@ -379,6 +864,23 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
                 o.u32(l.min_inhabitants);
             });
         });
+    }
+    std::vector<std::uint8_t> told;
+    for (std::size_t n = 0; n < world.infra_levels().size(); ++n) {
+        if (world.infra_levels()[n].message) {
+            told.push_back(static_cast<std::uint8_t>(n));
+        }
+    }
+    if (!told.empty()) {
+        section(
+            out, kLevelMessages,
+            [&](Writer& o) {
+                o.list(told, 5, [&](std::uint8_t n) {
+                    o.u8(n);
+                    o.string(*world.infra_levels()[n].message);
+                });
+            },
+            Need::Optional);
     }
     std::vector<std::size_t> unlocked_more;
     for (std::size_t p = 0; p < world.players().size(); ++p) {
@@ -403,6 +905,15 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
             o.list(world.own_buildings(), 8, [&](const assets::OwnBuilding& b) {
                 o.string(b.id);
                 o.u32(b.number);
+            });
+        });
+    }
+    if (!world.own_figures().empty()) {
+        // Required: without the figures the packages added, the buildings' carriers name nothing.
+        section(out, kOwnFigures, [&](Writer& o) {
+            o.list(world.own_figures(), 8, [&](const assets::OwnFigure& f) {
+                o.string(f.id);
+                o.u32(f.number);
             });
         });
     }
@@ -435,12 +946,14 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
     if (std::ranges::any_of(world.cities(), [](const City& c) {
             return c.ledger.minutes_closed() != 0 || !c.ledger.wares().empty() || c.history.minutes_closed() != 0;
         })) {
-        section(out, kLedgers, [&](Writer& o) { write_ledgers(o, world); }, Need::Optional);
+        const std::uint16_t ledgers_at = ledgers_version(world);
+        section(out, kLedgers, [&](Writer& o) { write_ledgers(o, world, ledgers_at); }, Need::Optional, ledgers_at);
     }
     const std::uint16_t scores_at = scores_version(world);
     section(out, kScores, [&](Writer& o) { write_scores(o, world, scores_at); }, Need::Required, scores_at);
     section(out, kProductions, [&](Writer& o) { write_productions(o, world); });
-    section(out, kHouses, [&](Writer& o) { write_houses(o, world); });
+    const std::uint16_t houses_at = houses_version(world);
+    section(out, kHouses, [&](Writer& o) { write_houses(o, world, houses_at); }, Need::Required, houses_at);
     section(out, kGrowth, [&](Writer& o) { write_growth(o, world); });
     section(out, kCosts, [&](Writer& o) { write_costs(o, world); });
     if (tiles == TileMode::Differences) {
@@ -456,7 +969,8 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
     section(out, kEpochs, [&](Writer& o) { write_epochs(o, world, epochs_at); }, Need::Required, epochs_at);
     section(out, kArmy, [&](Writer& o) { write_army(o, world); });
     section(out, kDiplomacy, [&](Writer& o) { write_diplomacy(o, world); });
-    section(out, kExplored, [&](Writer& o) { write_explored(o, world); });
+    const std::uint16_t explored_at = explored_version(world);
+    section(out, kExplored, [&](Writer& o) { write_explored(o, world, explored_at); }, Need::Required, explored_at);
     section(out, kQueues, [&](Writer& o) { write_queues(o, world); });
     section(out, kStances, [&](Writer& o) { write_stances(o, world); });
     if (tiles == TileMode::Full && origin == Origin::Keep && world.source() != nullptr) {
@@ -480,6 +994,9 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
         scripts = &running;
     }
     if (!scripts->empty()) {
+        // Version 1 while no script keeps a campaign table, so that older versions read it.
+        const bool campaign =
+            std::any_of(scripts->begin(), scripts->end(), [](const ScriptState& s) { return !s.campaign.empty(); });
         section(
             out, kScripts,
             [&](Writer& o) {
@@ -488,9 +1005,37 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
                     o.u64(s.random.state());
                     o.u64(s.random.increment());
                     o.u8s(s.data);
+                    if (campaign) {
+                        o.u8s(s.campaign);
+                    }
                 });
             },
+            Need::Optional, campaign ? kScriptsWithCampaign : std::uint16_t{1});
+    }
+    if (!world.package_scenario().empty()) {
+        section(out, kScenario, [&](Writer& o) { o.string(world.package_scenario()); }, Need::Optional);
+    }
+    if (const auto& part = world.campaign_part()) {
+        section(
+            out, kCampaign,
+            [&](Writer& o) {
+                o.string(part->campaign);
+                o.u8(part->part);
+                o.u8s(part->carried);
+            },
             Need::Optional);
+    }
+    if (!world.markers().empty()) {
+        section(out, kMarkers, [&](Writer& o) { write_markers(o, world.markers()); }, Need::Optional);
+    }
+    if (!world.scenario_script().empty()) {
+        section(out, kScenarioScript, [&](Writer& o) { o.string(world.scenario_script()); });
+    }
+    if (!world.editor_state().empty() && tiles == TileMode::Full) {
+        section(out, kEditorState, [&](Writer& o) { o.u8s(world.editor_state()); }, Need::Optional);
+    }
+    if (const auto& planned = world.planned_islands()) {
+        section(out, kPlannedIslands, [&](Writer& o) { write_planned_islands(o, *planned); });
     }
     const auto has_groups = [](const UnitGroups& g) {
         return std::any_of(g.begin(), g.end(), [](const auto& members) { return !members.empty(); });
@@ -508,6 +1053,28 @@ void encode_sections(core::ByteWriter& out, const World& world, const assets::Bu
                             o.u16(m.dy);
                         });
                     }
+                });
+            },
+            Need::Optional);
+    }
+    // Also for the game's fingerprint: every computer of a multiplayer game keeps the same ones.
+    if (!world.blueprints().empty() || !world.blueprint_auto().empty()) {
+        section(
+            out, kBlueprints,
+            [&](Writer& o) {
+                o.list(world.blueprints(), 17, [&](const Blueprint& b) {
+                    o.u8(b.player);
+                    o.u16(b.island);
+                    o.u32(b.building);
+                    o.i32(b.x);
+                    o.i32(b.y);
+                    o.u8(b.rotation);
+                    o.u8(b.anim_phase);
+                });
+                o.list(world.blueprint_auto(), 4, [&](const BlueprintAuto& a) {
+                    o.u8(a.player);
+                    o.u16(a.island);
+                    o.u8(a.city);
                 });
             },
             Need::Optional);
@@ -550,6 +1117,73 @@ std::optional<SaveMeta> read_meta(std::span<const std::uint8_t> sections) {
     if (!in.ok()) {
         return std::nullopt;
     }
+    // A scenario's SCNI follows META, its settings (SRUL) between them. The head may end inside
+    // SCNI: the names come before the long texts, and what is cut off is left out. The mark of a
+    // game changed in the editor (EDTD) comes first.
+    auto next = reader.u32();
+    auto next_version = reader.u16();
+    (void)reader.u16();  // flags
+    auto next_size = reader.u32();
+    if (next && *next == kEdited && next_size) {
+        const auto mark = reader.bytes(*next_size);
+        meta.edited = mark && !mark->empty() && (*mark)[0] != 0;
+        next = reader.u32();
+        next_version = reader.u16();
+        (void)reader.u16();  // flags
+        next_size = reader.u32();
+    }
+    std::optional<Rules> rules;
+    if (next && *next == kScenarioRules && next_size) {
+        const auto rules_body = reader.bytes(*next_size);
+        if (rules_body && next_version && *next_version <= max_version(kScenarioRules)) {
+            core::ByteReader rr(*rules_body);
+            StateIn rules_state(rr);
+            Reader rules_in(rules_state);
+            const Rules r = read_rules(rules_in);
+            if (rules_state.ok()) {
+                rules = r;
+            }
+        }
+        next = reader.u32();
+        (void)reader.u16();  // version
+        (void)reader.u16();  // flags
+        next_size = reader.u32();
+    }
+    if (next && *next == kScenarioInfo && next_size) {
+        const auto rest = sections.subspan(sections.size() - reader.remaining());
+        core::ByteReader ir(rest.subspan(0, std::min<std::size_t>(rest.size(), *next_size)));
+        StateIn info_in(ir);
+        Reader info(info_in);
+        ScenarioInfo summary;
+        std::uint8_t flags = 0;
+        info.u8(summary.stars);
+        info.u8(flags);
+        info.list(summary.names, 8, [&](ScenarioText& t) {
+            info.string(t.language);
+            info.string(t.text);
+        });
+        if (!info_in.ok()) {
+            summary.names.clear();
+        } else {
+            // The author, version and briefings where the head holds all of them.
+            ScenarioInfo more;
+            info.string(more.author);
+            info.string(more.version);
+            info.list(more.briefings, 8, [&](ScenarioText& t) {
+                info.string(t.language);
+                info.string(t.text);
+            });
+            if (info_in.ok()) {
+                summary.author = std::move(more.author);
+                summary.version = std::move(more.version);
+                summary.briefings = std::move(more.briefings);
+            }
+        }
+        summary.original_limits = (flags & 1U) != 0;
+        summary.stars = std::min(summary.stars, ScenarioInfo::kMaxStars);
+        summary.rules = rules;
+        meta.scenario = std::move(summary);
+    }
     return meta;
 }
 
@@ -565,7 +1199,10 @@ core::Result<World> world_from_sections(std::span<const std::uint8_t> sections, 
             in.u32();
             in.u64();
             const std::uint64_t fingerprint = in.u64();
-            meta_ok = in.ok() && fingerprint == buildings_fingerprint(buildings);
+            // A map saved without packages (a package's own map, made by o1602-tool) keeps the Ids
+            // of the original's buildings, which the packages' buildings leave as they are.
+            meta_ok = in.ok() && (fingerprint == buildings_fingerprint(buildings) ||
+                                  fingerprint == original_buildings_fingerprint(buildings));
         } else if (id == kMap && !world) {
             Reader reader(in);
             world = read_map(reader, buildings, version);
@@ -611,6 +1248,12 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                 d.tutorial = on != 0;
                 break;
             }
+            case kEdited: {
+                std::uint8_t on = 0;
+                in.u8(on);
+                d.edited = on != 0;
+                break;
+            }
             case kIslands:
                 d.islands = read_islands(in, version);
                 break;
@@ -621,12 +1264,14 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                 d.players = read_players(in);
                 break;
             case kFactions:
-                d.factions = read_factions(in);
+                d.factions = read_factions(in, version);
                 break;
             case kBalance: {
                 Balance b;
                 for (const BalanceField& f : kBalanceFields) {
-                    in.u32(b.*f.value);
+                    if (f.version <= version) {
+                        in.u32(b.*f.value);
+                    }
                 }
                 if (!valid(b)) {
                     in.fail();
@@ -673,6 +1318,178 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                     in.fail();
                 }
                 d.figure_values = std::move(values);
+                break;
+            }
+            case kComputerOrders: {
+                std::vector<ComputerOrder> orders;
+                in.list(orders, 5, [&](ComputerOrder& order) {
+                    std::uint8_t list = 0;
+                    in.u8(list);
+                    order.list = static_cast<ComputerList>(list);
+                    in.list(order.needs, 8, [&](ComputerNeed& n) {
+                        std::uint8_t kind = 0;
+                        std::uint8_t flag = 0;
+                        std::uint8_t when = 0;
+                        in.u8(kind);
+                        in.u8(n.slot);
+                        in.u32(n.n);
+                        in.u8(flag);
+                        in.u8(when);
+                        n.kind = static_cast<ComputerNeed::Kind>(kind);
+                        n.flag = static_cast<ComputerNeed::When>(flag);
+                        n.when = static_cast<ComputerNeed::When>(when);
+                    });
+                });
+                if (!valid(orders)) {
+                    in.fail();  // a list, an entry or a condition of a later version
+                }
+                d.computer_orders = std::move(orders);
+                break;
+            }
+            case kComputerProducers: {
+                std::vector<ComputerProducer> producers;
+                in.list(producers, 14, [&](ComputerProducer& p) {
+                    std::uint8_t fields = 0;
+                    std::uint32_t building = 0;
+                    std::uint8_t attempts = 0;
+                    std::uint8_t fertile = 0;
+                    std::uint8_t after = 0;
+                    std::uint8_t wait = 0;
+                    in.u8(p.slot);
+                    in.u8(fields);
+                    in.u32(building);
+                    in.u8(attempts);
+                    in.u8(fertile);
+                    in.u8(after);
+                    in.u8(wait);
+                    in.u32s(p.counts);
+                    if ((fields & ~31U) != 0 || wait >= kProducerWaits) {
+                        in.fail();  // a field of a later version
+                        return;
+                    }
+                    if ((fields & 1U) != 0) {
+                        p.building = building;
+                    }
+                    if ((fields & 2U) != 0) {
+                        p.attempts = attempts;
+                    }
+                    if ((fields & 4U) != 0) {
+                        p.fertile = fertile;
+                    }
+                    if ((fields & 8U) != 0) {
+                        p.after = after;
+                    }
+                    if ((fields & 16U) != 0) {
+                        p.wait = static_cast<ProducerWait>(wait);
+                    }
+                });
+                if (!valid(producers)) {
+                    in.fail();
+                }
+                d.computer_producers = std::move(producers);
+                break;
+            }
+            case kComputerSlots: {
+                std::vector<ComputerSlot> slots;
+                in.list(slots, 28, [&](ComputerSlot& k) {
+                    slot_fields(in, k);
+                    ComputerSlot own;
+                    const ComputerSlot* o = computer_slot(original_computer_slots(), k.number);
+                    if (o == nullptr && version >= kSlotsWithPublic && k.number <= kOwnPublicSlot &&
+                        k.number > kOwnPublicSlot - kMaxOwnPublic) {
+                        std::string name;
+                        std::uint32_t building = 0;
+                        assets::ServiceBits service = 0;
+                        in.string(name);
+                        in.u32(building);
+                        if (version >= kSlotsWithWideServices) {
+                            in.u64(service);
+                        } else {
+                            in.u16(service);
+                        }
+                        own = own_public_slot(kOwnPublicSlot - k.number, std::move(name), building, service);
+                        o = &own;
+                    }
+                    if (o == nullptr) {
+                        in.fail();  // a slot of a later version
+                        return;
+                    }
+                    // What slots.toml does not change is the original's (or as it adds it).
+                    ComputerSlot read = k;
+                    k = *o;
+                    if (read.removed) {
+                        k = ComputerSlot{};
+                        k.name = o->name;
+                        k.number = o->number;
+                        k.removed = true;
+                    } else {
+                        k.instead = read.instead;
+                        k.instead_crop = read.instead_crop;
+                        k.instead_unlocked = read.instead_unlocked;
+                        k.single_below_stock = read.single_below_stock;
+                        k.single_below_users = read.single_below_users;
+                        k.raw_stock = read.raw_stock;
+                        k.process_from = read.process_from;
+                        k.process_per = read.process_per;
+                        k.process_round_up = read.process_round_up;
+                        k.process_rank = read.process_rank;
+                        k.process_max = read.process_max;
+                        k.subsidy_ware = read.subsidy_ware;
+                        k.subsidy_tons = read.subsidy_tons;
+                        k.subsidy_above = read.subsidy_above;
+                        k.subsidy_class = read.subsidy_class;
+                        k.subsidy_people = read.subsidy_people;
+                        k.after = read.after;
+                        k.counts_goods = std::move(read.counts_goods);
+                        k.min_houses = read.min_houses;
+                        k.roads_on_fail = read.roads_on_fail;
+                    }
+                });
+                if (!valid(slots)) {
+                    in.fail();
+                }
+                d.computer_slots = std::move(slots);
+                break;
+            }
+            case kClimates: {
+                Decoded::ClimatePart part;
+                in.list(part.climates, 16, [&](Climate& c) {
+                    in.string(c.id);
+                    in.u8(c.like);
+                    std::vector<std::pair<std::string, std::string>> names;
+                    in.list(names, 8, [&](std::pair<std::string, std::string>& name) {
+                        in.string(name.first);
+                        in.string(name.second);
+                    });
+                    c.names.insert(names.begin(), names.end());
+                    in.u32(c.crops);
+                    in.u32s(c.forest);
+                    in.u8(c.share);
+                    if (version >= kClimatesWithGround) {
+                        in.u32s(c.ground);
+                    }
+                    if (version >= kClimatesWithShares) {
+                        std::vector<std::pair<std::string, std::uint8_t>> shares;
+                        in.list(shares, 5, [&](std::pair<std::string, std::uint8_t>& share) {
+                            in.string(share.first);
+                            in.u8(share.second);
+                        });
+                        c.landscape_shares.insert(shares.begin(), shares.end());
+                    }
+                });
+                in.list(part.islands, 3, [&](std::pair<std::uint16_t, std::uint8_t>& island) {
+                    in.u16(island.first);
+                    in.u8(island.second);
+                });
+                if (!valid(part.climates)) {
+                    in.fail();
+                }
+                for (const auto& [island, climate] : part.islands) {
+                    if (climate == 0 || climate > part.climates.size()) {
+                        in.fail();
+                    }
+                }
+                d.climates = std::move(part);
                 break;
             }
             case kGoods: {
@@ -741,6 +1558,29 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                 d.classes = std::move(classes);
                 break;
             }
+            case kClassPublic: {
+                std::vector<std::pair<std::uint8_t, std::vector<assets::ServiceBits>>> own;
+                const bool wide = version >= kWideClassPublic;
+                in.list(own, 5, [&](std::pair<std::uint8_t, std::vector<assets::ServiceBits>>& p) {
+                    in.u8(p.first);
+                    in.list(p.second, wide ? 8 : 2, [&](assets::ServiceBits& any) {
+                        if (wide) {
+                            in.u64(any);
+                        } else {
+                            in.u16(any);
+                        }
+                        // The public buildings of classes.toml (resident_classes.hpp).
+                        if (any == 0 || (any & ~assets::public_building::kAll) != 0) {
+                            in.fail();
+                        }
+                    });
+                    if (p.first >= assets::kMaxResidentClasses || p.second.size() > assets::kMaxPublicNeeds) {
+                        in.fail();
+                    }
+                });
+                d.class_public = std::move(own);
+                break;
+            }
             case kLevels: {
                 std::vector<assets::InfraLevel> levels;
                 in.list(levels, 9, [&](assets::InfraLevel& l) {
@@ -756,6 +1596,20 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                     in.fail();
                 }
                 d.levels = std::move(levels);
+                break;
+            }
+            case kLevelMessages: {
+                std::vector<std::pair<std::uint8_t, std::string>> messages;
+                in.list(messages, 5, [&](std::pair<std::uint8_t, std::string>& m) {
+                    in.u8(m.first);
+                    in.string(m.second);
+                    // levels.toml: "" or "<package>:<name>".
+                    if (!m.second.empty() &&
+                        (m.second.find(':') == std::string::npos || m.second.size() > assets::kMaxMessageId)) {
+                        in.fail();
+                    }
+                });
+                d.level_messages = std::move(messages);
                 break;
             }
             case kUnlocked: {
@@ -784,6 +1638,19 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                 d.own_buildings = std::move(own);
                 break;
             }
+            case kOwnFigures: {
+                std::vector<assets::OwnFigure> own;
+                in.list(own, 8, [&](assets::OwnFigure& f) {
+                    in.string(f.id);
+                    in.u32(f.number);
+                    if (f.id.size() < 3 || f.id.size() > 2 * assets::kMaxPackageIdLength + 1 ||
+                        f.number >= assets::kMaxFigures) {
+                        in.fail();
+                    }
+                });
+                d.own_figures = std::move(own);
+                break;
+            }
             case kScripts: {
                 std::vector<ScriptState> states;
                 in.list(states, 24, [&](ScriptState& s) {
@@ -793,12 +1660,76 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                     in.u64(random);
                     in.u64(increment);
                     in.u8s(s.data);
+                    if (version >= kScriptsWithCampaign) {
+                        in.u8s(s.campaign);
+                    }
                     s.random = Random::from_state(random, increment);
-                    if (s.package.empty() || s.package.size() > assets::kMaxPackageIdLength) {
+                    // A package's id, or a package scenario's ("<package>:<name>").
+                    if (s.package.empty() || s.package.size() > kMaxScenarioIdLength) {
                         in.fail();
                     }
                 });
                 d.script_states = std::move(states);
+                break;
+            }
+            case kScenario: {
+                std::string scenario;
+                in.string(scenario);
+                if (scenario.empty() || scenario.size() > kMaxScenarioIdLength) {
+                    in.fail();
+                }
+                d.package_scenario = std::move(scenario);
+                break;
+            }
+            case kCampaign: {
+                World::CampaignPart part;
+                in.string(part.campaign);
+                in.u8(part.part);
+                in.u8s(part.carried);
+                if (part.campaign.empty() || part.campaign.size() > kMaxScenarioIdLength ||
+                    part.part >= assets::kMaxCampaignParts) {
+                    in.fail();
+                }
+                d.campaign_part = std::move(part);
+                break;
+            }
+            case kScenarioInfo: {
+                ScenarioInfo info;
+                read_scenario_info(in, info);
+                d.scenario_info = std::move(info);
+                break;
+            }
+            case kScenarioRules:
+                d.scenario_rules = read_rules(in);
+                break;
+            case kMarkers: {
+                std::vector<ScenarioMarker> markers;
+                read_markers(in, markers);
+                d.markers = std::move(markers);
+                break;
+            }
+            case kScenarioScript: {
+                std::string script;
+                in.string(script);
+                if (script.empty() || script.size() > kMaxScenarioScriptLength) {
+                    in.fail();
+                }
+                d.scenario_script = std::move(script);
+                break;
+            }
+            case kEditorState: {
+                std::vector<std::uint8_t> editor;
+                in.u8s(editor);
+                if (editor.empty() || editor.size() > kMaxEditorStateLength) {
+                    in.fail();
+                }
+                d.editor_state = std::move(editor);
+                break;
+            }
+            case kPlannedIslands: {
+                PlannedIslands planned;
+                read_planned_islands(in, planned);
+                d.planned_islands = std::move(planned);
                 break;
             }
             case kUnitGroups: {
@@ -814,6 +1745,25 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                     }
                 });
                 d.unit_groups = std::move(groups);
+                break;
+            }
+            case kBlueprints: {
+                Decoded::BlueprintPart part;
+                in.list(part.blueprints, 17, [&](Blueprint& b) {
+                    in.u8(b.player);
+                    in.u16(b.island);
+                    in.u32(b.building);
+                    in.i32(b.x);
+                    in.i32(b.y);
+                    in.u8(b.rotation);
+                    in.u8(b.anim_phase);
+                });
+                in.list(part.autos, 4, [&](BlueprintAuto& a) {
+                    in.u8(a.player);
+                    in.u16(a.island);
+                    in.u8(a.city);
+                });
+                d.blueprints = std::move(part);
                 break;
             }
             case kPackages: {
@@ -853,7 +1803,7 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                 d.population_marks = read_population_marks(in);
                 break;
             case kLedgers:
-                d.ledgers = read_ledgers(in);
+                d.ledgers = read_ledgers(in, version);
                 break;
             case kScores:
                 d.scores = read_scores(in, version);
@@ -862,7 +1812,7 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                 d.productions = read_productions(in);
                 break;
             case kHouses:
-                d.houses = read_houses(in);
+                d.houses = read_houses(in, version);
                 break;
             case kGrowth:
                 d.growth = read_growth(in);
@@ -889,7 +1839,7 @@ core::Status apply_sections(World& world, const assets::BuildingTable& buildings
                 d.diplomacy = read_diplomacy(in);
                 break;
             case kExplored:
-                d.explored = read_explored(in);
+                d.explored = read_explored(in, version);
                 break;
             case kAnimals:
                 d.animals = read_animals(in);

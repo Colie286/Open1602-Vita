@@ -7,6 +7,7 @@
 
 #include "banner_graphic.hpp"
 
+#include "o1602/core/text.hpp"
 #include "o1602/sim/game_data.hpp"
 #include "o1602/ui/localization.hpp"
 #include "o1602/ui/package_icons.hpp"
@@ -31,7 +32,7 @@ constexpr std::int32_t kPreviewBlock = 3;  // BAUHAUS
 constexpr std::int32_t kPreviewW = 160;    // the preview's box (gadget size)
 constexpr std::int32_t kPreviewH = 110;
 
-/// LEISTE lines of the build menu's gadgets (Hud_UpdateTooltip 0x0042DA80).
+/// LEISTE lines of the build menu's gadgets.
 std::optional<std::size_t> bau_help(std::int32_t id, bool auto_align) {
     if (id >= 31001 && id <= 31008) {
         return static_cast<std::size_t>(23 + id - 31001);
@@ -87,7 +88,54 @@ std::string BuildPanel::name_of(const ui::BuildCategory& category, std::size_t i
 
 bool BuildPanel::demolish() const noexcept {
     const ui::BuildCategory* c = m_menu->category(m_category);
-    return c != nullptr && c->demolish;
+    return c != nullptr && c->demolish && m_tool == Tool::Demolish;
+}
+
+bool BuildPanel::copy() const noexcept {
+    const ui::BuildCategory* c = m_menu->category(m_category);
+    return c != nullptr && c->demolish && m_tool == Tool::Copy;
+}
+
+bool BuildPanel::moving() const noexcept {
+    const ui::BuildCategory* c = m_menu->category(m_category);
+    return c != nullptr && c->demolish && m_tool == Tool::Move;
+}
+
+void BuildPanel::show_tool(Tool tool) {
+    for (const ui::BuildCategory& c : m_menu->categories) {
+        if (c.demolish) {
+            m_popup.reset();
+            m_bau.set_selected(m_category, false);
+            m_category = c.button;
+            m_bau.set_selected(m_category, true);
+            m_tool = tool;
+            return;
+        }
+    }
+}
+
+ui::BuildCategory BuildPanel::tools_category(std::int32_t button) const {
+    ui::BuildCategory tools;
+    tools.button = button;
+    tools.demolish = true;
+    tools.names = "ABRISS";  // "Abreißen" in the game's own language
+    const auto tool = [](Tool t, const char* icon, const char* name) {
+        ui::BuildButton b;
+        b.id = static_cast<std::uint32_t>(t);
+        b.picture = icon;
+        b.name = ui::tr(name);  // already Windows-1252
+        return b;
+    };
+    ui::BuildButton demolish = tool(Tool::Demolish, "open1602:demolish", "build.tool.demolish");
+    if (m_texts != nullptr && !m_texts->section("ABRISS").empty()) {
+        demolish.text = 0;
+    }
+    tools.rows.push_back({demolish, tool(Tool::Copy, "open1602:copy", "build.tool.copy"),
+                          tool(Tool::Blueprint, "open1602:blueprint", "build.tool.blueprint"),
+                          tool(Tool::Move, "open1602:move", "build.tool.move")});
+    // A row holds four icons: the templates above the tools.
+    tools.rows.push_back({tool(Tool::Templates, "open1602:templates", "build.tool.templates")});
+    return tools;
 }
 
 std::optional<std::uint32_t> BuildPanel::current(const Available& available) {
@@ -109,21 +157,39 @@ std::optional<std::uint32_t> BuildPanel::current(const Available& available) {
     return std::nullopt;
 }
 
-// Upstream #450: panel and actual tool must agree when changing category.
 BuildPanel::Action BuildPanel::shown_action(const Available& available) {
-    if(demolish())return Action{Action::Kind::Demolish,0,0};
-    if(const auto id=current(available))return Action{Action::Kind::Pick,*id,0};
-    return Action{Action::Kind::Off,0,0};
+    if (demolish()) {
+        return Action{Action::Kind::Demolish, 0, 0};
+    }
+    if (copy()) {
+        return Action{Action::Kind::Copy, 0, 0};
+    }
+    if (moving()) {
+        return Action{Action::Kind::Move, 0, 0};
+    }
+    if (const auto id = current(available)) {
+        return Action{Action::Kind::Pick, *id, 0};
+    }
+    return Action{Action::Kind::Off, 0, 0};
 }
 
-// Upstream #462: deselection retains the build page and its remembered category.
 bool BuildPanel::deselect() {
-    if(m_category==0)return false;
-    m_popup.reset();m_bau.set_selected(m_category,false);m_deselected=m_category;m_category=0;return true;
+    if (m_category == 0) {
+        return false;
+    }
+    m_popup.reset();
+    m_bau.set_selected(m_category, false);
+    m_deselected = m_category;
+    m_category = 0;
+    return true;
 }
+
 void BuildPanel::reselect() {
-    if(m_category!=0||m_menu->category(m_deselected)==nullptr)return;
-    m_category=m_deselected;m_bau.set_selected(m_category,true);
+    if (m_category != 0 || m_menu->category(m_deselected) == nullptr) {
+        return;
+    }
+    m_category = m_deselected;
+    m_bau.set_selected(m_category, true);
 }
 
 bool BuildPanel::show(std::uint32_t id) {
@@ -131,8 +197,10 @@ bool BuildPanel::show(std::uint32_t id) {
     if (c == nullptr) {
         return false;
     }
+    m_popup.reset();  // an open pop-up (the tools') belongs to the category left
     m_bau.set_selected(m_category, false);
     m_category = c->button;
+    m_building_category = m_category;
     m_bau.set_selected(m_category, true);
     m_picked[m_category] = c->index_of(id).value_or(0);
     return true;
@@ -149,12 +217,21 @@ void BuildPanel::open_popup(const ui::BuildCategory& category, const Available& 
     if (button == nullptr) {
         return;
     }
-    assets::Gadget anchor=*button;
-    for(const auto& c:m_menu->categories)if(const auto* other=m_layout.find(c.button))anchor.pos[1]=std::min(anchor.pos[1],other->pos[1]);
+    // Open1602: the pop-up stands above all category buttons, not just above the one pressed, so
+    // that it never covers another category (the original puts it right above its button, over
+    // the upper row).
+    assets::Gadget anchor = *button;
+    for (const ui::BuildCategory& c : m_menu->categories) {
+        if (const assets::Gadget* other = m_layout.find(c.button)) {
+            anchor.pos[1] = std::min(anchor.pos[1], other->pos[1]);
+        }
+    }
     m_popup.emplace(ui::build_popup(category, ok, anchor, m_gfx_bauhaus, m_menu->locked_icon_offset), m_bau.scale());
+    ui::show_popup_patches(*m_popup);
     m_popup_category = category.button;
     // The button is still held: the pop-up takes over this press, so that dragging onto an icon
-    // and letting go there picks it.
+    // and letting go there picks it. The panel underneath lets go of it: the release goes to the
+    // pop-up, and a press on another category while the pop-up is open must open that one at once.
     (void)m_popup->mouse(x, y, true);
     m_bau.drop_press();
 }
@@ -168,15 +245,47 @@ std::optional<BuildPanel::Action> BuildPanel::mouse(std::int32_t x, std::int32_t
         bool closed = false;
         for (const ui::PanelEvent& e : m_popup->mouse(x, y, down)) {
             if (e.kind == ui::PanelEvent::Kind::Pressed && e.id == ui::kPopupBackdrop) {
-                // A press beside the icons closes the pop-up and goes on to the panel (0x0043D0C9).
+                // A press beside the icons closes the pop-up and goes on to the panel.
                 closed = true;
             } else if (e.kind == ui::PanelEvent::Kind::Clicked && e.id >= ui::kPopupSlot &&
                        e.id < ui::kPopupSlot + 1000) {
                 const ui::BuildCategory* c = m_menu->category(m_popup_category);
                 const auto index = static_cast<std::size_t>(e.id - ui::kPopupSlot);
-                if (c != nullptr) {
+                if (c != nullptr && c->demolish) {
+                    // The tools' pop-up: the tool picked.
+                    if (const auto tool = m_tools.at(index); tool && static_cast<Tool>(*tool) == Tool::Blueprint) {
+                        // A switch: the menu goes back to what is in hand, the copy tool or the
+                        // building shown last.
+                        action = Action{Action::Kind::Blueprint, 0, 0};
+                        if (m_tool != Tool::Copy) {
+                            // No building shown yet in this game: the menu's first category.
+                            if (m_menu->category(m_building_category) == nullptr) {
+                                for (const ui::BuildCategory& other : m_menu->categories) {
+                                    if (!other.demolish) {
+                                        m_building_category = other.button;
+                                        break;
+                                    }
+                                }
+                            }
+                            m_bau.set_selected(m_category, false);
+                            m_category = m_building_category;
+                            m_bau.set_selected(m_category, true);
+                        }
+                    } else if (tool && static_cast<Tool>(*tool) == Tool::Templates) {
+                        // The copy tool, waiting for a piece or a template from the list.
+                        m_tool = Tool::Copy;
+                        action = Action{Action::Kind::Templates, 0, 0};
+                    } else if (tool && (static_cast<Tool>(*tool) != Tool::Move || m_moving)) {
+                        m_tool = static_cast<Tool>(*tool);
+                        const auto kind = m_tool == Tool::Copy   ? Action::Kind::Copy
+                                          : m_tool == Tool::Move ? Action::Kind::Move
+                                                                 : Action::Kind::Demolish;
+                        action = Action{kind, 0, 0};
+                    }
+                } else if (c != nullptr) {
                     if (const auto id = c->at(index); id && available(*id)) {
                         m_picked[m_popup_category] = index;
+                        m_building_category = m_popup_category;
                         action = Action{Action::Kind::Pick, *id, 0};
                     }
                 }
@@ -194,16 +303,27 @@ std::optional<BuildPanel::Action> BuildPanel::mouse(std::int32_t x, std::int32_t
         consumed = true;
         if (e.kind == ui::PanelEvent::Kind::Pressed && e.id >= 31001 && e.id <= 31008) {
             // The categories answer the press (Menuflg): demolish at once, the others open their icons.
-            const bool other=e.id!=m_category;
+            const bool other = e.id != m_category;
             m_bau.set_selected(m_category, false);
             m_category = e.id;
             m_bau.set_selected(m_category, true);
             if (const ui::BuildCategory* c = m_menu->category(e.id)) {
                 if (c->demolish) {
-                    action = Action{Action::Kind::Demolish, 0, 0};
+                    // Open1602: the tools in a pop-up like the buildings' (demolish, copy).
+                    m_tools = tools_category(c->button);
+                    open_popup(
+                        m_tools, [this](std::uint32_t id) { return static_cast<Tool>(id) != Tool::Move || m_moving; },
+                        x, y);
                 } else {
+                    m_building_category = e.id;
                     open_popup(*c, available, x, y);
                     if(other)action=shown_action(available);
+                }
+                if (other) {
+                    // What the panel shows is what the map builds: the category's remembered
+                    // building (or tool) is in hand at once, also when the pop-up closes without
+                    // a pick or the map is clicked while it is open.
+                    action = shown_action(available);
                 }
             }
         } else if (e.kind == ui::PanelEvent::Kind::Clicked && (e.id == kRotateLeft || e.id == kRotateRight)) {
@@ -223,7 +343,9 @@ std::optional<std::string> BuildPanel::help(const std::vector<std::string>& leis
     if (m_popup) {
         const auto id = m_popup->hovered();
         if (id && *id >= ui::kPopupSlot && *id < ui::kPopupSlot + 1000) {
-            if (const ui::BuildCategory* c = m_menu->category(m_popup_category)) {
+            if (const ui::BuildCategory* c = m_menu->category(m_popup_category); c != nullptr && c->demolish) {
+                return name_of(m_tools, static_cast<std::size_t>(*id - ui::kPopupSlot));
+            } else if (c != nullptr) {
                 return name_of(*c, static_cast<std::size_t>(*id - ui::kPopupSlot));
             }
         }
@@ -244,11 +366,13 @@ void BuildPanel::refresh(const assets::BuildingTable& buildings, const Available
     const assets::BuildingType* b = id ? buildings.by_id(*id) : nullptr;
     // Title: the building's name, "Abreißen", or nothing.
     if (category != nullptr && category->demolish) {
-        const auto& names = m_texts != nullptr ? m_texts->section("ABRISS") : std::vector<std::string>{};
-        m_bau.set_text(kTitle, names.empty() ? std::string() : names[0]);
+        const ui::BuildCategory tools = tools_category(category->button);
+        const std::string name = name_of(tools, static_cast<std::size_t>(m_tool));
+        m_bau.set_text(kTitle, m_blueprint && m_tool == Tool::Copy ? ui::tr("build.blueprint.title", {name}) : name);
         m_bau.set_visible(kTitle, true);
     } else if (b != nullptr && category != nullptr) {
-        m_bau.set_text(kTitle, name_of(*category, category->index_of(*id).value_or(0)));
+        const std::string name = name_of(*category, category->index_of(*id).value_or(0));
+        m_bau.set_text(kTitle, m_blueprint ? ui::tr("build.blueprint.title", {name}) : name);
         m_bau.set_visible(kTitle, true);
     } else {
         m_bau.set_visible(kTitle, false);
@@ -402,6 +526,8 @@ std::optional<Selection::Kind> InfoPanel::mouse(std::int32_t x, std::int32_t y, 
             m_goods_clicked = true;
         }
     }
+    // The goods balance line lights up yellow under the mouse, like a link.
+    m_panel.set_selected(kInfoGoods, m_panel.hovered() == kInfoGoods);
     return list;
 }
 
@@ -440,7 +566,7 @@ void InfoPanel::refresh(const sim::PlayerFigures& f, const render::Banner* banne
         m_panel.set_text(kInfoRows[i].first + 1, std::to_string(values[i]));
     }
     // The coat of arms in the player's colour, the balance icon green or red.
-    const render::BannerArt arms = render::BannerArt::at(m_arms);
+    const render::BannerArt arms = render::BannerArt::arms_at(m_arms);
     set_banner_graphic(m_panel, kInfoArms, arms, banner);
     set_banner_graphic(m_panel, kInfoArmsShadow, arms, banner);
     m_panel.set_graphic(kInfoBalanceIcon, m_balance_icon + (f.balance < 0 ? 1 : 0), 0);

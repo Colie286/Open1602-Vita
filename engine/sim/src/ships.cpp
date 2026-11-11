@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <functional>
 #include <utility>
 #include <vector>
 
@@ -15,14 +16,14 @@ namespace o1602::sim {
 
 namespace {
 
-constexpr std::uint32_t kReach = 5;            // Kontor and shipyard reach (0x004670D0)
-constexpr std::int32_t kShipNear = 7;          // a ship reaches another ship (0x0044F110)
-constexpr std::int32_t kPlanRadius = 80;       // ordinary plan (ship + 0x00 = 0x50)
+constexpr std::uint32_t kReach = 5;            // Kontor and shipyard reach
+constexpr std::int32_t kShipNear = 7;          // a ship reaches another ship
+constexpr std::int32_t kPlanRadius = 80;       // ordinary plan
 constexpr std::int32_t kFollowRadius = 40;     // re-plan towards a moving target (0x28)
-constexpr std::int32_t kDetourRadius = 9;      // way round a ship ahead (0x00456270)
+constexpr std::int32_t kDetourRadius = 9;      // way round a ship ahead
 constexpr std::int32_t kObstacleRange = 5;     // other ships in the planning grid
 constexpr std::int32_t kTowerReach = 8;        // half side of the expensive square round a hostile tower
-constexpr std::int32_t kLookAhead = 6;         // ships ahead (0x004538A0)
+constexpr std::int32_t kLookAhead = 6;         // ships ahead
 constexpr std::uint32_t kIdleMs = 1000;        // an idle ship decides again after a second
 constexpr std::uint32_t kNoWayMs = 2000;       // after a plan without a way
 constexpr std::uint32_t kBlockedMs = 10000;    // after a plan that only other ships blocked (S-121)
@@ -33,16 +34,16 @@ constexpr std::uint32_t kShipStopMs = 2000;    // route stop at a ship
 constexpr std::uint8_t kMaxFailures = 2;       // the order is given up after the third failed plan
 
 constexpr std::uint8_t kGiveUpsToComplain = 4;  // ships giving up a Kontor before its computer complains
-constexpr std::int32_t kKontorComplaint = 16;   // reach of the count round the Kontor (0x00428640)
+constexpr std::int32_t kKontorComplaint = 16;   // reach of the count round the Kontor
 
 constexpr std::uint32_t kTon = kStockUnitsPerTon;
 constexpr std::size_t kMaxSteps = 64;  // decisions of one ship in one tick (a guard)
 // A tile takes 6 250 000 * divisor / Speed microseconds straight, sqrt 2 times that diagonally
-// (0x0044A690: Speed * 32 / divisor in 1/10000 tile per 20 ms).
+// (Speed * 32 / divisor in 1/10000 tile per 20 ms).
 constexpr std::uint64_t kStraightUs = 6'250'000;
 constexpr std::uint64_t kDiagonalUs = 8'838'835;
 
-/// Piecewise linear table of the original's speed factors (0x00442A90).
+/// Piecewise linear table of the original's speed factors.
 std::uint32_t interpolate(std::uint32_t i, std::initializer_list<std::pair<std::uint32_t, std::uint32_t>> points) {
     auto prev = *points.begin();
     for (const auto& p : points) {
@@ -79,14 +80,36 @@ std::int32_t tile_of(std::int32_t pos) noexcept {
 
 }  // namespace
 
-bool building_in_reach(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
-                       std::uint32_t bx, std::uint32_t by, std::int32_t wx, std::int32_t wy) {
+namespace {
+
+/// The water a ship reaches a building from: a circle round the centre of its footprint.
+struct ReachArea {
+    std::int32_t cx = 0;  ///< world tile of the centre
+    std::int32_t cy = 0;
+    std::int32_t odd_w = 0;  ///< 1 when the footprint is even wide: the half tile counts to the far side
+    std::int32_t odd_h = 0;
+
+    [[nodiscard]] bool contains(std::int32_t wx, std::int32_t wy) const {
+        std::int32_t dx = wx - cx;
+        std::int32_t dy = wy - cy;
+        if (dx > 0) {
+            dx -= odd_w;
+        }
+        if (dy > 0) {
+            dy -= odd_h;
+        }
+        return in_circle(dx, dy, kReach);
+    }
+};
+
+std::optional<ReachArea> reach_area(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
+                                    std::uint32_t bx, std::uint32_t by) {
     if (island >= world.islands().size()) {
-        return false;
+        return std::nullopt;
     }
     const WorldIsland& isl = world.islands()[island];
     if (!isl.map.contains(static_cast<std::int32_t>(bx), static_cast<std::int32_t>(by))) {
-        return false;
+        return std::nullopt;
     }
     const MapCell& cell = isl.map.top(bx, by);
     const assets::BuildingType* b = cell.empty() ? nullptr : buildings.by_sprite(cell.sprite);
@@ -96,17 +119,17 @@ bool building_in_reach(const World& world, const assets::BuildingTable& building
         rotated_size(*b, cell.rotation, w, h);
     }
     // Centre of the footprint; buildings of even size count the half tile towards the far side.
-    const auto cx = static_cast<std::int32_t>(isl.x + bx + (w - 1) / 2);
-    const auto cy = static_cast<std::int32_t>(isl.y + by + (h - 1) / 2);
-    std::int32_t dx = wx - cx;
-    std::int32_t dy = wy - cy;
-    if (dx > 0) {
-        dx -= static_cast<std::int32_t>((w - 1) & 1U);
-    }
-    if (dy > 0) {
-        dy -= static_cast<std::int32_t>((h - 1) & 1U);
-    }
-    return in_circle(dx, dy, kReach);
+    return ReachArea{static_cast<std::int32_t>(isl.x + bx + (w - 1) / 2),
+                     static_cast<std::int32_t>(isl.y + by + (h - 1) / 2), static_cast<std::int32_t>((w - 1) & 1U),
+                     static_cast<std::int32_t>((h - 1) & 1U)};
+}
+
+}  // namespace
+
+bool building_in_reach(const World& world, const assets::BuildingTable& buildings, std::uint16_t island,
+                       std::uint32_t bx, std::uint32_t by, std::int32_t wx, std::int32_t wy) {
+    const std::optional<ReachArea> area = reach_area(world, buildings, island, bx, by);
+    return area && area->contains(wx, wy);
 }
 
 std::optional<std::size_t> kontor_in_reach(const World& world, const assets::BuildingTable& buildings, std::int32_t wx,
@@ -128,14 +151,14 @@ std::optional<KontorSite> kontor_site_near(const World& world, const assets::Bui
     if (wx < 0 || wy < 0 || !world.contains(static_cast<std::uint32_t>(wx), static_cast<std::uint32_t>(wy))) {
         return std::nullopt;
     }
-    // The ship's tile must lie in an island's rectangle (0x0046AAA0), water inside it included.
+    // The ship's tile must lie in an island's rectangle, water inside it included.
     const std::uint16_t index = world.cell(static_cast<std::uint32_t>(wx), static_cast<std::uint32_t>(wy)).island;
     if (index == World::kSea || index >= world.islands().size()) {
         return std::nullopt;
     }
     const WorldIsland& isl = world.islands()[index];
     const IslandMap& map = isl.map;
-    // The circles of the island's markets and Kontors (0x00483080), at least 8 tiles.
+    // The circles of the island's markets and Kontors, at least 8 tiles.
     std::vector<std::pair<Catchment, std::uint8_t>> circles;
     for (std::uint32_t y = 0; y < map.height(); ++y) {
         for (std::uint32_t x = 0; x < map.width(); ++x) {
@@ -165,7 +188,7 @@ std::optional<KontorSite> kontor_site_near(const World& world, const assets::Bui
             return in_circle(dx, dy, circle.second);
         });
     };
-    // The window round the ship cut to the disc (0x004700B0, 0x00471280): sea, surf and beach
+    // The window round the ship cut to the disc: sea, surf and beach
     // can be passed, land claimed by a city cannot, unclaimed land is the goal. Beyond the
     // island's rectangle there is only open sea.
     enum class Cell : std::uint8_t { Blocked, Water, Goal };
@@ -197,7 +220,7 @@ std::optional<KontorSite> kontor_site_near(const World& world, const assets::Bui
             }
         }
     }
-    // A search from the ship's tile (0x00471C50): eight neighbours, a diagonal step only between
+    // A search from the ship's tile: eight neighbours, a diagonal step only between
     // two open sides; the first goal reached is the site.
     const auto open = [&](std::int32_t x, std::int32_t y) {
         return x >= 0 && y >= 0 && x < kSide && y < kSide &&
@@ -258,6 +281,9 @@ Fleet::Fleet(World& world, const assets::BuildingTable& buildings, const assets:
         }
         if (s.cargo.empty()) {
             s.cargo.resize(type != nullptr && type->ship.cargo_slots != 0 ? type->ship.cargo_slots : 1U);
+        } else if (type != nullptr && type->ship.cargo_slots != 0) {
+            // A file played with other holds than it was saved with (Rules::large_ship_holds).
+            fit_holds(s, type->ship.cargo_slots);
         }
         if (world.simulation_state().empty()) {
             // An original savegame keeps no island for its ships; a game saved by Open1602 does.
@@ -265,10 +291,31 @@ Fleet::Fleet(World& world, const assets::BuildingTable& buildings, const assets:
             update_island(s);
         }
     }
-    // The original starts the names at rand() (0x00442A90); a copy of the generator, so that
+    // The original starts the names at rand(); a copy of the generator, so that
     // making a Simulation does not change the game.
     Random names = world.random(RandomStream::Ships);
     m_name_index = names.next();
+}
+
+void fit_holds(Ship& ship, std::size_t holds) {
+    if (ship.cargo.size() < holds) {
+        ship.cargo.resize(holds);
+        return;
+    }
+    std::size_t free = 0;
+    for (std::size_t h = holds; h < ship.cargo.size(); ++h) {
+        if (ship.cargo[h].ware == 0) {
+            continue;
+        }
+        while (free < holds && ship.cargo[free].ware != 0) {
+            ++free;
+        }
+        if (free == holds) {
+            return;  // full: the goods keep their holds
+        }
+        ship.cargo[free] = ship.cargo[h];
+        ship.cargo[h] = CargoSlot{};
+    }
 }
 
 // ---- Data of ships -----------------------------------------------------------------------------
@@ -325,7 +372,7 @@ std::uint32_t Fleet::space_for(const Ship& ship, std::uint8_t ware, std::uint8_t
 void Fleet::add_cargo(Ship& ship, std::uint8_t ware, std::uint32_t amount, std::uint16_t price) {
     const std::size_t n = holds(ship);
     const std::uint32_t capacity = hold_capacity(ship);
-    // Holds of the same ware first, then empty ones, each in order (0x00448120).
+    // Holds of the same ware first, then empty ones, each in order.
     for (int pass = 0; pass < 2 && amount != 0; ++pass) {
         for (std::size_t i = 0; i < n && amount != 0; ++i) {
             CargoSlot& c = ship.cargo[i];
@@ -349,6 +396,26 @@ void Fleet::add_cargo(Ship& ship, std::uint8_t ware, std::uint32_t amount, std::
             amount -= put;
         }
     }
+}
+
+std::uint32_t Fleet::cheat_cargo(std::uint32_t id, std::uint8_t ware, std::uint32_t amount) {
+    Ship* ship = m_world->ship(id);
+    if (ship == nullptr) {
+        return 0;
+    }
+    const std::uint32_t put = std::min(amount, space_for(*ship, ware));
+    add_cargo(*ship, ware, put, 0);
+    return put;
+}
+
+bool Fleet::cheat_cannon(std::uint32_t id) {
+    Ship* ship = m_world->ship(id);
+    const assets::FigureType* type = ship != nullptr ? type_of(*ship) : nullptr;
+    if (type == nullptr || ship->cannons >= type->ship.max_cannons) {
+        return false;
+    }
+    ++ship->cannons;
+    return true;
 }
 
 std::uint32_t Fleet::remove_cargo(Ship& ship, std::uint8_t ware, std::uint32_t amount, std::uint8_t hold) {
@@ -375,7 +442,7 @@ std::uint32_t Fleet::run_us(const Ship& ship, std::uint8_t direction, std::uint8
     }
     const assets::FigureType* t = type_of(ship);
     const std::uint32_t speed = t != nullptr && t->speed != 0 ? t->speed : 500U;
-    // Speed divisor of damage and load (0x004487E0): 32 = full speed, 96 = a third.
+    // Speed divisor of damage and load: 32 = full speed, 96 = a third.
     std::uint32_t h = 128;
     if (t != nullptr && t->ship.max_health != 0) {
         h = std::min<std::uint32_t>(128, ship.health * 128 / t->ship.max_health);
@@ -495,30 +562,57 @@ namespace {
 /// the Kontor reach, where the original's ship stops too, up to the beach; the original then never
 /// arrives (exactly the tile) and gives the order up (S-071). Without water there, anywhere in
 /// the reach.
+/// A position as a goal: the tile itself when it is water, otherwise the water tiles nearest to it
+/// within reach (all of them when there is none).
+struct PositionGoal {
+    std::int32_t tx = 0;
+    std::int32_t ty = 0;
+    bool water = false;
+    std::int32_t nearest = -1;  ///< squared distance of the nearest water within reach, -1 none
+
+    static PositionGoal of(const SeaMap& sea, const Target& t) {
+        PositionGoal g;
+        g.tx = static_cast<std::int32_t>(t.x);
+        g.ty = static_cast<std::int32_t>(t.y);
+        g.water = sea.sailable(g.tx, g.ty);
+        if (g.water) {
+            return g;
+        }
+        constexpr auto r = static_cast<std::int32_t>(kReach);
+        for (std::int32_t dy = -r; dy <= r; ++dy) {
+            for (std::int32_t dx = -r; dx <= r; ++dx) {
+                const std::int32_t d = dx * dx + dy * dy;
+                if ((g.nearest < 0 || d < g.nearest) && in_circle(dx, dy, kReach) &&
+                    sea.sailable(g.tx + dx, g.ty + dy)) {
+                    g.nearest = d;
+                }
+            }
+        }
+        return g;
+    }
+
+    bool operator()(std::int32_t x, std::int32_t y) const {
+        if (water) {
+            return x == tx && y == ty;
+        }
+        if (!in_circle(x - tx, y - ty, kReach)) {
+            return false;
+        }
+        const std::int32_t d = (x - tx) * (x - tx) + (y - ty) * (y - ty);
+        return nearest < 0 || d <= nearest;
+    }
+};
+
 bool reached(const World& world, const assets::BuildingTable& buildings, const SeaMap& sea, const Target& t,
              std::int32_t x, std::int32_t y) {
     switch (t.kind) {
         case Target::Kind::Position: {
             const auto tx = static_cast<std::int32_t>(t.x);
             const auto ty = static_cast<std::int32_t>(t.y);
-            if (sea.sailable(tx, ty)) {
-                return x == tx && y == ty;
+            if (!sea.sailable(tx, ty) && !in_circle(x - tx, y - ty, kReach)) {
+                return false;  // spares looking for the nearest water
             }
-            if (!in_circle(x - tx, y - ty, kReach)) {
-                return false;
-            }
-            std::int32_t nearest = -1;
-            constexpr auto r = static_cast<std::int32_t>(kReach);
-            for (std::int32_t dy = -r; dy <= r; ++dy) {
-                for (std::int32_t dx = -r; dx <= r; ++dx) {
-                    const std::int32_t d = dx * dx + dy * dy;
-                    if ((nearest < 0 || d < nearest) && in_circle(dx, dy, kReach) && sea.sailable(tx + dx, ty + dy)) {
-                        nearest = d;
-                    }
-                }
-            }
-            const std::int32_t d = (x - tx) * (x - tx) + (y - ty) * (y - ty);
-            return nearest < 0 || d <= nearest;
+            return PositionGoal::of(sea, t)(x, y);
         }
         case Target::Kind::City: {
             const City* c = world.city(t.island, t.city);
@@ -541,6 +635,61 @@ bool reached(const World& world, const assets::BuildingTable& buildings, const S
             break;
     }
     return false;
+}
+
+/// `reached` for one target as a test of many tiles: what does not depend on the tile is looked
+/// up once (the course search asks for every tile it visits). The world must not change while
+/// the test is in use.
+std::function<bool(std::int32_t, std::int32_t)> goal_of(const World& world, const assets::BuildingTable& buildings,
+                                                        const SeaMap& sea, const Target& t) {
+    const auto none = [](std::int32_t, std::int32_t) { return false; };
+    switch (t.kind) {
+        case Target::Kind::Position:
+            return PositionGoal::of(sea, t);
+        case Target::Kind::City: {
+            const City* c = world.city(t.island, t.city);
+            if (c == nullptr || !c->warehouse_x || !c->warehouse_y) {
+                return none;
+            }
+            const std::optional<ReachArea> area =
+                reach_area(world, buildings, t.island, *c->warehouse_x, *c->warehouse_y);
+            if (!area) {
+                return none;
+            }
+            return [a = *area](std::int32_t x, std::int32_t y) { return a.contains(x, y); };
+        }
+        case Target::Kind::Building: {
+            const std::optional<ReachArea> area = reach_area(world, buildings, t.island, t.x, t.y);
+            if (!area) {
+                return none;
+            }
+            return [a = *area](std::int32_t x, std::int32_t y) { return a.contains(x, y); };
+        }
+        case Target::Kind::Ship: {
+            const Ship* s = world.ship(t.ship);
+            if (s == nullptr) {
+                return none;
+            }
+            return [sx = s->x, sy = s->y](std::int32_t x, std::int32_t y) {
+                return sea_distance(sx - x, sy - y) < kShipNear;
+            };
+        }
+        case Target::Kind::Soldier: {
+            const Soldier* s = world.soldier(t.ship);
+            if (s == nullptr) {
+                return none;
+            }
+            return [sx = s->pos_x / kPosUnit, sy = s->pos_y / kPosUnit](std::int32_t x, std::int32_t y) {
+                return sea_distance(sx - x, sy - y) < kShipNear;
+            };
+        }
+        case Target::Kind::Spot:
+            return [cx = static_cast<std::int32_t>(t.x / 2), cy = static_cast<std::int32_t>(t.y / 2)](
+                       std::int32_t x, std::int32_t y) { return in_circle(x - cx, y - cy, kReach); };
+        case Target::Kind::None:
+            break;
+    }
+    return none;
 }
 
 }  // namespace
@@ -630,7 +779,7 @@ void Fleet::tick(std::uint32_t dt_ms) {
         }
     }
     m_squares_valid = false;
-    // Sunk ships are gone with their cargo (Figure_Free 0x00443520). The wreck the original leaves
+    // Sunk ships are gone with their cargo. The wreck the original leaves
     // for about 22 s is only a picture (render::CombatEffects).
     m_world->erase_ships([](const Ship& s) { return s.sinking && s.owner == kNoPlayer; });
     trader_tick(dt_ms);
@@ -657,8 +806,9 @@ void Fleet::hit(std::uint32_t id, std::uint32_t damage, PlayerId attacker, bool 
     const Player* owner = m_world->player(ship->owner);
     if (by_pirates && !ship->held && owner != nullptr && owner->role != PlayerRole::Human &&
         m_world->behaviour(*owner) != FactionBehaviour::Pirates) {
-        // A computer's, the trader's or the natives' ship surrenders at once (0x00445930).
+        // A computer's, the trader's or the natives' ship surrenders at once.
         ship->held = true;
+        ship->plundered = false;
         ship->motion.path.clear();
         ship->motion.path_index = 0;
         m_events.push_back(ShipEvent{ShipEvent::Kind::WhiteFlag, ship->id, ship->owner});
@@ -669,7 +819,7 @@ void Fleet::sink(Ship& ship, PlayerId attacker) {
     if (ship.sinking) {
         return;
     }
-    // Op 0x0C: the ship stops, turns to the nearest odd heading and goes down (0x0044A9A0).
+    // The ship stops, turns to the nearest odd heading and goes down.
     ship.sinking = true;
     ship.held = false;
     trader_leave(ship);
@@ -695,7 +845,7 @@ void Fleet::sink(Ship& ship, PlayerId attacker) {
     m.phase = ShipMotion::Phase::Sinking;
     m.elapsed_us = 0;
     m.duration_us = (steps * turn + sink_ms) * 1000U;
-    // The score's counters (0x0044A9A0): the soldiers aboard go down with the ship.
+    // The score's counters: the soldiers aboard go down with the ship.
     std::uint32_t soldiers = 0;
     for (const CargoSlot& c : ship.cargo) {
         soldiers += is_soldier_ware(c.ware) ? 1U : 0U;
@@ -783,7 +933,7 @@ bool Fleet::start_next_run(Ship& ship) {
     const auto tiles = static_cast<std::uint8_t>(code & 0x0FU);
     const assets::FigureType* t = type_of(ship);
     if (dir != ship.direction && t != nullptr && t->ship.turn_ms != 0) {
-        // Turn in place, one 45 degree step at once and one per Drehtime (0x0044A9A0).
+        // Turn in place, one 45 degree step at once and one per Drehtime.
         const std::uint8_t right = static_cast<std::uint8_t>((dir - ship.direction) & 7U);
         const std::uint8_t left = static_cast<std::uint8_t>((ship.direction - dir) & 7U);
         ship.direction = static_cast<std::uint8_t>((ship.direction + (right < left ? 1U : 7U)) & 7U);
@@ -824,8 +974,9 @@ Fleet::Planned Fleet::plan(Ship& ship, std::int32_t radius) {
     r.radius = radius;
     r.aim_x = aim->first;
     r.aim_y = aim->second;
+    r.guided = true;  // around islands wider than the window
     if (m.failures != 0) {
-        // After a failure the window moves off-centre (0x00455A20).
+        // After a failure the window moves off-centre.
         const std::uint32_t k = m_world->random(RandomStream::Ships).next() & 3U;
         r.shift_x = (k & 1U) != 0 ? radius / 2 : -radius / 2;
         r.shift_y = (k & 2U) != 0 ? radius / 2 : -radius / 2;
@@ -841,8 +992,8 @@ Fleet::Planned Fleet::plan(Ship& ship, std::int32_t radius) {
         r.ships.push_back(SeaPlan::Obstacle{o.x, o.y, o.motion.phase == ShipMotion::Phase::Run});
         return false;
     });
-    // Water near the cannon towers of players at war with the ship's owner (0x00455A20 with
-    // 0x0046AA20): a square of 16 tiles around each. The original raises the cost around every
+    // Water near the cannon towers of players at war with the ship's owner:
+    // a square of 16 tiles around each. The original raises the cost around every
     // tower of an island with a hostile city, also the towers of allies; Open1602 only around
     // hostile ones (S-103).
     for (const Tower& t : m_world->towers()) {
@@ -858,8 +1009,7 @@ Fleet::Planned Fleet::plan(Ship& ship, std::int32_t radius) {
         r.danger.push_back(
             SeaPlan::Danger{tx - kTowerReach + 1, ty - kTowerReach + 1, tx + kTowerReach, ty + kTowerReach});
     }
-    const Target target = ship.target;
-    r.goal = [&](std::int32_t x, std::int32_t y) { return reached(*m_world, *m_buildings, m_sea, target, x, y); };
+    r.goal = goal_of(*m_world, *m_buildings, m_sea, ship.target);
     SeaCourse course = m_planner.plan(m_sea, r);
     if (course.path.empty() && !course.reached_goal && !r.ships.empty()) {
         // No way: whether only the ships nearby close it, e.g. one lying in a narrow inlet (S-121).
@@ -926,7 +1076,7 @@ bool Fleet::local_detour(Ship& ship) {
 }
 
 void Fleet::update_island(Ship& ship) {
-    // The island whose rectangle grown by 5 tiles holds the ship (0x0046A4D0).
+    // The island whose rectangle grown by 5 tiles holds the ship.
     std::uint16_t found = 0xFFFF;
     for (std::size_t i = 0; i < m_world->islands().size(); ++i) {
         const WorldIsland& isl = m_world->islands()[i];
@@ -970,8 +1120,8 @@ void Fleet::update_island(Ship& ship) {
 }
 
 void Fleet::gave_up_city(const Target& target) {
-    // 0x00454F50: every ship that gives up its way to a Kontor counts, whoever owns it; the fourth
-    // makes a computer owner look for the culprits (0x00428920 with 1).
+    // Every ship that gives up its way to a Kontor counts, whoever owns it; the fourth
+    // makes a computer owner look for the culprits (with 1).
     City* city = m_world->city(target.island, target.city);
     if (city == nullptr || !city->warehouse_x || !city->warehouse_y || ++city->ships_gave_up < kGiveUpsToComplain) {
         return;
@@ -983,7 +1133,7 @@ void Fleet::gave_up_city(const Target& target) {
 }
 
 void Fleet::complain_of_ships(PlayerId owner, std::int32_t x, std::int32_t y, std::int32_t reach) {
-    // 0x00428640 / 0x004287B0: only a computer complains. It counts the other players' ships whose
+    // Only a computer complains. It counts the other players' ships whose
     // distance max + 0.33 * min (in tiles, from the ship's centre) is at most `reach`, then blames the
     // first human with ships there that it is at peace with: event 10, -100 on its mood.
     const Player* complainer = m_world->player(owner);
@@ -1038,7 +1188,7 @@ std::optional<std::uint32_t> Fleet::arrive_at_target(Ship& ship) {
     m_events.push_back(ShipEvent{ShipEvent::Kind::Arrived, ship.id, ship.owner});
     if (!ship.route.active && arrived.kind == Target::Kind::City && ship.owner == pirates() &&
         ship.owner != kNoPlayer) {
-        // A pirate at its base unloads everything at price 0 and stays 8 s (0x0044E120).
+        // A pirate at its base unloads everything at price 0 and stays 8 s.
         if (City* c = m_world->city(arrived.island, arrived.city); c != nullptr && c->owner == ship.owner) {
             for (CargoSlot& slot : ship.cargo) {
                 if (m_world->goods().is_trade(slot.ware)) {
@@ -1058,7 +1208,7 @@ std::optional<std::uint32_t> Fleet::arrive_at_target(Ship& ship) {
         if (City* c = m_world->city(arrived.island, arrived.city)) {
             c->trader_inbound = false;
             if (trader_trade(ship, *c)) {
-                wait = 8000;  // the trader stays 8 s after trading (0x00452370)
+                wait = 8000;  // the trader stays 8 s after trading
             }
         }
     } else if (ship.route.active) {
@@ -1101,7 +1251,7 @@ void Fleet::choose_next_target(Ship& ship) {
 }
 
 bool Fleet::ship_ahead(const Ship& ship) const {
-    // Another ship within kLookAhead in the direction the ship sails (0x004538A0).
+    // Another ship within kLookAhead in the direction the ship sails.
     bool ahead = false;
     near_ships(ship.x, ship.y, kLookAhead, [&](const Ship& o) {
         if (o.id == ship.id) {
@@ -1158,7 +1308,7 @@ void Fleet::decide(Ship& ship) {
             want_plan = true;
         }
     } else if (ship.target.kind == Target::Kind::Ship) {
-        // Following a moving ship: a new course at most every 2 s (0x00452370).
+        // Following a moving ship: a new course at most every 2 s.
         const std::uint64_t now = m_world->time_ms() * 1000ULL;
         if (now >= m.next_follow_us && m_plans_left != 0 && !at_target(ship, ship.target)) {
             m.next_follow_us = now + kFollowMs * 1000ULL;
@@ -1237,7 +1387,7 @@ bool Fleet::order(const ShipOrder& o) {
     ship->attack_move = o.attack_move && !o.target.empty();
     ship->hold = false;
     ShipMotion& m = ship->motion;
-    // The running run (at most two tiles) ends; then the ship plans (0x00448A10, 0x0044EBA0).
+    // The running run (at most two tiles) ends; then the ship plans.
     m.path.clear();
     m.path_index = 0;
     m.failures = 0;
@@ -1248,7 +1398,7 @@ bool Fleet::order(const ShipOrder& o) {
     if (ship->repairing) {
         ship->repairing = false;
     }
-    stop_exploring(*ship);  // every order ends the exploring (0x00448A10)
+    stop_exploring(*ship);  // every order ends the exploring
     ship->route.active = false;
     ship->previous = Target::position(ship->x, ship->y);
     ship->target = o.target;
@@ -1281,7 +1431,7 @@ bool Fleet::edit_route(const RouteEdit& e) {
                 }
             }
             route.stops[e.stop] = RouteStop{e.target, {}};
-            route.current = 0;  // the original starts the route anew (UI 0x00440B30)
+            route.current = 0;  // the original starts the route anew (UI)
             return true;
         case RouteEdit::Op::ClearStop:
             if (e.stop == 0xFF) {
@@ -1303,7 +1453,7 @@ bool Fleet::edit_route(const RouteEdit& e) {
             if (!route.has_stops()) {
                 return false;
             }
-            // Op 0x28: from the current stop, white flag and repair cancelled, a fresh course.
+            // From the current stop, white flag and repair cancelled, a fresh course.
             ship->previous = Target::position(ship->x, ship->y);
             ship->held = false;
             ship->repairing = false;
@@ -1384,7 +1534,7 @@ bool Fleet::may_trade(PlayerId ship_owner, PlayerId city_owner) const {
     if (city == nullptr || ship == nullptr) {
         return false;
     }
-    // A trade treaty of the ship's owner with the Kontor's (player + 0x130); the free trader trades
+    // A trade treaty of the ship's owner with the Kontor's; the free trader trades
     // everywhere.
     return m_world->behaviour(*ship) == FactionBehaviour::Trader ||
            m_world->diplomacy().may_trade(ship_owner, city_owner);
@@ -1392,7 +1542,7 @@ bool Fleet::may_trade(PlayerId ship_owner, PlayerId city_owner) const {
 
 std::uint32_t Fleet::move_goods(Ship& ship, City& city, std::uint8_t ware, bool to_ship, std::uint32_t amount,
                                 std::uint8_t hold, bool limits, std::uint16_t price) {
-    // The city side of 0x00484450 and the ship side of 0x00448120 in one step: the ship's room is
+    // The city side and the ship side in one step: the ship's room is
     // checked before anything leaves the Kontor, so no goods are lost and nobody pays for what does
     // not fit (S-073).
     city.ensure_ware(ware);
@@ -1507,7 +1657,7 @@ std::uint32_t Fleet::move_goods(Ship& ship, City& city, std::uint8_t ware, bool 
         city.book(ware, ship.owner == city.owner ? GoodsFlow::ShippedIn : GoodsFlow::Bought, n);
     }
     if (price != 0 && ship.owner != city.owner && !natives) {
-        // Trade makes friends (op 0x4A from 0x00484450): the Kontor's owner by half the value, the
+        // Trade makes friends: the Kontor's owner by half the value, the
         // ship's owner by a third.
         const auto value = static_cast<std::uint32_t>(std::uint64_t{price} * n / kTon);
         m_world->diplomacy().add_trade(city.owner, ship.owner, value / 2);
@@ -1526,9 +1676,9 @@ std::uint32_t Fleet::transfer(const CargoTransfer& t) {
     // The Kontor the ship lies at: the player's own first, else one it may trade with.
     std::optional<std::size_t> found;
     if (ship->cart()) {
-        // A cart at a market or Kontor of its own city exchanges goods, at a foreign one it trades
-        // with a trade treaty (TRADER.GAD 59004 and 59003).
-        for (const std::size_t i : cities_near_cart(*m_world, *m_buildings, ship->x, ship->y)) {
+        // A cart next to a market or Kontor of its own city exchanges goods, at a foreign one it
+        // trades with a trade treaty (TRADER.GAD 59004 and 59003).
+        for (const std::size_t i : cities_near_cart(*m_world, *m_buildings, ship->x, ship->y, kCartHandReach)) {
             const City& c = m_world->cities()[i];
             if (c.owner == ship->owner) {
                 found = i;
@@ -1622,7 +1772,7 @@ bool Fleet::set_trade(const TradeSetting& s) {
             t.buy = false;
             return true;
         case TradeSetting::Mode::Sell:
-            if (!t.sell) {  // switching on: keep nothing, half the base price (sub 0x20)
+            if (!t.sell) {  // switching on: keep nothing, half the base price
                 t.keep = 0;
                 t.sell_price = natives ? 0 : static_cast<std::uint16_t>(base * 64U / 128U);
             }
@@ -1636,7 +1786,7 @@ bool Fleet::set_trade(const TradeSetting& s) {
             }
             return true;
         case TradeSetting::Mode::Buy:
-            if (!t.buy) {  // up to the room, three quarters of the base price (sub 0x1D)
+            if (!t.buy) {  // up to the room, three quarters of the base price
                 t.limit = city->capacity;
                 t.buy_price = natives ? 0 : static_cast<std::uint16_t>(base * 96U / 128U);
             }
@@ -1656,7 +1806,7 @@ bool Fleet::set_trade(const TradeSetting& s) {
 // ---- Trade routes ------------------------------------------------------------------------------
 
 void Fleet::route_next_stop(Ship& ship) {
-    // 0x004556D0: the next stop with a target, wrapping round; three rounds with refused transfers
+    // The next stop with a target, wrapping round; three rounds with refused transfers
     // warn the player.
     TradeRoute& route = ship.route;
     std::size_t next = route.current;
@@ -1697,11 +1847,11 @@ bool Fleet::route_city_stop(Ship& ship, const RouteStop& stop) {
     if (city == nullptr || !may_trade(ship.owner, city->owner)) {
         return false;  // no treaty: skipped without a warning, like the original
     }
-    city->ships_gave_up = 0;  // a ship got through (0x00455347)
+    city->ships_gave_up = 0;  // a ship got through
     const bool foreign = city->owner != ship.owner;
     bool requested = false;
     const std::size_t entries = usable_route_entries(ship, *m_figures);
-    // Unloads first, then loads; entries of the same ware add up (0x00455000).
+    // Unloads first, then loads; entries of the same ware add up.
     for (int pass = 0; pass < 2; ++pass) {
         const bool unload = pass == 0;
         std::array<bool, RouteStop::kEntries> done{};
@@ -1752,7 +1902,7 @@ bool Fleet::route_ship_stop(Ship& ship, const RouteStop& stop) {
     if (other == nullptr || other == &ship || (other->owner != ship.owner && !pirate)) {
         return false;
     }
-    // 0x004553C0: goods between the two ships, no money (pirates plunder this way).
+    // Goods between the two ships, no money (pirates plunder this way).
     bool moved_any = false;
     const std::size_t entries = usable_route_entries(ship, *m_figures);
     for (std::size_t k = 0; k < entries; ++k) {

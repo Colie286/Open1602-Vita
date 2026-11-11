@@ -5,6 +5,7 @@
 #include <charconv>
 #include <cmath>
 #include <limits>
+#include <cstdlib>
 
 #include "o1602/ui/panel.hpp"
 
@@ -33,6 +34,9 @@ bool read_number(std::string_view value, std::int32_t lo, std::int32_t hi, std::
     out = std::clamp(n, lo, hi);
     return true;
 }
+
+/// The values of "display.event_speed", in the order of EventSpeed.
+constexpr std::array<std::string_view, 3> kEventSpeedNames = {"normal", "attacks", "keep"};
 
 const char* on_off(bool on) {
     return on ? "on" : "off";
@@ -112,6 +116,42 @@ std::int32_t edge_speed_at(double position) noexcept {
 double edge_speed_position(std::int32_t speed) noexcept {
     const std::int32_t s = std::clamp(speed, kEdgeSpeedMin, kEdgeSpeedMax);
     return static_cast<double>(s - kEdgeSpeedMin) / (kEdgeSpeedMax - kEdgeSpeedMin);
+}
+
+namespace {
+
+/// The index in kAutosaveMinutes nearest to `minutes`.
+std::size_t autosave_index(std::int32_t minutes) noexcept {
+    std::size_t best = 0;
+    for (std::size_t i = 1; i < kAutosaveMinutes.size(); ++i) {
+        if (std::abs(kAutosaveMinutes[i] - minutes) < std::abs(kAutosaveMinutes[best] - minutes)) {
+            best = i;
+        }
+    }
+    return best;
+}
+
+}  // namespace
+
+std::int32_t autosave_at(double position) noexcept {
+    if (!std::isfinite(position)) {
+        return kAutosaveDefault;
+    }
+    constexpr double kLast = static_cast<double>(kAutosaveMinutes.size() - 1);
+    const auto i = static_cast<std::size_t>(std::lround(std::clamp(position, 0.0, 1.0) * kLast));
+    return kAutosaveMinutes[i];
+}
+
+double autosave_position(std::int32_t minutes) noexcept {
+    return static_cast<double>(autosave_index(minutes)) / static_cast<double>(kAutosaveMinutes.size() - 1);
+}
+
+std::int32_t next_autosave(std::int32_t minutes, bool forward) noexcept {
+    const std::size_t i = autosave_index(minutes);
+    if (forward) {
+        return kAutosaveMinutes[std::min(i + 1, kAutosaveMinutes.size() - 1)];
+    }
+    return kAutosaveMinutes[i == 0 ? 0 : i - 1];
 }
 
 std::int32_t next_ui_scale(std::int32_t current) noexcept {
@@ -201,8 +241,29 @@ bool read_display_line(DisplaySettings& s, std::string_view key, std::string_vie
     if (key == "rival_wars") {
         return read_flag(value, s.rival_wars);
     }
+    if (key == "event_speed") {
+        for (std::size_t i = 0; i < kEventSpeedNames.size(); ++i) {
+            if (value == kEventSpeedNames[i]) {
+                s.event_speed = static_cast<EventSpeed>(i);
+                return true;
+            }
+        }
+        return false;
+    }
     if (key == "plant_fields") {
         return read_flag(value, s.plant_fields);
+    }
+    if (key == "autosave") {
+        if (value == "off") {
+            s.autosave_minutes = 0;
+            return true;
+        }
+        std::int32_t n = 0;
+        if (!read_number(value, 0, kAutosaveMinutes.back(), n)) {
+            return false;
+        }
+        s.autosave_minutes = kAutosaveMinutes[autosave_index(n)];  // one of those offered
+        return true;
     }
     if (key == "graphics") {
         if (value == "classic" || value == "modern") {
@@ -239,10 +300,15 @@ std::string write_display(const DisplaySettings& s) {
     out += std::string("display.goods_trend = ") + on_off(s.goods_trend) + "\n";
     out += "# Tell when two other players go to war or make peace\n";
     out += std::string("display.rival_wars = ") + on_off(s.rival_wars) + "\n";
+    out += "# Which messages set the game back to normal speed: normal (all, original), attacks, keep (none)\n";
+    out += "display.event_speed = " + std::string(kEventSpeedNames[static_cast<std::size_t>(s.event_speed)]) + "\n";
     out += "# A new farm plants its fields on the open ground around it at once\n";
     out += std::string("display.plant_fields = ") + on_off(s.plant_fields) + "\n";
     out += "# classic: shadows and smoke as the original draws them (every second pixel); modern: blended\n";
     out += std::string("display.graphics = ") + (s.classic_graphics ? "classic" : "modern") + "\n";
+    out += "# Keep the game as lastgame every so many minutes of game time (off, 5, 10, 15, 20, 30, 60)\n";
+    out += "display.autosave = " + (s.autosave_minutes > 0 ? std::to_string(s.autosave_minutes) : std::string("off")) +
+           "\n";
     return out;
 }
 

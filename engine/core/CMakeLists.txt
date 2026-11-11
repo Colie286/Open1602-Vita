@@ -11,6 +11,7 @@ add_library(o1602_core
     src/png_reader.cpp
     src/png_writer.cpp
     src/text.cpp
+    src/zip_archive.cpp
 )
 add_library(o1602::core ALIAS o1602_core)
 

@@ -2,6 +2,7 @@
 #include "o1602/assets/figure_table.hpp"
 
 #include <algorithm>
+#include <string>
 
 #include "o1602/assets/cod.hpp"
 #include "o1602/assets/cod_predefined.hpp"
@@ -172,6 +173,79 @@ std::uint32_t figure_sprite(const FigureType& type, std::size_t anim, std::uint3
         return type.gfx + a->offset + a->add * frame + dir * a->rotate;
     }
     return type.gfx + dir * type.rotate;
+}
+
+core::Result<std::uint32_t> FigureTable::add(const FigureType& like) {
+    for (std::uint32_t number = kMaxFigures; number-- > 0;) {
+        if (number >= m_types.size() || !m_types[number].defined) {
+            if (number >= m_types.size()) {
+                m_types.resize(std::size_t{number} + 1);
+            }
+            FigureType f = like;
+            f.number = number;
+            f.defined = true;
+            m_types[number] = std::move(f);
+            return number;
+        }
+    }
+    return make_error(ErrorCode::Unsupported,
+                      "figuren.cod has no number free below " + std::to_string(kMaxFigures) + " for another figure");
+}
+
+core::Result<std::uint32_t> FigureTable::add_unit_family(std::span<const FigureType> colours) {
+    if (colours.size() != kUnitVariants) {
+        return make_error(ErrorCode::OutOfRange, "a unit family has " + std::to_string(kUnitVariants) + " colours");
+    }
+    const auto first = add_block(colours);
+    if (!first) {
+        return make_error(ErrorCode::Unsupported, "figuren.cod has no " + std::to_string(kUnitVariants) +
+                                                      " numbers in a row free below " + std::to_string(kMaxFigures) +
+                                                      " for another unit");
+    }
+    m_unit_families.push_back(*first);
+    return *first;
+}
+
+core::Result<std::uint32_t> FigureTable::add_ship(std::span<const FigureType> ship_and_wreck, std::uint8_t type) {
+    if (ship_and_wreck.size() != 2 || type >= figure::kShips.size()) {
+        return make_error(ErrorCode::OutOfRange, "a ship of a package is a ship and its wreck, of one of " +
+                                                     std::to_string(figure::kShips.size()) + " types");
+    }
+    const auto first = add_block(ship_and_wreck);
+    if (!first) {
+        return make_error(ErrorCode::Unsupported, "figuren.cod has no 2 numbers in a row free below " +
+                                                      std::to_string(kMaxFigures) + " for another ship");
+    }
+    m_ships.emplace_back(*first, type);
+    return *first;
+}
+
+std::optional<std::uint32_t> FigureTable::add_block(std::span<const FigureType> figures) {
+    const auto n = static_cast<std::uint32_t>(figures.size());
+    if (n == 0 || n > kMaxFigures) {
+        return std::nullopt;
+    }
+    const auto free = [&](std::uint32_t number) { return number >= m_types.size() || !m_types[number].defined; };
+    for (std::uint32_t first = kMaxFigures - n + 1; first-- > 0;) {
+        bool room = true;
+        for (std::uint32_t k = 0; k < n && room; ++k) {
+            room = free(first + k);
+        }
+        if (!room) {
+            continue;
+        }
+        if (std::size_t{first} + n > m_types.size()) {
+            m_types.resize(std::size_t{first} + n);
+        }
+        for (std::uint32_t k = 0; k < n; ++k) {
+            FigureType f = figures[k];
+            f.number = first + k;
+            f.defined = true;
+            m_types[first + k] = std::move(f);
+        }
+        return first;
+    }
+    return std::nullopt;
 }
 
 core::Result<FigureTable> FigureTable::load(const GameDirectory& game) {

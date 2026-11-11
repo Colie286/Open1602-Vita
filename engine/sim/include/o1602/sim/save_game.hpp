@@ -31,6 +31,10 @@ inline constexpr std::string_view kSaveExtension = ".o1602";
 struct SaveOptions {
     /// Compress the sections with zlib (if the build has zlib; otherwise they are stored as they are).
     bool compress = true;
+    /// Pack a large game (sections over 64 MiB, a world of thousands of tiles a side) at zlib's
+    /// fastest level: about four times as fast, the file about half as large again. For saving to
+    /// disk while the game waits; a game sent over the network keeps the smaller file.
+    bool fast = false;
 };
 
 /// What the section META of a savegame says (docs/formats/o1602-save.md), for a list of savegames.
@@ -39,6 +43,11 @@ struct SaveMeta {
     std::uint32_t height = 0;
     std::uint64_t time_ms = 0;  ///< game time
     std::string player;         ///< name of the first human player (Windows-1252)
+    /// A scenario of the editor (section SCNI after META): its stars, flags and names; author,
+    /// version and briefings where the head read holds them whole, else empty. Nothing for a
+    /// savegame.
+    std::optional<ScenarioInfo> scenario;
+    bool edited = false;  ///< a running game changed in the editor (section EDTD)
 };
 
 /// What the header of a savegame says, for a list of savegames.
@@ -73,6 +82,11 @@ struct SaveInfo {
 [[nodiscard]] core::Result<SaveInfo> save_info(std::span<const std::uint8_t> head, std::uint64_t file_size);
 /// How much of a savegame save_info needs: the header and the packed head of the sections.
 inline constexpr std::size_t kSaveInfoHead = 64 * 1024;
+/// The description of a scenario (SCNI) whole, with its briefings, from the start of its file
+/// (`bytes`, kScenarioHead bytes are enough); nothing for a savegame or a damaged head.
+[[nodiscard]] std::optional<ScenarioInfo> scenario_info_of(std::span<const std::uint8_t> bytes,
+                                                           std::uint64_t file_size);
+inline constexpr std::size_t kScenarioHead = 1024 * 1024;
 
 /// Loads a savegame. Fails (with nothing loaded) if the file is damaged, of a newer Open1602,
 /// names buildings the game's data does not have or does not hold together (validate.hpp). With

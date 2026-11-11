@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstddef>
+#include <string>
 
 #include "o1602/ui/localization.hpp"
 
@@ -13,11 +14,29 @@ namespace {
 constexpr std::array<const char*, sim::kOriginalPlayers> kColourNames = {"player.colour.red", "player.colour.blue",
                                                                          "player.colour.yellow", "player.colour.white"};
 // In the order of render::BannerTable::add_more_players.
-constexpr std::array<const char*, sim::kMaxPlayers - sim::kOriginalPlayers> kMoreColourNames = {
+constexpr std::array<const char*, 8> kMoreColourNames = {
     "player.colour.orange",  "player.colour.green", "player.colour.teal",   "player.colour.pink",
     "player.colour.magenta", "player.colour.grey",  "player.colour.purple", "player.colour.brown"};
 
+/// The name of the further player `more` (0 = the fifth): its colour for the eight colours with a
+/// name, else "Player N" (a higher sim::kMaxPlayers, render::BannerTable::generated_colour).
+std::string more_player_name(std::size_t more) {
+    return more < kMoreColourNames.size()
+               ? ui::tr(kMoreColourNames[more])
+               : ui::tr("player.default", {std::to_string(sim::kOriginalPlayers + more + 1)});
+}
+
+// The lobby's names of the colours, in the order of the players (BannerTable::add_more_players).
+constexpr std::array<const char*, 12> kLobbyColours = {"net.colour.red",   "net.colour.blue",   "net.colour.yellow",
+                                                       "net.colour.white", "net.colour.orange", "net.colour.green",
+                                                       "net.colour.teal",  "net.colour.pink",   "net.colour.magenta",
+                                                       "net.colour.grey",  "net.colour.purple", "net.colour.brown"};
+
 }  // namespace
+
+std::string player_colour_name(std::size_t n) {
+    return n < kLobbyColours.size() ? ui::tr(kLobbyColours[n]) : ui::tr("net.colour.number", {std::to_string(n + 1)});
+}
 
 void name_more_players(sim::World& world) {
     // Only a game that has not run yet: later a person may have taken a slot and its name.
@@ -28,7 +47,7 @@ void name_more_players(sim::World& world) {
         sim::Player* p = world.player(sim::player_slot(n));
         if (p != nullptr && p->role == sim::PlayerRole::Computer &&
             p->banner == sim::kFirstExtraBanner + (n - sim::kOriginalPlayers) && p->name.empty()) {
-            p->name = ui::tr(kMoreColourNames[n - sim::kOriginalPlayers]);
+            p->name = more_player_name(n - sim::kOriginalPlayers);
         }
     }
 }
@@ -38,8 +57,9 @@ std::string colour_player_name(sim::BannerId banner, const std::vector<std::stri
         return banner < colour_names.size() && !colour_names[banner].empty() ? colour_names[banner]
                                                                              : ui::tr(kColourNames[banner]);
     }
-    if (banner >= sim::kFirstExtraBanner && std::size_t{banner} - sim::kFirstExtraBanner < kMoreColourNames.size()) {
-        return ui::tr(kMoreColourNames[banner - sim::kFirstExtraBanner]);
+    if (banner >= sim::kFirstExtraBanner &&
+        std::size_t{banner} - sim::kFirstExtraBanner < sim::kMaxPlayers - sim::kOriginalPlayers) {
+        return more_player_name(banner - sim::kFirstExtraBanner);
     }
     return ui::tr("player.default", {std::to_string(banner + 1)});
 }

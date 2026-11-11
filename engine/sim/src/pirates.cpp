@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Pirates at sea (docs/re/pirates.md): new ships, arming, hunting, plunder, the nest's sales.
+// Pirates at sea: new ships, arming, hunting, plunder, the nest's sales.
 #include <algorithm>
 #include <limits>
 
@@ -12,9 +12,9 @@ namespace o1602::sim {
 
 namespace {
 
-constexpr std::uint32_t kPirateStepMs = 10'000;  // the pirates' AI step (0x0042B4B0)
+constexpr std::uint32_t kPirateStepMs = 10'000;  // the pirates' AI step
 constexpr std::uint8_t kMaxPirateCannons = 10;   // Maxkanon of PIRAT
-constexpr std::int32_t kWanderRange = 90;        // tiles: random places at sea (0x004455F0)
+constexpr std::int32_t kWanderRange = 90;        // tiles: random places at sea
 constexpr std::uint32_t kNestFoodMin = 25 * 32;  // the nest sells when it holds more food
 constexpr std::uint32_t kNestFoodCost = 10 * 32;
 constexpr std::uint16_t kValuable = 35;  // base price of Tabak: plunder is worth at least this
@@ -23,11 +23,14 @@ constexpr std::uint32_t kPlunderAmount = 50 * 32;
 }  // namespace
 
 PlayerId Fleet::pirates() const {
-    return m_world->first_of(FactionBehaviour::Pirates);
+    // The pirates the game steers: a scripted faction's ships sail and plunder as its scripts say.
+    const PlayerId p = m_world->first_of(FactionBehaviour::Pirates);
+    const Player* player = m_world->player(p);
+    return player != nullptr && m_world->faction(*player).scripted ? kNoPlayer : p;
 }
 
 std::uint32_t pirate_max_ships(const World& world) noexcept {
-    // Pirates_MaxShips 0x0040F310: by the highest level any player reached (infra::kShipSteps).
+    // By the highest level any player reached (infra::kShipSteps).
     // Level 2D (75 settlers) would allow one ship, but the pirates need at least two to start (original).
     std::uint32_t best = 0;
     for (const Player& p : world.players()) {
@@ -96,7 +99,6 @@ void Fleet::pirates_tick(std::uint32_t dt_ms) {
 }
 
 void Fleet::pirates_step() {
-    // Pirates_Step 0x00429FD0.
     const PlayerId p = pirates();
     const World::GameSettings& settings = m_world->game_settings();
     const std::uint32_t max = pirate_max_ships(*m_world);
@@ -193,7 +195,7 @@ void Fleet::pirates_step() {
             }
         }
     }
-    // The nests: with enough food each eats 10 t and offers its goods once more (0x0041DD80; the
+    // The nests: with enough food each eats 10 t and offers its goods once more (the
     // original has only one). The regular offer comes from the pirates' task 5 (pirate_develop).
     if (ships != 0) {
         for (const std::size_t b : bases) {
@@ -266,17 +268,17 @@ void pirate_nest_offer(World& world, const assets::BuildingTable& buildings, Cit
 }
 
 void Fleet::pirate_choose(Ship& ship) {
-    // An idle pirate (0x00452370): one time in four it goes after a player's ship, otherwise to a
+    // An idle pirate: one time in four it goes after a player's ship, otherwise to a
     // random place at sea, and only if three of those fail to one of its bases.
     Random& random = m_world->random(RandomStream::Pirates);
     const PlayerId p = ship.owner;
     ship.held = false;
     ship.repairing = false;
     // Prey are ships (no carts) that have not surrendered: a ship under the white flag is left
-    // alone, and so is a player who has no other (0x0044F000: kinds 1-3 without flag +0x11 bit 4).
+    // alone, and so is a player who has no other (kinds 1-3 without flag +0x11 bit 4).
     const auto is_prey = [](const Ship& s) { return !s.sinking && !s.cart() && !s.held; };
     if ((random.next() & 3U) == 0) {
-        // Pirate_FindPrey 0x004488D0: a player the pirates do not like, with a ship.
+        // A player the pirates do not like, with a ship.
         PlayerId prey_owner = kNoPlayer;
         std::int64_t best = 0;
         for (std::size_t b = 0; b < m_world->players().size(); ++b) {
@@ -319,8 +321,7 @@ void Fleet::pirate_choose(Ship& ship) {
             }
         }
     }
-    // Pirate_RandomSeaPos 0x004455F0 draws with the world twins of Island_RandomX (0x004432C0 and
-    // 0x004432F0): base + r - 2 * (rand() % r), clamped to the map, so only offsets of r's parity.
+    // The original draws base + r - 2 * (rand() % r), clamped to the map, so only offsets of r's parity.
     const auto random_coord = [&random](std::uint32_t base, std::uint32_t size) {
         const std::int32_t v =
             static_cast<std::int32_t>(base) + kWanderRange - 2 * static_cast<std::int32_t>(random.below(kWanderRange));
@@ -344,7 +345,7 @@ void Fleet::pirate_choose(Ship& ship) {
 }
 
 bool Fleet::plunder(Ship& pirate, Ship& victim) {
-    // Pirate_BuildPlunderRoute 0x00455840: the victim ship twice, then a pirate base twice; up to
+    // The victim ship twice, then a pirate base twice; up to
     // six valuable holds, 50 t each, from the victim to the base. Peace with the victim's owner in
     // any case, also when nothing comes of it (original).
     const PlayerId p = pirate.owner;
@@ -373,7 +374,7 @@ bool Fleet::plunder(Ship& pirate, Ship& victim) {
             ++n;
         }
         if (n != 0) {
-            // Op 0x28 value 1: the route starts at its first stop.
+            // The route starts at its first stop.
             route.active = true;
             route.one_way = true;
             route.current = 0;
@@ -382,7 +383,7 @@ bool Fleet::plunder(Ship& pirate, Ship& victim) {
             any = true;
         }
         // The surrender pleases the pirates whether or not there was loot (events 9 and 6 after
-        // 0x00455840 returns, 0x00452BE0): without this they would declare war again at their
+        // The original returns): without this they would declare war again at their
         // next look and hunt the same ship until it sinks.
         Diplomacy& d = m_world->diplomacy();
         for (std::size_t b = 0; b < m_world->players().size(); ++b) {
@@ -393,6 +394,7 @@ bool Fleet::plunder(Ship& pirate, Ship& victim) {
         }
         d.add_event(p, victim.owner, DiplomacyEventType::Surrendered, m_world->time_ms());
     }
+    victim.plundered = true;  // once per surrender: the pirates leave the ship alone now
     if (!any) {
         const Player* owner = m_world->player(victim.owner);
         if (owner != nullptr && owner->role != PlayerRole::Human) {

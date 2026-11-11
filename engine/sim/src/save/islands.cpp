@@ -43,7 +43,13 @@ void io_island(A& a, I& i, std::uint16_t version) {
             a.u8(d.x);
             a.u8(d.y);
         }
-        a.u8(d.mask);  // the first 8 players; all bits in XPLR
+        if constexpr (A::kReading) {
+            std::uint8_t low = 0;
+            a.u8(low);
+            d.mask = low;
+        } else {
+            a.u8(d.mask.word(0));  // the first 8 players; all of them in XPLR
+        }
         a.u8(d.kind);
         a.u16(d.amount);
     });
@@ -51,9 +57,27 @@ void io_island(A& a, I& i, std::uint16_t version) {
 }
 
 template <class A, class E>
-void io_explored(A& a, E& e) {
+void io_explored(A& a, E& e, std::uint16_t version) {
     a.bools(e.explored);
-    a.u32s(e.deposit_masks);
+    a.list(e.deposit_masks, 4, [&](auto& mask) {
+        if constexpr (A::kReading) {
+            std::vector<std::uint32_t> words(1, 0);
+            if (version >= kWideDepositKnowledge) {
+                a.u32s(words);
+            } else {
+                a.u32(words[0]);
+            }
+            mask = assets::SlotSet::from_words(words);
+        } else if (version >= kWideDepositKnowledge) {
+            std::vector<std::uint32_t> words(mask.word_count());
+            for (std::size_t i = 0; i < words.size(); ++i) {
+                words[i] = mask.word(i);
+            }
+            a.u32s(words);
+        } else {
+            a.u32(mask.word(0));
+        }
+    });
 }
 
 }  // namespace
@@ -101,20 +125,31 @@ std::vector<Decoded::IslandPart> read_islands(Reader& in, std::uint16_t version)
     return list;
 }
 
-void write_explored(Writer& out, const World& w) {
+std::uint16_t explored_version(const World& w) {
+    for (const WorldIsland& i : w.islands()) {
+        for (const auto& d : i.header.deposits) {
+            if (d.mask.word_count() > 1) {
+                return kWideDepositKnowledge;
+            }
+        }
+    }
+    return 1;
+}
+
+void write_explored(Writer& out, const World& w, std::uint16_t version) {
     out.list(w.islands(), 8, [&](const WorldIsland& i) {
         Decoded::ExplorePart part;
         part.explored = i.explored;
         for (const auto& d : i.header.deposits) {
             part.deposit_masks.push_back(d.mask);
         }
-        io_explored(out, std::as_const(part));
+        io_explored(out, std::as_const(part), version);
     });
 }
 
-std::vector<Decoded::ExplorePart> read_explored(Reader& in) {
+std::vector<Decoded::ExplorePart> read_explored(Reader& in, std::uint16_t version) {
     std::vector<Decoded::ExplorePart> list;
-    in.list(list, 8, [&](Decoded::ExplorePart& part) { io_explored(in, part); });
+    in.list(list, 8, [&](Decoded::ExplorePart& part) { io_explored(in, part, version); });
     return list;
 }
 

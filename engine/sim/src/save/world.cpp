@@ -49,6 +49,19 @@ enum RuleKey : std::uint16_t {
     kRevealNone = 41,       // 1: Reveal::None, under its own key so older versions read the original's way
     kNoShipPurchases = 42,  // 1: the computers buy no ships (Rules::computers_buy_ships off)
     kBugNativeLand = 43,
+    kOneCart = 44,          // 1: one trade cart per player and island (Rules::more_carts off)
+    kFertileFields = 45,    // 1: poor ground takes nothing from a field (Rules::fertile_fields)
+    kMoving = 46,           // Rules::moving other than Moving::Free
+    kClimateCrops = 47,     // 1: every island grew its climate's crops fully (Rules::climate_crops)
+    kBigOreVeins = 48,      // 1: every iron vein was a big one at the start (Rules::big_ore_veins)
+    kWiderHunting = 49,     // 1: the hunter's hut reaches further (Rules::wider_hunting)
+    kCheats = 50,           // Rules::cheats (Code when missing)
+    kPlagues = 51,          // Rules::plagues, when not the original's
+    kFires = 52,            // Rules::fires, when not the original's
+    kRareEruptions = 53,    // 1: Volcanoes::Rare, under its own key so older versions read the game's way
+    kEventSpeed = 54,       // no longer read: the speed at events became an option of each computer
+    kShipHolds = 55,        // 1: the large merchant ship has 8 holds, the warship 6 (Rules::large_ship_holds)
+    kRevealResources = 56,  // 1: every island explored by everyone from the start (Rules::reveal_resources)
     // The victory conditions (VictoryConditions).
     kWinInhabitants = 11,
     kWinResidentClass = 12,
@@ -154,7 +167,7 @@ void write_rules(Writer& out, const Rules& r) {
         {kGuaranteeResources, r.guarantee_resources ? 1U : 0U},
         {kMaxGameSpeed, r.max_game_speed},
         {kDroughts, static_cast<std::uint32_t>(r.droughts)},
-        {kVolcanoRule, static_cast<std::uint32_t>(r.volcanoes)},
+        {kVolcanoRule, static_cast<std::uint32_t>(r.volcanoes == Volcanoes::Rare ? Volcanoes::Game : r.volcanoes)},
         {kTraderPrices, static_cast<std::uint32_t>(r.trader_prices)},
         {kMaxArmy, r.max_army},
         {kClassicAi, r.bugs.classic_ai ? 1U : 0U},
@@ -185,13 +198,55 @@ void write_rules(Writer& out, const Rules& r) {
     if (r.computer_players != Computers::Game) {
         values.emplace_back(kComputerPlayers, static_cast<std::uint32_t>(r.computer_players));
     }
-    // The revised bread chain only when it is on: off is the original, so older games keep their bytes.
+    // The revised bread chain only when it is on: the games of the versions before it, which have no
+    // key, played the original's chain (read_rules).
     if (r.revised_bread) {
         values.emplace_back(kRevisedBread, 1U);
     }
     // The computers' purchases of ships only when off: on is Open1602's way.
     if (!r.computers_buy_ships) {
         values.emplace_back(kNoShipPurchases, 1U);
+    }
+    // One trade cart per island only when so: more is Open1602's way.
+    if (!r.more_carts) {
+        values.emplace_back(kOneCart, 1U);
+    }
+    // Every field bearing only when so: the original's way keeps the bytes.
+    if (r.fertile_fields) {
+        values.emplace_back(kFertileFields, 1U);
+    }
+    // Moving buildings only when not free, which is Open1602's way.
+    if (r.moving != Moving::Free) {
+        values.emplace_back(kMoving, static_cast<std::uint32_t>(r.moving));
+    }
+    if (r.climate_crops) {
+        values.emplace_back(kClimateCrops, 1U);
+    }
+    if (r.big_ore_veins) {
+        values.emplace_back(kBigOreVeins, 1U);
+    }
+    if (r.reveal_resources) {
+        values.emplace_back(kRevealResources, 1U);
+    }
+    if (r.cheats != Cheats::Code) {
+        values.emplace_back(kCheats, static_cast<std::uint32_t>(r.cheats));
+    }
+    if (r.wider_hunting) {
+        values.emplace_back(kWiderHunting, 1U);
+    }
+    if (r.large_ship_holds) {
+        values.emplace_back(kShipHolds, 1U);
+    }
+    // Rarer eruptions and outbreaks only when not the original's: the original's way keeps the
+    // bytes.
+    if (r.volcanoes == Volcanoes::Rare) {
+        values.emplace_back(kRareEruptions, 1U);
+    }
+    if (r.plagues != Outbreaks::Original) {
+        values.emplace_back(kPlagues, static_cast<std::uint32_t>(r.plagues));
+    }
+    if (r.fires != Outbreaks::Original) {
+        values.emplace_back(kFires, static_cast<std::uint32_t>(r.fires));
     }
     // The towns shown from the start only when there are any: the original's way keeps the bytes.
     if (r.reveal == Reveal::All) {
@@ -233,6 +288,11 @@ void write_rules(Writer& out, const Rules& r) {
 
 Rules read_rules(Reader& in) {
     Rules r;
+    // Without its key a game plays the original's bread chain, as the versions before the key did.
+    r.revised_bread = false;
+    r.wider_hunting = false;      // the same for the hunter's hut
+    r.large_ship_holds = false;   // and for the large ships' holds
+    bool rare_eruptions = false;  // applies to the game's way only, whichever key comes first
     const std::uint32_t n = in.in().count(6);
     for (std::uint32_t i = 0; i < n; ++i) {
         const std::uint16_t key = in.in().u16();
@@ -317,6 +377,42 @@ Rules read_rules(Reader& in) {
             case kNoShipPurchases:
                 r.computers_buy_ships = v == 0;
                 break;
+            case kOneCart:
+                r.more_carts = v == 0;
+                break;
+            case kFertileFields:
+                r.fertile_fields = v != 0;
+                break;
+            case kMoving:
+                r.moving = static_cast<Moving>(std::min<std::uint32_t>(v, static_cast<std::uint32_t>(Moving::Off)));
+                break;
+            case kClimateCrops:
+                r.climate_crops = v != 0;
+                break;
+            case kBigOreVeins:
+                r.big_ore_veins = v != 0;
+                break;
+            case kRevealResources:
+                r.reveal_resources = v != 0;
+                break;
+            case kCheats:
+                r.cheats = v <= static_cast<std::uint32_t>(Cheats::Off) ? static_cast<Cheats>(v) : Cheats::Code;
+                break;
+            case kWiderHunting:
+                r.wider_hunting = v != 0;
+                break;
+            case kShipHolds:
+                r.large_ship_holds = v != 0;
+                break;
+            case kRareEruptions:
+                rare_eruptions = v != 0;
+                break;
+            case kPlagues:
+                r.plagues = static_cast<Outbreaks>(std::min<std::uint32_t>(v, 2));
+                break;
+            case kFires:
+                r.fires = static_cast<Outbreaks>(std::min<std::uint32_t>(v, 2));
+                break;
             case kWinInhabitants:
                 r.victory.inhabitants = v;
                 break;
@@ -356,6 +452,9 @@ Rules read_rules(Reader& in) {
             default:
                 break;  // a setting of a later version
         }
+    }
+    if (rare_eruptions && r.volcanoes == Volcanoes::Game) {
+        r.volcanoes = Volcanoes::Rare;
     }
     return r;
 }

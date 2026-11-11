@@ -71,23 +71,27 @@ public:
 
     /// Takes all widgets away for a new layout; the pressed and the focused widget stay by Id.
     void clear() { m_widgets.clear(); }
+    /// Forgets the button held: its release clicks nothing (the widgets changed beneath it).
+    void cancel_press() noexcept { m_pressed.reset(); }
 
     /// A framed background.
     void panel(Rect r);
-    /// A plain rectangle of a palette colour (a banner's colour).
-    void swatch(Rect r, std::uint8_t colour);
+    /// A plain rectangle of a palette colour or a colour of its own (ui::rgb_ink): a banner's colour,
+    /// which the palette does not have for every banner (no pink, no violet).
+    void swatch(Rect r, std::int32_t colour);
     /// Text in the box, cut to its width; vertically centred.
     void label(Rect r, std::string text, Align align = Align::Left, Tone tone = Tone::Normal);
     /// A line of a chat, left aligned and cut to the box as one text: the speaker's name in palette
     /// colour `ink` (their banner's colour), what follows it (": Hallo") in the tone.
-    void speech(Rect r, std::string speaker, std::uint8_t ink, std::string text, Tone tone = Tone::Normal);
+    void speech(Rect r, std::string speaker, std::int32_t ink, std::string text, Tone tone = Tone::Normal);
     /// A label on the left and its value on the right of one box, as a list of settings shown
     /// only: the value gets the room it needs, the label what is left.
     void entry(Rect r, std::string label, std::string value, Tone label_tone = Tone::Normal,
                Tone value_tone = Tone::Normal);
     /// Text wrapped into the lines of the box (`line` design units apart); what does not fit is
-    /// left out.
-    void paragraph(Rect r, std::string text, Tone tone = Tone::Normal, std::int32_t line = 22);
+    /// left out. With a `fallback`, that is shown instead where `text` does not fit whole.
+    void paragraph(Rect r, std::string text, Tone tone = Tone::Normal, std::int32_t line = 22,
+                   std::string fallback = {});
     void button(Id id, Rect r, std::string text, bool enabled = true, bool selected = false);
     /// A button that goes through values: the left button chooses the next, the right one the
     /// previous (clicked_with() tells which). Other widgets answer the left button only.
@@ -105,6 +109,12 @@ public:
     /// A bar that fills from the left as something goes on: `done` of it (0..1), in the frame's
     /// gold inside a field's ground.
     void progress(Rect r, double done);
+    /// A box that explains what lies under the mouse (a setting's tooltip): framed like a panel,
+    /// opaque, the text wrapped to at most kTooltipWidth, below `anchor` (the thing it explains)
+    /// or above it where the screen ends, always within the 1024 x 768 design. Laid out last, it
+    /// lies over everything; it takes no clicks.
+    void tooltip(Rect anchor, std::string text);
+    static constexpr std::int32_t kTooltipWidth = 420;
 
     /// The field that takes the keys, if any.
     [[nodiscard]] std::optional<Id> focus() const noexcept { return m_focus; }
@@ -156,17 +166,19 @@ public:
             Check,
             Row,
             Slider,
-            Progress
+            Progress,
+            Tooltip
         };
         Kind kind = Kind::Label;
         Id id = 0;
         Rect rect;
         std::string text;
-        std::string value;  ///< entry: the text on the right; speech: what follows the name
+        std::string value;  ///< entry: the text on the right; speech: what follows the name; paragraph: the fallback
         Align align = Align::Left;
         Tone tone = Tone::Normal;
         Tone value_tone = Tone::Normal;  ///< entry
-        std::uint8_t colour = 0;         ///< swatch: its colour; speech: the name's
+        std::int32_t colour = 0;         ///< swatch: its colour (a palette colour or ui::rgb_ink)
+        std::int32_t ink = -1;           ///< speech: the name's (a palette colour or ui::rgb_ink)
         std::int32_t line = 0;           ///< paragraph: line height
         double position = 0.0;           ///< slider: where the knob is; progress: how far (0..1)
         bool enabled = true;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Frame stepping of figure animations (ANIM objects of figuren.cod), as the original advances
-// them once per displayed frame (0x0045D0B0): after AnimAnz frames of AnimSpeed ms an animation
+// them once per displayed frame: after AnimAnz frames of AnimSpeed ms an animation
 // has run once; after AnimRept runs ENDLESS starts over, JUMPTO continues with AnimNr[0] and
 // RANDOM with a random entry of AnimNr. The original uses rand(); Open1602 keeps a small
 // generator per figure so a picture at a given time is reproducible.

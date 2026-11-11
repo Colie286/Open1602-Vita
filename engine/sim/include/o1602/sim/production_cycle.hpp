@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The production cycle of workshops, farms, mines, hunters, fishers and markets, once per game
-// second (the original's 0x0047DAF0, docs/re/production.md):
+// second:
 //
 // A switched-on building counts down the seconds of its running cycle. When the cycle ends,
 // the raw material it used is taken and its product added to the store (scaled by the cycle's
@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "o1602/assets/building_table.hpp"
+#include "o1602/assets/figure_table.hpp"
 #include "o1602/sim/world.hpp"
 
 namespace o1602::sim {
@@ -29,6 +30,7 @@ struct ProductionEvent {
         Started,        ///< a cycle with rate > 0 started after an idle one
         Stopped,        ///< no new cycle after a working one
         NeedsRawGoods,  ///< the building asks for `ware` (carriers, farmers, miners, market carts)
+        VeinExhausted,  ///< a mine found its vein exhausted (once per mine, MELDUNG 0x2D)
     };
     Kind kind = Kind::Produced;
     std::uint32_t production = 0;  ///< index into World::productions()
@@ -36,7 +38,7 @@ struct ProductionEvent {
     std::uint8_t ware = 0;
 };
 
-/// Seconds a building waits when it cannot start a cycle (0x0047DCEB: 11).
+/// Seconds a building waits when it cannot start a cycle (11).
 inline constexpr std::uint16_t kIdleWaitSeconds = 11;
 /// Rates below this (half of the raw material of a cycle) do not start a cycle.
 inline constexpr std::uint8_t kMinRate = 64;
@@ -44,7 +46,23 @@ inline constexpr std::uint8_t kMinRate = 64;
 inline constexpr std::uint16_t kMaxStatisticsSeconds = 239;
 
 /// One game second of all production buildings of `world`, in list order. `events` may be null.
-void advance_production(World& world, const assets::BuildingTable& buildings, std::vector<ProductionEvent>* events);
+/// `figures` (may be null) gives the walks of farmers, hunters and fishers for the goods statistics.
+void advance_production(World& world, const assets::BuildingTable& buildings, std::vector<ProductionEvent>* events,
+                        const assets::FigureTable* figures = nullptr);
+
+/// The rate (x/128) of the cycle the building's raw material allows now; 0 if it allows none (less
+/// than kMinRate, burning, no product).
+[[nodiscard]] std::uint32_t cycle_rate(const Production& p, const assets::BuildingType& b) noexcept;
+
+/// Game seconds the building needs for its product (produce_amount) when it works at full speed,
+/// as its window's productivity counts it: the interval, and for farms, hunters and fishers also
+/// the walks of their worker for the raw material (the worker's figure from `figures`, if given).
+[[nodiscard]] std::uint32_t full_speed_seconds(const assets::BuildingType& b, const assets::FigureTable* figures);
+
+/// Whether a producer stands still only for want of room: its own store is full, it has the raw
+/// material for a cycle, and no cart can take its goods away because the warehouse of `city` is
+/// full as well. With more room it would go on (the goods statistics count it as production).
+[[nodiscard]] bool waits_for_room(const Production& p, const assets::BuildingType& b, const City& city) noexcept;
 
 /// The cycle step of one building (exposed for tests): called when its countdown has run out.
 void finish_cycle(Production& p, const assets::BuildingType& b, std::uint32_t index,

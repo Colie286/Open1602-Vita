@@ -13,7 +13,7 @@ std::uint64_t trail_key(sim::Handle h) noexcept {
     return std::uint64_t{h.index} << 32U | h.generation;
 }
 
-/// Figure kinds 8, 9, 0x0A, 0x0B and 0x0F, which 0x0044FA90 draws only where 0x00451590 allows.
+/// Figure kinds 8, 9, 0x0A, 0x0B and 0x0F, which draws only where allows.
 /// Workers, hunters, animals and fishing boats follow their own rules (crop_cut).
 bool hidden_in_buildings(sim::WalkerKind kind) noexcept {
     switch (kind) {
@@ -56,7 +56,7 @@ void WalkerFigures::update(const sim::Logistics& logistics, const sim::World& wo
             return;
         }
         if (w.kind == sim::WalkerKind::Robber && w.working() && w.animation == 1) {
-            return;  // waits unseen in his house (0x00451590)
+            return;  // waits unseen in his house
         }
         if (h.index >= m_slots.size()) {
             m_slots.resize(std::size_t{h.index} + 1);
@@ -69,8 +69,8 @@ void WalkerFigures::update(const sim::Logistics& logistics, const sim::World& wo
             slot.requested = anim;
             slot.state = start_animation(*type, anim, h.index * 2654435761U + h.generation);
             if (!change) {
-                // The height of the tile it was made on, kept while it walks (0x00446CA0 callers):
-                // fishers on the water, carriers never below land (0x0044AC28). Carts have no such
+                // The height of the tile it was made on, kept while it walks (callers):
+                // fishers on the water, carriers never below land. Carts have no such
                 // floor in the original and walk 17 px low from a fisher's hut (U-010); here they
                 // get the carriers' floor.
                 const sim::WalkerPosition p = sim::walker_position(w);
@@ -82,7 +82,7 @@ void WalkerFigures::update(const sim::Logistics& logistics, const sim::World& wo
                 }
             }
             if (change) {
-                // A new animation starts from its first frame (0x00446D90): a shot deer falls.
+                // A new animation starts from its first frame: a shot deer falls.
                 slot.state.frame = 0;
                 slot.state.elapsed_ms = 0;
             }
@@ -104,18 +104,18 @@ void WalkerFigures::update(const sim::Logistics& logistics, const sim::World& wo
         f.figure = w.figure;
         f.z = slot.z;
         // Every walker but the deer shows only on an island the local player has discovered
-        // (0x00451590: kinds 4 to 0x12 except 0x11).
+        // (kinds 4 to 0x12 except 0x11).
         if (w.kind != sim::WalkerKind::Deer) {
             f.island = w.island;
         }
         // Workers, hunters, grazing animals and deer are cut by the crops and trees they stand in
-        // (case 0x0C of 0x0044FA90): a woodcutter at work vanishes into the tree.
+        // (case 0x0C): a woodcutter at work vanishes into the tree.
         if (w.kind == sim::WalkerKind::Harvester || w.kind == sim::WalkerKind::Hunter ||
             w.kind == sim::WalkerKind::Grazer || w.kind == sim::WalkerKind::Deer) {
             f.crop = crop_cut(world, buildings, f.x, f.y);
         }
-        // Carriers, carts, doctors, firemen and robbers are drawn only on roads and open ground
-        // (0x00451590): on the tiles of a building they are hidden, so a cart crossing the market
+        // Carriers, carts, doctors, firemen and robbers are drawn only on roads and open ground:
+        // on the tiles of a building they are hidden, so a cart crossing the market
         // square into a producer next to it is not seen at all.
         if (hidden_in_buildings(w.kind) && !walker_visible_at(world, buildings, f.x, f.y)) {
             return;

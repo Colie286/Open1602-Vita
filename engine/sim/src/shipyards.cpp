@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Shipyards (docs/re/ships.md, "Shipyard"): a switched-on yard with an order or a ship to repair runs
+// Shipyards: a switched-on yard with an order or a ship to repair runs
 // production-like cycles of wood and cloth its pack donkey brings; the points of each cycle build
 // the ship or become its health.
 #include <algorithm>
@@ -17,7 +17,7 @@ constexpr std::uint16_t kIdleSeconds = 11;        // a cycle that could not star
 constexpr std::uint32_t kFetchThreshold = 0x180;  // material for three cycles or less: fetch more
 
 constexpr std::uint8_t kLaunchesToComplain = 100;  // failed launches before a computer complains
-constexpr std::int32_t kYardComplaint = 8;         // reach of the count round the shipyard (0x004287B0)
+constexpr std::int32_t kYardComplaint = 8;         // reach of the count round the shipyard
 constexpr std::uint8_t kMaxIdle = 15;
 constexpr std::uint8_t kSmallYardSize = 3;
 constexpr auto kShipTypes = static_cast<std::uint8_t>(figure::kShips.size());
@@ -47,7 +47,7 @@ void Fleet::yard_delivery(std::uint16_t island, std::uint16_t x, std::uint16_t y
     const WorldIsland& isl = m_world->islands()[island];
     const MapCell& cell = isl.map.top(x, y);
     const assets::BuildingType* b = cell.empty() ? nullptr : m_buildings->by_sprite(cell.sprite);
-    // 0x0047D940: the Workstoff to the cloth, everything else to the wood; a waiting yard starts.
+    // The Workstoff to the cloth, everything else to the wood; a waiting yard starts.
     if (b != nullptr && ware == b->raw2_ware && ware != b->raw_ware) {
         yard->cloth += amount;
     } else {
@@ -77,7 +77,7 @@ bool Fleet::shipyard(const ShipyardOrder& o) {
             }
             return true;
         }
-        // Ship op 0x24: only a ship lying in reach, only one ship per yard.
+        // Only a ship lying in reach, only one ship per yard.
         if (yard == nullptr ||
             !building_in_reach(*m_world, *m_buildings, yard->island, yard->x, yard->y, ship->x, ship->y) ||
             (yard->repair_ship != 0 && yard->repair_ship != ship->id && m_world->ship(yard->repair_ship) != nullptr)) {
@@ -109,6 +109,10 @@ bool Fleet::shipyard(const ShipyardOrder& o) {
             if (o.ship_type >= kShipTypes || yard->order != CostBuilding::kNoOrder) {
                 return false;
             }
+            // A package's ship stands beside the original's of its type (FigureTable::add_ship).
+            if (o.figure != 0 && m_figures->ship_type_of(o.figure) != o.ship_type) {
+                return false;
+            }
             // The small yard builds only the small ships; the original checks this only in its
             // window (S-005), which OriginalBugs::small_yard_warships brings back.
             const assets::BuildingType* b = cell.empty() ? nullptr : m_buildings->by_sprite(cell.sprite);
@@ -122,6 +126,7 @@ bool Fleet::shipyard(const ShipyardOrder& o) {
                 return false;
             }
             yard->order = o.ship_type;
+            yard->order_figure = o.figure;
             yard->progress = 0;
             if (!yard->enabled) {
                 yard->enabled = true;
@@ -136,8 +141,9 @@ bool Fleet::shipyard(const ShipyardOrder& o) {
             if (yard->order == CostBuilding::kNoOrder) {
                 return false;
             }
-            // Op 0x1A 0xFF: the progress is lost, the material in the yard stays.
+            // Cancelled: the progress is lost, the material in the yard stays.
             yard->order = CostBuilding::kNoOrder;
+            yard->order_figure = 0;
             yard->progress = 0;
             yard->enabled = yard->repair_ship != 0;
             return true;
@@ -177,7 +183,6 @@ void Fleet::yards_tick(std::uint32_t dt_ms) {
 }
 
 void Fleet::yard_cycle(CostBuilding& yard) {
-    // 0x004791B0.
     if (yard.island >= m_world->islands().size()) {
         return;
     }
@@ -234,16 +239,17 @@ void Fleet::yard_cycle(CostBuilding& yard) {
     yard.rate = 0;
     // 2. A finished ship is launched.
     if (yard.repair_ship == 0 && yard.order != CostBuilding::kNoOrder) {
-        const assets::FigureType* t = m_figures->get(figure::ship_figure(yard.order));
+        const assets::FigureType* t = m_figures->get(yard_ship(yard));
         const std::uint32_t threshold = t != nullptr ? t->ship.build_amount : 0U;
         if (threshold != 0 && yard.progress >= threshold) {
             if (launch(yard)) {
                 yard.order = CostBuilding::kNoOrder;
+                yard.order_figure = 0;
                 yard.progress = 0;
                 yard.enabled = false;
             } else if (++yard.failed_launches >= kLaunchesToComplain) {
-                // 0x00479508: after 100 tries (about 18 minutes) a computer owner looks for the
-                // ships in the way (0x00428920 with 2). The original measures from the shipyard
+                // After 100 tries (about 18 minutes) a computer owner looks for the
+                // ships in the way. The original measures from the shipyard
                 // its computer has noted, Open1602 from this one; a computer builds only one.
                 yard.failed_launches = 0;
                 const WorldIsland& home = m_world->islands()[yard.island];
@@ -303,12 +309,30 @@ void Fleet::yard_cycle(CostBuilding& yard) {
     yard.countdown = wait;
 }
 
+std::optional<std::uint32_t> Fleet::add_ship(PlayerId owner, std::uint32_t figure, std::int32_t x, std::int32_t y) {
+    const assets::FigureType* type = m_figures->get(figure);
+    if (type == nullptr || !m_figures->ship_type_of(figure) || m_world->player(owner) == nullptr ||
+        !m_sea.sailable(x, y)) {
+        return std::nullopt;
+    }
+    Ship s;
+    s.name = next_ship_name();
+    s.place(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
+    s.figure = static_cast<std::uint16_t>(figure);  // below kMaxFigures
+    s.owner = owner;
+    s.health = type->ship.max_health;
+    s.cargo.resize(std::max<std::size_t>(1, type->ship.cargo_slots));
+    m_world->add_ship(std::move(s));
+    update_island(m_world->ships().back());
+    return m_world->ships().back().id;
+}
+
 bool Fleet::launch(CostBuilding& yard) {
-    // 0x004796A0: the nearest free sea tile within the yard's Radius.
+    // The nearest free sea tile within the yard's Radius.
     const WorldIsland& isl = m_world->islands()[yard.island];
     const MapCell& cell = isl.map.top(yard.x, yard.y);
     const assets::BuildingType* b = m_buildings->by_sprite(cell.sprite);
-    const assets::FigureType* type = m_figures->get(figure::ship_figure(yard.order));
+    const assets::FigureType* type = m_figures->get(yard_ship(yard));
     if (b == nullptr || type == nullptr) {
         return false;
     }
@@ -356,7 +380,7 @@ bool Fleet::launch(CostBuilding& yard) {
     Ship s;
     s.name = next_ship_name();
     s.place(static_cast<std::uint32_t>(spot->first), static_cast<std::uint32_t>(spot->second));
-    s.figure = figure::ship_figure(yard.order);
+    s.figure = static_cast<std::uint16_t>(yard_ship(yard));  // below kMaxFigures
     s.owner = cell.owner;
     s.direction = static_cast<std::uint8_t>((cell.rotation * 2U) & 7U);
     s.health = type->ship.max_health;

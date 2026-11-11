@@ -3,6 +3,7 @@
 // The cities and their buildings: CITY, CSTA (trade statistics), MLCK (the clocks of the material
 // locks), CPOP (the population messages), PROD (the production list with its free slots), HOUS, GROW and COST
 // (shipyards and castles).
+#include <algorithm>
 #include <utility>
 
 #include "section_io.hpp"
@@ -93,26 +94,30 @@ void io_give_up_count(A& a, C& c) {
     a.u8(c.ships_gave_up);
 }
 
-/// GLDG: one good of a GoodsLedger.
+/// GLDG: one good of a GoodsLedger, with the first `flows` flows (kGoodsFlowsV1 up to version 1).
 template <class A, class W>
-void io_ledger_ware(A& a, W& w) {
+void io_ledger_ware(A& a, W& w, std::size_t flows) {
     a.boolean(w.warned);
-    for (auto& c : w.current) {
-        a.u32(c);
+    for (std::size_t f = 0; f < flows; ++f) {
+        a.u32(w.current[f]);
     }
-    for (auto& c : w.quarter) {
-        a.u32(c);
+    for (std::size_t f = 0; f < flows; ++f) {
+        a.u32(w.quarter[f]);
     }
     const auto samples = [&](auto& ring) {
         for (auto& s : ring) {
-            for (auto& f : s.flow) {
-                a.u16(f);
+            for (std::size_t f = 0; f < flows; ++f) {
+                a.u16(s.flow[f]);
             }
             a.u32(s.stock);
         }
     };
     samples(w.minutes);
     samples(w.quarters);
+}
+
+std::size_t ledger_flows(std::uint16_t version) noexcept {
+    return version >= kLedgerWithheld ? kGoodsFlows : kGoodsFlowsV1;
 }
 
 /// GLDG: a city's CityHistory.
@@ -173,7 +178,7 @@ void io_productions(A& a, L& list, F& free) {
 }
 
 template <class A, class H>
-void io_house(A& a, H& h) {
+void io_house(A& a, H& h, std::uint16_t version) {
     a.u16(h.island);
     a.u16(h.x);
     a.u16(h.y);
@@ -186,7 +191,11 @@ void io_house(A& a, H& h) {
     a.u8(h.market_distance);
     a.boolean(h.market);
     a.boolean(h.services_complete);
-    a.u16(h.services);
+    if (version >= kWideServices) {
+        a.u64(h.services);
+    } else {
+        a.u16(h.services);
+    }
 }
 
 template <class A, class E>
@@ -249,7 +258,19 @@ std::vector<Decoded::GiveUpCount> read_give_up_counts(Reader& in) {
     return list;
 }
 
-void write_ledgers(Writer& out, const World& w) {
+std::uint16_t ledgers_version(const World& w) {
+    constexpr auto kWithheld = static_cast<std::size_t>(GoodsFlow::Withheld);
+    const auto withheld = [](const GoodsLedger::Ware& ware) {
+        const auto in_sample = [](const GoodsLedger::Sample& s) { return s.flow[kWithheld] != 0; };
+        return ware.current[kWithheld] != 0 || ware.quarter[kWithheld] != 0 ||
+               std::ranges::any_of(ware.minutes, in_sample) || std::ranges::any_of(ware.quarters, in_sample);
+    };
+    const bool any =
+        std::ranges::any_of(w.cities(), [&](const City& c) { return std::ranges::any_of(c.ledger.wares(), withheld); });
+    return any ? kLedgerWithheld : 1;
+}
+
+void write_ledgers(Writer& out, const World& w, std::uint16_t version) {
     std::vector<const City*> kept;
     for (const City& c : w.cities()) {
         if (c.ledger.minutes_closed() != 0 || !c.ledger.wares().empty() || c.history.minutes_closed() != 0) {
@@ -269,7 +290,7 @@ void write_ledgers(Writer& out, const World& w) {
         }
         out.list(used, 1, [&](std::uint8_t ware) {
             out.u8(ware);
-            io_ledger_ware(out, c->ledger.wares()[ware]);
+            io_ledger_ware(out, c->ledger.wares()[ware], ledger_flows(version));
         });
         // The figures of the city window: only human players' cities have them.
         const bool history = c->history.minutes_closed() != 0;
@@ -281,7 +302,7 @@ void write_ledgers(Writer& out, const World& w) {
     });
 }
 
-std::vector<Decoded::CityLedger> read_ledgers(Reader& in) {
+std::vector<Decoded::CityLedger> read_ledgers(Reader& in, std::uint16_t version) {
     std::vector<Decoded::CityLedger> list;
     in.list(list, 12, [&](Decoded::CityLedger& c) {
         in.u16(c.island);
@@ -291,7 +312,7 @@ std::vector<Decoded::CityLedger> read_ledgers(Reader& in) {
         std::vector<std::pair<std::uint8_t, GoodsLedger::Ware>> read;
         in.list(read, 1, [&](std::pair<std::uint8_t, GoodsLedger::Ware>& e) {
             in.u8(e.first);
-            io_ledger_ware(in, e.second);
+            io_ledger_ware(in, e.second, ledger_flows(version));
             e.second.used = true;
         });
         std::vector<GoodsLedger::Ware> wares;
@@ -335,13 +356,19 @@ Decoded::ProductionPart read_productions(Reader& in) {
     return part;
 }
 
-void write_houses(Writer& out, const World& w) {
-    out.list(w.houses(), 20, [&](const House& h) { io_house(out, h); });
+std::uint16_t houses_version(const World& w) {
+    const bool wide =
+        std::any_of(w.houses().begin(), w.houses().end(), [](const House& h) { return h.services > 0xFFFFU; });
+    return wide ? kWideServices : std::uint16_t{1};
 }
 
-std::vector<House> read_houses(Reader& in) {
+void write_houses(Writer& out, const World& w, std::uint16_t version) {
+    out.list(w.houses(), 20, [&](const House& h) { io_house(out, h, version); });
+}
+
+std::vector<House> read_houses(Reader& in, std::uint16_t version) {
     std::vector<House> list;
-    in.list(list, 20, [&](House& h) { io_house(in, h); });
+    in.list(list, 20, [&](House& h) { io_house(in, h, version); });
     return list;
 }
 

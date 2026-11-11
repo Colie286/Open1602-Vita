@@ -9,6 +9,7 @@
 
 #include "o1602/assets/figure_looks.hpp"
 #include "o1602/assets/game_data.hpp"
+#include "o1602/assets/package_flags.hpp"
 #include "o1602/sim/disasters.hpp"
 #include "o1602/sim/houses.hpp"
 #include "o1602/sim/ships.hpp"
@@ -85,7 +86,7 @@ struct RotatedWorld {
 };
 
 /// World point (continuous tile coordinates) -> world pixel position of the current view
-/// (0x0044D940: x = (fx - fy) * w/2, y = (fx + fy) * (h+1)/2 after the view rotation).
+/// (x = (fx - fy) * w/2, y = (fx + fy) * (h+1)/2 after the view rotation).
 void project_point(const WorldView& view, double wx, double wy, double& sx, double& sy) {
     const RotatedWorld rw(view);
     const double W = rw.world_width;
@@ -123,11 +124,14 @@ std::optional<std::uint32_t> flag_sprite(const WorldLayers& layers, sim::BannerI
         return std::nullopt;
     }
     // The tinted flag has as many images as its template, of which the atlas holds one block per
-    // banner; own sprites as many as the banner says (FB-33).
-    if (banner->flag == FlagStyle::Tinted && layers.banner_flags != nullptr && id < layers.banner_flags->size() &&
-        (*layers.banner_flags)[id] && layers.banners->flag_template() && layers.banners->flag_template()->frames > 0) {
-        return *(*layers.banner_flags)[id] +
-               static_cast<std::uint32_t>(frame % layers.banners->flag_template()->frames);
+    // banner, a package's flag (flags.toml) kFlagFrames, for any banner; own sprites as many as the
+    // banner says (FB-33).
+    if (layers.banner_flags != nullptr && id < layers.banner_flags->size() && (*layers.banner_flags)[id]) {
+        const auto& t = layers.banners->flag_template();
+        const bool own =
+            layers.package_flags != nullptr && id < layers.package_flags->size() && (*layers.package_flags)[id];
+        const std::uint32_t frames = !own && t && t->frames > 0 ? t->frames : assets::kFlagFrames;
+        return *(*layers.banner_flags)[id] + static_cast<std::uint32_t>(frame % frames);
     }
     if (banner->flag == FlagStyle::Sprites && banner->flag_frames > 0) {
         return layers.ship_base + banner->flag_gfx + static_cast<std::uint32_t>(frame % banner->flag_frames);
@@ -136,7 +140,7 @@ std::optional<std::uint32_t> flag_sprite(const WorldLayers& layers, sim::BannerI
 }
 
 /// Whether `island` stays hidden from `player`: an island the player has not discovered shows its
-/// ground layer only, without buildings and figures (0x00489C90, 0x00451590). kNoPlayer sees all.
+/// ground layer only, without buildings and figures. kNoPlayer sees all.
 bool undiscovered(const sim::World& world, sim::PlayerId player, std::uint16_t island) {
     return player != sim::kNoPlayer && island < world.islands().size() &&
            !world.islands()[island].discovered_by(player);
@@ -223,6 +227,13 @@ TileLighting TileLighting::circle(sim::PlayerId player, const sim::Catchment& ar
     l.m_kind = Kind::Circle;
     l.m_player = player;
     l.add_circle(area);
+    return l;
+}
+
+TileLighting TileLighting::harbours_only(sim::PlayerId player) {
+    TileLighting l;
+    l.m_kind = Kind::Circle;  // without a circle: no land lit
+    l.m_player = player;
     return l;
 }
 
@@ -328,12 +339,15 @@ bool ship_sprites(const sim::Ship& ship, const sim::World& world, const WorldVie
         return false;
     }
     const assets::FigureType* fig = layers.figures->get(ship.figure);
-    if (fig == nullptr || fig->sheet != assets::FigureSheet::Ship) {
+    // From SHIP.BSH, or a ship of a package drawn with its own image (own_figures.hpp).
+    if (fig == nullptr || (fig->sheet != assets::FigureSheet::Ship && !assets::draws_package_image(*fig))) {
         return false;
     }
-    // Below half health the next record (HANDELD1 ..., Gfx + 8) every frame (0x0044FB0C).
+    // Below half health the next record (HANDELD1 ..., Gfx + 8) every frame; a ship of a package
+    // with its own image keeps it, as the record after it shows the original's.
     const std::uint32_t max_health = fig->ship.max_health;
-    if (ship.health != 0 && max_health != 0 && ship.health * 128U / max_health < 64U) {
+    if (ship.health != 0 && max_health != 0 && ship.health * 128U / max_health < 64U &&
+        !assets::draws_package_image(*fig)) {
         const assets::FigureType* damaged = layers.figures->get(ship.figure + 1U);
         if (damaged != nullptr && damaged->sheet == assets::FigureSheet::Ship) {
             fig = damaged;
@@ -360,15 +374,15 @@ bool ship_sprites(const sim::Ship& ship, const sim::World& world, const WorldVie
     }
     project_point(view, fx, fy, screen_x, screen_y);
 
-    // The original keeps figures at Y = y + Posoffs[1] * w/64 (0x00451CC5), each term truncated, and
-    // sorts them by Y into the row loop (0x00489A60). Open1602's tile rows start one pixel lower than
-    // the original's, so the pictures go one pixel up (docs/re/figures.md).
+    // The original keeps figures at Y = y + Posoffs[1] * w/64, each term truncated, and
+    // sorts them by Y into the row loop. Open1602's tile rows start one pixel lower than
+    // the original's, so the pictures go one pixel up.
     const std::int32_t itw = tile_width(view.zoom);
     const std::int32_t depth = static_cast<std::int32_t>(std::floor(screen_y)) + fig->posoffs[1] * itw / 64;
     out.depth = depth;
     out.row = floor_div(depth - 1, static_cast<std::int32_t>(hh));
 
-    // Hull: sprite = Gfx + ((direction + 2 * view rotation) & 7) * Rotate (0x0044FA60), centred,
+    // Hull: sprite = Gfx + ((direction + 2 * view rotation) & 7) * Rotate, centred,
     // bottom at Y + Posoffs[0] * w/64 (field +0x0C of the figure record).
     const std::uint32_t dir = (ship.direction + 2U * rw.rotation) & 7U;
     // From SHIP.BSH, or from the terrain sheet for a ship drawn with a package's image (figure_looks.hpp).
@@ -377,11 +391,19 @@ bool ship_sprites(const sim::Ship& ship, const sim::World& world, const WorldVie
             ? layers.sheet_base[static_cast<std::size_t>(assets::FigureSheet::Stadtfld)].value_or(0)
             : layers.ship_base;
     out.hull.sprite = hull_base + fig->gfx + dir * fig->rotate;
+    // A package's ship drawn as a tint template: in the colour of its owner's banner.
+    if (assets::draws_package_image(*fig) && layers.template_tint != nullptr && ship.owner != sim::kNoPlayer) {
+        if (const sim::Player* owner = world.player(ship.owner)) {
+            if (const auto tinted = layers.template_tint->sprite(owner->banner, fig->gfx + dir * fig->rotate)) {
+                out.hull.sprite = *tinted;
+            }
+        }
+    }
     const AtlasRect& hull = layers.atlas->rect(out.hull.sprite);
     out.hull.x = static_cast<std::int32_t>(std::floor(screen_x)) - hull.width / 2;
     out.hull.y = depth + fig->posoffs[0] * itw / 64 - 1;
 
-    // Sinking (docs/re/ships.md#images): after the turn the hull goes down by one height unit
+    // Sinking: after the turn the hull goes down by one height unit
     // (half a tile width) per second and is cut at the waterline, its bottom at height 0; the
     // splash UNTERGANG plays where it went down.
     const sim::ShipMotion& m = ship.motion;
@@ -415,7 +437,7 @@ bool ship_sprites(const sim::Ship& ship, const sim::World& world, const WorldVie
         out.hull.cut_bottom = static_cast<std::uint16_t>(std::min<std::int32_t>(drop, hull.height));
     }
 
-    // Bow wave while the ship runs (not turning, waiting or sinking; 0x0044FC09): BUGH, 12 frames
+    // Bow wave while the ship runs (not turning, waiting or sinking): BUGH, 12 frames
     // per direction at the ship's 90 ms, bottom on the ship's Y, drawn under the hull.
     out.has_wave = false;
     if (!ship.sinking && m.phase == sim::ShipMotion::Phase::Run && fig->bow_wave != 0) {
@@ -431,8 +453,8 @@ bool ship_sprites(const sim::Ship& ship, const sim::World& world, const WorldVie
         }
     }
 
-    // Smoke of a broadside (0x0044FA90 with ship + 0x214): turned to the bearing; Fahnoffs[0]
-    // across the ship to the side it fired to and Fahnoffs[1] along it (0x00443180), projected,
+    // Smoke of a broadside: turned to the bearing; Fahnoffs[0]
+    // across the ship to the side it fired to and Fahnoffs[1] along it, projected,
     // hanging down from Fahnoffs[2] above Y plus its Posoffs[0], like the flag. It goes under the
     // hull when that side faces away from the viewer, over hull and flag otherwise.
     out.has_smoke = false;
@@ -462,15 +484,15 @@ bool ship_sprites(const sim::Ship& ship, const sim::World& world, const WorldVie
         }
     }
 
-    // Flag of the owner's banner (original: figure from table 0x00498F2C). Offset: Fahnoffs[1]
-    // along the ship axis, rotated by (direction + 2) * 45 degrees (0x00443180), projected; lifted
+    // Flag of the owner's banner (original: figure). Offset: Fahnoffs[1]
+    // along the ship axis, rotated by (direction + 2) * 45 degrees, projected; lifted
     // by Fahnoffs[2] * w/2 from Y and hanging down from there. (The original also adds the flag
     // figure's Posoffs[0], which is 0 for all flags.)
     out.has_flag = false;
     const sim::Player* owner = world.player(ship.owner);
     auto flag = owner != nullptr ? flag_sprite(layers, owner->banner, time_ms / kFlagFrameMs) : std::nullopt;
     if (ship.held) {
-        // A surrendered ship shows FAHNEWEISS instead (ship + 0x1A8 bit 3).
+        // A surrendered ship shows FAHNEWEISS instead.
         const assets::FigureType* white = layers.figures->get(kFigureFahneWeiss);
         flag = white != nullptr && white->sheet == assets::FigureSheet::Ship
                    ? std::optional<std::uint32_t>(layers.ship_base + white->gfx +
@@ -520,8 +542,8 @@ const sim::CostBuilding* shipyard_at(const sim::World& world, std::uint16_t isla
 
 }  // namespace
 
-/// Building centre (0x00463A70) plus the figure's Fahnoffs turned with the building (0x004466A0,
-/// the same for flags, smoke, icons and jugglers).
+/// Building centre plus the figure's Fahnoffs turned with the building
+/// (the same for flags, smoke, icons and jugglers).
 std::pair<std::int32_t, std::int32_t> text_figure_point(const WorldView& view, double x, double y, double z) {
     double sx = 0.0;
     double sy = 0.0;
@@ -609,7 +631,7 @@ void collect_island_building_figures(const sim::World& world, const assets::Buil
                     f.role = role;
                     if (role == BuildingFigureRole::Status) {
                         // Symbols (kinds 0x16, 0x19-0x1B) stand on the building centre at the
-                        // building's Einhoffs height, not at the figure's Fahnoffs (0x00446776).
+                        // building's Einhoffs height, not at the figure's Fahnoffs.
                         attach_point(island, b, x, y, cell.rotation, assets::FigureType{}, f.x, f.y);
                         f.z = b.icon_height;
                     } else {
@@ -633,7 +655,7 @@ void collect_island_building_figures(const sim::World& world, const assets::Buil
                 } else if (b.prod_kind == assets::prod::kHouse) {
                     add(BuildingFigureRole::Disaster, kFigureSensenmann);
                 } else if (b.prod_kind == assets::prod::kShipyard) {
-                    // Shipyards of the local player: the same icon as kind 0x19 (0x00486E91).
+                    // Shipyards of the local player: the same icon as kind 0x19.
                     add(BuildingFigureRole::Status, kFigureNoAktiv);
                 } else if (sim::is_producer(b)) {
                     add(BuildingFigureRole::Status, kFigureNoAktiv);
@@ -641,7 +663,7 @@ void collect_island_building_figures(const sim::World& world, const assets::Buil
                 }
             }
         }
-        // Ore and gold symbols: on the origin of the ore mountain a deposit lies at (0x00487076);
+        // Ore and gold symbols: on the origin of the ore mountain a deposit lies at;
         // whether the local player sees one is decided when drawing.
         for (const auto& d : island.header.deposits) {
             if ((d.ware != assets::ware::kOre && d.ware != assets::ware::kGold) || d.x >= map.width() ||
@@ -673,10 +695,10 @@ void collect_island_building_figures(const sim::World& world, const assets::Buil
 
 namespace {
 
-/// Body of a display figure at world point (x, y) with height z (0x00451D72, 0x0044FA90): centred,
+/// Body of a display figure at world point (x, y) with height z: centred,
 /// bottom at Y + Posoffs[0] * w/64 - trunc(z * w/2), where Y = y + Posoffs[1] * w/64 is also its
-/// depth (0x00451F74). The original truncates each term; Open1602's tile rows start one pixel lower
-/// than the original's, so figures go one pixel up (docs/re/figures.md). For flags and smoke both
+/// depth. The original truncates each term; Open1602's tile rows start one pixel lower
+/// than the original's, so figures go one pixel up. For flags and smoke both
 /// offsets cancel out (Posoffs -40, 40 / -20, 20 ...).
 void place_display_figure(const WorldView& view, const AtlasRect& r, const assets::FigureType& fig, double x, double y,
                           double z, DrawCommand& c, FigureSprites& out) {
@@ -701,8 +723,11 @@ bool building_figure_sprites(const BuildingFigure& figure, const sim::World& wor
         return false;
     }
     const assets::FigureType* fig = layers.figures->get(figure.figure);
-    // 0x00486B60 makes no display figures on an island the local player has not discovered.
-    if (fig == nullptr || undiscovered(world, layers.local_player, figure.island)) {
+    // The original makes no display figures on an island the local player has not discovered. A
+    // deposit the player knows is the exception: by ship that needs the island discovered anyway,
+    // with the island resources known from the start (Rules::reveal_resources) it does not.
+    if (fig == nullptr ||
+        (figure.role != BuildingFigureRole::Deposit && undiscovered(world, layers.local_player, figure.island))) {
         return false;
     }
     const WorldView view = fit_view(view_in, world);
@@ -725,8 +750,8 @@ bool building_figure_sprites(const BuildingFigure& figure, const sim::World& wor
             break;
         }
         case BuildingFigureRole::Deposit: {
-            // Drawn only for the local player who discovered the island (checked above) and
-            // explored this deposit (byte 3, 0x00452098).
+            // Drawn only for the local player who knows this deposit (byte 3), also on an island
+            // they have not discovered (see above).
             if (figure.island >= world.islands().size() || layers.local_player == sim::kNoPlayer) {
                 return false;
             }
@@ -752,7 +777,7 @@ bool building_figure_sprites(const BuildingFigure& figure, const sim::World& wor
         }
         case BuildingFigureRole::Disaster:
         case BuildingFigureRole::MarketFire: {
-            // 0x00486B60: the reaper over a house with the plague (ANIM 0), flames over a house on
+            // The reaper over a house with the plague (ANIM 0), flames over a house on
             // fire (ANIM 1, 0.4 lower) and over a burning market of the local player.
             const auto base = layers.sheet_base[static_cast<std::size_t>(assets::FigureSheet::Effekte)];
             if (!base) {
@@ -788,7 +813,7 @@ bool building_figure_sprites(const BuildingFigure& figure, const sim::World& wor
         case BuildingFigureRole::Smoke:
         case BuildingFigureRole::Status: {
             const sim::Production* state = world.production(figure.island, figure.origin_x, figure.origin_y);
-            // The draw kinds pick their sheet (0x0044FA90: kinds 0x16/0x17 always EFFEKTE.BSH), not
+            // The draw kinds pick their sheet (kinds 0x16/0x17 always EFFEKTE.BSH), not
             // the figure's Blocknr - the smoke and icon figures have none.
             const auto base = layers.sheet_base[static_cast<std::size_t>(assets::FigureSheet::Effekte)];
             if (!base) {
@@ -796,7 +821,7 @@ bool building_figure_sprites(const BuildingFigure& figure, const sim::World& wor
             }
             std::uint8_t anim = 0;
             if (state == nullptr && figure.role == BuildingFigureRole::Status) {
-                // A shipyard of the local player (kind 0x19, 0x004790C0): on fire -> ANIM 2, 0.4
+                // A shipyard of the local player (kind 0x19): on fire -> ANIM 2, 0.4
                 // lower; switched off -> ANIM 0; Maxnorohst cycles without material -> ANIM 1.
                 if (figure.owner != layers.local_player || figure.owner == sim::kNoPlayer) {
                     return false;
@@ -823,15 +848,14 @@ bool building_figure_sprites(const BuildingFigure& figure, const sim::World& wor
             } else if (state == nullptr) {
                 return false;
             } else if (figure.role == BuildingFigureRole::Smoke) {
-                if (!sim::smoke_visible(*state)) {  // 0x0047CF30
+                if (!sim::smoke_visible(*state)) {
                     return false;
                 }
-                // Drawn every second pixel (0x00401D50 -> 0x004048E0): 50 % translucent.
+                // Drawn every second pixel: 50 % translucent.
                 c.mode = DrawCommand::Mode::Translucent;
                 c.tint = assets::Rgba{255, 255, 255, kSmokeAlpha};
             } else {
-                // Icon of the local player's buildings: anim 0 switched off, 1 no raw material
-                // (0x00451E8D with 0x0047CDD0).
+                // Icon of the local player's buildings: anim 0 switched off, 1 no raw material.
                 if (figure.owner != layers.local_player || figure.owner == sim::kNoPlayer) {
                     return false;
                 }
@@ -844,7 +868,7 @@ bool building_figure_sprites(const BuildingFigure& figure, const sim::World& wor
                 }
                 anim = status == sim::ProductionStatus::Disabled ? 0 : status == sim::ProductionStatus::Burning ? 2 : 1;
             }
-            // Endless animations: the original starts them at a random frame (0x0044670B); here the
+            // Endless animations: the original starts them at a random frame; here the
             // building's phase stands in for it so the picture is reproducible.
             const assets::FigureAnim* a = fig->anim(anim);
             std::uint32_t frame = 0;
@@ -885,21 +909,31 @@ bool land_figure_sprites(const FigureInstance& figure, const sim::World& world, 
     // Units drawn per player colour: the variant of the owner's banner, or its tinted template.
     const assets::FigureType* body_type = type;
     std::optional<std::uint32_t> tinted_body;
-    if (const auto variant = assets::FigureTable::unit_variant(figure.figure)) {
+    if (const auto variant = layers.figures->unit_of(figure.figure)) {
         const sim::Player* owner = world.player(figure.owner);
         const Banner* banner =
             owner != nullptr && layers.banners != nullptr ? layers.banners->get(owner->banner) : nullptr;
-        if (banner != nullptr && banner->unit_variant && *banner->unit_variant < variant->count) {
+        const std::uint32_t image =
+            assets::figure_sprite(*type, figure.anim, figure.frame, figure.direction, view_in.rotation);
+        if (banner != nullptr && layers.template_tint != nullptr && sheet == assets::FigureSheet::Stadtfld &&
+            layers.template_tint->sprite(owner->banner, image)) {
+            // A package's tint template: in the colour of every banner, also of those with a drawn variant.
+            tinted_body = layers.template_tint->sprite(owner->banner, image);
+        } else if (banner != nullptr && banner->unit_variant && *banner->unit_variant < variant->count) {
             // A variant drawn from another sheet than the figure (one colour given a package's image) is not used.
             if (const assets::FigureType* v = layers.figures->get(variant->family + *banner->unit_variant);
                 v != nullptr && assets::draws_package_image(*v) == assets::draws_package_image(*type)) {
                 body_type = v;
             }
-        } else if (banner != nullptr && layers.unit_tint != nullptr && sheet == assets::FigureSheet::Soldat) {
-            // The tinted templates are of SOLDAT.BSH: a unit drawn with a package's image keeps its colours.
-            tinted_body = layers.unit_tint->sprite(
-                owner->banner,
-                assets::figure_sprite(*type, figure.anim, figure.frame, figure.direction, view_in.rotation));
+        } else if (banner != nullptr) {
+            // Templates made from the four drawn colours: of SOLDAT.BSH, or of a package's image with a
+            // block per colour (one image for all colours keeps its colours).
+            const UnitTint* tint = sheet == assets::FigureSheet::Soldat     ? layers.unit_tint
+                                   : sheet == assets::FigureSheet::Stadtfld ? layers.package_unit_tint
+                                                                            : nullptr;
+            if (tint != nullptr) {
+                tinted_body = tint->sprite(owner->banner, image);
+            }
         }
     }
     const WorldView view = fit_view(view_in, world);
@@ -907,14 +941,14 @@ bool land_figure_sprites(const FigureInstance& figure, const sim::World& world, 
     double fx = 0.0;
     double fy = 0.0;
     project_point(view, figure.x, figure.y, fx, fy);
-    // The original truncates the screen position (0x00451B9E); visible positions are not negative.
+    // The original truncates the screen position; visible positions are not negative.
     const auto px = static_cast<std::int32_t>(std::floor(fx));
-    // Y = y + Posoffs[1] * w/64 (0x00451CC5): depth and reference for body and shadow.
+    // Y = y + Posoffs[1] * w/64: depth and reference for body and shadow.
     const std::int32_t p1 = type->posoffs[1] * tw / 64;
     const std::int32_t depth = static_cast<std::int32_t>(std::floor(fy)) + p1;
     // Body and shadow are lifted by the height, trunc(z * w/2) (17 px on land at full zoom), and by
     // one more pixel: Open1602's tile rows start one pixel below the original's, which puts the
-    // centre of a tile exactly on the centre row of its diamond (docs/re/figures.md).
+    // centre of a tile exactly on the centre row of its diamond.
     const std::int32_t lift = static_cast<std::int32_t>(figure.z * tw / 2.0) + 1;
 
     // Shadow first (drawn below the body), centred on the lifted ground point.
@@ -945,7 +979,7 @@ bool land_figure_sprites(const FigureInstance& figure, const sim::World& world, 
     }
     // Workers and animals in crops and young trees lose rows at the bottom, h * k / 256 of the
     // picture of this zoom level; the shadow goes up by as much; all of it hidden: nothing drawn
-    // (0x00451250, case 0x0C of 0x0044FA90).
+    // (case 0x0C).
     const std::int32_t cut = figure.crop >= kCropHidden ? r.height : r.height * figure.crop / 256;
     if (cut >= r.height) {
         out.count = 0;
@@ -960,7 +994,7 @@ bool land_figure_sprites(const FigureInstance& figure, const sim::World& world, 
     body.x = px - r.width / 2;
     body.y = depth + type->posoffs[0] * tw / 64 - lift;
     ++out.count;
-    // The height does not change the row (0x0044FA90 compares Y).
+    // The height does not change the row (compares Y).
     out.depth = depth;
     out.row = floor_div(depth - 1, tile_height(view.zoom) / 2);
     return true;
@@ -997,7 +1031,7 @@ bool effect_figure_sprites(const EffectFigure& figure, const sim::World& world, 
     if (shadow != nullptr && shadow_base && figure.z - figure.ground < kShadowHeight) {
         DrawCommand& c = out.parts[out.count];
         c = DrawCommand{};
-        // The shadow figure's picture of the body's ANIM, frame and direction (0x0044F8F0, called
+        // The shadow figure's picture of the body's ANIM, frame and direction (called
         // with the shadow figure for kinds 0x1E and 0x21).
         c.sprite = *shadow_base + assets::figure_sprite(*shadow, figure.anim, frame, figure.direction, view.rotation);
         const AtlasRect& r = layers.atlas->rect(c.sprite);
@@ -1061,7 +1095,7 @@ struct TileDrawer {
           sea_frame(sea != nullptr ? c.frame(*sea) : 0),
           sea_elevation(sea != nullptr ? sea->posoffs * tw / 64 : 0) {}
 
-    /// Tiles of production buildings take their frame from the building's state (0x00489C90);
+    /// Tiles of production buildings take their frame from the building's state;
     /// `island` is kSea for tiles without such state (the ground layer).
     [[nodiscard]] DrawCommand cell(const sim::MapCell& cell, std::int32_t sx, std::int32_t row_bottom,
                                    std::uint16_t island, const sim::IslandMap* map, std::uint16_t lx,
@@ -1087,7 +1121,7 @@ struct TileDrawer {
     }
 
     /// Whether the tiles of `island` show only the ground layer: the local player has not
-    /// discovered it (0x00489C90 then reads the grid at island + 0xAFC instead of + 0xAF4).
+    /// discovered it (then the ground grid is drawn).
     [[nodiscard]] bool hidden(std::uint16_t island) const { return undiscovered(world, local_player, island); }
 
     /// The cell a tile shows (shown_cell).
@@ -1172,7 +1206,7 @@ void build_world_draw_list(const sim::World& world, const assets::BuildingTable&
     const std::int32_t sea_elevation = drawer.sea_elevation;
 
     // Figures of the visible rows (ships, building flags, land figures), sorted by row and within
-    // a row by depth, as the original sorts its one list by Y (0x00452190); equal depths keep this
+    // a row by depth, as the original sorts its one list by Y; equal depths keep this
     // order (the original's radix sort leaves them in an order that depends on the other keys).
     std::vector<FigureSprites>& figures = scratch.figures;
     figures.clear();
@@ -1413,12 +1447,13 @@ void build_world_draw_list(const sim::World& world, const assets::BuildingTable&
                     if (layers.lighting == nullptr || !layers.lighting->active()) {
                         return;
                     }
-                    // Water, the island's shallows and surf included, is never land to build on.
+                    // Water, the island's shallows, surf, river mouths and the bare beach included,
+                    // is never land to build on: the whole shore is shaded like the sea, whoever's
+                    // land it lies in, instead of bright strips along the own coast.
                     const assets::BuildingType* t =
                         cell != nullptr && !cell->empty() ? buildings.by_sprite(cell->sprite) : nullptr;
-                    const bool land = t != nullptr && t->kind != sim::building_kind::kSea &&
-                                      t->kind != sim::building_kind::kSurf &&
-                                      t->kind != sim::building_kind::kSurfCorner;
+                    const bool land = t != nullptr && (t->kind < sim::building_kind::kSea ||
+                                                       t->kind > sim::building_kind::kBeachVariant);
                     // A building is lit or dark as a whole, whichever of its tiles is drawn.
                     TileLighting::Footprint footprint{wx, wy, 1, 1};
                     if (t != nullptr && t->tile_count() > 1 && !hidden) {
@@ -1447,6 +1482,30 @@ void build_world_draw_list(const sim::World& world, const assets::BuildingTable&
                 }
                 commands.insert(commands.end(), drawn.parts.begin(), drawn.parts.begin() + drawn.count);
                 dim();
+                if (layers.sprite_checker != nullptr && layers.sprite_checker->contains(wx, wy)) {
+                    for (std::size_t k = first; k < commands.size(); ++k) {
+                        DrawCommand& c = commands[k];
+                        if (c.mode == DrawCommand::Mode::Normal || c.mode == DrawCommand::Mode::Dimmed) {
+                            c.mode = DrawCommand::Mode::Checkered;
+                            c.tint = layers.sprite_checker->colour;
+                        }
+                    }
+                }
+                if (layers.sprite_tints != nullptr && layers.sprite_tints->contains(wx, wy)) {
+                    const assets::Rgba t = layers.sprite_tints->colour;
+                    for (std::size_t k = first; k < commands.size(); ++k) {
+                        DrawCommand& c = commands[k];
+                        if (c.mode == DrawCommand::Mode::Normal) {
+                            c.mode = DrawCommand::Mode::Tinted;
+                            c.tint = t;
+                        } else if (c.mode == DrawCommand::Mode::Dimmed) {
+                            c.mode = DrawCommand::Mode::Tinted;
+                            c.tint = assets::Rgba{static_cast<std::uint8_t>(c.tint.r * t.r / 255),
+                                                  static_cast<std::uint8_t>(c.tint.g * t.g / 255),
+                                                  static_cast<std::uint8_t>(c.tint.b * t.b / 255), t.a};
+                        }
+                    }
+                }
             }
             if (!high_pass) {
                 commands.insert(commands.end(), overlays.begin(), overlays.end());

@@ -18,6 +18,12 @@ bool VideoController::available(std::uint16_t number) const {
     return m_player && m_player->available(number);
 }
 
+void VideoController::set_package_videos(const std::vector<std::filesystem::path>& files) {
+    if (m_player) {
+        m_player->set_package_videos(files);
+    }
+}
+
 void VideoController::request(std::uint16_t number, std::uint8_t tracks, bool loop, bool intro, bool in_frame) {
     if (!m_player) {
         return;

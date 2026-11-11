@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The building tasks of the computer players (docs/re/ai.md, "Stages"): each runs its site
+// The building tasks of the computer players: each runs its site
 // search step by step and builds the best site through the normal build order; roads, fields,
 // the survey of a city (task 8) and the maintenance sweep.
 #include <algorithm>
@@ -60,7 +60,7 @@ bool is_farm_task(std::uint8_t task) {
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------
-// Slot bookkeeping (0x0040FB20, 0x0040F560, 0x0040FAD0, 0x0040FB50)
+// Slot bookkeeping
 
 void Engine::slot_built(AiPlayer& p, std::uint8_t slot) {
     if (CityPlan* r = current_plan(p)) {
@@ -125,7 +125,7 @@ std::size_t Engine::demolish_tile(AiPlayer& p, std::int32_t x, std::int32_t y) {
 
 std::int32_t Engine::road_line(AiPlayer& p, std::int32_t x, std::int32_t y, std::int32_t len, std::uint8_t dir,
                                bool force) {
-    // 0x00411450: a straight dirt road with wooden bridges, at most 13 tiles (the original makes
+    // A straight dirt road with wooden bridges, at most 13 tiles (the original makes
     // 6 of a longer one). A line that runs into a road ends there.
     (void)force;
     len = std::clamp(len, 0, 13);
@@ -181,7 +181,7 @@ std::int32_t Engine::road_line(AiPlayer& p, std::int32_t x, std::int32_t y, std:
 
 std::int32_t Engine::road_three(AiPlayer& p, std::int32_t x, std::int32_t y, std::uint8_t dir, std::int32_t right,
                                 std::int32_t left, std::int32_t back, bool force) {
-    // 0x004118A0: three straight roads from one point; seven or more tiles open new sites.
+    // Three straight roads from one point; seven or more tiles open new sites.
     std::int32_t placed = road_line(p, x, y, back, static_cast<std::uint8_t>((dir + 2U) & 3U), true);
     placed += road_line(p, x, y, right, static_cast<std::uint8_t>((dir + 1U) & 3U), force);
     placed += road_line(p, x, y, left, static_cast<std::uint8_t>((dir + 3U) & 3U), force);
@@ -198,7 +198,7 @@ std::int32_t Engine::road_three(AiPlayer& p, std::int32_t x, std::int32_t y, std
 }
 
 void Engine::plaza_ring(AiPlayer& p) {
-    // 0x00418940: a square around the Kontor.
+    // A square around the Kontor.
     const City* c = current_city(p);
     const assets::BuildingType* square = by_id(id::kSquare);
     if (c == nullptr || square == nullptr || !c->warehouse_x || !c->warehouse_y) {
@@ -262,7 +262,7 @@ std::vector<WoodReach> Engine::woodcutters_near(AiPlayer& p, std::int32_t x0, st
 
 void Engine::fill_fields(AiPlayer& p, std::int32_t x0, std::int32_t y0, std::int32_t x1, std::int32_t y1,
                          std::int32_t rings_n, std::uint8_t field_ware, std::uint8_t radius) {
-    // 0x00411B50: fields in rings around the farm, inside its reach, on ruins, meadows and trees.
+    // Fields in rings around the farm, inside its reach, on ruins, meadows and trees.
     // Fix S-122: other crops leave the trees in reach of the city's own woodcutters standing; the
     // original plants over them, and the woodcutter replants and is torn down in turn.
     const assets::BuildingType* ripe = producer(field_ware, 0);
@@ -333,7 +333,7 @@ void Engine::task_building(AiPlayer& p, std::uint8_t task) {
         task_workshop(p);
         return;
     }
-    if (public_task(task) != nullptr) {
+    if (public_task(slots(), task)) {
         task_public(p, task);
         return;
     }
@@ -428,7 +428,9 @@ void Engine::task_workshop(AiPlayer& p) {
     } else if (task == kStonemason) {
         done = search_stonemason(p);
     } else {
-        done = search_workshop(p, task == kCannonFoundry);
+        // A package's workshop of another footprint than the original's 2 x 2 is placed by its size.
+        const bool sized = p.search.slot >= kSlots && (b->size_x != 2 || b->size_y != 2);
+        done = search_workshop(p, task == kCannonFoundry || sized);
     }
     if (!done) {
         return;
@@ -471,9 +473,9 @@ void Engine::task_houses(AiPlayer& p) {
         slot_built(p, kSlotHouses);
         slot_ok(p, kSlotHouses);
         slot_ok(p, kSlotMarket);
-        // 0x0047B200: what the new house lacks opens the public building again.
+        // What the new house lacks opens the public building again.
         if (CityPlan* r = current_plan(p)) {
-            const std::uint16_t sv = house_services(p.island, s.best_x0, s.best_y0);
+            const assets::ServiceBits sv = house_services(p.island, s.best_x0, s.best_y0);
             if ((sv & (hs::kKapelle | hs::kKirche)) == 0) {
                 r->flags &= ~city_flag::kKapelle;
             }
@@ -486,6 +488,12 @@ void Engine::task_houses(AiPlayer& p) {
             if ((sv & hs::kKlinik) == 0) {
                 r->flags &= ~city_flag::kKlinik;
             }
+            for (const ComputerSlot& k : slots()) {
+                if (k.number > kOwnPublicSlot - kMaxOwnPublic && k.kind == ComputerSlot::Kind::Public &&
+                    (sv & k.service) == 0) {
+                    r->flags &= ~k.flag;
+                }
+            }
         }
         return;
     }
@@ -495,9 +503,9 @@ void Engine::task_houses(AiPlayer& p) {
 }
 
 void Engine::task_public(AiPlayer& p, std::uint8_t task) {
-    const PublicTask* def = public_task(task);
+    const std::optional<PublicTask> def = public_task(slots(), task);
     CityPlan* r = current_plan(p);
-    if (def == nullptr || r == nullptr) {
+    if (!def || r == nullptr) {
         pop(p);
         refund(p);
         return;
@@ -696,7 +704,7 @@ void Engine::task_shipyard(AiPlayer& p) {
 }
 
 void Engine::task_shipyard_upgrade(AiPlayer& p) {
-    // 0x00419C00: the big yard where the small one stands (it is demolished first).
+    // The big yard where the small one stands (it is demolished first).
     pop(p);
     refund(p);
     CityPlan* r = current_plan(p);
@@ -792,7 +800,7 @@ void Engine::task_pirate_houses(AiPlayer& p) {
 }
 
 void Engine::task_kontor_upgrade(AiPlayer& p) {
-    // 0x0041CDD0: the next Kontor in place of the old one.
+    // The next Kontor in place of the old one.
     pop(p);
     refund(p);
     City* c = current_city(p);
@@ -813,7 +821,7 @@ void Engine::task_kontor_upgrade(AiPlayer& p) {
 }
 
 void Engine::task_paving(AiPlayer& p) {
-    // 0x00418D80: dirt roads and wooden bridges around the Kontor become stone, ring by ring.
+    // Dirt roads and wooden bridges around the Kontor become stone, ring by ring.
     pop(p);
     City* c = current_city(p);
     CityPlan* r = current_plan(p);
@@ -861,7 +869,7 @@ void Engine::task_paving(AiPlayer& p) {
 }
 
 void Engine::task_towers(AiPlayer& p) {
-    // 0x00418300: towers on the coast around the Kontor, apart from each other, near fish.
+    // Towers on the coast around the Kontor, apart from each other, near fish.
     pop(p);
     City* c = current_city(p);
     CityPlan* r = current_plan(p);
@@ -941,7 +949,6 @@ void Engine::task_towers(AiPlayer& p) {
 // Roads (task 6) and the layout of the runs (task 7)
 
 void Engine::task_roads(AiPlayer& p) {
-    // 0x00419210
     pop(p);
     City* c = current_city(p);
     if (c == nullptr || !c->warehouse_x || !c->warehouse_y) {
@@ -1023,7 +1030,7 @@ void Engine::task_layout(AiPlayer& p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Survey (task 8, 0x0041E100)
+// Survey (task 8)
 
 void Engine::task_survey(AiPlayer& p) {
     pop(p);
@@ -1065,7 +1072,7 @@ void Engine::task_survey(AiPlayer& p) {
         }
     }
     r->slots[kSlotKontor].count = static_cast<std::uint16_t>(kontor_level(*c));
-    // Cleanup (docs/re/demolish.md): exhausted mines; sheep and small weavers where cotton grows.
+    // Cleanup: exhausted mines; sheep and small weavers where cotton grows.
     for (const auto& [x, y] : finds.starved_mines) {
         demolish_tile(p, x, y);
     }
@@ -1106,6 +1113,14 @@ bool Engine::survey_tile(AiPlayer& p, const City& c, CityPlan& r, std::uint32_t 
     }
     const std::uint8_t w = t.ware;
     const std::uint8_t raw = t.raw;
+    // A public building of a kind of its own (slots.toml) before the kind of the building it copies.
+    for (const ComputerSlot& k : slots()) {
+        if (k.number > kOwnPublicSlot - kMaxOwnPublic && k.kind == ComputerSlot::Kind::Public &&
+            k.building == t.type->id) {
+            count(k.number);
+            return true;
+        }
+    }
     switch (t.prod) {
         case prod::kHouse:
             count(kSlotHouses);
@@ -1185,13 +1200,22 @@ bool Engine::survey_tile(AiPlayer& p, const City& c, CityPlan& r, std::uint32_t 
         return true;
     }
     // Producers by ware and raw material.
-    if (w == m_buildings.food_ware()) {
-        count(kSlotFood);
+    // Food and alcohol, with the goods of packages that count as such (ComputerSlot::counts_goods).
+    for (const std::uint8_t counter : {std::uint8_t{kSlotFood}, std::uint8_t{kSlotAlcohol}}) {
+        const ComputerSlot* k = computer_slot(slots(), counter);
+        if ((counter == kSlotFood ? w == m_buildings.food_ware() : w == ware::kAlcohol) ||
+            (k != nullptr && std::ranges::find(k->counts_goods, w) != k->counts_goods.end())) {
+            count(counter);
+        }
     }
-    if (w == ware::kAlcohol) {
-        count(kSlotAlcohol);
+    // A package's producer first: its building and those it counts (ComputerProducer).
+    std::optional<std::uint8_t> slot = counted_slot(t.type->id, m_world.balance().computer_producers);
+    if (!slot) {
+        slot = producer_slot(slots(), w, raw, t.type->id);
     }
-    const std::optional<std::uint8_t> slot = producer_slot(w, raw, t.type->id);
+    if (!slot) {
+        slot = package_slot(w);
+    }
     if (!slot) {
         return true;
     }
@@ -1211,7 +1235,7 @@ bool Engine::survey_tile(AiPlayer& p, const City& c, CityPlan& r, std::uint32_t 
 }
 
 // ---------------------------------------------------------------------------------------------
-// Maintenance sweep (0x0041F550) and the Kontor after a fire (0x0041D1F0)
+// Maintenance sweep and the Kontor after a fire
 
 void Engine::sweep(AiPlayer& p) {
     CityPlan* r = current_plan(p);
@@ -1226,6 +1250,9 @@ void Engine::sweep(AiPlayer& p) {
     std::int32_t seen = 0;
     std::int32_t cleared = 0;
     std::vector<BuildItem> rebuild;
+    // Walls: at war with a human, or at peace from the citizens' level on.
+    const bool war = at_war_with_a_human(p);
+    const bool walls = war || civ_level(p) > 1;
     const auto y = static_cast<std::int32_t>(r->sweep_y);
     while (r->sweep_x < map.width() && seen < 16 && cleared < 20) {
         const auto x = static_cast<std::int32_t>(r->sweep_x);
@@ -1240,6 +1267,19 @@ void Engine::sweep(AiPlayer& p) {
                 demolish_tile(p, x, y);
                 ++cleared;
             }
+            continue;
+        }
+        if (walls && rebuild.size() < 5) {
+            if (std::optional<BuildItem> wall = wall_item(p, *c, t, x, y, war)) {
+                rebuild.push_back(*wall);
+                if (t.kind == kind::kRoad) {
+                    continue;  // the road is gone
+                }
+            }
+        }
+        if (t.kind == kind::kWall && inner_wall(p, x, y)) {
+            demolish_tile(p, x, y);  // the city grew past it
+            ++cleared;
             continue;
         }
         if (t.kind == kind::kRoad) {
@@ -1320,8 +1360,135 @@ void Engine::sweep(AiPlayer& p) {
     }
 }
 
+namespace {
+
+/// Land a wall goes on: road, forest, ground, ruin.
+bool wall_land(std::int32_t k) {
+    return k == kind::kRoad || k == kind::kForest || k == kind::kGround || k == kind::kRuin;
+}
+
+bool wall_beach(std::int32_t k) {
+    return k == kind::kBeach || k == kind::kBeachOuter || k == kind::kBeachInner || k == kind::kBeachVariant ||
+           k == kind::kBeachRuin;
+}
+
+/// What the rings around a tile of the city's border hold.
+struct Border {
+    std::int32_t flags = 0;  ///< 1: a neighbour lies outside the city; 2: another city is near
+    std::int32_t land = 0;   ///< land neighbours
+    std::int32_t sea = 0;    ///< sea tiles within two rings
+};
+
+}  // namespace
+
+bool Engine::at_war_with_a_human(const AiPlayer& p) const {
+    const Diplomacy& d = m_world.diplomacy();
+    for (std::size_t h = 0; h < m_world.players().size(); ++h) {
+        const Player& other = m_world.players()[h];
+        if (other.role == PlayerRole::Human && other.status == PlayerStatus::Playing &&
+            d.relation(p.player, static_cast<PlayerId>(h)).peace != Treaty::Signed) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::optional<BuildItem> Engine::wall_item(AiPlayer& p, const City& c, const Tile& t, std::int32_t x, std::int32_t y,
+                                           bool war) {
+    // As in the original: enough gold, and 16 t of bricks at war or more than 40 t at peace.
+    const std::uint32_t bricks = c.stock(m_buildings.materials().bricks);
+    if (player(p).money <= 4000 || (war ? bricks < 16U * kTon : bricks <= 40U * kTon)) {
+        return std::nullopt;
+    }
+    const auto scan = [&](std::int32_t n) {
+        Border b;
+        rings(p, RingFilter::Any, x, y, x, y, n, [&](const Tile& o, std::int32_t, std::int32_t, std::int32_t d) {
+            if (d == 0 && o.city != p.city) {
+                b.flags |= 1;
+            }
+            if (o.city != MapCell::kNoCity && o.city != p.city) {
+                // A wall of another city next to the tile starts the flags over.
+                if (d == 0 && o.kind == kind::kWall) {
+                    b.flags = 0;
+                } else {
+                    b.flags |= 2;
+                }
+            }
+            if (wall_land(o.kind) || o.kind == kind::kBuilding) {
+                b.land += d == 0 ? 1 : 0;
+            } else if (o.kind == kind::kSea || o.kind == kind::kSurf || o.kind == kind::kSurfCorner) {
+                b.sea += d < 2 ? 1 : 0;
+            } else if (wall_beach(o.kind) && o.city != p.city) {
+                b.flags |= 2;  // free beach too
+            }
+        });
+        return b;
+    };
+    const assets::BuildingType* wall = by_id(id::kWall);
+    if (wall == nullptr) {
+        return std::nullopt;
+    }
+    if (wall_land(t.kind)) {
+        // Only the border: without a neighbour outside the city the flags cannot come out right,
+        // so the wide scan is skipped.
+        bool border = false;
+        rings(p, RingFilter::Any, x, y, x, y, 1,
+              [&](const Tile& o, std::int32_t, std::int32_t, std::int32_t) { border = border || o.city != p.city; });
+        if (!border) {
+            return std::nullopt;
+        }
+        // At war the border away from other cities, at peace the border towards them.
+        if (scan(war ? 9 : 6).flags != (war ? 1 : 3)) {
+            return std::nullopt;
+        }
+        if (t.kind == kind::kRoad) {
+            demolish_tile(p, x, y);  // at once, whether the wall can be paid or not
+        }
+        return BuildItem{wall->id, x, y, 0, 0};
+    }
+    if (wall_beach(t.kind)) {
+        // The coast: beach with land beside it and sea close by (only the first two rings count).
+        const Border b = scan(2);
+        if (b.land == 0 || b.sea == 0) {
+            return std::nullopt;
+        }
+        return BuildItem{wall->id, x, y, 0, 0};
+    }
+    if (!war && t.kind == kind::kWall) {
+        // A gate where the wall crosses a straight road, unless a gate is already beside it.
+        const std::array<std::int32_t, 4> k{tile(p.island, x + 1, y).kind, tile(p.island, x - 1, y).kind,
+                                            tile(p.island, x, y + 1).kind, tile(p.island, x, y - 1).kind};
+        if (std::find(k.begin(), k.end(), kind::kGate) != k.end()) {
+            return std::nullopt;
+        }
+        std::uint32_t roads = 0;
+        for (std::size_t i = 0; i < k.size(); ++i) {
+            roads |= k[i] == kind::kRoad ? 1U << i : 0U;
+        }
+        // Roads on both sides along x, or along y, and none on the other two.
+        const bool across_x = roads == 0b0011U;
+        const bool across_y = roads == 0b1100U;
+        const assets::BuildingType* gate = by_id(id::kGate);
+        if (gate == nullptr || (!across_x && !across_y)) {
+            return std::nullopt;
+        }
+        return BuildItem{gate->id, x, y, static_cast<std::uint8_t>(across_x ? 2 : 1), 0};
+    }
+    return std::nullopt;
+}
+
+bool Engine::inner_wall(AiPlayer& p, std::int32_t x, std::int32_t y) {
+    bool coast = false;
+    bool outside = false;
+    rings(p, RingFilter::Any, x, y, x, y, 2, [&](const Tile& o, std::int32_t, std::int32_t, std::int32_t d) {
+        coast = coast || wall_beach(o.kind);
+        outside = outside || (d == 0 && o.city != p.city);
+    });
+    return !coast && !outside;
+}
+
 void Engine::kontor_restore(AiPlayer& p) {
-    // 0x0041D1F0: a destroyed Kontor is built again at its level (the original always builds
+    // A destroyed Kontor is built again at its level (the original always builds
     // Kontor I, because it compares the intact Ids).
     City* c = current_city(p);
     CityPlan* r = current_plan(p);

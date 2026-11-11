@@ -85,7 +85,8 @@ public:
     /// The render device was reset and the textures lost their contents: all go and are made
     /// again when next drawn (an image from the pixels given then).
     void release_textures();
-    /// The packages' icons changed (ui::set_package_icons()): their pictures are read again.
+    /// The packages' icons changed (ui::set_package_icons(), ui::set_interface_sprites()): the
+    /// sprites are made again when next drawn.
     void forget_package_icons();
     /// The renderer was made again (the device was lost): textures come from `renderer` from now
     /// on. release_textures() goes before the old renderer does.
@@ -103,7 +104,9 @@ private:
     [[nodiscard]] std::vector<std::uint8_t> tinted(const assets::SpriteSheet& sheet, std::int32_t gfx,
                                                    const ui::ColourTint& tint) const;
     /// The picture of a package's icon at the art's scale, or its shape in `colour` (mask, raster).
-    Texture package_icon(const assets::PackageIcon& icon, int mode, std::int32_t colour);
+    /// A package's icon; a template icon (PackageIcon::tint) tinted in `player`, if given.
+    Texture package_icon(const assets::PackageIcon& icon, int mode, std::int32_t colour,
+                         std::optional<assets::Rgba> player);
     /// The font of a slot and size: the large one where that size has none, nullptr for none.
     [[nodiscard]] const ui::Font* font(std::int32_t slot, ui::ArtSize size) const noexcept;
     /// Text in text colour `colour`, its letters in palette colour `ink` unless that is -1 (DrawItem::ink).

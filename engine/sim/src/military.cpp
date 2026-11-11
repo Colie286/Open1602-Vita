@@ -15,13 +15,13 @@ namespace o1602::sim {
 
 namespace {
 
-constexpr std::uint32_t kRegenEpochMs = 10'000;  // 0x0047A8C0: building damage heals every 10 s
+constexpr std::uint32_t kRegenEpochMs = 10'000;  // building damage heals every 10 s
 constexpr std::uint32_t kRegenAmount = 32;       // by 1 HP
 constexpr std::uint32_t kTowerThinkUs = 1'000'000;
 constexpr std::uint32_t kCastleSecondMs = 1000;  // castles count their training in seconds
 constexpr std::int32_t kTowerSight8 = 0x60;      // towers score entries within 12 tiles
 
-/// HAUS kinds that take only 51/128 of the damage of a shot that is not a cannon's (0x0047A650).
+/// HAUS kinds that take only 51/128 of the damage of a shot that is not a cannon's.
 bool sturdy(std::int32_t kind) noexcept {
     switch (kind) {
         case sim::kind::kGate:
@@ -108,7 +108,7 @@ bool Military::order(const SoldierOrder& o) {
     if (o.attack) {
         declare_war_by_attack(units.front()->owner, o.target);
     }
-    // Formation (0x0044C6D0): slots one tile apart around the spot; each unit in order takes the
+    // Formation: slots one tile apart around the spot; each unit in order takes the
     // nearest free slot.
     std::vector<Target> targets(units.size(), o.target);
     const auto& formations = m_figures->formations();
@@ -163,7 +163,7 @@ bool Military::order(const SoldierOrder& o) {
         s.queue.clear();
         s.attack_move = o.attack_move;
         s.hold = false;
-        // Soldier_SetTarget 0x004497C0: the running cell ends, then the soldier plans.
+        // The running cell ends, then the soldier plans.
         s.target = targets[u];
         s.motion.path.clear();
         s.motion.path_index = 0;
@@ -182,7 +182,7 @@ bool Military::declare_war_by_attack(PlayerId self, const Target& target) {
         return false;
     }
     const Player* p = m_world->player(other);
-    // SetRelation(self, other, 0) (0x004760E0): also an offer of peace on either side ends.
+    // SetRelation(self, other, 0): also an offer of peace on either side ends.
     if (p == nullptr || m_world->behaviour(*p) == FactionBehaviour::Trader || self >= m_world->diplomacy().size() ||
         other >= m_world->diplomacy().size() || m_world->diplomacy().relation(self, other).peace == Treaty::None) {
         return false;
@@ -209,7 +209,7 @@ bool Military::command(const SoldierCommand& c) {
             s->motion.path_index = 0;
             return true;
         case SoldierCommand::Op::Disband: {
-            // The original charges the third value of the Soldat: line (0x0043D559).
+            // The original charges the third value of the Soldat: line.
             const assets::FigureType* type = type_of(*s);
             if (Player* p = m_world->player(s->owner); p != nullptr && type != nullptr) {
                 p->money = money_plus(p->money, -static_cast<std::int64_t>(m_figures->unit_cost(type->kind)));
@@ -249,7 +249,7 @@ void Military::update_towers(std::uint16_t island) {
         return;
     }
     const IslandMap& map = m_world->islands()[island].map;
-    // Towers whose building is gone, or no Wachturm any more, go (0x00481450); the others belong to
+    // Towers whose building is gone, or no Wachturm any more, go; the others belong to
     // the owner of the city they stand in.
     std::erase_if(m_world->towers(), [&](const Tower& t) {
         if (t.island != island) {
@@ -271,7 +271,7 @@ void Military::update_towers(std::uint16_t island) {
         }
     }
     std::sort(known_at.begin(), known_at.end());
-    // New towers for Wachturm buildings in a city's territory (0x00482120).
+    // New towers for Wachturm buildings in a city's territory.
     for (std::uint32_t y = 0; y < map.height(); ++y) {
         for (std::uint32_t x = 0; x < map.width(); ++x) {
             const MapCell& c = map.top(x, y);
@@ -330,7 +330,7 @@ void Military::tower_think(Tower& t) {
         if (!c.near) {
             continue;
         }
-        // Pirate towers spare unarmed trade ships without soldiers on board (0x00458E60).
+        // Pirate towers spare unarmed trade ships without soldiers on board.
         if (pirate_tower && c.unit.kind == Target::Kind::Ship) {
             const Ship* ship = m_world->ship(c.unit.ship);
             if (ship != nullptr && ship->cannons == 0 && !ship->trader) {
@@ -347,7 +347,7 @@ void Military::tower_think(Tower& t) {
         if (!target) {
             continue;
         }
-        // In range from the tower's centre (half tiles), no line of sight needed (0x00458D80).
+        // In range from the tower's centre (half tiles), no line of sight needed.
         const std::int32_t cx = me->x8 / 4;
         const std::int32_t cy = me->y8 / 4;
         if (target->cells.distance(cx, cy) > me->range8 / 4) {
@@ -388,7 +388,7 @@ void Military::resolve_hits(std::vector<ConstructionEvent>* construction) {
 }
 
 void Military::hit(const PendingHit& h, std::vector<ConstructionEvent>* construction) {
-    // Projectile_Hit 0x00445930: the target is hit if it still exists, wherever it went.
+    // The target is hit if it still exists, wherever it went.
     const auto target = m_combat->fighter(h.target);
     if (!target) {
         return;
@@ -497,7 +497,7 @@ void Military::damage_building(std::uint16_t island, std::uint16_t x, std::uint1
     }
     list.erase(it);
     const PlayerId victim = cell.owner;
-    // A destroyed market or Kontor blames the attacker (op 0x52; the natives' curse looks at it).
+    // A destroyed market or Kontor blames the attacker (the natives' curse looks at it).
     if ((b->type->prod_kind == prod::kMarket || b->type->prod_kind == prod::kKontor) && acts(*m_world, attacker)) {
         m_world->diplomacy().set_blamed(victim, attacker);
     }
@@ -520,7 +520,7 @@ void Military::damage_building(std::uint16_t island, std::uint16_t x, std::uint1
 }
 
 void Military::curse(std::uint16_t island, std::uint8_t city, bool dissolved) {
-    // Natives_Curse 0x0047EAA0, from 0x00482120: when the village is gone, or defenceless with fewer
+    // From: when the village is gone, or defenceless with fewer
     // than 3 dwellings. The blamed player (the last who killed their warriors or destroyed their
     // main building) is cursed; one time in two a drought follows on the island.
     City* c = m_world->city(island, city);

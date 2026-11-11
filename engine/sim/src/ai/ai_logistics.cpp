@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The ships of the computer players (docs/re/ai.md, "Ships and trade"): every 10 s the repair at the own
+// The ships of the computer players: every 10 s the repair at the own
 // shipyard, one supply run that brings goods home, the size of the fleet and new ships, and the
-// patrols around the own islands (AI_Logistics 0x00424BF0).
+// patrols around the own islands (AI_Logistics).
 #include <algorithm>
 #include <array>
 
@@ -88,8 +88,8 @@ bool Engine::ship_at_city(const Ship& s, const City& c) const {
 }
 
 bool Engine::ship_idle(AiPlayer& p, const Ship& s) {
-    // The white flag does not count (0x00423BC0, 0x00423E80 test bit 5 of ship + 0x1A8, the flag is
-    // bit 3): a plundered ship gets its next job, and the job strikes the flag.
+    // The white flag does not count (the original tests the wrong bit):
+    // a plundered ship gets its next job, and the job strikes the flag.
     const ShipNote& n = note(p, s.id);
     return !ship_moving(s) && !s.route.active && n.mission == 0 && !s.repairing && s.id != p.settle.ship;
 }
@@ -107,7 +107,7 @@ void Engine::send_to_city(AiPlayer& p, Ship& s, const City& c) {
 }
 
 void Engine::arm_one(City& c, Ship& s) {
-    // 0x004234D0: one cannon from the city's stock onto the ship.
+    // One cannon from the city's stock onto the ship.
     const assets::FigureType* t = ship_type(s);
     const std::uint8_t cannons = m_buildings.materials().cannons;
     if (t != nullptr && s.cannons < t->ship.max_cannons && c.stock(cannons) > kTon) {
@@ -119,7 +119,7 @@ void Engine::arm_one(City& c, Ship& s) {
 // ---------------------------------------------------------------------------------------------
 
 void Engine::logistics(AiPlayer& p) {
-    // A scenario can keep the computer's ships out of supply and patrols (player +0x70 bit 6).
+    // A scenario can keep the computer's ships out of supply and patrols.
     if (p.pirates || player(p).scenario.has(scenario_flag::kNoFleet)) {
         return;
     }
@@ -146,6 +146,7 @@ void Engine::logistics(AiPlayer& p) {
         if (p.yard_valid) {
             healthy = yard_service(p);
         }
+        cart_supply(p);
         if (Ship* s = pick_logistics_ship(p, healthy)) {
             // As in the original, a ship the computer offered for sale is withdrawn when it gets
             // this job (a patrol keeps the offer).
@@ -186,7 +187,7 @@ void Engine::logistics(AiPlayer& p) {
 }
 
 bool Engine::yard_service(AiPlayer& p) {
-    // 0x004243C0: one ship at a time into the yard for repair.
+    // One ship at a time into the yard for repair.
     const Tile t = tile(p.yard_island, p.yard_x, p.yard_y);
     if (!t.valid() || t.prod != prod::kShipyard || t.owner != p.player) {
         p.yard_valid = false;
@@ -256,7 +257,7 @@ bool Engine::yard_service(AiPlayer& p) {
 }
 
 Ship* Engine::pick_logistics_ship(AiPlayer& p, bool healthy) {
-    // 0x00423BC0: an idle ship with the fewest cannons, else the patrol with the fewest stops left
+    // An idle ship with the fewest cannons, else the patrol with the fewest stops left
     // that lies at the end of a leg; a ship under way is never taken.
     Ship* best = nullptr;
     std::uint32_t best_cannons = 50;
@@ -297,7 +298,7 @@ Ship* Engine::pick_logistics_ship(AiPlayer& p, bool healthy) {
 }
 
 Ship* Engine::pick_patrol_ship(AiPlayer& p, bool healthy) {
-    // 0x00423E80: an idle ship with the most cannons; worn-out patrols go home.
+    // An idle ship with the most cannons; worn-out patrols go home.
     const std::vector<Ship*> ships = own_ships(p);
     const City* home = home_city(p);
     Ship* best = nullptr;
@@ -340,7 +341,7 @@ std::uint32_t Engine::patrols(AiPlayer& p, std::uint16_t island) {
 }
 
 void Engine::patrol_route(AiPlayer& p, Ship& s, std::uint16_t island) {
-    // 0x00424A50: the corners of the island's rectangle, a little apart each time, in a loop.
+    // The corners of the island's rectangle, a little apart each time, in a loop.
     const WorldIsland& isl = island_of(island);
     const std::int32_t r1 = static_cast<std::int32_t>(rng().next() & 3U);
     const std::int32_t r2 = static_cast<std::int32_t>(rng().next() & 3U);
@@ -395,7 +396,7 @@ void Engine::patrol_route(AiPlayer& p, Ship& s, std::uint16_t island) {
 
 std::optional<std::size_t> Engine::supply_source(AiPlayer& p, std::uint16_t home_island, std::uint8_t w,
                                                  std::uint16_t* price) {
-    // 0x00424560: an own city on another island with goods to spare, else the cheapest Kontor
+    // An own city on another island with goods to spare, else the cheapest Kontor
     // of a partner with a trade treaty.
     const auto& m = m_buildings.materials();
     const std::uint32_t reserve = (w == m.tools || w == m.bricks || w == m.wood) ? 28 * kTon : 5 * kTon;
@@ -412,8 +413,9 @@ std::optional<std::size_t> Engine::supply_source(AiPlayer& p, std::uint16_t home
     for (std::size_t i = 0; i < cities.size(); ++i) {
         const City& c = cities[i];
         const Player* o = m_world.player(c.owner);
-        // Only human and computer partners (the original also takes natives and pirates, S-101).
-        if (c.owner == p.player || o == nullptr || (o->role != PlayerRole::Human && o->role != PlayerRole::Computer)) {
+        // Any partner with a trade treaty, the pirates' nest and the natives' villages too, as in the
+        // original.
+        if (c.owner == p.player || o == nullptr) {
             continue;
         }
         if (m_world.diplomacy().relation(p.player, c.owner).trade != Treaty::Signed) {
@@ -432,37 +434,164 @@ std::optional<std::size_t> Engine::supply_source(AiPlayer& p, std::uint16_t home
     return best;
 }
 
-bool Engine::home_supply_route(AiPlayer& p, Ship& s, City& home) {
-    // 0x00424850: one or two wares the home city lacks, from where they are, one-way home.
+std::vector<std::uint8_t> Engine::supply_wares(const AiPlayer& p, const City& home, std::uint32_t* target) const {
     std::vector<std::uint8_t> wares{m_buildings.food_ware(), m_buildings.materials().tools,
                                     m_buildings.materials().bricks, m_buildings.materials().wood, ware::kCloth};
-    std::uint32_t target = 10 * kTon;
+    *target = 10 * kTon;
     if (demand(home, ware::kSpices) > 0 || p.max_stage > 30) {
         wares.insert(wares.end(), {ware::kTobaccoGoods, ware::kSpices, ware::kAlcohol, ware::kOre, ware::kIron});
-        target = 20 * kTon;
+        *target = 20 * kTon;
     }
     if (demand(home, ware::kCocoa) > 0 || p.max_stage > 39) {
         wares.insert(wares.end(), {ware::kCocoa, ware::kClothes});
-        target = 30 * kTon;
+        *target = 30 * kTon;
     }
     if (p.max_stage > 49) {
         wares.insert(wares.end(), {ware::kGold, ware::kJewellery});
-        target = 40 * kTon;
+        *target = 40 * kTon;
     }
-    // Wares other supply ships already bring.
+    return wares;
+}
+
+namespace {
+
+/// The wares a route unloads.
+void unloaded_wares(const TradeRoute& route, std::vector<std::uint8_t>& out) {
+    for (const RouteStop& stop : route.stops) {
+        for (const RouteEntry& e : stop.entries) {
+            if (e.ware != 0 && e.unload) {
+                out.push_back(e.ware);
+            }
+        }
+    }
+}
+
+}  // namespace
+
+void Engine::cart_supply(AiPlayer& p) {
+    // Open1602's computers: a city buys what it lacks from a partner's city on its own island with
+    // its trade cart, as players do, before a ship sails for it. The original's computers never
+    // send a cart out.
+    if (classic()) {
+        return;
+    }
+    for (std::size_t h = 0; h < m_world.cities().size(); ++h) {
+        const City& home = m_world.cities()[h];
+        if (home.owner != p.player || !home.warehouse_x || !home.warehouse_y) {
+            continue;
+        }
+        const Ship* cart = trade_cart_of(m_world, p.player, home.island);
+        if (cart != nullptr && (cart->route.active || ship_moving(*cart))) {
+            continue;  // on its way
+        }
+        std::uint32_t target = 0;
+        const std::vector<std::uint8_t> wares = supply_wares(p, home, &target);
+        std::optional<std::size_t> source;
+        std::uint8_t ware = 0;
+        for (const std::uint8_t w : wares) {
+            if (home.stock(w) >= target) {
+                continue;
+            }
+            std::uint16_t best_price = 1000;
+            for (std::size_t i = 0; i < m_world.cities().size(); ++i) {
+                const City& c = m_world.cities()[i];
+                if (c.island != home.island || c.owner == p.player || !c.warehouse_x || !c.warehouse_y ||
+                    m_world.player(c.owner) == nullptr ||
+                    m_world.diplomacy().relation(p.player, c.owner).trade != Treaty::Signed) {
+                    continue;
+                }
+                const City::Trade* t = c.trade_of(w);
+                if (t == nullptr || !t->sell || c.stock(w) <= t->keep + 5 * kTon || t->sell_price >= best_price) {
+                    continue;
+                }
+                source = i;
+                best_price = t->sell_price;
+            }
+            if (source) {
+                ware = w;
+                break;
+            }
+        }
+        if (!source) {
+            continue;
+        }
+        const City& from = m_world.cities()[*source];
+        const std::uint8_t home_index = home.index;
+        const std::uint16_t island = home.island;
+        const Target load = Target::city_of(from.island, from.index);
+        const std::uint32_t amount = std::max<std::uint32_t>(target - home.stock(ware), 5 * kTon);
+        std::uint32_t id = cart != nullptr ? cart->id : 0;
+        if (cart == nullptr) {
+            const WorldIsland& isl = island_of(island);
+            CartRequest request;
+            request.player = p.player;
+            request.island = island;
+            request.city = home_index;
+            request.x = static_cast<std::uint16_t>(isl.x + *from.warehouse_x);
+            request.y = static_cast<std::uint16_t>(isl.y + *from.warehouse_y);
+            if (!execute(request).accepted) {
+                continue;
+            }
+            const Ship* made = trade_cart_of(m_world, p.player, island);
+            if (made == nullptr) {
+                continue;
+            }
+            id = made->id;
+            log(p, "trade cart %u on island %u", id, island);
+        }
+        // Load at the partner, unload at home, once.
+        const auto edit = [&](RouteEdit e) {
+            e.player = p.player;
+            e.ship = id;
+            execute(e);
+        };
+        RouteEdit clear;
+        clear.op = RouteEdit::Op::ClearStop;
+        clear.stop = 0xFF;
+        edit(clear);
+        const std::array<std::pair<Target, RouteEntry>, 2> stops = {
+            std::pair{load, RouteEntry{ware, false, amount}},
+            std::pair{Target::city_of(island, home_index), RouteEntry{ware, true, 50 * kTon}}};
+        for (std::uint8_t i = 0; i < stops.size(); ++i) {
+            RouteEdit stop;
+            stop.op = RouteEdit::Op::SetStop;
+            stop.stop = i;
+            stop.target = stops[i].first;
+            edit(stop);
+            RouteEdit entry;
+            entry.op = RouteEdit::Op::SetEntry;
+            entry.stop = i;
+            entry.entry = 0;
+            entry.value = stops[i].second;
+            edit(entry);
+        }
+        RouteEdit way;
+        way.op = RouteEdit::Op::OneWay;
+        way.on = true;
+        edit(way);
+        RouteEdit start;
+        start.op = RouteEdit::Op::Start;
+        edit(start);
+        log(p, "trade cart %u fetches ware %u from city %u/%u", id, ware, load.island, load.city);
+    }
+}
+
+bool Engine::home_supply_route(AiPlayer& p, Ship& s, City& home) {
+    // One or two wares the home city lacks, from where they are, one-way home.
+    std::uint32_t target = 0;
+    const std::vector<std::uint8_t> wares = supply_wares(p, home, &target);
+    // Wares other supply ships already bring, and the trade cart on the home island.
     std::vector<std::uint8_t> routed;
     for (const ShipNote& n : p.ships) {
         const Ship* o = m_world.ship(n.id);
         if (o == nullptr || o->id == s.id || !n.supply || !o->route.active) {
             continue;
         }
-        for (const RouteStop& stop : o->route.stops) {
-            for (const RouteEntry& e : stop.entries) {
-                if (e.ware != 0 && e.unload) {
-                    routed.push_back(e.ware);
-                }
-            }
-        }
+        unloaded_wares(o->route, routed);
+    }
+    if (const Ship* cart = trade_cart_of(m_world, p.player, home.island);
+        cart != nullptr && cart->route.active && !classic()) {
+        unloaded_wares(cart->route, routed);
     }
     struct Pick {
         std::uint8_t ware = 0;
@@ -581,7 +710,7 @@ bool Engine::home_supply_route(AiPlayer& p, Ship& s, City& home) {
 }
 
 void Engine::update_fleet_target(AiPlayer& p) {
-    // 0x00423710: about one ship per city, more against strong human fleets once the computer
+    // About one ship per city, more against strong human fleets once the computer
     // casts cannons.
     const auto ships = static_cast<std::int32_t>(own_ships(p).size());
     const auto n = static_cast<std::int32_t>(p.cities);
@@ -628,14 +757,14 @@ void Engine::update_fleet_target(AiPlayer& p) {
 }
 
 void Engine::order_ship(AiPlayer& p) {
-    // 0x00422150: a ship of a random type the yard can build, while the money covers half of it.
+    // A ship of a random type the yard can build, while the money covers half of it.
     // Never in the tutorial.
     if (tutorial()) {
         return;
     }
     if (!p.yard_valid) {
-        // Without a yard the computer plans one (0x0042233E: when a building task is on top of its
-        // stack, 0x00421D30), whatever its stage; the stage lists ask for it only from the merchants
+        // Without a yard the computer plans one (when a building task is on top of its
+        // stack), whatever its stage; the stage lists ask for it only from the merchants
         // on. Without this a computer never had more than its first ship. The original plans it
         // right here and so replaces the search of the paused task (GB-2); Open1602 leaves the
         // request for the next develop step; the original's computers keep the quirk.
@@ -677,7 +806,22 @@ void Engine::order_ship(AiPlayer& p) {
         const Tile t = tile(p.yard_island, p.yard_x, p.yard_y);
         const bool small = !t.valid() || t.type->size_x <= 3;
         const auto type = static_cast<std::uint8_t>((rng().next() & 1U) * 2U + (small ? 0U : 1U));
-        const assets::FigureType* f = m_sim.m_figures->get(figure::ship_figure(type));
+        // Open1602: a ship of a package of that type is built as often as the original's
+        // (docs/modding/own-figures.md#ships); the original's computers know only theirs.
+        std::uint32_t package_ship = 0;
+        if (!classic()) {
+            std::vector<std::uint32_t> choice{0};
+            for (const auto& [number, ship_type] : m_sim.m_figures->package_ships()) {
+                if (ship_type == type) {
+                    choice.push_back(number);
+                }
+            }
+            if (choice.size() > 1) {
+                package_ship = choice[rng().next() % choice.size()];
+            }
+        }
+        const assets::FigureType* f =
+            m_sim.m_figures->get(package_ship != 0 ? package_ship : figure::ship_figure(type));
         const std::int64_t price = f != nullptr ? f->ship.price : 0;
         if (std::int64_t{player(p).money} > price / 2) {
             ShipyardOrder order;
@@ -687,6 +831,7 @@ void Engine::order_ship(AiPlayer& p) {
             order.y = p.yard_y;
             order.op = ShipyardOrder::Op::Build;
             order.ship_type = type;
+            order.figure = package_ship;
             execute(order);
             return;
         }

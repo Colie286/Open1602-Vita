@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Missions of scenarios: goals, loss conditions, victory and defeat (docs/re/missions.md).
+// Missions of scenarios: goals, loss conditions, victory and defeat.
 //
 // The original keeps four mission slots (AUFTRAG4); each player names one or none. A mission is a
 // set of goals that must all hold at the same time, plus up to two loss conditions. The original
@@ -13,10 +13,12 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "o1602/assets/building_table.hpp"
 #include "o1602/assets/figure_table.hpp"
+#include "o1602/assets/package_scenarios.hpp"
 #include "o1602/assets/scenario.hpp"
 #include "o1602/sim/player.hpp"
 
@@ -25,7 +27,7 @@ namespace o1602::sim {
 class World;
 struct City;
 
-/// Goal bits of a mission (AUFTRAG4 +0x04, Mission_Evaluate 0x00475440).
+/// Goal bits of a mission (AUFTRAG4 +0x04).
 namespace goal {
 inline constexpr std::uint32_t kCity1 = 0x1;  ///< a city at least cities[0]
 inline constexpr std::uint32_t kCity2 = 0x2;  ///< another city at least cities[1]
@@ -115,35 +117,49 @@ struct Mission {
 /// The record of the export (AUFTRAG4) for slot `slot`.
 [[nodiscard]] assets::MissionRecord mission_to_record(const Mission& mission, std::uint32_t slot);
 
-/// Load-time steps of a game with missions (0x0048C0F0, TIMERS loader 0x00484EE1): the islands of
+/// Load-time steps of a game with missions: the islands of
 /// the island goals that have no list yet, and settings bit 5 ("defeat the pirates": pirates
 /// need a nest for new ships and can be defeated) if a mission of any player asks to defeat
 /// them (the original looks at the local player only, S-105).
 void prepare_missions(World& world);
 
-/// Einwohner of a city as the city list and the missions count them (0x0047F790): house
+/// The mission of goals as a scenario gives them (docs/modding/scenarios.md), with `text`
+/// (Windows-1252) as its description. A good the world does not know, and a third good, are left
+/// out with a warning that starts with `source`.
+[[nodiscard]] Mission mission_from_goals(const World& world, const assets::ScenarioGoals& goals, std::string text,
+                                         std::string_view source, std::vector<std::string>* warnings);
+
+/// Starts a package's scenario (docs/modding/scenarios.md) on `world`, loaded from its map: the
+/// money of every human player, if the scenario gives it, and its goals, if any, as the mission of
+/// every human player, with the briefing in `language` as the mission's text, and the slots it gives
+/// to factions. A goods goal whose good the world does not know, and a slot that is none or names a
+/// faction the world does not have, are left out with a warning.
+void apply_package_scenario(World& world, const assets::PackageScenario& scenario, std::string_view language,
+                            std::vector<std::string>* warnings);
+
+/// Einwohner of a city as the city list and the missions count them: house
 /// inhabitants of all classes plus the workers of its buildings.
 [[nodiscard]] std::uint32_t city_einwohner(const City& city, std::uint32_t workers) noexcept;
 
-/// Workers per city (city + 0x218, Arbeiter of every building with a running cost, tower or
+/// Workers per city (Arbeiter of every building with a running cost, tower or
 /// castle), indexed like World::cities().
 [[nodiscard]] std::vector<std::uint32_t> city_workers(const World& world, const assets::BuildingTable& buildings);
 /// Workers of one city, without the index of all cities (for a single city every frame).
 [[nodiscard]] std::uint32_t city_workers(const World& world, const assets::BuildingTable& buildings, const City& city);
 
-/// Military upkeep per minute per player (0x00475B00): soldiers, units in castles and on ships,
+/// Military upkeep per minute per player: soldiers, units in castles and on ships,
 /// cannon towers. Computer players pay none.
 [[nodiscard]] std::vector<std::uint32_t> military_upkeep(const World& world, const assets::FigureTable& figures);
 
-/// Trade balance per minute (0x00474E80).
+/// Trade balance per minute.
 [[nodiscard]] std::int32_t trade_balance(const Player& player) noexcept;
 
-/// Balance per minute of a player as the status bar shows it (0x00474ED0): taxes less running
+/// Balance per minute of a player as the status bar shows it: taxes less running
 /// costs of all own cities, less the military upkeep, plus the trade balance.
 [[nodiscard]] std::int32_t player_balance(const World& world, const assets::BuildingTable& buildings,
                                           const assets::FigureTable& figures, PlayerId player);
 
-/// The figures of the info panel "Spielerstatus" (InfoPanel_Refresh 0x00434420), per minute.
+/// The figures of the info panel "Spielerstatus", per minute.
 struct PlayerFigures {
     std::uint32_t inhabitants = 0;  ///< Einwohner of all own cities
     std::int64_t taxes = 0;
@@ -156,7 +172,7 @@ struct PlayerFigures {
 [[nodiscard]] PlayerFigures player_figures(const World& world, const assets::BuildingTable& buildings,
                                            const assets::FigureTable& figures, PlayerId player);
 
-/// Whether a player owns a city, a ship that is not sinking (the original's player + 0x86, + 0x9A).
+/// Whether a player owns a city, a ship that is not sinking.
 [[nodiscard]] bool owns_city(const World& world, PlayerId player);
 [[nodiscard]] bool owns_ship(const World& world, PlayerId player);
 
@@ -167,7 +183,7 @@ struct MissionCheck {
     bool lost = false;           ///< a loss condition holds
 };
 
-/// Checks the mission of `player` (Mission_Evaluate 0x00475440). A player without a mission, or a
+/// Checks the mission of `player`. A player without a mission, or a
 /// computer whose mission does not allow computers, neither wins nor loses.
 [[nodiscard]] MissionCheck check_mission(const World& world, const assets::BuildingTable& buildings,
                                          const assets::FigureTable& figures, PlayerId player);
@@ -186,7 +202,8 @@ struct GameEvent {
         NoPossessions,  ///< no city and no ship
         Bankrupt,       ///< money below -1000 and no positive balance for 200 s
         MissionFailed,  ///< a loss condition of the mission
-        Retired,        ///< a computer with no city and no ship (AI root 0x00429070) or pirates without ships and nest
+        Retired,        ///< a computer with no city and no ship (AI root) or pirates without ships and nest
+        Script,         ///< a script of a content package (Simulation::script_defeat)
     };
     Kind kind = Kind::GameOver;
     PlayerId player = kNoPlayer;

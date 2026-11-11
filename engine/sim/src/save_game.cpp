@@ -32,8 +32,9 @@ constexpr std::uint64_t kMaxSize = 1ULL << 30;  // 1 GiB
 constexpr std::uint64_t kMaxSizeWithoutMeta = 1ULL << 28;
 /// Beyond the map's tiles (MAPW, at most 20 bytes a tile), what the rest of a game may need.
 constexpr std::uint64_t kMaxSizeBeyondMap = 128ULL << 20;
-/// The prefix of the sections that holds META (it comes first and is small).
-constexpr std::size_t kHead = 4096;
+/// The prefix of the sections that holds META (it comes first and is small) and the stars and
+/// names of a scenario's SCNI behind it.
+constexpr std::size_t kHead = 16384;
 
 /// How large the sections of a game on a world of this size can be: a file promising more is
 /// damaged or made to cost memory (HI-11: a host's snapshot is such a file for its clients).
@@ -45,12 +46,12 @@ std::uint64_t max_size_for(const SaveMeta& meta) noexcept {
 }
 
 /// META at the start of the stored sections, without unpacking more than its prefix.
-std::optional<SaveMeta> meta_of(std::span<const std::uint8_t> stored, bool compressed) {
+std::optional<SaveMeta> meta_of(std::span<const std::uint8_t> stored, bool compressed, std::size_t head_size = kHead) {
     if (compressed) {
-        auto head = core::zlib_inflate_prefix(stored, kHead);
+        auto head = core::zlib_inflate_prefix(stored, head_size);
         return head ? save::read_meta(*head) : std::nullopt;
     }
-    return save::read_meta(stored.subspan(0, std::min(stored.size(), kHead)));
+    return save::read_meta(stored.subspan(0, std::min(stored.size(), head_size)));
 }
 
 struct Header {
@@ -113,7 +114,7 @@ core::Result<core::Bytes> encode_game(const World& world, const assets::Building
         save::encode_sections(world, buildings, simulation, save::TileMode::Full, std::span<const std::uint8_t>{});
     // Before packing: a game too large to read back fails at once, not after seconds of deflate,
     // and with a message that says why (DS-4).
-    const SaveMeta meta{world.width(), world.height(), 0, {}};
+    const SaveMeta meta{world.width(), world.height(), 0, {}, std::nullopt};
     if (sections.size() > max_size_for(meta)) {
         return make_error(ErrorCode::LimitExceeded, "savegame: the game is too large (" +
                                                         std::to_string(sections.size() >> 20) + " MiB of " +
@@ -126,7 +127,10 @@ core::Result<core::Bytes> pack_game(const core::Bytes& sections, const SaveOptio
     std::uint16_t flags = 0;
     core::Bytes stored;
     if (options.compress && core::has_zlib()) {
-        auto packed = core::zlib_deflate(sections);
+        // SaveOptions::fast: a world of 4000 x 3346 with giants saves in 0.5 s instead of 2.2 s,
+        // 59 MB instead of 38 MB.
+        constexpr std::size_t kLarge = std::size_t{64} << 20;
+        auto packed = core::zlib_deflate(sections, options.fast && sections.size() > kLarge ? 1 : 6);
         if (!packed) {
             return packed.error();
         }
@@ -164,6 +168,16 @@ core::Result<SaveInfo> save_info(std::span<const std::uint8_t> head, std::uint64
     // META comes first and is small; a list of savegames needs no more of the file.
     info.meta = meta_of(bytes.subspan(kHeaderSize), info.compressed);
     return info;
+}
+
+std::optional<ScenarioInfo> scenario_info_of(std::span<const std::uint8_t> bytes, std::uint64_t file_size) {
+    auto h = read_header(bytes, file_size);
+    if (!h) {
+        return std::nullopt;
+    }
+    // SCNI follows META and the settings: its longest texts fit in the first megabyte unpacked.
+    auto meta = meta_of(bytes.subspan(kHeaderSize), (h->flags & kCompressed) != 0, kScenarioHead);
+    return meta ? std::move(meta->scenario) : std::nullopt;
 }
 
 core::Result<World> read_game(std::span<const std::uint8_t> bytes, const assets::BuildingTable& buildings,
@@ -205,6 +219,15 @@ core::Result<World> read_game(std::span<const std::uint8_t> bytes, const assets:
         return status.error();
     }
     if (figures != nullptr) {
+        // The packages of this computer must give the game's figures the same numbers again
+        // (docs/modding/own-figures.md).
+        for (const assets::OwnFigure& f : world->own_figures()) {
+            if (figures->get(f.number) == nullptr) {
+                return make_error(ErrorCode::NotFound, "savegame: the figure " + f.id + " (number " +
+                                                           std::to_string(f.number) +
+                                                           ") is not there; its package is missing");
+            }
+        }
         if (auto status = Simulation::state_readable(*world, buildings, *figures); !status) {
             return make_error(status.error().code,
                               "savegame: the state of the running game is damaged (" + status.error().message + ")");

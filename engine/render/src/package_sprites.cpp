@@ -33,7 +33,7 @@ std::vector<std::uint8_t> cut(const core::PngImage& png, std::uint32_t i, std::u
 
 }  // namespace
 
-PackageImageSource::PackageImageSource(const assets::PackageImage& image, std::size_t zoom) {
+PackageImageSource::PackageImageSource(const assets::PackageImage& image, std::size_t zoom, bool whole) {
     m_sprites.resize(image.count);
     // The level with a file of its own, this one or the next larger one that has one.
     std::size_t from = std::min(zoom, assets::kPackageZoomLevels - 1);
@@ -65,6 +65,9 @@ PackageImageSource::PackageImageSource(const assets::PackageImage& image, std::s
             std::vector<std::uint8_t> half;
             halve_rgba(s.rgba, s.width, s.height, half, s.width, s.height);
             s.rgba = std::move(half);
+        }
+        if (whole) {
+            continue;
         }
         // Leave out the transparent rows at the top; a sprite with none opaque is empty.
         std::uint32_t first = 0;
@@ -135,14 +138,58 @@ bool PlacedSources::pixels(std::uint32_t i, std::vector<std::uint8_t>& rgba) con
     return true;
 }
 
+RedirectedSprites::RedirectedSprites(const SpriteSource& base, std::vector<assets::SpriteRedirect> redirects)
+    : m_base(&base), m_redirects(std::move(redirects)) {
+    // Those that lead out of the base, or overlap one before them (a building whose sprites share
+    // another's), are left out.
+    std::erase_if(m_redirects, [&](const assets::SpriteRedirect& r) {
+        return r.count == 0 || std::uint64_t{r.to} + r.count > base.count() ||
+               std::uint64_t{r.from} + r.count > base.count();
+    });
+    std::sort(m_redirects.begin(), m_redirects.end(),
+              [](const assets::SpriteRedirect& a, const assets::SpriteRedirect& b) { return a.from < b.from; });
+    std::uint64_t end = 0;
+    std::erase_if(m_redirects, [&](const assets::SpriteRedirect& r) {
+        if (r.from < end) {
+            return true;
+        }
+        end = std::uint64_t{r.from} + r.count;
+        return false;
+    });
+}
+
+std::uint32_t RedirectedSprites::target(std::uint32_t i) const noexcept {
+    const auto it = std::upper_bound(m_redirects.begin(), m_redirects.end(), i,
+                                     [](std::uint32_t a, const assets::SpriteRedirect& r) { return a < r.from; });
+    if (it == m_redirects.begin()) {
+        return i;
+    }
+    const assets::SpriteRedirect& r = *std::prev(it);
+    return i - r.from < r.count ? r.to + (i - r.from) : i;
+}
+
+void RedirectedSprites::size(std::uint32_t i, std::uint32_t& width, std::uint32_t& height) const {
+    m_base->size(target(i), width, height);
+}
+
+bool RedirectedSprites::pixels(std::uint32_t i, std::vector<std::uint8_t>& rgba) const {
+    return m_base->pixels(target(i), rgba);
+}
+
 IconPixels package_icon_pixels(const assets::PackageIcon& icon, double scale) {
     IconPixels out;
-    const auto bytes = core::read_file(icon.file);
-    if (!bytes) {
-        out.error = core::path_to_utf8(icon.file) + ": " + bytes.error().message;
-        return out;
+    std::vector<std::uint8_t> read;
+    std::span<const std::uint8_t> file(icon.data, icon.data != nullptr ? icon.size : 0);
+    if (icon.data == nullptr) {
+        auto bytes = core::read_file(icon.file);
+        if (!bytes) {
+            out.error = core::path_to_utf8(icon.file) + ": " + bytes.error().message;
+            return out;
+        }
+        read = std::move(*bytes);
+        file = read;
     }
-    auto png = core::decode_png(*bytes);
+    auto png = core::decode_png(file);
     if (!png) {
         out.error = core::path_to_utf8(icon.file) + ": " + png.error().message;
         return out;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Orders of the ship panel beyond sailing and trade (docs/re/ships.md#ship-window): mounting
+// Orders of the ship panel beyond sailing and trade: mounting
 // and taking off cannons, goods overboard, the name, and selling ships between players.
 #include <algorithm>
 #include <span>
@@ -77,33 +77,37 @@ bool Fleet::command(const ShipCommand& c) {
             return mounted > 0;
         }
         case ShipCommand::Op::UnmountCannon: {
-            // Needs room for 1 t of cannons: a hold with cannons and space, or an empty hold.
-            if (!own || ship->cannons == 0) {
+            // Each needs room for 1 t of cannons: a hold with cannons and space, else an empty hold;
+            // `count` times, or until the mounted cannons or the room run out.
+            if (!own) {
                 return false;
             }
-            CargoSlot* target = nullptr;
             const std::span<CargoSlot> usable(ship->cargo.data(), holds(*ship));
-            for (CargoSlot& slot : usable) {
-                if (slot.ware == cannons && slot.amount + kTon <= kHoldCapacity) {
-                    target = &slot;
-                    break;
-                }
-            }
-            if (target == nullptr) {
+            const auto room = [&]() -> CargoSlot* {
                 for (CargoSlot& slot : usable) {
-                    if (slot.ware == 0) {
-                        target = &slot;
-                        break;
+                    if (slot.ware == cannons && slot.amount + kTon <= kHoldCapacity) {
+                        return &slot;
                     }
                 }
+                for (CargoSlot& slot : usable) {
+                    if (slot.ware == 0) {
+                        return &slot;
+                    }
+                }
+                return nullptr;
+            };
+            std::uint8_t unmounted = 0;
+            while (unmounted < c.count && ship->cannons > 0) {
+                CargoSlot* target = room();
+                if (target == nullptr) {
+                    break;
+                }
+                target->ware = cannons;
+                target->amount += kTon;
+                --ship->cannons;
+                ++unmounted;
             }
-            if (target == nullptr) {
-                return false;
-            }
-            target->ware = cannons;
-            target->amount += kTon;
-            --ship->cannons;
-            return true;
+            return unmounted > 0;
         }
         case ShipCommand::Op::Dump: {
             // Every hold (or the one named) but soldiers on board; the goods are gone.
@@ -127,15 +131,21 @@ bool Fleet::command(const ShipCommand& c) {
             }
             ship->name = c.name;
             return true;
-        case ShipCommand::Op::OfferForSale:
+        case ShipCommand::Op::OfferForSale: {
             if (!own || c.factor > ShipCommand::kMaxSaleFactor) {
                 return false;
             }
+            // Only a new offer is announced to the other players; changing the price of a ship
+            // already for sale (dragging the price slider sends one command per step) stays quiet.
+            const bool announce = !ship->for_sale;
             ship->for_sale = true;
             ship->sale_factor = c.factor;
-            m_events.push_back(
-                ShipEvent{ShipEvent::Kind::OfferedForSale, ship->id, ship->owner, 0, 0, 0, 0, sale_price(*ship)});
+            if (announce) {
+                m_events.push_back(
+                    ShipEvent{ShipEvent::Kind::OfferedForSale, ship->id, ship->owner, 0, 0, 0, 0, sale_price(*ship)});
+            }
             return true;
+        }
         case ShipCommand::Op::WithdrawSale:
             if (!own || !ship->for_sale) {
                 return false;
@@ -143,7 +153,7 @@ bool Fleet::command(const ShipCommand& c) {
             ship->for_sale = false;
             return true;
         case ShipCommand::Op::Buy: {
-            // 0x0044DF80: the seller earns the price and the ship changes hands. The original takes
+            // The seller earns the price and the ship changes hands. The original takes
             // the money without looking whether the buyer has it; Open1602 checks it, the fleet
             // limit of the buyer, and that no soldiers are on board (they would change sides).
             Player* buyer = m_world->player(c.player);
@@ -176,10 +186,11 @@ bool Fleet::command(const ShipCommand& c) {
                 return false;
             }
             if (c.on) {
-                // Raising it stops the ship like the stop button (0x0044EBA0), then holds it.
+                // Raising it stops the ship like the stop button, then holds it.
                 if (!ship->held) {
                     order(ShipOrder{c.player, ship->id, Target{}});
                     ship->held = true;
+                    ship->plundered = false;
                     m_events.push_back(ShipEvent{ShipEvent::Kind::WhiteFlag, ship->id, ship->owner});
                 }
             } else {

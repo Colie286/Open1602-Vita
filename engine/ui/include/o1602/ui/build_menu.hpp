@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The build menu (docs/re/ui.md#baumenü): eight category buttons in BAU.GAD, and per category a
-// pop-up of building icons in rows that the code builds itself (BuildMenu_OnCategoryPress
-// 0x00432A70). Which buildings belong to which category is a table in the original's code, not
-// data; here it is data (BuildMenuDefinition), with the original's lists as the default, and the
-// packages' build_menu.toml add, move and remove buildings (ADR 0007, docs/modding/build-menu.md).
-// The eight categories are the buttons of BAU.GAD.
+// The build menu: eight category buttons in BAU.GAD, and per category a
+// pop-up of building icons in rows that the code builds itself. Which buildings belong to which category is a table in
+// the original's code, not data; here it is data (BuildMenuDefinition), with the original's lists as the default, and
+// the packages' build_menu.toml add, move and remove buildings (ADR 0007, docs/modding/build-menu.md). The eight
+// categories are the buttons of BAU.GAD.
 #pragma once
 
 #include <cstddef>
@@ -24,6 +23,8 @@
 #include "o1602/core/result.hpp"
 
 namespace o1602::ui {
+
+class Panel;
 
 /// One building of a category's pop-up.
 struct BuildButton {
@@ -58,7 +59,7 @@ struct BuildCategory {
 
 struct BuildMenuDefinition {
     std::vector<BuildCategory> categories;
-    std::int32_t default_category = 31006;  ///< selected at the start of a game (Farmen, 0x0042BAD0)
+    std::int32_t default_category = 31006;  ///< selected at the start of a game (Farmen)
     std::int32_t locked_icon_offset = 43;   ///< the grey "?" of a building not yet available
 
     [[nodiscard]] const BuildCategory* category(std::int32_t button) const noexcept;
@@ -66,7 +67,7 @@ struct BuildMenuDefinition {
     [[nodiscard]] const BuildCategory* category_of(std::uint32_t id) const noexcept;
 };
 
-/// The original's categories (lists 0x00498440.., row sizes 0x004985A0..).
+/// The original's categories and their row sizes.
 [[nodiscard]] const BuildMenuDefinition& original_build_menu();
 
 /// The build menu of the game: original_build_menu() with the packages' changes once
@@ -96,8 +97,15 @@ core::Status apply_build_menu_package(BuildMenuDefinition& menu, std::string_vie
                                                        std::span<const assets::OwnBuilding> own = {});
 
 // Gadget Ids of the pop-up (the original's numbers).
-inline constexpr std::int32_t kPopupSlot = 32001;           ///< + position in the list: the frame to click
-inline constexpr std::int32_t kPopupIcon = 32101;           ///< + position: the icon
+inline constexpr std::int32_t kPopupSlot = 32001;  ///< + position in the list: the frame to click
+inline constexpr std::int32_t kPopupIcon = 32101;  ///< + position: the icon
+/// + row: a strip of the row's own picture over its middle, for a row without a third icon (the
+/// picture has a small mark there that a third icon always hides); see popup_patch().
+inline constexpr std::int32_t kPopupPatch = 32941;
+/// The patches' columns of the row picture (where it is plain) and where they go, in its pixels.
+inline constexpr std::int32_t kPopupPatchFrom = 180;
+inline constexpr std::int32_t kPopupPatchAt = 112;
+inline constexpr std::int32_t kPopupPatchWidth = 20;
 inline constexpr std::int32_t kPopupBackdrop = 1000000000;  ///< the rest of the panel: closes the pop-up
 /// Distance of two rows and of two icons in a row, in design units.
 inline constexpr std::int32_t kPopupRowStep = 59;
@@ -110,5 +118,7 @@ inline constexpr std::int32_t kPopupIconStep = 57;
 [[nodiscard]] assets::GadgetLayout build_popup(const BuildCategory& category, const std::vector<bool>& available,
                                                const assets::Gadget& button, std::int32_t gfx_bauhaus,
                                                std::int32_t locked_icon_offset);
+/// Gives the patches of a pop-up made from build_popup() their band of the row picture.
+void show_popup_patches(Panel& popup);
 
 }  // namespace o1602::ui

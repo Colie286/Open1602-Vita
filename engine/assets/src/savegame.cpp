@@ -304,7 +304,7 @@ core::Result<GameState> load_game_state(const ChunkFile& file) {
             state.tutorial = data[kTimersTutorial];
             state.difficulty = data[kTimersDifficulty];
             state.settings = u32(data, kTimersSettings);
-            // A byte the loader turns into "large veins never run out" (0x00484D30); no file sets it.
+            // A byte the loader turns into "large veins never run out"; no file sets it.
             constexpr std::size_t kTimersEndlessVeins = 0xA4;
             constexpr std::uint32_t kEndlessVeinsBit = 1U << 3;
             if (data[kTimersEndlessVeins] != 0) {
@@ -322,7 +322,7 @@ core::Result<GameState> load_game_state(const ChunkFile& file) {
         constexpr std::size_t kTimersCraters = 0xD0;
         constexpr std::uint8_t kRefIslandTile = 0x33;
         const auto crater_ref = [&](std::size_t o) -> std::optional<GameState::CraterRef> {
-            // The low byte tells whether the ref is set (0x0048C0F0 tests it alone).
+            // The low byte tells whether the ref is set (tests it alone).
             if (data[o] != kRefIslandTile) {
                 return std::nullopt;
             }

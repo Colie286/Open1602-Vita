@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
+#include <iterator>
 #include <map>
 #include <random>
 #include <utility>
@@ -13,6 +15,8 @@
 
 #include "o1602/assets/chunk_file.hpp"
 #include "o1602/core/file.hpp"
+#include "o1602/core/text.hpp"
+#include "o1602/sim/save_game.hpp"
 #include "o1602/ui/list_scroll.hpp"
 #include "o1602/ui/localization.hpp"
 
@@ -33,6 +37,8 @@ constexpr std::int32_t kHistoryQuit = 30007;
 // Open1602's own button on BASE.GAD's screen, below the original's.
 constexpr std::int32_t kModsButton = 1;
 constexpr ui::Rect kModsButtonRect{24, 714, 160, 38};
+constexpr std::int32_t kEditorButton = 2;
+constexpr ui::Rect kEditorButtonRect{192, 714, 160, 38};
 // HOST.GAD
 constexpr std::int32_t kNewGame = 31002;
 constexpr std::int32_t kLoadGame = 31003;
@@ -71,10 +77,15 @@ constexpr std::int32_t kNamePrompt = 35003;
 constexpr std::int32_t kFlag = 35011;    ///< + colour 0..3: the banners in the hall
 constexpr std::int32_t kBanner = 35021;  ///< + colour 0..3: their outlines, which take the click
 // Open1602's own: the further colours as coats of arms beside the name board.
-constexpr std::int32_t kMoreArms = 35031;       ///< + 0..7, banner kFirstExtraBanner + n
 constexpr std::int32_t kMoreArmsLabel = 35041;  ///< + side 0..1: the colour under the mouse
+constexpr std::int32_t kMoreArms = 35051;       ///< + 0..kMoreBanners - 1, banner kFirstExtraBanner + n
 constexpr std::size_t kMoreBanners = sim::kMaxPlayers - sim::kOriginalPlayers;
-constexpr std::size_t kArmsPerSide = kMoreBanners / 2;
+/// Half of the further colours on either side, the left one taking the odd one.
+constexpr std::size_t kArmsPerSide = (kMoreBanners + 1) / 2;
+/// Coats of arms side by side; more players than twelve (sim::kMaxPlayers) fill further rows.
+constexpr std::size_t kArmsColumns = 4;
+constexpr std::size_t kArmsColumnsUsed = kArmsPerSide < kArmsColumns ? kArmsPerSide : kArmsColumns;
+constexpr std::size_t kArmsRows = (kArmsPerSide + kArmsColumns - 1) / kArmsColumns;
 /// START.BSH: the end screen's buttons with a coat of arms (ENDE.GAD: GFXWAPPEN + 4, from GFXFARB
 /// on 14 + 7 + 4 further; red, blue, yellow, white) and the same with a golden frame, 4 further.
 constexpr std::int32_t kGfxArmsFromFarb = 25;
@@ -100,6 +111,12 @@ std::vector<std::uint8_t> choice_digits(const MenuScenario& s) {
     return digits;
 }
 
+/// The list's ranking for a difficulty of 1 to 5 stars (the original counts from 0 for one star);
+/// 0 stars shows none.
+std::uint32_t ranking_of_stars(std::uint8_t stars) {
+    return stars == 0 ? assets::ScenarioHeader::kNone : std::uint32_t{stars} - 1U;
+}
+
 std::string lower(std::string_view s) {
     std::string out(s);
     std::transform(out.begin(), out.end(), out.begin(),
@@ -115,9 +132,9 @@ std::optional<ui::Panel> load_panel(const assets::GameDirectory& game, const cha
     return ui::Panel(std::move(layout).value(), 1.0);
 }
 
-/// FARBWAHL.GAD with the further colours: four coats of arms on either side of the name board,
-/// each side with a line below for the name of the colour under the mouse. Unchanged without the
-/// name board.
+/// FARBWAHL.GAD with the further colours: four coats of arms on either side of the name board (in
+/// further rows centred on the board when there are more than eight), each side with a line below
+/// for the name of the colour under the mouse. Unchanged without the name board.
 assets::GadgetLayout with_more_arms(assets::GadgetLayout farbwahl) {
     const assets::Gadget* name = farbwahl.find(kNameBox);  // as large as the board it is written on
     if (name == nullptr) {
@@ -125,8 +142,10 @@ assets::GadgetLayout with_more_arms(assets::GadgetLayout farbwahl) {
     }
     const std::int32_t gfx = farbwahl.constant("GFXFARB").value_or(kGfxFarb) + kGfxArmsFromFarb;
     const std::int32_t block = farbwahl.constant("BLK_START").value_or(1);
-    const std::int32_t top = name->pos[1] + (name->size[1] - kArmsHeight) / 2;
-    constexpr std::int32_t kSideWidth = static_cast<std::int32_t>(kArmsPerSide) * (kArmsWidth + kArmsGap) - kArmsGap;
+    constexpr std::int32_t kRowsHeight = static_cast<std::int32_t>(kArmsRows) * (kArmsHeight + kArmsGap) - kArmsGap;
+    const std::int32_t top = name->pos[1] + (name->size[1] - kRowsHeight) / 2;
+    constexpr std::int32_t kSideWidth =
+        static_cast<std::int32_t>(kArmsColumnsUsed) * (kArmsWidth + kArmsGap) - kArmsGap;
     const std::array<std::int32_t, 2> left = {name->pos[0] - kArmsBoardGap - kSideWidth,
                                               name->pos[0] + name->size[0] + kArmsBoardGap};
     const assets::Gadget label = *name;  // the name's font and colour (copied: the gadgets grow below)
@@ -139,7 +158,9 @@ assets::GadgetLayout with_more_arms(assets::GadgetLayout farbwahl) {
         arms.block = block;
         arms.gfx = gfx;
         arms.press_offset = kGfxArmsGold;
-        arms.pos = {left[side] + static_cast<std::int32_t>(n % kArmsPerSide) * (kArmsWidth + kArmsGap), top};
+        const std::size_t place = n % kArmsPerSide;
+        arms.pos = {left[side] + static_cast<std::int32_t>(place % kArmsColumns) * (kArmsWidth + kArmsGap),
+                    top + static_cast<std::int32_t>(place / kArmsColumns) * (kArmsHeight + kArmsGap)};
         arms.size = {kArmsWidth, kArmsHeight};
         farbwahl.gadgets.push_back(arms);
     }
@@ -149,7 +170,7 @@ assets::GadgetLayout with_more_arms(assets::GadgetLayout farbwahl) {
         line.kind = assets::GadgetKind::TextCentre;
         line.base = static_cast<std::int32_t>(farbwahl.gadgets.size());
         line.no_select = true;
-        line.pos = {left[side], top + kArmsHeight + 4};
+        line.pos = {left[side], top + kRowsHeight + 4};
         line.size = {kSideWidth, kArmsLabelHeight};
         line.offset = {static_cast<std::int16_t>(kSideWidth / 2), static_cast<std::int16_t>(kArmsLabelHeight - 4)};
         farbwahl.gadgets.push_back(line);
@@ -169,7 +190,7 @@ std::optional<ui::Panel> load_colour_panel(const assets::GameDirectory& game) {
 
 std::vector<MenuScenario> scenario_list(const std::filesystem::path& folder, const std::array<std::string, 4>& headings,
                                         const assets::GameDirectory* game) {
-    // One entry per name without the extension and the digits at its end (0x0048E710).
+    // One entry per name without the extension and the digits at its end.
     std::map<std::string, MenuScenario> by_name;
     std::error_code ec;
     for (const auto& entry : std::filesystem::directory_iterator(folder, ec)) {
@@ -207,7 +228,7 @@ std::vector<MenuScenario> scenario_list(const std::filesystem::path& folder, con
     }
     std::array<std::vector<MenuScenario>, 3> groups;
     for (auto& [key, s] : by_name) {
-        // Every file of a name writes its header over the one before (0x0048E8F3), in the order
+        // Every file of a name writes its header over the one before, in the order
         // FindFirstFile gives them (alphabetical): the last file's header counts. Pirata1 has no
         // campaign of its own, Pirata3 has it.
         const auto last = std::max_element(s.files.begin(), s.files.end(), [](const auto& a, const auto& b) {
@@ -227,7 +248,7 @@ std::vector<MenuScenario> scenario_list(const std::filesystem::path& folder, con
     std::stable_sort(groups[0].begin(), groups[0].end(), [](const MenuScenario& a, const MenuScenario& b) {
         return a.header.mission_number < b.header.mission_number;
     });
-    // Campaigns by their stars, then their number (0x0048EAF9); equal ones stay in name order.
+    // Campaigns by their stars, then their number; equal ones stay in name order.
     std::stable_sort(groups[1].begin(), groups[1].end(), [](const MenuScenario& a, const MenuScenario& b) {
         return std::pair{a.header.ranking, a.header.campaign} < std::pair{b.header.ranking, b.header.campaign};
     });
@@ -249,6 +270,131 @@ std::vector<MenuScenario> scenario_list(const std::filesystem::path& folder, con
     return out;
 }
 
+std::vector<MenuScenario> package_scenario_list(std::span<const assets::PackageScenario> scenarios,
+                                                std::span<const assets::PackageCampaign> campaigns,
+                                                std::string_view language, std::string heading) {
+    std::vector<MenuScenario> out;
+    if (scenarios.empty() && campaigns.empty()) {
+        return out;
+    }
+    MenuScenario head;
+    head.name = std::move(heading);
+    head.separator = true;
+    out.push_back(std::move(head));
+    // Its high scores beside the others, by a name no scenario of the game folder has.
+    const auto base_of = [](std::string id) {
+        std::replace(id.begin(), id.end(), ':', '_');
+        return core::path_from_utf8(id);
+    };
+    for (const assets::PackageCampaign& c : campaigns) {
+        MenuScenario s;
+        s.name = c.name(language);
+        s.base = base_of(c.id);
+        s.header.ranking = ranking_of_stars(c.stars);
+        s.package_campaign = c.id;
+        s.briefing = c.briefing(language);
+        for (std::size_t i = 0; i < c.parts.size(); ++i) {
+            const assets::PackageScenario* part = assets::find_scenario(scenarios, c.parts[i]);
+            if (part == nullptr) {
+                break;  // read_campaigns_file() lets only scenarios of the package through
+            }
+            s.files.emplace_back(static_cast<std::uint8_t>(i), part->file);
+            s.package_parts.push_back(MenuScenario::Part{part->id, part->briefing(language)});
+        }
+        out.push_back(std::move(s));
+    }
+    for (const assets::PackageScenario& p : scenarios) {
+        MenuScenario s;
+        s.name = p.name(language);
+        s.base = base_of(p.id);
+        s.files.emplace_back(std::uint8_t{0xFF}, p.file);
+        s.header.ranking = ranking_of_stars(p.stars);
+        s.package_scenario = p.id;
+        s.briefing = p.briefing(language);
+        out.push_back(std::move(s));
+    }
+    return out;
+}
+
+std::vector<MenuScenario> own_scenario_list(const std::filesystem::path& folder, std::string heading,
+                                            std::span<const MenuScenario> taken, std::vector<std::string>* skipped) {
+    std::vector<MenuScenario> own;
+    std::error_code ec;
+    if (folder.empty() || !std::filesystem::is_directory(folder, ec)) {
+        return own;
+    }
+    const std::array<std::string, 4> no_headings{};
+    for (MenuScenario& s : scenario_list(folder, no_headings, nullptr)) {
+        if (!s.separator) {
+            own.push_back(std::move(s));
+        }
+    }
+    // Games saved by Open1602 (and, later, maps of its own editor): one entry per file.
+    for (const auto& entry : std::filesystem::directory_iterator(folder, ec)) {
+        if (!entry.is_regular_file(ec) || lower(core::path_to_utf8(entry.path().extension())) != ".o1602") {
+            continue;
+        }
+        const std::u8string u8 = entry.path().stem().u8string();
+        MenuScenario s;
+        s.name = utf8_to_cp1252(std::string_view(reinterpret_cast<const char*>(u8.data()), u8.size()));
+        if (s.name.empty()) {
+            continue;
+        }
+        s.base = entry.path().stem();
+        s.files.emplace_back(std::uint8_t{0xFF}, entry.path());
+        own.push_back(std::move(s));
+    }
+    // A name the list has already would make two entries of one name, which share their high score
+    // list and of which opening by name finds only the first: the game folder's (or the .szs) wins.
+    std::vector<std::string> names;
+    for (const MenuScenario& s : taken) {
+        if (!s.separator) {
+            names.push_back(lower(s.name));
+        }
+    }
+    std::vector<MenuScenario> out;
+    for (MenuScenario& s : own) {
+        const std::string key = lower(s.name);
+        if (std::find(names.begin(), names.end(), key) != names.end()) {
+            if (skipped != nullptr) {
+                skipped->push_back(s.name);
+            }
+            continue;
+        }
+        names.push_back(key);
+        out.push_back(std::move(s));
+    }
+    if (out.empty()) {
+        return out;
+    }
+    // A scenario of the editor shows the name, stars and introduction of its description (SCNI) in
+    // the player's language, where it has them; it is still found by its file's name.
+    for (MenuScenario& s : out) {
+        if (s.files.size() != 1 || lower(core::path_to_utf8(s.files.front().second.extension())) != ".o1602") {
+            continue;
+        }
+        const auto head = core::read_file_head(s.files.front().second, sim::kSaveInfoHead);
+        const auto info = head ? sim::save_info(head->bytes, head->size) : core::Result<sim::SaveInfo>(head.error());
+        if (!info || !info->meta || !info->meta->scenario) {
+            continue;
+        }
+        const sim::ScenarioInfo& scenario = *info->meta->scenario;
+        s.header.ranking = ranking_of_stars(scenario.stars);
+        const std::string_view language = ui::current_language();
+        if (const std::string_view name = sim::scenario_text(scenario.names, language); !name.empty()) {
+            s.name = utf8_to_cp1252(name);
+        }
+        s.briefing = utf8_to_cp1252(sim::scenario_text(scenario.briefings, language));
+    }
+    std::stable_sort(out.begin(), out.end(),
+                     [](const MenuScenario& a, const MenuScenario& b) { return lower(a.name) < lower(b.name); });
+    MenuScenario head;
+    head.name = std::move(heading);
+    head.separator = true;
+    out.insert(out.begin(), std::move(head));
+    return out;
+}
+
 std::optional<CampaignPart> campaign_part_of(const std::filesystem::path& file) {
     const std::array<std::string, 4> headings{};
     for (const MenuScenario& s : scenario_list(file.parent_path(), headings, nullptr)) {
@@ -262,6 +408,22 @@ std::optional<CampaignPart> campaign_part_of(const std::filesystem::path& file) 
         }
     }
     return std::nullopt;
+}
+
+std::optional<sim::Rules> scenario_rules_of(const std::filesystem::path& file) {
+    if (lower(core::path_to_utf8(file.extension())) != ".o1602") {
+        return std::nullopt;
+    }
+    // Only the head of the file: the settings come right after its first section.
+    const auto head = core::read_file_head(file, sim::kSaveInfoHead);
+    if (!head) {
+        return std::nullopt;
+    }
+    const auto info = sim::save_info(head->bytes, head->size);
+    if (!info || !info->meta || !info->meta->scenario) {
+        return std::nullopt;
+    }
+    return info->meta->scenario->rules;
 }
 
 const std::string& MainMenu::default_name() {
@@ -348,7 +510,7 @@ ui::Panel* MainMenu::panel() {
 void MainMenu::refresh_host() {
     ui::Panel& p = *m_host;
     if (m_mode == ListMode::Load) {
-        // The savegames without stars (0x0048AC70: the original's twelve fit without arrows; Open1602
+        // The savegames without stars (the original's twelve fit without arrows; Open1602
         // keeps any number, so the list scrolls like the scenarios).
         const std::size_t count = m_slots.size();
         m_first = std::min(m_first, count > kRows ? count - kRows : 0);
@@ -367,7 +529,8 @@ void MainMenu::refresh_host() {
             // Open1602 adds the time played from the savegame's META (the full line in the settings).
             std::string text = m_slots.names[i].empty() ? std::string("-") : m_slots.names[i];
             if (!m_slots.names[i].empty() && i < m_slots.meta.size() && m_slots.meta[i]) {
-                text += "  (" + save_time(m_slots.meta[i]->time_ms) + ")";
+                text += "  (" + save_time(m_slots.meta[i]->time_ms) +
+                        (m_slots.meta[i]->edited ? ui::tr("save.edited") : std::string()) + ")";
             }
             p.set_text(kRowText + k, text);
         }
@@ -420,17 +583,36 @@ void MainMenu::load_scenarios() {
     if (const auto folder = m_game->resolve("Szenes")) {
         m_scenarios = scenario_list(*folder, headings, m_game);
     }
-    // The numbered missions above the progress are not offered (0x0048DC90).
+    // The numbered missions above the progress are not offered.
     std::erase_if(m_scenarios, [&](const MenuScenario& s) {
         const std::uint32_t n = s.header.mission_number;
         return !s.separator && n >= assets::CampaignProgress::kFirstNumbered &&
                n <= assets::CampaignProgress::kLastNumbered && n > m_progress.numbered;
     });
+    const auto append = [&](std::vector<MenuScenario> more) {
+        m_scenarios.insert(m_scenarios.end(), std::make_move_iterator(more.begin()),
+                           std::make_move_iterator(more.end()));
+    };
+    std::vector<std::string> skipped;
+    append(own_scenario_list(m_own_scenario_folder, ui::tr("menu.own_scenarios"), m_scenarios, &skipped));
+    if (skipped != m_own_skipped) {
+        for (const std::string& name : skipped) {
+            std::fprintf(stderr,
+                         "warning: own scenario \"%s\" left out: the list has a scenario of that name already\n",
+                         core::cp1252_to_utf8(name).c_str());
+        }
+        m_own_skipped = std::move(skipped);
+    }
+    append(package_scenario_list(m_package_scenarios, m_package_campaigns, ui::current_language(),
+                                 ui::tr("menu.package_scenarios")));
 }
 
 std::size_t MainMenu::campaign_parts_open(const MenuScenario& s) const {
     // MISSION.GAD: a part above the campaign's progress is disabled; other scenarios have all.
     constexpr std::size_t kAll = 4;
+    if (!s.package_campaign.empty()) {
+        return m_progress.package_parts_open(s.package_campaign);
+    }
     if (s.header.campaign == assets::ScenarioHeader::kNone) {
         return kAll;
     }
@@ -460,7 +642,8 @@ bool MainMenu::open_mission(std::string_view name) {
     }
     load_scenarios();
     for (std::size_t i = 0; i < m_scenarios.size(); ++i) {
-        if (!m_scenarios[i].separator && lower(m_scenarios[i].name) == lower(name)) {
+        const MenuScenario& s = m_scenarios[i];
+        if (!s.separator && (lower(s.name) == lower(name) || lower(core::path_to_utf8(s.base)) == lower(name))) {
             select_scenario(i);
             m_screen = Screen::Mission;
             return true;
@@ -486,9 +669,29 @@ void MainMenu::load_details() {
     const MenuScenario& s = m_scenarios[m_chosen];
     m_briefing_line = 0;
     // The briefing: the mission of the human in the file (AUFTRAG4 of the player record).
-    m_briefing.clear();
-    if (auto bytes = core::read_file(chosen_file())) {
-        if (auto file = assets::ChunkFile::from_bytes(std::move(bytes).value())) {
+    // A package's scenario may have one of its own; otherwise the map's.
+    m_briefing = s.briefing;
+    if (const std::size_t part = m_variant == 0xFF ? 0 : m_variant;
+        part < s.package_parts.size() && !s.package_parts[part].briefing.empty()) {
+        m_briefing = s.package_parts[part].briefing;
+    }
+    // A scenario of the editor: the introduction of its description, read whole (the list read
+    // only the head of the file).
+    if (m_briefing.empty() && lower(core::path_to_utf8(chosen_file().extension())) == ".o1602") {
+        if (const auto head = core::read_file_head(chosen_file(), sim::kScenarioHead)) {
+            if (const auto info = sim::scenario_info_of(head->bytes, head->size)) {
+                m_briefing = utf8_to_cp1252(sim::scenario_text(info->briefings, ui::current_language()));
+            }
+        }
+    }
+    std::optional<core::Bytes> map_bytes;
+    if (m_briefing.empty() && lower(core::path_to_utf8(chosen_file().extension())) != ".o1602") {
+        if (auto read = core::read_file(chosen_file())) {
+            map_bytes = std::move(read).value();
+        }
+    }
+    if (map_bytes) {
+        if (auto file = assets::ChunkFile::from_bytes(std::move(*map_bytes))) {
             const auto players = assets::load_players(*file);
             const auto missions = assets::load_missions(*file);
             if (missions && !missions->empty()) {
@@ -508,7 +711,7 @@ void MainMenu::load_details() {
     append_level_notes();
     m_scores.clear();
     if (!s.files.empty()) {
-        // A campaign part has a list of its own, named by its label (HighScore_Insert 0x0048E540).
+        // A campaign part has a list of its own, named by its label.
         std::filesystem::path name = s.base;
         name += ".hss";
         if (s.header.campaign != assets::ScenarioHeader::kNone && m_texts != nullptr) {
@@ -595,7 +798,7 @@ void MainMenu::refresh_mission() {
     }
     p.set_text(kBriefing, m_briefing);
     p.set_visible(kBriefing2, false);
-    // The high scores, four at a time; not for the tutorial (0x0048B0E0).
+    // The high scores, four at a time; not for the tutorial.
     const bool scores = s.header.mission_number != kTutorial;
     for (const std::int32_t id : {kScoresHeading, kScoresFrame, kScoresUp, kScoresDown}) {
         p.set_visible(id, scores);
@@ -607,7 +810,7 @@ void MainMenu::refresh_mission() {
         for (const std::int32_t id : {kScoreName, kScorePoints, kScoreRank}) {
             p.set_visible(id + k, shown);
         }
-        // The level of an endless game as stars: sprite 21 + level, one star for "Einfach" (0x0048B0E0).
+        // The level of an endless game as stars: sprite 21 + level, one star for "Einfach".
         const bool stars = shown && s.header.mission_number == kEndless;
         p.set_visible(kScoreStars + k, stars);
         if (!shown) {
@@ -639,7 +842,7 @@ void MainMenu::refresh_colour() {
             continue;
         }
         const bool lit = hovered == id || (!m_typing && p.held() == id);
-        set_banner_graphic(p, id, render::BannerArt::at(lit ? g->gfx + kGfxArmsGold : g->gfx), banner,
+        set_banner_graphic(p, id, render::BannerArt::arms_at(lit ? g->gfx + kGfxArmsGold : g->gfx), banner,
                            lit ? 0 : kGfxArmsGold);
         if (lit) {
             preview = banner;
@@ -696,12 +899,12 @@ std::vector<ui::DrawItem> MainMenu::draw(const std::array<const ui::Font*, ui::k
         p->set_scroll(kBriefing, m_briefing_line);
         m_briefing_last = last;
         m_briefing_rows = p->flow_rows(kBriefing);
-        // Its arrows and slider are faded while the whole briefing fits (0x0048B195); then they
-        // scroll nothing and the knob rests in the middle (0x00407600 with 50 of 100).
+        // Its arrows and slider are faded while the whole briefing fits; then they
+        // scroll nothing and the knob rests in the middle (with 50 of 100).
         for (const std::int32_t id : {kBriefingUp, kBriefingDown, kBriefingSlider}) {
             p->set_faded(id, last == 0);
         }
-        // 0x0048B195: the knob at (first line + rows / 2) of (lines + rows - 1), counted from the
+        // The knob at (first line + rows / 2) of (lines + rows - 1), counted from the
         // bottom.
         if (last > 0) {
             p->set_slider(kBriefingSlider, 1, briefing_slider_range() - m_briefing_rows / 2 - m_briefing_line,
@@ -730,6 +933,7 @@ void MainMenu::layout_base_form() {
 #ifndef O1602_EXPERIMENTAL_VITA
     m_base_form.button(kModsButton, kModsButtonRect, ui::tr("menu.mods"));
 #endif
+    m_base_form.button(kEditorButton, kEditorButtonRect, ui::tr("menu.editor"));
 }
 
 std::vector<MenuEvent> MainMenu::mouse(std::int32_t x, std::int32_t y, bool down, ui::MouseButton button) {
@@ -738,11 +942,23 @@ std::vector<MenuEvent> MainMenu::mouse(std::int32_t x, std::int32_t y, bool down
         switch (m_settings.mouse(x, y, down, button)) {
             case GameSettingsMenu::Result::Start: {
                 if (m_settings.scope() == SetupScope::Scenario) {
-                    m_scenario = m_settings.setup();
                     MenuEvent ev{MenuEvent::Kind::Scenario};
+                    if (!m_scenario_own_rules) {
+                        m_scenario = m_settings.setup();
+                    }
                     ev.path = chosen_file();
                     ev.name = m_name;
-                    ev.setup = m_scenario;
+                    ev.setup = m_settings.setup();
+                    ev.scenario_rules = m_scenario_own_rules;
+                    const MenuScenario& chosen = m_scenarios[m_chosen];
+                    ev.package_scenario = chosen.package_scenario;
+                    if (!chosen.package_campaign.empty()) {
+                        const std::size_t part = m_variant == 0xFF ? 0 : m_variant;
+                        ev.package_campaign = chosen.package_campaign;
+                        ev.package_scenario =
+                            part < chosen.package_parts.size() ? chosen.package_parts[part].scenario : std::string();
+                        ev.level = static_cast<std::uint8_t>(part);
+                    }
                     out.push_back(std::move(ev));
                     break;
                 }
@@ -753,6 +969,7 @@ std::vector<MenuEvent> MainMenu::mouse(std::int32_t x, std::int32_t y, bool down
                 ev.name = m_name;
                 ev.setup = m_endless;
                 out.push_back(std::move(ev));
+                m_endless.world_seed = 0;  // the next game a new world, unless the islands' page shows one
                 break;
             }
             case GameSettingsMenu::Result::Back:
@@ -781,11 +998,16 @@ std::vector<MenuEvent> MainMenu::mouse(std::int32_t x, std::int32_t y, bool down
     }
     if (m_screen == Screen::Base && button == ui::MouseButton::Left) {
         layout_base_form();
-        if (m_base_form.mouse(x, y, down) == kModsButton) {
+        const auto clicked = m_base_form.mouse(x, y, down);
+        if (clicked == kModsButton) {
             m_mods.open();
             m_mods_model.notice.clear();
             m_screen = Screen::Mods;
             out.push_back(MenuEvent{MenuEvent::Kind::Mods});
+            return out;
+        }
+        if (clicked == kEditorButton) {
+            out.push_back(MenuEvent{MenuEvent::Kind::Editor});
             return out;
         }
     }
@@ -868,10 +1090,10 @@ std::vector<MenuEvent> MainMenu::mouse(std::int32_t x, std::int32_t y, bool down
                 } else if (e.id == kStart) {
                     const MenuScenario& s = m_scenarios[m_chosen];
                     if (s.header.mission_number == kEndless && m_colour) {
-                        m_screen = Screen::Colour;  // name and banner first (0x0048A680)
+                        m_screen = Screen::Colour;  // name and banner first
                         // Each visit shows the further colours in other patterns (two runs of four).
                         m_banners.shuffle_art_patterns(sim::kFirstExtraBanner, kMoreBanners, std::random_device{}());
-                        // The name can be typed at once (as the original, mode 5 of 0x00409910);
+                        // The name can be typed at once (as the original, mode 5);
                         // the last one, or "Namenlos", stands there until the first key.
                         if (m_name.empty()) {
                             m_name = default_name();
@@ -880,7 +1102,14 @@ std::vector<MenuEvent> MainMenu::mouse(std::int32_t x, std::int32_t y, bool down
                         m_name_fresh = true;
                     } else if (s.header.mission_number != kTutorial) {
                         // The rules first (Open1602's own dialog; the original starts here).
-                        m_settings.open(m_scenario, SetupScope::Scenario);
+                        // A scenario of the editor made for settings of its own begins from them.
+                        EndlessSetup setup = m_scenario;
+                        const std::optional<sim::Rules> own = scenario_rules_of(chosen_file());
+                        m_scenario_own_rules = own.has_value();
+                        if (own) {
+                            setup.rules = *own;
+                        }
+                        m_settings.open(setup, SetupScope::Scenario);
                         m_screen = Screen::Settings;
                     } else {
                         // The tutorial teaches the game as it is: no settings.
@@ -913,6 +1142,7 @@ std::vector<MenuEvent> MainMenu::mouse(std::int32_t x, std::int32_t y, bool down
                                    ? static_cast<sim::BannerId>(e.id - kBanner)
                                    : static_cast<sim::BannerId>(sim::kFirstExtraBanner + (e.id - kMoreArms));
                     m_settings.open(m_endless, SetupScope::Endless);
+                    m_settings.set_level(m_variant == 0xFF ? 0 : m_variant);
                     m_screen = Screen::Settings;
                 }
                 break;
@@ -969,7 +1199,9 @@ bool MainMenu::back() {
             }
             // Kept for the next time.
             if (m_settings.scope() == SetupScope::Scenario) {
-                m_scenario = m_settings.setup();
+                if (!m_scenario_own_rules) {
+                    m_scenario = m_settings.setup();
+                }
                 m_screen = Screen::Mission;
             } else {
                 m_endless = m_settings.setup();
@@ -984,7 +1216,7 @@ void MainMenu::type(std::string_view text) {
     if (!m_typing) {
         return;
     }
-    constexpr std::size_t kMaxName = 19;  // 0x0048A680
+    constexpr std::size_t kMaxName = 19;
     if (std::exchange(m_name_fresh, false) && !text.empty()) {
         m_name.clear();
     }

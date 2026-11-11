@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// What ships, soldiers and towers share in a fight (docs/re/military.md, "Combat"): who sees whom,
+// What ships, soldiers and towers share in a fight: who sees whom,
 // how good a target is, and shots on their way.
 //
 // Every figure step the original builds a list of hostile figures within 12 tiles for each ship,
-// soldier and tower (0x0045CAD0, 0x0045CD20). A shooter scores the entries with five tables
-// (0x00454250: a target it can kill, a big share of its health per shot, a threat to itself, one it
+// soldier and tower. A shooter scores the entries with five tables
+// (a target it can kill, a big share of its health per shot, a threat to itself, one it
 // outranges, the distance beyond its range) and takes the best one it can hit. Damage does not
 // depend on chance or distance; a shot lands after the shooter's Shottime on the target if it still
 // exists. There is no projectile that could miss.
@@ -46,7 +46,7 @@ struct Fighter {
     bool ship = false;
 };
 
-/// A scored candidate (0x00454250).
+/// A scored candidate.
 struct Candidate {
     Target unit;
     std::int32_t distance8 = 0;
@@ -54,7 +54,7 @@ struct Candidate {
     bool near = false;  ///< within range (and half a tile)
 };
 
-/// Whether units can shoot at a building of this kind (Haus_IsDestroyable 0x00464A80): gates,
+/// Whether units can shoot at a building of this kind: gates,
 /// walls, towers, buildings, beach houses, mines, Kontors, harbours and mills always; roads, trees
 /// and fields, bridges and piers only with `ctrl`; terrain (ground, beach, river, rock, ...) and
 /// ruins never, nor a destroyed Kontor or market.
@@ -79,7 +79,7 @@ public:
     /// Whether a unit of `self` sent against this building target shoots it although nobody is at
     /// war: a tree or a field (forest kind) that is not its own, also one of nobody. In the original
     /// an order with Ctrl takes these as targets, and units shoot every target that is not their
-    /// owner's (Haus_IsDestroyable 0x00464A80, 0x00456D00, 0x00452370).
+    /// owner's.
     [[nodiscard]] bool fellable(const Target& unit, PlayerId self) const;
     /// Scores the entries within `max_distance8` and sorts them best first (stable). Valid until
     /// the next rank().
@@ -97,8 +97,8 @@ public:
     /// Something was built or demolished on an island.
     void island_changed(std::uint16_t island);
 
-    /// Damage of a shot of a soldier or tower with this health (Hitpoint scaled by health,
-    /// 0x00454250): full at full health, a third near death.
+    /// Damage of a shot of a soldier or tower with this health (Hitpoint scaled by health):
+    /// full at full health, a third near death.
     [[nodiscard]] static std::uint32_t scaled_damage(std::uint32_t hit, std::uint32_t health,
                                                      std::uint32_t max_health) noexcept;
     /// Damage per shot of a ship by its cannons: Hitpoint times 1, 2, 4 or 6.

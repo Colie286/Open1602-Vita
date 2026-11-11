@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "o1602/core/profile.hpp"
+#include "o1602/render/flag_tint.hpp"
 #include "o1602/render/package_sprites.hpp"
 #include "o1602/render/shape_tint.hpp"
 #include "o1602/render/variant_tint.hpp"
@@ -325,7 +326,11 @@ double SdlUiRenderer::art_scale() const noexcept {
 
 std::optional<std::pair<std::int32_t, std::int32_t>> SdlUiRenderer::sprite_size(std::int32_t block,
                                                                                 std::int32_t gfx) const {
-    if (const assets::PackageIcon* icon = assets::package_icon_at(ui::package_icons(), gfx)) {
+    const assets::PackageIcon* icon = assets::package_icon_at(ui::package_icons(), gfx);
+    if (icon == nullptr) {
+        icon = ui::interface_icon(block, gfx);  // a sprite of the original a package draws anew
+    }
+    if (icon != nullptr) {
         // As package_icon_pixels() makes it at the art's scale.
         const double scale = std::min(1.0, art_scale());
         return std::make_pair(std::max(1, static_cast<std::int32_t>(std::lround(icon->width * scale))),
@@ -412,6 +417,8 @@ SdlUiRenderer::Texture SdlUiRenderer::sprite(std::int32_t block, std::int32_t gf
     const assets::PackageIcon* icon = assets::package_icon_at(ui::package_icons(), gfx);
     if (icon != nullptr) {
         block = -1;  // the same picture in every sheet
+    } else {
+        icon = ui::interface_icon(block, gfx);  // a sprite of the original a package draws anew
     }
     const bool tinting = own_colours(mode) && tint && (tint->shape || tint->base < tint->variants);
     const SpriteKey key{
@@ -431,7 +438,10 @@ SdlUiRenderer::Texture SdlUiRenderer::sprite(std::int32_t block, std::int32_t gf
     }
     Texture t;
     if (icon != nullptr) {
-        t = package_icon(*icon, mode, colour);
+        // A template icon in the colour of the player it stands for (set_package_icon); others as drawn.
+        const std::optional<assets::Rgba> player =
+            icon->tint && tinting ? std::optional<assets::Rgba>(tint->colour) : std::nullopt;
+        t = package_icon(*icon, mode, colour, player);
     } else if (block >= 0 && block < static_cast<std::int32_t>(m_sheets.size()) &&
                m_sheets[static_cast<std::size_t>(block)] && gfx >= 0 &&
                static_cast<std::size_t>(gfx) < m_sheets[static_cast<std::size_t>(block)]->size()) {
@@ -468,13 +478,17 @@ SdlUiRenderer::Texture SdlUiRenderer::sprite(std::int32_t block, std::int32_t gf
     return t;
 }
 
-SdlUiRenderer::Texture SdlUiRenderer::package_icon(const assets::PackageIcon& icon, int mode, std::int32_t colour) {
+SdlUiRenderer::Texture SdlUiRenderer::package_icon(const assets::PackageIcon& icon, int mode, std::int32_t colour,
+                                                   std::optional<assets::Rgba> player) {
     IconPixels picture = package_icon_pixels(icon, art_scale());
     if (!picture.error.empty()) {
         std::fprintf(stderr, "mods: icon %s: %s\n", icon.id.c_str(), picture.error.c_str());
         return Texture{};
     }
     if (own_colours(mode)) {
+        if (player) {
+            tint_rgba(picture.rgba, *player);
+        }
         if (mode != kModeSprite) {
             clear_raster(picture.rgba, picture.width, picture.height, mode);
         }
@@ -496,18 +510,14 @@ SdlUiRenderer::Texture SdlUiRenderer::package_icon(const assets::PackageIcon& ic
 }
 
 void SdlUiRenderer::forget_package_icons() {
-    m_panel_valid=false;m_window_valid=false;
-    for (auto it = m_sprites.begin(); it != m_sprites.end();) {
-        if (std::get<1>(it->first) >= assets::kFirstPackageIcon) {
-            const Texture& t = it->second.texture;
-            m_sprite_bytes -= std::min(
-                m_sprite_bytes, std::size_t{static_cast<std::uint32_t>(t.w)} * static_cast<std::uint32_t>(t.h) * 4);
-            SDL_DestroyTexture(t.texture);
-            it = m_sprites.erase(it);
-        } else {
-            ++it;
-        }
+    m_panel_valid = false;
+    m_window_valid = false;
+    // The icons, and the original's sprites, which a package may draw anew now or no longer.
+    for (auto& [k, sprite] : m_sprites) {
+        SDL_DestroyTexture(sprite.texture.texture);
     }
+    m_sprites.clear();
+    m_sprite_bytes = 0;
 }
 
 SdlUiRenderer::Texture SdlUiRenderer::text(const std::string& s, std::int32_t slot, ui::ArtSize size,
@@ -516,7 +526,10 @@ SdlUiRenderer::Texture SdlUiRenderer::text(const std::string& s, std::int32_t sl
     // the ink.
     const std::int32_t key = slot + static_cast<std::int32_t>(ui::kFontSlots) * static_cast<std::int32_t>(size);
     colour = std::clamp(colour, 0, static_cast<std::int32_t>(ui::kTextColours) - 1);
-    ink = std::clamp(ink, -1, 255);
+    const bool rgb = ui::is_rgb_ink(ink);
+    if (!rgb) {
+        ink = std::clamp(ink, -1, 255);
+    }
     const std::int32_t shade = colour + static_cast<std::int32_t>(ui::kTextColours) * (ink + 1);
     if (const Texture* cached = m_texts.find(s, key, shade)) {
         return *cached;
@@ -528,12 +541,24 @@ SdlUiRenderer::Texture SdlUiRenderer::text(const std::string& s, std::int32_t sl
         canvas.height = f->height() + f->above();  // the accents above the cell (D-012)
         canvas.indices.assign(std::size_t{canvas.width} * canvas.height, 0);
         canvas.opaque.assign(canvas.indices.size(), 0);
-        const ui::Recolour recolour =
-            ink < 0 ? m_colours[static_cast<std::size_t>(colour)]
-                    : ui::text_recolour(m_palette, static_cast<std::size_t>(colour), static_cast<std::uint8_t>(ink));
-        f->draw(canvas, s, 0, static_cast<std::int32_t>(canvas.height), recolour);
-        t = make(canvas.to_rgba(m_palette), static_cast<std::int32_t>(canvas.width),
-                 static_cast<std::int32_t>(canvas.height));
+        ui::Recolour recolour = ink < 0 || rgb ? m_colours[static_cast<std::size_t>(colour)]
+                                               : ui::text_recolour(m_palette, static_cast<std::size_t>(colour),
+                                                                   static_cast<std::uint8_t>(ink));
+        if (rgb) {
+            // The letters in a colour of their own: drawn in a spare index of a copy of the palette
+            // that holds that colour (any index but the shadow's and the transparent 0).
+            const std::uint8_t spare = recolour[ui::kGlyphShadow] == 254 ? 253 : 254;
+            recolour[ui::kGlyphBody] = spare;
+            f->draw(canvas, s, 0, static_cast<std::int32_t>(canvas.height), recolour);
+            assets::Palette own = m_palette;
+            own.set(spare, ui::ink_rgb(ink));
+            t = make(canvas.to_rgba(own), static_cast<std::int32_t>(canvas.width),
+                     static_cast<std::int32_t>(canvas.height));
+        } else {
+            f->draw(canvas, s, 0, static_cast<std::int32_t>(canvas.height), recolour);
+            t = make(canvas.to_rgba(m_palette), static_cast<std::int32_t>(canvas.width),
+                     static_cast<std::int32_t>(canvas.height));
+        }
         if (t.texture != nullptr && f->design_scale() > ui::art_scale(size)) {
             // A larger font standing in for a missing one is shrunk: blended, so that no stroke
             // of a glyph drops out.
@@ -669,7 +694,7 @@ void SdlUiRenderer::draw(const std::vector<ui::DrawItem>& items, std::int32_t ox
     const auto even_place = [&](std::int32_t x, std::int32_t y) {
         return ((std::lround((ox + x) / scale) + std::lround((oy + y) / scale)) & 1) == 0;
     };
-    // 0x00404CD0: every second pixel of (x, y, w, h) in `c`; row r starts at (h - r) & 1, so the
+    // Every second pixel of (x, y, w, h) in `c`; row r starts at (h - r) & 1, so the
     // pixels where x + r + h is even.
     const auto checkerboard = [&](const ui::DrawItem& d, const assets::Rgba& c) {
         if (m_checker.texture == nullptr) {
@@ -695,7 +720,7 @@ void SdlUiRenderer::draw(const std::vector<ui::DrawItem>& items, std::int32_t ox
     for (const ui::DrawItem& d : items) {
         switch (d.kind) {
             case ui::DrawItem::Kind::Sprite: {
-                // Faded (0x004048E0): only its pixels on the screen's even x + y.
+                // Faded: only its pixels on the screen's even x + y.
                 const int mode = !d.faded ? kModeSprite : even_place(d.x, d.y) ? kModeFaded : kModeFadedOdd;
                 const Texture t = sprite(d.block, d.gfx, mode, 0, d.tint);
                 if (d.w > 0 && d.h > 0 && t.texture != nullptr && t.w > 0 && t.h > 0) {
@@ -708,16 +733,19 @@ void SdlUiRenderer::draw(const std::vector<ui::DrawItem>& items, std::int32_t ox
                                         static_cast<float>(oy + d.y + std::trunc((d.h - h) / 2)), static_cast<float>(w),
                                         static_cast<float>(h)};
                     SDL_RenderTexture(m_renderer, t.texture, nullptr, &dst);
-                } else if (d.rows > 0 && t.texture != nullptr) {
-                    // A band of the art's rows, at its place.
-                    const double first = std::min<double>(d.first_row * art_scale(), t.h);
-                    const double count = std::min<double>(d.rows * art_scale(), t.h - first);
+                } else if ((d.rows > 0 || d.cols > 0) && t.texture != nullptr) {
+                    // A band of the art's rows or columns (or both), at its place.
+                    const double first = d.rows > 0 ? std::min<double>(d.first_row * art_scale(), t.h) : 0.0;
+                    const double count = d.rows > 0 ? std::min<double>(d.rows * art_scale(), t.h - first) : t.h;
+                    const double left = d.cols > 0 ? std::min<double>(d.first_col * art_scale(), t.w) : 0.0;
+                    const double width = d.cols > 0 ? std::min<double>(d.cols * art_scale(), t.w - left) : t.w;
                     SDL_SetTextureAlphaMod(t.texture, d.half ? 128 : 255);
-                    const SDL_FRect src{0.0F, static_cast<float>(first), static_cast<float>(t.w),
+                    const SDL_FRect src{static_cast<float>(left), static_cast<float>(first), static_cast<float>(width),
                                         static_cast<float>(count)};
-                    const SDL_FRect dst{
-                        static_cast<float>(ox + d.x), static_cast<float>(oy + d.y + std::round(first * stretch)),
-                        static_cast<float>(std::round(t.w * stretch)), static_cast<float>(std::round(count * stretch))};
+                    const SDL_FRect dst{static_cast<float>(ox + d.x + std::round(left * stretch)),
+                                        static_cast<float>(oy + d.y + std::round(first * stretch)),
+                                        static_cast<float>(std::round(width * stretch)),
+                                        static_cast<float>(std::round(count * stretch))};
                     SDL_RenderTexture(m_renderer, t.texture, &src, &dst);
                 } else {
                     blit(t, d.x, d.y, d.half);
@@ -735,7 +763,7 @@ void SdlUiRenderer::draw(const std::vector<ui::DrawItem>& items, std::int32_t ox
                      d.x, d.y, d.half, kMaskAlpha);
                 break;
             case ui::DrawItem::Kind::SpriteRaster: {
-                // 0x00404740: on the pixels where x + y of the screen is even (the 1024 layout's).
+                // On the pixels where x + y of the screen is even (the 1024 layout's).
                 blit(sprite(d.block, d.gfx, even_place(d.x, d.y) ? kModeRaster : kModeRasterOdd, d.colour), d.x, d.y,
                      false);
                 break;
@@ -760,7 +788,10 @@ void SdlUiRenderer::draw(const std::vector<ui::DrawItem>& items, std::int32_t ox
                 break;
             }
             case ui::DrawItem::Kind::Fill: {
-                const assets::Rgba c = m_palette[static_cast<std::uint8_t>(std::clamp(d.colour, 0, 255))];
+                // A colour of its own (a banner's that the palette lacks) or a palette colour.
+                const assets::Rgba c = ui::is_rgb_ink(d.colour)
+                                           ? ui::ink_rgb(d.colour)
+                                           : m_palette[static_cast<std::uint8_t>(std::clamp(d.colour, 0, 255))];
                 if (d.faded) {
                     checkerboard(d, c);  // a faded fill or bar: its own colour on every second pixel
                     break;

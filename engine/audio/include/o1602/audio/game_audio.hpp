@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The sounds of the game as the original plays them (docs/re/audio.md): effects at a place on the
+// The sounds of the game as the original plays them: effects at a place on the
 // screen, the voice messages and the music. Audio is presentation only: it follows the simulation's
 // events and the camera, draws from its own random numbers (the original takes the game's rand(),
 // S-112) and never changes the game.
@@ -8,8 +8,10 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <future>
+#include <map>
 #include <memory>
 #include <optional>
 #include <random>
@@ -40,11 +42,14 @@ inline constexpr SampleId kWavShipMove = 87;       ///< + 0..4
 /// Open1602 (D-001): SAMPLES/Backer.wav, which the original never loads, for the bakery that names
 /// the undefined WAV_BAECKER (assets::fixes::kBakerySound).
 inline constexpr SampleId kWavBakery = 92;
-inline constexpr SampleId kWavTest = 58;  ///< "Test" of the effects' volume (plantage.wav, 0x0049572D)
+inline constexpr SampleId kWavTest = 57;  ///< "Test" of the effects' volume: the hunting lodge's horn (jagdhtte.wav)
 
 /// File of a sound relative to the game directory ("SAMPLES/kanone5.wav"), nothing for the
-/// numbers the original leaves silent (GameInit 0x00494870).
+/// numbers the original leaves silent (GameInit).
 [[nodiscard]] std::optional<std::string> sample_file(SampleId id);
+/// The sound numbers that play SAMPLES/`name`.wav (case ignored; some files have two), none for a
+/// name that is no file of the original's.
+[[nodiscard]] std::vector<SampleId> samples_named(std::string_view name);
 
 /// Volume in the original's unit, 1/100 dB of attenuation (-4000 .. 0), as a gain.
 [[nodiscard]] float gain_of(std::int32_t centibel) noexcept;
@@ -70,6 +75,13 @@ struct AudioSettings {
     std::vector<std::string> disabled_songs;  ///< by track title (the original keeps indices)
 };
 
+/// Whether a message of `kind` is switched off completely: Open1602's own kinds (kSpeechRoutes on)
+/// mute the whole message, its sound and its icon, where the original's kinds only swap the voice
+/// for the message sound.
+[[nodiscard]] constexpr bool message_muted(const AudioSettings& settings, std::uint8_t kind) noexcept {
+    return kind >= kSpeechRoutes && kind < settings.speech.size() && !settings.speech[kind];
+}
+
 /// The audio lines of the original's Game.dat (read only; Open1602 never writes it): Musik,
 /// Samples, Random, Volume (the third value is the mission progress), Song, Speach, Video.
 [[nodiscard]] AudioSettings parse_audio_settings(std::string_view game_dat);
@@ -87,7 +99,13 @@ public:
 
     void set_enabled(bool on) noexcept { m_enabled = on; }
     void set_volume(std::int32_t centibel) noexcept { m_gain = gain_of(centibel); }
-    /// Queues a sound at (x, y) of the view.
+    /// The sounds of the packages by their numbers from assets::kFirstPackageSound
+    /// (package_sounds.hpp); nullptr for one that could not be decoded.
+    void set_package_sounds(std::vector<std::shared_ptr<const Pcm>> sounds) { m_package = std::move(sounds); }
+    /// Sounds of packages in place of the original's, by the original's numbers (sounds.toml
+    /// `replaces`); nullptr where the original's plays.
+    void set_replaced_sounds(std::vector<std::shared_ptr<const Pcm>> by_id) { m_replaced = std::move(by_id); }
+    /// Queues a sound at (x, y) of the view: one of the original's, or of a package.
     void request(SampleId id, float x, float y);
     /// Plays what was queued since the last call.
     void flush();
@@ -107,30 +125,44 @@ private:
     bool m_enabled = true;
     float m_gain = 1.0F;
     std::vector<Request> m_queue;
+    std::vector<std::shared_ptr<const Pcm>> m_package;
+    std::vector<std::shared_ptr<const Pcm>> m_replaced;
 };
 
-/// The widest view the original hears its scenery in (birds and surf): its game view at 1024 x 768
-/// (768 x 734, docs/re/ui.md) at the small zoom level, in pixels of the large level (four each).
-inline constexpr double kWidestViewWidth = 768.0 * 4;
-inline constexpr double kWidestViewHeight = 734.0 * 4;
+/// The original's game view at 1024 x 768 (768 x 734 pixels): it hears its scenery (birds and
+/// surf) only there, at each of its zoom levels (one, two and four pixels of the large level per
+/// screen pixel).
+inline constexpr double kOriginalViewWidth = 768.0;
+inline constexpr double kOriginalViewHeight = 734.0;
+/// The original's closest and farthest zoom: screen pixels per pixel of the large level.
+inline constexpr double kOriginalNearMagnification = 1.0;
+inline constexpr double kOriginalFarMagnification = 0.25;
+/// The widest view the original hears its scenery in: its game view at the small zoom level, in
+/// pixels of the large level (four each).
+inline constexpr double kWidestViewWidth = kOriginalViewWidth / kOriginalFarMagnification;
+inline constexpr double kWidestViewHeight = kOriginalViewHeight / kOriginalFarMagnification;
 
-/// How far the scenery is heard, in view half sizes: the whole view up to the original's widest
-/// one, beyond that (the free zoom shows more) only the middle that the widest view covers. More
-/// trees and beaches on screen thus never sound more often than in the original.
+/// How far the scenery is heard, in view half sizes: the whole view up to the part of the world
+/// the original's game view shows at the same magnification, beyond that (a larger screen or the
+/// free zoom shows more) only the middle that view covers. A wood fills a large screen with many
+/// more trees than the original's view, and every 25th of them calls; so more trees on screen
+/// never sound more often than in the original at that zoom.
 struct SceneryReach {
     float x = 1.0F;
     float y = 1.0F;
 };
-/// The reach for a view of `width` x `height` pixels of the large zoom level.
-[[nodiscard]] SceneryReach scenery_reach(double width, double height) noexcept;
+/// The reach for a view of `width` x `height` pixels of the large zoom level, shown at
+/// `magnification` screen pixels per pixel of the large level. The original's view at that
+/// magnification (between its closest and farthest zoom) is 768 x 734 screen pixels.
+[[nodiscard]] SceneryReach scenery_reach(double width, double height, double magnification) noexcept;
 /// Where a scenery sound at (x, y) of the view (Effects::request) plays: within the reach it is
-/// placed as in the original's widest view, so it pans and softens as there; nothing outside.
+/// placed as in the original's view, so it pans and softens as there; nothing outside.
 [[nodiscard]] std::optional<std::pair<float, float>> scenery_place(const SceneryReach& reach, float x,
                                                                    float y) noexcept;
 
 // ---- Voice messages ------------------------------------------------------------------------------
 
-/// What a message (MELDUNG number) brings (table 0x0049B210): its kind of voice message, the first
+/// What a message (MELDUNG number) brings: its kind of voice message, the first
 /// voice file and how many there are (every second number), the videos and flags.
 struct MessageAudio {
     std::uint8_t kind = 0;  ///< [SPEECHKIND], 0 = only the master switch
@@ -166,7 +198,7 @@ struct MessagePlayback {
 };
 
 /// The voice of the messages (Speech8): four waiting at most, one speaking at a time, never cut
-/// off (0x00488D00, 0x00488D50). A message that finds no room, or has no voice, sounds event.wav.
+/// off. A message that finds no room, or has no voice, sounds event.wav.
 class Voices {
 public:
     Voices(Mixer& mixer, SoundBank& bank, Effects& effects, std::uint32_t seed = 1602)
@@ -180,12 +212,12 @@ public:
     /// A message for the local player; `visible` whether its place is on screen. Returns the
     /// message's flags (kMessageNormalSpeed asks the game to slow down). A message plays its video
     /// instead of a voice when videos of its kind are on and its place is off screen, or always
-    /// (flag 0x01), or at a quarter of the times (flag 0x08) (Msg_Audio 0x00488E80).
+    /// (flag 0x01), or at a quarter of the times (flag 0x08).
     std::uint16_t message(std::uint16_t message, bool visible);
     /// The same for a message described by its playback (own sound before the Speech8 voices).
     std::uint16_t message(const MessagePlayback& m, bool visible);
     /// One of `count` voice files base, base + 2, ... at random, without a message (the menu's
-    /// "Wählt Euer Banner": Speech_Queue(0x6B, 5, 2) 0x0048C008). False if muted or no room.
+    /// "Wählt Euer Banner":). False if muted or no room.
     bool speak(std::uint16_t base, std::uint8_t count);
     /// The video the last messages asked for (the latest wins), once.
     [[nodiscard]] std::optional<std::uint16_t> take_video() noexcept { return std::exchange(m_video, std::nullopt); }
@@ -221,7 +253,7 @@ private:
 
 // ---- Music ---------------------------------------------------------------------------------------
 
-/// The music (Music_Update 0x00489190): the tracks of MUSIC8 except Fight1..3, at random (not
+/// The music: the tracks of MUSIC8 except Fight1..3, at random (not
 /// one of the last few) or in order; battle music while shots fall near the middle of the view, back
 /// 25 s after the last; a change fades out over 3 s. The order of the tracks is by name, not by
 /// the file system's (U-014). The tracks of content packages come after the original's
@@ -242,9 +274,9 @@ public:
     void update(std::uint64_t game_ms, std::uint32_t real_ms);
 
     [[nodiscard]] const std::vector<std::string>& tracks() const noexcept { return m_tracks; }
-    /// Stops the track at once (a video starts, 0x00488C00); the next update picks a new one.
+    /// Stops the track at once (a video starts); the next update picks a new one.
     void stop();
-    /// Plays `title` now (a click on it in the list, 0x00488C20); the list goes on from there.
+    /// Plays `title` now (a click on it in the list); the list goes on from there.
     void play(const std::string& title);
     /// Title playing now, empty if none (also while its file is still being decoded).
     [[nodiscard]] std::string playing() const;
@@ -265,6 +297,8 @@ private:
     std::vector<std::string> m_tracks;
     std::vector<std::string> m_fights;
     std::vector<MusicTrack> m_own;  ///< the packages' tracks, played from their files
+    /// MUSIC8 titles a package's track plays in place of, with that track's file.
+    std::map<std::string, std::filesystem::path> m_replaced;
     std::vector<bool> m_enabled;
     std::mt19937 m_random;
     AudioSettings m_settings;

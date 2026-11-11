@@ -72,6 +72,12 @@ void io_player_state(A& a, P& p, std::uint16_t version) {
     if (version >= kClosedGates) {
         a.boolean(p.gates_closed);
     }
+    if (version >= kPlayerOwners) {
+        a.u64(p.owner);
+    }
+    if (version >= kPlayerCheats) {
+        a.u8(p.cheats);
+    }
 }
 
 template <class A, class S>
@@ -84,12 +90,15 @@ void io_scaling(A& a, S& s) {
 }
 
 template <class A, class F>
-void io_faction(A& a, F& f) {
+void io_faction(A& a, F& f, std::uint16_t version) {
     a.string(f.id);
     a.enum8(f.behaviour, kLastBehaviour);
     io_scaling(a, f.nests);
     io_scaling(a, f.ships);
     a.u16(f.reach_players);
+    if (version >= kScriptedFactions) {
+        a.boolean(f.scripted);
+    }
 }
 
 template <class A, class G>
@@ -253,16 +262,22 @@ bool has_own_factions(const World& w) {
     return w.factions() != base_factions();
 }
 
-void write_factions(Writer& out, const World& w) {
-    out.list(w.factions(), 23, [&](const Faction& f) { io_faction(out, f); });
+std::uint16_t factions_version(const World& w) {
+    return std::any_of(w.factions().begin(), w.factions().end(), [](const Faction& f) { return f.scripted; })
+               ? kScriptedFactions
+               : 1;
+}
+
+void write_factions(Writer& out, const World& w, std::uint16_t version) {
+    out.list(w.factions(), 23, [&](const Faction& f) { io_faction(out, f, version); });
     out.list(w.players(), 1, [&](const Player& p) { out.u8(p.faction); });
 }
 
-Decoded::FactionPart read_factions(Reader& in) {
+Decoded::FactionPart read_factions(Reader& in, std::uint16_t version) {
     Decoded::FactionPart part;
-    in.list(part.factions, 23, [&](Faction& f) { io_faction(in, f); });
+    in.list(part.factions, 23, [&](Faction& f) { io_faction(in, f, version); });
     in.list(part.players, 1, [&](FactionId& f) { in.u8(f); });
-    if (part.factions.empty() || part.factions.size() > kMaxPlayerCount ||
+    if (part.factions.empty() || part.factions.size() > kMaxFactions ||
         std::any_of(part.players.begin(), part.players.end(), [&](FactionId f) { return f >= part.factions.size(); })) {
         in.fail();
     }
@@ -272,6 +287,12 @@ Decoded::FactionPart read_factions(Reader& in) {
 std::uint16_t player_state_version(const World& w) {
     const bool any = std::any_of(w.players().begin(), w.players().end(),
                                  [](const Player& p) { return p.scenario != ScenarioSwitches{}; });
+    if (std::any_of(w.players().begin(), w.players().end(), [](const Player& p) { return p.cheats != 0; })) {
+        return kPlayerCheats;
+    }
+    if (std::any_of(w.players().begin(), w.players().end(), [](const Player& p) { return p.owner != 0; })) {
+        return kPlayerOwners;
+    }
     if (std::any_of(w.players().begin(), w.players().end(), [](const Player& p) { return p.gates_closed; })) {
         return kClosedGates;
     }
@@ -281,6 +302,12 @@ std::uint16_t player_state_version(const World& w) {
 namespace {
 
 std::size_t player_state_size(std::uint16_t version) {
+    if (version >= kPlayerCheats) {
+        return 43;
+    }
+    if (version >= kPlayerOwners) {
+        return 42;
+    }
     if (version >= kClosedGates) {
         return 34;
     }

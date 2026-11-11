@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Fires and plagues (docs/re/disasters.md).
+// Fires and plagues.
 //
 // Every 60 to 67 seconds each city of a human or computer player may catch the plague (big cities
 // of citizens and better), send out a robber (logistics.hpp) or catch fire (pioneers and settlers).
@@ -29,7 +29,7 @@
 
 namespace o1602::sim {
 
-/// Epoch of the disasters (0x0047A020).
+/// Epoch of the disasters.
 inline constexpr std::uint32_t kDisasterEpochMs = 10'000;
 inline constexpr std::uint8_t kPlagueDuration = 20;       ///< epochs
 inline constexpr std::uint8_t kFireDuration = 25;         ///< a fire that broke out
@@ -62,7 +62,7 @@ struct RobberSpawn {
 /// The disaster on the building with origin (x, y), if any.
 [[nodiscard]] const Disaster* disaster_at(const World& world, std::uint16_t island, std::uint16_t x, std::uint16_t y);
 
-/// Starts a disaster on the building covering `tile` (0x00479CA0): one that is already there is
+/// Starts a disaster on the building covering `tile`: one that is already there is
 /// replaced. A house shows it, a workshop stops working. False if there is no building or it is a
 /// destroyed one.
 bool start_disaster(World& world, const assets::BuildingTable& buildings, std::uint16_t island, TilePos tile,
@@ -80,13 +80,13 @@ void forget_disaster(World& world, std::uint16_t island, TilePos origin);
 /// Counts the disasters of every city by the city the building belongs to now (City::disasters).
 void recount_disasters(World& world);
 
-/// One epoch of all disasters (0x0047A020): each lasts one epoch longer and may spread; at its end
+/// One epoch of all disasters: each lasts one epoch longer and may spread; at its end
 /// a plague is over and a fire burns the building down (`construction` gets what that removed).
 /// `rules` say whether wood or brick catches fire more easily (OriginalBugs::fire_risk).
 void advance_disasters(World& world, const assets::BuildingTable& buildings, const Rules& rules,
                        std::vector<DisasterEvent>* events, std::vector<ConstructionEvent>* construction);
 
-/// The event check of the cities whose time has come (0x0047F8A0): plague, robbers, fire. `rules`
+/// The event check of the cities whose time has come: plague, robbers, fire. `rules`
 /// say how the gallows and the fire table work (OriginalBugs).
 void advance_city_events(World& world, const assets::BuildingTable& buildings, const Rules& rules,
                          std::vector<DisasterEvent>* events, std::vector<RobberSpawn>* robbers);

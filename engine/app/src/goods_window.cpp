@@ -175,6 +175,9 @@ std::vector<ui::DrawItem> GoodsWindow::draw(const sim::World& world, const asset
             case Tab::Trade:
                 layout_trade(world, player, below, above);
                 break;
+            case Tab::Routes:
+                layout_routes(world, player, below, above);
+                break;
             case Tab::Finances:
                 layout_finances(world, buildings, figures, player, below, above);
                 break;
@@ -305,7 +308,7 @@ void GoodsWindow::layout_table(const sim::World& world, sim::PlayerId player, Pa
         };
         const std::array<std::string, 5> values = {
             ui::tr("stats.tons", {std::to_string(tons(l.stock))}),
-            rate(t.of(GoodsFlow::Produced)),
+            rate(t.production()),
             rate(imported(t)),
             rate(consumed(t)),
             rate(exported(t)),
@@ -314,7 +317,7 @@ void GoodsWindow::layout_table(const sim::World& world, sim::PlayerId player, Pa
             above.text(Rect{kColumns[c].right - kColumnW, y, kColumnW, kRowH}, values[c], Align::Right, tone,
                        kFontMedium);
         }
-        const std::int64_t net = t.net();
+        const std::int64_t net = t.balance();
         above.text(Rect{kColumns[5].right - kColumnW, y, kColumnW, kRowH}, rate_text(net, m, true), Align::Right,
                    net > 0   ? ui::kTextInkGreen
                    : net < 0 ? ui::kTextInkRed
@@ -332,13 +335,13 @@ void GoodsWindow::layout_table(const sim::World& world, sim::PlayerId player, Pa
         const std::int32_t half = kRowH / 2 - 5;
         std::int64_t top = 1;
         for (const sim::GoodsSample& g : history) {
-            top = std::max(top, std::abs(static_cast<std::int64_t>(g.in()) - static_cast<std::int64_t>(g.out())));
+            top = std::max(top, std::abs(g.balance()));
         }
         const std::size_t slots = sim::GoodsLedger::kMinutes;
         const std::size_t first = slots - std::min(slots, history.size());
         for (std::size_t k = 0; k < history.size() && k < slots; ++k) {
             const sim::GoodsSample& g = history[history.size() - std::min(slots, history.size()) + k];
-            const std::int64_t v = static_cast<std::int64_t>(g.in()) - static_cast<std::int64_t>(g.out());
+            const std::int64_t v = g.balance();
             const auto h = static_cast<std::int32_t>(std::abs(v) * half / top);
             const std::int32_t x = kSparkX + static_cast<std::int32_t>((first + k) * kSparkW / slots);
             if (v > 0) {
@@ -368,9 +371,9 @@ void GoodsWindow::layout_detail(const sim::World& world, const assets::BuildingT
     const std::uint32_t m = std::max<std::uint32_t>(t.minutes, 1);
     const std::uint64_t stock = sim::goods_stock(world, scope, ware);
     const std::uint64_t room = sim::goods_capacity(world, scope);
-    const std::int64_t net = t.net();
+    const std::int64_t net = t.balance();
 
-    // The good, its stock and balance.
+    // The good, its stock and balance (producers idle only for a full warehouse count as working).
     below.fill(Rect{kMargin, 84, 50, 48}, s.dark);
     above.sprite(Rect{kMargin + 1, 85, 48, 46}, ware_icon(world, ware));
     above.text(Rect{kMargin + 60, 86, 300, 26}, ware_name(world, ware), Align::Left, st.text);
@@ -409,7 +412,7 @@ void GoodsWindow::layout_detail(const sim::World& world, const assets::BuildingT
     for (const sim::GoodsProducers& p : producers) {
         recent += p.recent;
     }
-    const std::uint64_t produced = t.of(GoodsFlow::Produced);
+    const std::uint64_t produced = t.production();
     std::uint64_t given = 0;
     for (std::size_t i = 0; i < producers.size(); ++i) {
         const sim::GoodsProducers& p = producers[i];
@@ -471,7 +474,8 @@ void GoodsWindow::layout_detail(const sim::World& world, const assets::BuildingT
         return y;
     };
     below.fill(Rect{kMargin, kColumnsY - 4, kWidth - 2 * kMargin, 1}, s.shade);
-    const std::int32_t in_end = column(kMargin + 2, kHalf - 16, "stats.inflow", t.in(), in, s.green, ui::kTextInkGreen);
+    const std::int32_t in_end = column(kMargin + 2, kHalf - 16, "stats.inflow", t.in() + t.of(GoodsFlow::Withheld), in,
+                                       s.green, ui::kTextInkGreen);
     const std::int32_t out_end =
         column(kHalf + 10, kWidth - kMargin - 2, "stats.outflow", t.out(), out, s.red, ui::kTextInkRed);
     const std::int32_t columns_end = std::max(in_end, out_end) + 4;
@@ -587,15 +591,20 @@ void GoodsWindow::layout_detail(const sim::World& world, const assets::BuildingT
     if (!producers.empty()) {
         std::uint32_t count = 0;
         std::uint32_t working = 0;
+        std::uint32_t waiting_for_room = 0;
         std::uint32_t short_of_raw = 0;
         std::uint32_t off = 0;
         for (const sim::GoodsProducers& p : producers) {
             count += p.count;
             working += p.working;
+            waiting_for_room += p.waiting_for_room;
             short_of_raw += p.short_of_raw;
             off += p.off;
         }
         std::string text = ui::tr("stats.working", {std::to_string(working), std::to_string(count)});
+        if (waiting_for_room != 0) {
+            text += ", " + ui::tr("stats.waiting_for_room", {std::to_string(waiting_for_room)});
+        }
         if (short_of_raw != 0) {
             text += ", " + ui::tr("stats.short_of_raw", {std::to_string(short_of_raw)});
         }
@@ -660,6 +669,12 @@ GoodsWindow::Result GoodsWindow::mouse(std::int32_t x, std::int32_t y, bool down
                 m_scroll = 0;
             } else if (*id >= kRow && *id < kRow + 256) {
                 m_detail = static_cast<std::uint8_t>(*id - kRow);
+            } else if (*id >= kRouteRow && static_cast<std::size_t>(*id - kRouteRow) < m_route_ships.size()) {
+                m_ship = m_route_ships[static_cast<std::size_t>(*id - kRouteRow)];
+                return Result::Ship;
+            } else if (*id >= kRouteSort && *id <= kRouteSort + static_cast<Id>(RouteOrder::Problems)) {
+                m_route_order = static_cast<RouteOrder>(*id - kRouteSort);
+                m_scroll = 0;
             } else if (*id >= kProducerRow && static_cast<std::size_t>(*id - kProducerRow) < m_row_wares.size()) {
                 m_detail = m_row_wares[static_cast<std::size_t>(*id - kProducerRow)];
             }

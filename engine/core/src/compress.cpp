@@ -55,18 +55,24 @@ Result<std::vector<std::uint8_t>> zlib_deflate(std::span<const std::uint8_t> dat
     }
     uLongf size = compressBound(static_cast<uLong>(data.size()));
     std::vector<std::uint8_t> out(size);
-    if (compress2(out.data(), &size, data.data(), static_cast<uLong>(data.size()), level) != Z_OK) {
+    if (compress2(out.data(), &size, data.data(), static_cast<uLong>(data.size()), std::clamp(level, 1, 9)) != Z_OK) {
         return make_error(ErrorCode::InvalidFormat, "zlib: compression failed");
     }
     out.resize(size);
     return out;
 #else
-    (void)data;(void)level;
+    (void)data;
+    (void)level;
     return make_error(ErrorCode::Unsupported, "zlib: this build of Open1602 has no zlib");
 #endif
 }
 
-Result<std::vector<std::uint8_t>> zlib_inflate(std::span<const std::uint8_t> stream, std::size_t size) {
+namespace {
+
+/// The data of a deflate stream, exactly `size` bytes: with zlib's header and checksum
+/// (`window_bits` 15) or without (-15, as in a zip archive).
+Result<std::vector<std::uint8_t>> inflate_exactly(std::span<const std::uint8_t> stream, std::size_t size,
+                                                  [[maybe_unused]] int window_bits) {
 #if defined(O1602_HAVE_ZLIB)
     // Deflate packs at most about 1:1032; a size beyond that is a lie of the header.
     constexpr std::size_t kMaxRatio = 1032;
@@ -78,7 +84,7 @@ Result<std::vector<std::uint8_t>> zlib_inflate(std::span<const std::uint8_t> str
     constexpr std::size_t kFirstStep = std::size_t{1} << 20;
     std::vector<std::uint8_t> out(std::min(size, kFirstStep));
     z_stream z{};
-    if (inflateInit(&z) != Z_OK) {
+    if (inflateInit2(&z, window_bits) != Z_OK) {
         return make_error(ErrorCode::InvalidFormat, "zlib: cannot unpack");
     }
     z.next_in = const_cast<Bytef*>(stream.data());  // zlib's API is not const; it does not write
@@ -107,6 +113,16 @@ Result<std::vector<std::uint8_t>> zlib_inflate(std::span<const std::uint8_t> str
     (void)size;
     return make_error(ErrorCode::Unsupported, "zlib: this build of Open1602 has no zlib");
 #endif
+}
+
+}  // namespace
+
+Result<std::vector<std::uint8_t>> zlib_inflate(std::span<const std::uint8_t> stream, std::size_t size) {
+    return inflate_exactly(stream, size, 15);
+}
+
+Result<std::vector<std::uint8_t>> raw_inflate(std::span<const std::uint8_t> stream, std::size_t size) {
+    return inflate_exactly(stream, size, -15);
 }
 
 Result<std::vector<std::uint8_t>> zlib_inflate_prefix(std::span<const std::uint8_t> stream, std::size_t size) {

@@ -144,6 +144,7 @@ void io(A& a, T& t)
     a(t.ship_type);
     a(t.on);
     a(t.ship);
+    a(t.figure);
 }
 
 template <class A, class T>
@@ -283,6 +284,7 @@ void io(A& a, T& t)
 {
     a(t.player);
     a(t.computer);
+    a(t.owner);
 }
 
 template <class A, class T>
@@ -295,6 +297,19 @@ void io(A& a, T& t)
 
 template <class A, class T>
 void io(A& a, T& t)
+    requires std::is_same_v<std::remove_const_t<T>, CheatOrder>
+{
+    a(t.player);
+    a.enumeration(t.op, CheatOrder::Op::Volcano);
+    a(t.code);
+    a(t.ware);
+    a(t.ship);
+    a(t.x);
+    a(t.y);
+}
+
+template <class A, class T>
+void io(A& a, T& t)
     requires std::is_same_v<std::remove_const_t<T>, CartRequest>
 {
     a(t.player);
@@ -302,6 +317,36 @@ void io(A& a, T& t)
     a(t.city);
     a(t.x);
     a(t.y);
+    a(t.from_x);
+    a(t.from_y);
+    a(t.another);
+}
+
+template <class A, class T>
+void io(A& a, T& t)
+    requires std::is_same_v<std::remove_const_t<T>, BlueprintOrder>
+{
+    a(t.player);
+    a.enumeration(t.kind, BlueprintOrder::Kind::Auto);
+    a(t.island);
+    a(t.items);
+    a(t.from);
+    a(t.to);
+    a(t.city);
+    a(t.on);
+}
+
+template <class A, class T>
+void io(A& a, T& t)
+    requires std::is_same_v<std::remove_const_t<T>, MoveOrder>
+{
+    a(t.player);
+    a(t.island);
+    a(t.from);
+    a(t.x);
+    a(t.y);
+    a(t.rotation);
+    a(t.orient_to_road);
 }
 
 class Writer {
@@ -312,6 +357,7 @@ public:
     void operator()(const std::uint8_t& v) { m_out.u8(v); }
     void operator()(const std::uint16_t& v) { m_out.u16(v); }
     void operator()(const std::uint32_t& v) { m_out.u32(v); }
+    void operator()(const std::uint64_t& v) { m_out.u64(v); }
     void operator()(const std::int16_t& v) { m_out.u16(static_cast<std::uint16_t>(v)); }
     void operator()(const std::int32_t& v) { m_out.i32(v); }
     void operator()(const std::string& v) { m_out.string(v); }
@@ -366,6 +412,7 @@ public:
     void operator()(std::uint8_t& v) { v = m_state.u8(); }
     void operator()(std::uint16_t& v) { v = m_state.u16(); }
     void operator()(std::uint32_t& v) { v = m_state.u32(); }
+    void operator()(std::uint64_t& v) { v = m_state.u64(); }
     void operator()(std::int16_t& v) { v = static_cast<std::int16_t>(m_state.u16()); }
     void operator()(std::int32_t& v) { v = m_state.i32(); }
     void operator()(std::string& v) {

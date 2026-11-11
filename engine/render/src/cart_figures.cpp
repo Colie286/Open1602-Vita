@@ -11,7 +11,7 @@ namespace o1602::render {
 namespace {
 
 constexpr std::uint8_t kStandAnim = 1;
-constexpr std::uint8_t kDieAnim = 2;
+constexpr std::uint8_t kDieAnim = 3;  ///< then ANIM 4 holds its last picture
 
 /// Wegspeed of the tile under world point (x, y) for the figure's Speedtyp, 32 = road.
 std::uint32_t walk_speed_at(const sim::World& world, const assets::BuildingTable& buildings,
@@ -51,7 +51,8 @@ void CartFigures::update(const sim::World& world, const assets::BuildingTable& b
         double x = 0.0;
         double y = 0.0;
         trail.position(ship, x, y);
-        // TRADER1: ANIM 0 drives, ANIM 1 stands (one picture per direction), ANIM 2 is destroyed.
+        // TRADER1: ANIM 0 drives, ANIM 1 stands (one picture per direction), ANIM 2 fights (the
+        // standing picture), ANIM 3 is destroyed and jumps to ANIM 4, its last picture held.
         const bool driving = ship.motion.phase == sim::ShipMotion::Phase::Run;
         const std::uint8_t anim = ship.sinking                                    ? kDieAnim
                                   : !driving && type->anim(kStandAnim) != nullptr ? kStandAnim
@@ -61,6 +62,10 @@ void CartFigures::update(const sim::World& world, const assets::BuildingTable& b
         if (added || slot.requested != anim) {
             slot.state = start_animation(*type, anim, ship.id * 2654435761U);
             slot.requested = anim;
+            if (ship.sinking) {
+                slot.state.frame = 0;  // the destruction from its first picture
+                slot.state.elapsed_ms = 0;
+            }
         } else if (ship.sinking) {
             advance_animation(slot.state, *type, dt_ms);
         } else if (driving) {

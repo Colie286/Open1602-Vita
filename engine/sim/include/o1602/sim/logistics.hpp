@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Goods on the move between the buildings of a city (docs/re/logistics.md):
+// Goods on the move between the buildings of a city:
 //
-// - Carriers: a workshop that runs short of raw material sends a carrier (0x0044AB60). He walks
+// - Carriers: a workshop that runs short of raw material sends a carrier. He walks
 //   over roads and open ground to the nearest building of his city that has the ware - a producer
 //   of it, a market or the warehouse - takes up to what he can carry and brings it home.
-// - Market carts: every market and warehouse sends carts (up to Figuranz, 0x0044AD50). A cart
+// - Market carts: every market and warehouse sends carts (up to Figuranz). A cart
 //   drives on roads to the fullest producer of the city in its circle and brings the goods to the
 //   city's warehouse. Finished goods are always collected; raw material and intermediate goods
 //   only from a full store, the rest is left to the carriers of the next workshop.
@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -49,13 +50,18 @@ struct BuildingAt {
 [[nodiscard]] std::optional<BuildingAt> building_at(const World& world, const assets::BuildingTable& buildings,
                                                     std::uint16_t island, TilePos tile);
 
-/// Door of a building (0x004634C0): its centre tile, or with Tuerflg the middle tile of one edge,
+/// Door of a building: its centre tile, or with Tuerflg the middle tile of one edge,
 /// which edge depending on the rotation.
+/// The room per ware of every city, in 1/32 t, keyed by (island << 8 | city number): the Maxlager of
+/// its Kontor plus 10 t for every further market or warehouse, as City::capacity holds it; a city
+/// without any has none listed.
+[[nodiscard]] std::unordered_map<std::uint32_t, std::uint32_t> city_capacities(const World& world,
+                                                                               const assets::BuildingTable& buildings);
 [[nodiscard]] TilePos door_tile(const BuildingAt& building) noexcept;
 /// Centre tile: origin + (size - 1) / 2.
 [[nodiscard]] TilePos centre_tile(const BuildingAt& building) noexcept;
 
-/// Forest spots where deer may settle (0x0046B920): tiles of odd rows and the island's column
+/// Forest spots where deer may settle: tiles of odd rows and the island's column
 /// parity where at least 4 of the tile and its 4 neighbours carry trees.
 [[nodiscard]] std::vector<TilePos> deer_census_spots(const World& world, const assets::BuildingTable& buildings,
                                                      std::uint16_t island);
@@ -197,15 +203,15 @@ public:
 
     /// Every used deer spot gets its deer (the original does this when it loads a game).
     void spawn_deer_at_spots();
-    /// One island epoch (30 s, 0x0046B3E0): expired spots get their deer back or are given up, and
+    /// One island epoch (30 s): expired spots get their deer back or are given up, and
     /// every fourth epoch the island counts its forest spots and may settle new deer.
     void advance_islands(const std::vector<bool>* due = nullptr);
     /// Whether a worker is on the way to harvest this tile.
     [[nodiscard]] bool field_reserved(std::uint16_t island, TilePos tile) const;
-    /// A robber the city tick sent out (0x0044B620): he waits in the house for a victim.
+    /// A robber the city tick sent out: he waits in the house for a victim.
     void spawn_robber(const RobberSpawn& spawn);
     /// A shipyard's pack donkey fetches `ware` from a market or Kontor of its city within the
-    /// yard's Radius (0x0044AB60 with PACKESEL). False if there is nothing to fetch.
+    /// yard's Radius (with PACKESEL). False if there is nothing to fetch.
     bool send_yard_carrier(std::uint16_t island, TilePos origin, std::uint8_t ware, std::uint16_t figure);
     /// What pack donkeys brought to shipyards (amount 0: the trip failed).
     struct YardDelivery {
@@ -224,6 +230,13 @@ public:
         std::vector<DisasterEvent> events;
         events.swap(m_disaster_events);
         return events;
+    }
+    /// Mines (production entries) that found their vein exhausted since the last call; each mine
+    /// once, after Maxnorohst idle cycles, as in the original.
+    [[nodiscard]] std::vector<std::uint32_t> take_exhausted_mines() {
+        std::vector<std::uint32_t> mines;
+        mines.swap(m_exhausted_mines);
+        return mines;
     }
     /// Game time per island epoch.
     static constexpr std::uint32_t kIslandEpochMs = 30'000;
@@ -247,9 +260,9 @@ private:
     [[nodiscard]] std::optional<BuildingAt> home_building(const Walker& walker) const;
     std::vector<YardDelivery> m_yard_deliveries;
     void send_cart(std::uint32_t home);
-    /// Farm worker, cattle or fishing boat for `ware` (0x0044B7E0, 0x0044BB40, 0x0044B9A0).
+    /// Farm worker, cattle or fishing boat for `ware`.
     void send_worker(std::uint32_t home, std::uint8_t ware, WalkerKind kind);
-    /// A mine takes ore straight from its deposit (0x0047DFD7; mines have no figures).
+    /// A mine takes ore straight from its deposit (mines have no figures).
     void mine_ore(std::uint32_t home);
     /// Prepares the search area of a walker's trip: the catchment of its home with what its kind
     /// walks on, its home opened; with `targets` the ripe tiles it may harvest are goals.
@@ -259,34 +272,35 @@ private:
     /// A worker is done at its field: harvest, then the next tile or home.
     void finish_work(Handle handle, Walker& walker);
 
-    /// A deer at forest place `spot` (0x0044BD00), unless one lives there; with nothing to eat it
+    /// A deer at forest place `spot`, unless one lives there; with nothing to eat it
     /// falls at once.
     bool spawn_deer(std::uint16_t island, TilePos spot);
     [[nodiscard]] bool deer_at(std::uint16_t island, TilePos spot) const;
-    /// The slot of `spot` waits a minute (0x0046B2A0).
+    /// The slot of `spot` waits a minute.
     void touch_spot(std::uint16_t island, TilePos spot);
-    /// The slot of `spot` is given up, the last slot moves into the hole (0x0046B310).
+    /// The slot of `spot` is given up, the last slot moves into the hole.
     void remove_spot(std::uint16_t island, TilePos spot);
     /// A deer that found no way falls for 5 s and gives its slot up.
     void fall(Walker& deer);
     /// Next grazing place of a deer: a ripe tile of its ware in the 13 x 13 square around its
-    /// spot, preferably about 4 steps away, chosen and reached like the original (0x0045C270).
+    /// spot, preferably about 4 steps away, chosen and reached like the original.
     bool plan_deer(Walker& deer);
     void deer_done(Handle handle, Walker& deer);
     void remove_deer(Handle handle, Walker& deer);
     void call_hunter(Handle deer);
     void hunter_arrive(Handle handle, Walker& hunter);
-    /// A hunter close to its grazing deer shoots (0x0045C450).
+    /// A hunter close to its grazing deer shoots.
     void check_shot(Walker& hunter);
     void census(std::uint16_t island);
-    /// A Klinik or fire brigade sends its figure if the city has a disaster of its kind
-    /// (0x0044AF90, 0x0044B470).
+    /// A Klinik or fire brigade sends its figure if the city has a disaster of its kind.
     void send_responder(std::uint32_t home, WalkerKind kind);
     /// The nearest disaster of the walker's kind in its city and circle; plans the way there.
     bool find_disaster(Walker& walker, const BuildingAt& home, const assets::FigureType& figure);
     /// A doctor or fireman has worked at a building: it is cured or put out; then the next one.
     void responder_done(Handle handle, Walker& walker);
-    /// Robbers (0x0045A780): waiting, chasing, fleeing.
+    /// A doctor or fireman at the disaster: starts his work there.
+    void begin_response(Walker& walker);
+    /// Robbers: waiting, chasing, fleeing.
     void robber_wait(Handle handle, Walker& robber);
     void robber_chase(Handle handle, Walker& robber);
     void robber_flee(Handle handle, Walker& robber);
@@ -312,7 +326,7 @@ private:
     [[nodiscard]] std::uint8_t& jobs(std::uint32_t production);
     [[nodiscard]] std::optional<BuildingAt> building_of(std::uint32_t production) const;
     /// Reserves up to `max` of `ware` at the building `at` (a producer or a market/warehouse);
-    /// nothing if less than `min` is free (0x0047D810).
+    /// nothing if less than `min` is free.
     std::uint16_t reserve(const BuildingAt& at, std::uint16_t island, std::uint8_t ware, std::uint16_t min,
                           std::uint16_t max, bool& from_warehouse, std::optional<std::uint32_t>& production);
 
@@ -325,6 +339,7 @@ private:
     PathFinder m_finder;
     LogisticsStats m_stats;
     std::vector<DisasterEvent> m_disaster_events;
+    std::vector<std::uint32_t> m_exhausted_mines;
     /// Ripe tiles a worker is on its way to (the original's grid bit 29), key: island, y, x.
     std::unordered_set<std::uint64_t> m_reserved_tiles;
     /// Deer that started grazing and call a hunter (handled after the figures moved).

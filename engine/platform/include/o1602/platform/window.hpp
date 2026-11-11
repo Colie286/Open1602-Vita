@@ -127,7 +127,22 @@ private:
 /// screen of `refresh_hz` (0 or a value out of 24..1000: 60 assumed): up to 90 % of a refresh.
 [[nodiscard]] std::uint64_t frame_hold_ns(std::uint64_t since_last_ns, float refresh_hz) noexcept;
 
-/// Milliseconds since SDL_Init (monotonic).
+/// The game's clock in milliseconds: everything that moves on screen (the simulation, figures,
+/// blinking, notices, videos) goes by it. Normally real time since SDL_Init (monotonic); with a
+/// fixed clock (use_fixed_clock) it stands still until advance_fixed_clock(), so a run of a fixed
+/// number of frames draws the same pictures on every computer and at every frame rate.
 [[nodiscard]] std::uint64_t ticks_ms();
+
+/// Real milliseconds since SDL_Init, also under a fixed clock: for measuring (frame rate, loading).
+[[nodiscard]] std::uint64_t real_ticks_ms();
+
+/// Lets ticks_ms() go by `step_ms` per advance_fixed_clock(), starting at 0; 0 gives the real clock back.
+void use_fixed_clock(std::uint32_t step_ms) noexcept;
+
+/// True while ticks_ms() is a fixed clock.
+[[nodiscard]] bool fixed_clock() noexcept;
+
+/// One step on: the next frame of a fixed clock. Does nothing with the real clock.
+void advance_fixed_clock() noexcept;
 
 }  // namespace o1602::platform

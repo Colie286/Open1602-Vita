@@ -53,9 +53,12 @@ enum class KeyAction : std::uint16_t {
     RotateBuildingBack,  ///< the other way round (History Edition)
     PickBuilding,
     DemolishTool,
-    NextBuilding,  ///< Open1602's list of all buildings (tests and modding)
-    PlantFields,   ///< the selected farm's field on all open ground in its catchment (History Edition text)
-    ToggleGates,   ///< closes or opens all own city gates to foreign soldiers (Open1602)
+    CopyTool,         ///< a piece of the city to build again elsewhere (Open1602)
+    BlueprintMode,    ///< places blueprints instead of buildings, on or off (Open1602)
+    BuildBlueprints,  ///< builds all blueprints of the city under the mouse (Open1602)
+    SaveTemplate,     ///< keeps the copy tool's piece in hand as a template (Open1602)
+    PlantFields,      ///< the selected farm's field on all open ground in its catchment (History Edition text)
+    ToggleGates,      ///< closes or opens all own city gates to foreign soldiers (Open1602)
     // Selection
     GroupStore,   ///< `param` 0..9
     GroupAdd,     ///< `param` 0..9
@@ -87,11 +90,47 @@ enum class KeyAction : std::uint16_t {
     ShowFps,          ///< the frame rate in the corner of the map (History Edition)
     ShowCoordinates,  ///< the tile under the mouse in the corner of the map (History Edition)
     ShowUnitArms,     ///< the owner's coat of arms over the own land units (History Edition)
+    ReloadPackages,   ///< reads the packages' files again, for their makers (Open1602)
     Fullscreen,       ///< window or full screen
     Quit,
+    // Editor (ADR 0013)
+    EditorUndo,
+    EditorRedo,
+    EditorSave,
+    EditorNew,
+    EditorOpen,
+    EditorSaveAs,
+    EditorRotate,        ///< the piece or object in hand a quarter on
+    EditorBrushBigger,   ///< the terrain brush one size larger
+    EditorBrushSmaller,  ///< and smaller
+    EditorTestPlay,      ///< a game of the map as it is, and back (ADR 0013)
+    EditorBookmarkSet,   ///< the view kept as bookmark `param` (0..8 for the keys 1..9)
+    EditorBookmarkGo,    ///< the view of bookmark `param`
+    EditorFind,          ///< the page "Find": islands, cities and ships by name
+    /// The tools of the tool bar, in its order (app::EditorTool): EditorToolSelect + the tool.
+    EditorToolSelect,
+    EditorToolIsland,
+    EditorToolPlaceholder,
+    EditorToolLand,
+    EditorToolWater,
+    EditorToolCoast,
+    EditorToolBrush,
+    EditorToolRandom,
+    EditorToolFill,
+    EditorToolReplace,
+    EditorToolPipette,
+    EditorToolArea,
+    EditorToolPaste,
+    EditorToolBuild,
+    EditorToolTemplate,
+    EditorToolShip,
+    EditorToolUnit,
+    EditorToolResource,
+    EditorToolRemove,
+    EditorToolMarker,
 };
 
-enum class KeyContext : std::uint8_t { General, Building, Units };
+enum class KeyContext : std::uint8_t { General, Building, Units, Editor };
 
 /// A key as it was pressed: what it means in the keyboard layout (`key`, a keycode) and where it
 /// sits on the keyboard (`scancode`).
@@ -133,6 +172,8 @@ public:
     void bind(KeyContext context, KeyChord chord, KeyAction action, std::uint8_t param = 0);
     /// Removes every key of an action (to assign it anew).
     void unbind(KeyAction action, std::uint8_t param = 0);
+    /// Removes the keys of an action in one context only.
+    void unbind(KeyContext context, KeyAction action, std::uint8_t param = 0);
     /// What a key does in `context` (its own bindings first, then the general ones).
     [[nodiscard]] std::optional<KeyBinding> find(KeyContext context, const KeyChord& chord) const;
     /// What a pressed key does in `context`: its own bindings first, then the general ones; on
@@ -140,6 +181,8 @@ public:
     [[nodiscard]] std::optional<KeyBinding> find_pressed(KeyContext context, const KeyPress& press) const;
     /// The keys of an action, for holding keys down (scrolling) and for the settings.
     [[nodiscard]] std::vector<KeyChord> keys(KeyAction action, std::uint8_t param = 0) const;
+    /// The keys of an action in one context, in the order they were bound.
+    [[nodiscard]] std::vector<KeyChord> keys(KeyContext context, KeyAction action, std::uint8_t param = 0) const;
     [[nodiscard]] const std::vector<KeyBinding>& all() const noexcept { return m_bindings; }
 
     /// Name of an action in settings files ("scroll_up", "group_recall").
@@ -163,6 +206,10 @@ public:
     /// misses nothing new.
     /// `as_comments`: every line behind "#", the defaults to look up and change one by one.
     [[nodiscard]] std::string write_text(const KeyName& key_name, bool as_comments = false) const;
+    /// The lines of a settings file for what differs from `defaults` (the key settings window
+    /// writes them below the defaults as comments): every key of an action whose keys in a context
+    /// changed, "= none" for one left without a key. Read over `defaults`, they make this table.
+    [[nodiscard]] std::string write_changes(const KeyBindings& defaults, const KeyName& key_name) const;
     /// Applies a settings file; returns what it could not read (line by line), the rest counts.
     std::vector<std::string> read_text(std::string_view text, const KeyFromName& key_from_name);
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// What the computer players read from the world (docs/re/ai.md): tiles, cities, land, money.
+// What the computer players read from the world: tiles, cities, land, money.
 #include <algorithm>
 
 #include "ai_engine.hpp"
@@ -108,7 +108,7 @@ std::uint32_t Engine::population(const City& c, std::size_t from) const {
 }
 
 std::uint32_t Engine::demand(const City& c, std::uint8_t w) const {
-    // 0x0047F7B0: food by all inhabitants, the other consumer goods by the classes that want them.
+    // Food by all inhabitants, the other consumer goods by the classes that want them.
     if (w == m_buildings.food_ware()) {
         return static_cast<std::uint32_t>((std::uint64_t{population(c)} * m_buildings.food_need() * 6) >> 8);
     }
@@ -242,7 +242,7 @@ bool Engine::unlocked(const AiPlayer& p, const assets::BuildingType& b) const {
 }
 
 bool Engine::affordable(const AiPlayer& p, const City& c, const assets::BuildingType& b) const {
-    // 0x0041D120. The original compares the gold unsigned, so a debt passes (S-096); Open1602 does not.
+    // The original compares the gold unsigned, so a debt passes (S-096); Open1602 does not.
     const auto& m = m_buildings.materials();
     const auto& cost = b.build_cost;
     return std::int64_t{player(p).money} >= cost.money && c.stock(m.wood) >= cost.wood &&
@@ -262,7 +262,7 @@ const assets::BuildingType* Engine::producer(std::uint8_t w, std::uint8_t raw) c
 }
 
 std::uint32_t Engine::fertility(std::uint16_t island, std::uint8_t w) const {
-    return island < m_world.islands().size() ? island_fertility(m_world.islands()[island], w) : 0;
+    return island < m_world.islands().size() ? island_fertility(m_world, m_world.islands()[island], w) : 0;
 }
 
 std::uint32_t Engine::full_crops(std::uint16_t island) const {
@@ -324,7 +324,7 @@ std::uint32_t Engine::total_population(PlayerId owner) const {
 }
 
 bool Engine::behind(const AiPlayer& p) const {
-    // 0x0040E9B0: behind the leading human in inhabitants (scaled by the difficulty) or in units.
+    // Behind the leading human in inhabitants (scaled by the difficulty) or in units.
     std::uint32_t best_pop = 0;
     std::uint32_t best_army = 0;
     for (std::size_t h = 0; h < m_world.players().size(); ++h) {
@@ -352,7 +352,7 @@ bool Engine::behind(const AiPlayer& p) const {
 }
 
 bool Engine::threatened(const AiPlayer& p) const {
-    // 0x0040F1D0: the current city was attacked within 30 s, or a human not at peace has soldiers
+    // The current city was attacked within 30 s, or a human not at peace has soldiers
     // on its island (the original looks only at the first such human, S-102).
     const City* c = current_city(p);
     if (c == nullptr) {

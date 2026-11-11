@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The white texts that rise over the local player's production buildings when their store gains a
-// ton ("Lager: 3") or is full ("Lager voll"), as the original shows them (0x0047DAF0 -> 0x00446BD0,
-// docs/re/production.md#floating-texts), and the gold of a buried treasure ("+1000", 0x004084D0).
+// ton ("Lager: 3") or is full ("Lager voll"), as the original shows them, and the gold of a buried treasure ("+1000").
 // Only a picture: the game never reads them.
 #pragma once
 
@@ -20,18 +19,18 @@
 
 namespace o1602::app {
 
-/// How long a text rises: 2.5 units at 0.04 per 20 ms step (Figures_Step 0x00451890), 1.25 s.
+/// How long a text rises: 2.5 units at 0.04 per 20 ms step, 1.25 s.
 inline constexpr double kStockNoteMs = 1250.0;
-/// Height at which a text starts, in half tile widths (0x00446BD0 -> Figure_Alloc).
+/// Height at which a text starts, in half tile widths.
 inline constexpr double kStockNoteStartHeight = 0.5;
 /// How fast it rises, in half tile widths per second (0.04 per 20 ms step).
 inline constexpr double kStockNoteRise = 2.0;
-/// The original keeps the texts in 176 slots (0x004E8870); when they are taken, no new one shows.
+/// The original keeps the texts in 176 slots; when they are taken, no new one shows.
 inline constexpr std::size_t kMaxStockNotes = 176;
 
 /// One text over a building.
 struct StockNote {
-    double x = 0.0;  ///< the building's centre in world tiles (Island_BuildingCenter 0x00463A70)
+    double x = 0.0;  ///< the building's centre in world tiles
     double y = 0.0;
     std::string text;
     double start_ms = 0.0;  ///< game time it appeared
@@ -57,8 +56,8 @@ public:
     void add(const sim::World& world, const assets::BuildingTable& buildings, const assets::TextTable& texts,
              std::span<const sim::ProductionEvent> events, sim::PlayerId local, double now_ms);
 
-    /// "+<gold>" over the buildings of `local` that were built on a treasure (sprintf "+%d" over
-    /// Island_BuildingCenter, 0x004084D0), appearing at `now_ms`.
+    /// "+<gold>" over the buildings of `local` that were built on a treasure (over the
+    /// building's centre), appearing at `now_ms`.
     void add_treasures(const sim::World& world, const assets::BuildingTable& buildings,
                        std::span<const sim::ConstructionEvent> events, sim::PlayerId local, double now_ms);
 

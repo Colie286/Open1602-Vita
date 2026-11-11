@@ -16,14 +16,14 @@ namespace hs = house_service;
 
 // HAUS_PRODTYP Kind values.
 
-// The original's tables (0x0049AED8, 0x0049AF08, 0x0049AF18): one bit per random value.
+// The original's tables: one bit per random value.
 constexpr std::array<std::array<std::uint8_t, 16>, 3> kPlagueTakes = {{
     {0, 1, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1},  // unprotected: 8 of 16
     {0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1},  // doctor or bath house: 5 of 16
     {0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},  // both: 3 of 16
 }};
 // The original gives the 7-of-8 row to buildings with more bricks than wood and the 3-of-8 row
-// to wooden ones (0x0049AF08); Open1602 swaps them, so wood burns more easily (S-049), unless the
+// to wooden ones; Open1602 swaps them, so wood burns more easily (S-049), unless the
 // game brings the bug back (OriginalBugs::fire_risk).
 constexpr std::array<std::array<std::uint8_t, 8>, 2> kFireTakes = {{
     {0, 0, 1, 0, 1, 0, 0, 1},  // 3 of 8: more bricks than wood (the original: wood)
@@ -33,7 +33,7 @@ constexpr std::array<std::uint8_t, 8> kRobberPastGallows = {0, 0, 1, 0, 0, 0, 0,
 
 constexpr std::uint32_t kSpreadTiles = 20;  // the area search collects at most 20 tiles
 
-/// Chance of 128 that a plague house infects a neighbour, by how full it is (0x005A7758): linear
+/// Chance of 128 that a plague house infects a neighbour, by how full it is: linear
 /// through (0, 0), (25, 25), (38, 51), (128, 64) over inhabitants * 128 / the largest house.
 std::uint32_t plague_spread_chance(std::uint32_t index) noexcept {
     struct Knot {
@@ -89,6 +89,12 @@ bool takes_fire(const assets::BuildingType& b, std::uint32_t r, const Rules& rul
     return kFireTakes[easily ? 1U : 0U][r] != 0;
 }
 
+/// The range of an outbreak's roll is this many times the original's: twice as wide is half as
+/// likely, and the roll draws the same random numbers either way.
+std::uint32_t rarity(Outbreaks o) noexcept {
+    return o == Outbreaks::Rare ? 2U : 1U;
+}
+
 std::size_t protection(const House& h) noexcept {
     return ((h.services & hs::kKlinik) != 0 ? 1U : 0U) + ((h.services & hs::kBadehaus) != 0 ? 1U : 0U);
 }
@@ -112,7 +118,7 @@ std::optional<Disaster> take(World& world, std::uint16_t island, TilePos origin)
     const auto x = static_cast<std::uint16_t>(origin.x);
     const auto y = static_cast<std::uint16_t>(origin.y);
     if (House* h = world.house(island, x, y)) {
-        h->services = static_cast<std::uint16_t>(h->services & ~hs::kDisasterMask);
+        h->services &= ~assets::ServiceBits{hs::kDisasterMask};
     }
     if (Production* p = production_at(world, island, x, y)) {
         p->flags = static_cast<std::uint8_t>(p->flags & ~Production::kBurningFlag);
@@ -139,7 +145,7 @@ void emit(World& world, std::vector<DisasterEvent>* events, DisasterEvent::Kind 
     events->push_back(e);
 }
 
-/// Tiles around a building the disaster can reach (0x004722F0, 0x00471FB0): a square window of
+/// Tiles around a building the disaster can reach: a square window of
 /// `radius` around its centre, searched outwards from the centre; `goal` tiles are collected (at
 /// most 20, nearest first) and crossed, `open` tiles only crossed.
 template <class Goal, class Open>
@@ -222,7 +228,7 @@ void spread_plague(World& world, const assets::BuildingTable& buildings, const D
     }
 }
 
-/// Fire leaps over buildings, walls, gates, towers and forest and fields (0x00472930), whoever
+/// Fire leaps over buildings, walls, gates, towers and forest and fields, whoever
 /// owns them; roads, open ground and the sea stop it.
 bool conducts_fire(const assets::BuildingType& b) noexcept {
     switch (b.kind) {
@@ -304,7 +310,7 @@ std::vector<House*> houses_of(World& world, const City& city, bool upper) {
     return out;
 }
 
-/// 0x0047B850: up to four tries on houses of citizens and better that are at least half full.
+/// Up to four tries on houses of citizens and better that are at least half full.
 void break_out_plague(World& world, const assets::BuildingTable& buildings, const City& city,
                       std::vector<DisasterEvent>* events) {
     const std::vector<House*> candidates = houses_of(world, city, true);
@@ -324,7 +330,7 @@ void break_out_plague(World& world, const assets::BuildingTable& buildings, cons
     }
 }
 
-/// 0x0047B540: up to three tries on houses of pioneers and settlers.
+/// Up to three tries on houses of pioneers and settlers.
 void break_out_fire(World& world, const assets::BuildingTable& buildings, const Rules& rules, const City& city,
                     std::vector<DisasterEvent>* events) {
     const std::vector<House*> candidates = houses_of(world, city, false);
@@ -343,7 +349,7 @@ void break_out_fire(World& world, const assets::BuildingTable& buildings, const 
     }
 }
 
-/// 0x0047B710: a house of citizens and better; a gallows nearby lets only two of eight through.
+/// A house of citizens and better; a gallows nearby lets only two of eight through.
 void send_robber(World& world, const Rules& rules, const City& city, std::vector<RobberSpawn>* robbers) {
     const std::vector<House*> candidates = houses_of(world, city, true);
     if (candidates.empty()) {
@@ -400,8 +406,7 @@ bool start_disaster(World& world, const assets::BuildingTable& buildings, std::u
         }
     } else if (p == prod::kHouse) {
         if (House* h = world.house(island, x, y)) {
-            h->services =
-                static_cast<std::uint16_t>((h->services & ~hs::kDisasterMask) | static_cast<std::uint16_t>(kind));
+            h->services = (h->services & ~assets::ServiceBits{hs::kDisasterMask}) | static_cast<std::uint16_t>(kind);
         }
     }
     Disaster d;
@@ -524,9 +529,10 @@ void advance_city_events(World& world, const assets::BuildingTable& buildings, c
         const std::uint64_t cum2 = count(2);
         Random& random = world.random(RandomStream::Events);
         // Plague: a city of at least 200 settlers and better without a disaster.
+        // Switched off, plague and fire still roll, so that the other events keep their random numbers.
         if (cum1 >= 200 && city->disasters == 0) {
             const std::uint32_t n = cum2 < 200 ? 400 : cum2 < 400 ? 250 : 180;
-            if (random.below(n) <= 12) {
+            if (random.below(n * rarity(rules.plagues)) <= 12 && rules.plagues != Outbreaks::Off) {
                 break_out_plague(world, buildings, *city, events);
             }
         }
@@ -539,15 +545,16 @@ void advance_city_events(World& world, const assets::BuildingTable& buildings, c
         }
         // Fire: many pioneers, or many pioneers and settlers together.
         bool fire = false;
+        const std::uint32_t k = rarity(rules.fires);
         if (n0 >= 80) {
-            fire = random.below(n0 < 120 ? 200 : n0 < 150 ? 150 : 100) <= 30;
+            fire = random.below((n0 < 120 ? 200U : n0 < 150 ? 150U : 100U) * k) <= 30;
         } else if (n0 + n1 >= 250) {
             const std::uint64_t s = n0 + n1;
-            fire = random.below(s < 300 ? 250 : s < 350 ? 180 : 100) <= 15;
+            fire = random.below((s < 300 ? 250U : s < 350 ? 180U : 100U) * k) <= 15;
         } else if (cum1 >= 250) {
-            fire = random.below(256) <= 7;
+            fire = random.below(256 * k) <= 7;
         }
-        if (fire) {
+        if (fire && rules.fires != Outbreaks::Off) {
             break_out_fire(world, buildings, rules, *city, events);
         }
         city->next_event_ms = now + kCityEventMinMs + std::uint64_t{random.below(8)} * 1000U;

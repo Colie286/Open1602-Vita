@@ -5,6 +5,7 @@
 // none; the windows show such a name in the game's language (MD-10).
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,12 @@ void name_more_players(sim::World& world);
 /// four from `colour_names` (Text.cod PLAYCOL) or Open1602's texts, the further ones from
 /// Open1602's texts.
 [[nodiscard]] std::string colour_player_name(sim::BannerId banner, const std::vector<std::string>& colour_names);
+
+/// The colour of player `n` (from 0, in the order of the lobby's banners: multiplayer_menu.hpp
+/// player_banners, editor::player_banners) as the lobby names it, Windows-1252: "Red" .. "Brown"
+/// for the twelve hand-picked colours, "Colour N" for those generated beyond
+/// (render::BannerTable::generated_colour).
+[[nodiscard]] std::string player_colour_name(std::size_t n);
 
 /// The name of a player as the game shows it (Windows-1252): its own, or the one of its colour.
 [[nodiscard]] std::string player_name(const sim::Player& player);

@@ -10,10 +10,13 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "o1602/assets/building_looks.hpp"
 #include "o1602/assets/figure_table.hpp"
 #include "o1602/assets/game_directory.hpp"
+#include "o1602/assets/package_flags.hpp"
 #include "o1602/assets/package_graphics.hpp"
 #include "o1602/assets/palette.hpp"
 #include "o1602/core/result.hpp"
@@ -48,6 +51,15 @@ struct GraphicsOptions {
     /// The images of the content packages (assets/package_graphics.hpp): their sprites join the
     /// terrain's at their sprite numbers. An image that cannot be read stays empty, with a warning.
     std::vector<assets::PackageImage> package_images{};
+    /// Sprites of the terrain sheet drawn with those of the packages' images: the original's
+    /// buildings a package draws anew (building_images.toml).
+    std::vector<assets::SpriteRedirect> sprite_redirects{};
+    /// Flags of the packages (flags.toml): a banner with one waves it instead of the tinted
+    /// generic flag (WorldGraphics::banner_flags).
+    std::vector<assets::PackageFlag> package_flags{};
+    /// Sprites of the terrain sheet (with the packages' images) drawn as tint templates, as first
+    /// sprite and count: the units of packages with `tint = true` (WorldGraphics::template_tint).
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> template_sprites{};
 };
 
 struct WorldGraphics {
@@ -56,11 +68,18 @@ struct WorldGraphics {
     std::array<std::optional<std::uint32_t>, assets::kFigureSheetCount> base{};
     /// Sheets made from the next larger zoom level.
     std::array<bool, assets::kFigureSheetCount> derived{};
-    /// Per banner (BannerTable index): atlas index of the first image of its tinted flag, nothing
-    /// for banners without a tinted flag.
+    /// Per banner (BannerTable index): atlas index of the first image of its tinted flag or of the
+    /// flag a package gives it, nothing for banners without one.
     std::vector<std::optional<std::uint32_t>> banner_flags;
+    /// Per banner: whether its flag is a package's (assets::kFlagFrames images) rather than the
+    /// tinted generic flag (as many as the template); empty when no package gives a flag.
+    std::vector<bool> package_flags;
     /// Units in banner colours without drawn variants (needs the soldier sheet and the figures).
     UnitTint unit_tint;
+    /// The same for package units whose image has a block per colour (terrain sheet).
+    UnitTint package_unit_tint;
+    /// Package units drawn as tint templates (GraphicsOptions::template_sprites), for every banner.
+    UnitTint template_tint;
     /// Shadows (SCHATTEN.BSH) and smoke (EFFEKTE.BSH) as the original draws them, for the classic
     /// graphics (WorldLayers::dither); empty unless GraphicsOptions::dither.
     Dither dither;

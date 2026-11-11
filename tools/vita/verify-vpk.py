@@ -9,7 +9,7 @@ with zipfile.ZipFile(path) as z:
     assert z.testzip() is None
     art={'sce_sys/icon0.png':(128,128),'sce_sys/livearea/contents/bg0.png':(840,500),'sce_sys/livearea/contents/startup.png':(280,158)}
     extra=set(art)|{'sce_sys/livearea/contents/template.xml'}
-    assert set(z.namelist()) <= extra | {'eboot.bin','client.self','sce_sys/param.sfo','licenses/Open1602.txt','licenses/enet.txt','licenses/lua.txt','licenses/SDL3.txt','licenses/zlib.txt','licenses/ThirdParty.txt'}
+    assert set(z.namelist()) <= extra | {'eboot.bin','client.self','sce_sys/param.sfo','licenses/Open1602.txt','licenses/enet.txt','licenses/lua.txt','licenses/SDL3.txt','licenses/zlib.txt','licenses/ThirdParty.txt','licenses/dav1d.txt','licenses/opus.txt'}
     b=z.read('sce_sys/param.sfo')
     magic,version,keys,values,count=struct.unpack_from('<5I',b)
     assert magic==0x46535000

@@ -10,6 +10,7 @@
 #include <thread>
 
 #include "o1602/assets/data_fixes.hpp"
+#include "o1602/assets/package_sounds.hpp"
 #include "o1602/core/file.hpp"
 #include "o1602/core/profile.hpp"
 
@@ -17,8 +18,8 @@ namespace o1602::audio {
 
 namespace {
 
-// Files of the sound numbers as GameInit loads them (0x004954A6..0x00495973); numbers 54 and 68
-// share the file of 55 and 53 (0x004957BE). Empty: the original leaves them silent. The last one
+// Files of the sound numbers as the original loads them; numbers 54 and 68
+// share the file of 55 and 53. Empty: the original leaves them silent. The last one
 // is Open1602's (kWavBakery, D-001).
 constexpr std::array<const char*, kSampleCount> kSampleFiles = {
     nullptr,    "kanone5",  "kanone7",  "kanone6",  "kanone8",  "muskete1", "schwert1", "schwert2", "schwert3",
@@ -35,7 +36,7 @@ constexpr std::array<const char*, kSampleCount> kSampleFiles = {
 };
 static_assert(kWavBakery == assets::fixes::kBakerySound, "the bakery's sound has one number");
 
-// The messages' voices and videos (0x0049B210, 0x70 entries): kind, first voice, voices, videos,
+// The messages' voices and videos (0x70 entries): kind, first voice, voices, videos,
 // flags. Open1602 gives 0x5D (trade routes) its own kind, kSpeechRoutes; the original has 0.
 constexpr std::array<MessageAudio, 0x70> kMessages = {{
     {0, 0, 0, 0, 0},    {1, 282, 3, 1, 6},  {1, 295, 4, 1, 6},  {1, 187, 4, 1, 4},  {1, 198, 5, 1, 8},
@@ -66,7 +67,7 @@ static_assert(kMessages[0x5D].kind == kSpeechRoutes, "the trade routes have a sw
 
 constexpr std::uint32_t kBattleMs = 25'000;       // back to normal music after the last shot
 constexpr std::uint32_t kBattleStartMs = 10'000;  // a new battle track only shortly after a shot
-constexpr std::int32_t kFadeRate = 42;            // Music_SetMode(.., 42): about 3 s
+constexpr std::int32_t kFadeRate = 42;            // about 3 s
 constexpr std::size_t kHistory = 8;
 
 std::string lower(std::string_view s) {
@@ -136,6 +137,16 @@ std::optional<std::string> sample_file(SampleId id) {
     return std::string("SAMPLES/") + kSampleFiles[id] + ".wav";
 }
 
+std::vector<SampleId> samples_named(std::string_view name) {
+    std::vector<SampleId> ids;
+    for (std::size_t id = 0; id < kSampleFiles.size(); ++id) {
+        if (kSampleFiles[id] != nullptr && lower(kSampleFiles[id]) == lower(name)) {
+            ids.push_back(static_cast<SampleId>(id));
+        }
+    }
+    return ids;
+}
+
 float gain_of(std::int32_t centibel) noexcept {
     if (centibel >= 0) {
         return 1.0F;
@@ -193,7 +204,7 @@ AudioSettings parse_audio_settings(std::string_view text) {
 // ---- Effects -------------------------------------------------------------------------------------
 
 void Effects::request(SampleId id, float x, float y) {
-    if (m_queue.size() < m_limit && sample_file(id)) {
+    if (m_queue.size() < m_limit && (id >= assets::kFirstPackageSound || sample_file(id))) {
         m_queue.push_back(Request{id, x, y});
     }
 }
@@ -215,27 +226,42 @@ void Effects::flush() {
     if (m_enabled) {
         for (const Request& r : m_queue) {
             const auto place = placement(r.x, r.y);
-            const auto file = sample_file(r.id);
-            if (!place || !file) {
+            if (!place) {
+                continue;
+            }
+            std::shared_ptr<const Pcm> sound;
+            if (r.id >= assets::kFirstPackageSound) {
+                const std::size_t slot = r.id - assets::kFirstPackageSound;
+                sound = slot < m_package.size() ? m_package[slot] : nullptr;
+            } else if (r.id < m_replaced.size() && m_replaced[r.id]) {
+                sound = m_replaced[r.id];
+            } else if (const auto file = sample_file(r.id)) {
+                bool pending = false;
+                sound = m_bank->request(*file, pending);
+                if (pending) { m_queue[waiting++] = r; continue; }
+            }
+            if (!sound) {
                 continue;
             }
             PlayOptions o;
             o.volume = place->first * m_gain;
             o.pan = place->second;
-            bool pending=false;auto pcm=m_bank->request(*file,pending);
-            if(pending){m_queue[waiting++]=r;continue;}
             core::profile::mark("effect_start");
-            m_mixer->play(std::move(pcm), o);
+            m_mixer->play(sound, o);
         }
     }
     m_queue.resize(waiting);
 }
 
-SceneryReach scenery_reach(double width, double height) noexcept {
-    const auto share = [](double widest, double view) {
-        return view > widest ? static_cast<float>(widest / view) : 1.0F;
+SceneryReach scenery_reach(double width, double height, double magnification) noexcept {
+    // The part of the world the original's view shows at this magnification, in large pixels.
+    const double m = std::isfinite(magnification) && magnification > 0.0
+                         ? std::clamp(magnification, kOriginalFarMagnification, kOriginalNearMagnification)
+                         : kOriginalFarMagnification;
+    const auto share = [](double original, double view) {
+        return view > original ? static_cast<float>(original / view) : 1.0F;
     };
-    return SceneryReach{share(kWidestViewWidth, width), share(kWidestViewHeight, height)};
+    return SceneryReach{share(kOriginalViewWidth / m, width), share(kOriginalViewHeight / m, height)};
 }
 
 std::optional<std::pair<float, float>> scenery_place(const SceneryReach& reach, float x, float y) noexcept {
@@ -257,7 +283,10 @@ std::uint16_t Voices::message(std::uint16_t message, bool visible) {
 }
 
 std::uint16_t Voices::message(const MessagePlayback& m, bool visible) {
-    // Video first (Msg_Audio 0x00488E80): off screen, or always, or at a quarter of the times. The
+    if (message_muted(m_settings, m.kind)) {
+        return m.flags;  // not even the message sound
+    }
+    // Video first: off screen, or always, or at a quarter of the times. The
     // random numbers are the interface's own, not the game's (S-112).
     const bool videos_on = m_settings.video[0] && (m.kind >= m_settings.video.size() || m_settings.video[m.kind]);
     if (m.videos > 0 && videos_on && m_video_check) {
@@ -326,7 +355,7 @@ void Voices::update() {
         if (pcm) {
             PlayOptions o;
             o.group = Group::Speech;
-            // Voices are a quarter less attenuated than the effects (0x00488D50).
+            // Voices are a quarter less attenuated than the effects.
             o.volume = gain_of(m_settings.effect_volume - m_settings.effect_volume / 4);
             core::profile::mark("speech_start");
             m_voice = m_mixer->play(std::move(pcm), o);
@@ -354,6 +383,18 @@ Music::Music(Mixer& mixer, SoundBank& bank, std::vector<std::string> tracks, std
     : m_mixer(&mixer), m_bank(&bank), m_tracks(std::move(tracks)), m_fights(std::move(fights)), m_random(seed) {
     // A package's track with the title of one of MUSIC8 is left out: the title names one track.
     for (MusicTrack& t : own) {
+        if (!t.replaces.empty()) {
+            // In place of a MUSIC8 track, case ignored; a later package wins.
+            const auto same = [&](const std::string& m) { return lower(m) == lower(t.replaces); };
+            const auto normal = std::find_if(m_tracks.begin(), m_tracks.end(), same);
+            const auto fight = std::find_if(m_fights.begin(), m_fights.end(), same);
+            if (normal == m_tracks.end() && fight == m_fights.end()) {
+                std::fprintf(stderr, "music: no track of MUSIC8 is called \"%s\"\n", t.replaces.c_str());
+                continue;
+            }
+            m_replaced[normal != m_tracks.end() ? *normal : *fight] = t.file;
+            continue;
+        }
         const bool taken = std::find(m_tracks.begin(), m_tracks.end(), t.title) != m_tracks.end() ||
                            std::find(m_fights.begin(), m_fights.end(), t.title) != m_fights.end();
         if (taken) {
@@ -410,7 +451,7 @@ void Music::set_settings(const AudioSettings& s) {
 }
 
 void Music::shot(float x, float y, float view_width_px, float view_height_px, std::uint64_t game_ms) {
-    // Near the middle of the view (0x004479B1): max + min / 4 of the pixel offsets within 1000.
+    // Near the middle of the view: max + min / 4 of the pixel offsets within 1000.
     const float dx = std::fabs(x) * view_width_px / 2.0F;
     const float dy = std::fabs(y) * view_height_px / 2.0F;
     if (std::max(dx, dy) + std::min(dx, dy) / 4.0F > 1000.0F || m_fights.empty()) {
@@ -474,7 +515,7 @@ std::optional<std::string> Music::pick(std::uint64_t game_ms) {
         return std::nullopt;
     }
     if (m_settings.random_music) {
-        // Not one of the last min(n / 2, 8) (Music_Update): only enabled tracks are drawn (U-016).
+        // Not one of the last min(n / 2, 8): only enabled tracks are drawn (U-016).
         std::vector<std::size_t> candidates;
         const std::size_t window = std::min<std::size_t>(enabled / 2, kHistory);
         for (std::size_t i = 0; i < m_tracks.size(); ++i) {
@@ -506,7 +547,10 @@ void Music::start(const std::string& title) {
         m_history.erase(m_history.begin());
     }
     const auto own = std::find_if(m_own.begin(), m_own.end(), [&](const MusicTrack& t) { return t.title == title; });
-    const auto path = own != m_own.end() ? std::optional(own->file) : m_bank->find("MUSIC8/" + title + ".wav");
+    const auto replaced = m_replaced.find(title);
+    const auto path = own != m_own.end()             ? std::optional(own->file)
+                      : replaced != m_replaced.end() ? std::optional(replaced->second)
+                                                     : m_bank->find("MUSIC8/" + title + ".wav");
     if (!path) {
         return;
     }
