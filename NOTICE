@@ -13,9 +13,8 @@ This source export contains no commercial game resources. The DE/EN catalogues
 and balance preset are Open1602 project sources. The embedded window and UI icons
 are original Open1602 CC0 artwork; see data/icons/window/LICENSE.txt and
 data/icons/ui/LICENSE.txt.
-The Open1602 logo was supplied by the project owner as AI-generated artwork.
-The owner supplied a replacement harbour background on 2026-11-12; the LiveArea
-and bubble use that image. The supplied project artwork is distributed under
+The Open1602 logo is AI-generated. The LiveArea and bubble use the replacement
+harbour background added on 2026-11-12. The project artwork is distributed under
 GPL-3.0-or-later.
 
 Bundled libraries retain their original notices: ENet 1.3.18 (MIT), Lua 5.4.8
