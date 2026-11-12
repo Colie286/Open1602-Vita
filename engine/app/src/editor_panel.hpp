@@ -22,8 +22,13 @@ namespace o1602::app {
 /// The settings of a new map.
 struct EditorNewMap {
     /// The sizes offered, in tiles: the original's first.
+#ifdef O1602_EXPERIMENTAL_VITA
+    static constexpr std::array<std::array<std::uint32_t, 2>, 3> kSizes = {
+        {{500, 350}, {700, 500}, {1000, 700}}};
+#else
     static constexpr std::array<std::array<std::uint32_t, 2>, 5> kSizes = {
         {{500, 350}, {700, 500}, {1000, 1000}, {2000, 2000}, {4000, 4000}}};
+#endif
     /// How many islands: none (only sea), few, as many as the original, many.
     enum class Islands : std::uint8_t { None, Few, Normal, Many };
 

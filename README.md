@@ -11,6 +11,7 @@ This is a native Vita port of [Open1602](https://github.com/x4rd4s/open1602), th
 ## Features
 
 - Single-player endless games and scenarios.
+- Map and scenario editor with creation, editing, saving and test play.
 - Settlement building, production chains, trade, ships and computer opponents.
 - Open1602's military and diplomacy systems.
 - Music, sound effects, intros and event videos.

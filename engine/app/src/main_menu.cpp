@@ -932,8 +932,8 @@ void MainMenu::layout_base_form() {
     m_base_form.clear();
 #ifndef O1602_EXPERIMENTAL_VITA
     m_base_form.button(kModsButton, kModsButtonRect, ui::tr("menu.mods"));
-    m_base_form.button(kEditorButton, kEditorButtonRect, ui::tr("menu.editor"));
 #endif
+    m_base_form.button(kEditorButton, kEditorButtonRect, ui::tr("menu.editor"));
 }
 
 std::vector<MenuEvent> MainMenu::mouse(std::int32_t x, std::int32_t y, bool down, ui::MouseButton button) {

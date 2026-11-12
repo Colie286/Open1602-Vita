@@ -228,17 +228,24 @@ constexpr std::array<const char*, EditorObjects::kTools> kObjectPieceLabels = {
 
 constexpr std::uint32_t kSizeStep = 50;
 constexpr std::uint32_t kFitMargin = 8;
+#ifdef O1602_EXPERIMENTAL_VITA
+constexpr std::uint32_t kMaxEditorWidth = 1000;
+constexpr std::uint32_t kMaxEditorHeight = 700;
+#else
+constexpr std::uint32_t kMaxEditorWidth = sim::kMaxWorldSide;
+constexpr std::uint32_t kMaxEditorHeight = sim::kMaxWorldSide;
+#endif
 
 /// `value` a step larger or smaller, between `least` and the largest map.
-std::uint32_t size_step(std::uint32_t value, std::uint32_t least, bool more) {
+std::uint32_t size_step(std::uint32_t value, std::uint32_t least, bool more, std::uint32_t limit) {
     const std::uint32_t v = more ? value + kSizeStep : (value > kSizeStep ? value - kSizeStep : 0);
-    return std::clamp(v, std::max<std::uint32_t>(least, 1), sim::kMaxWorldSide);
+    return std::clamp(v, std::max<std::uint32_t>(least, 1), std::max(limit, least));
 }
 
 /// A side as large as `used` with some sea, at a round number.
-std::uint32_t fitted(std::uint32_t used) {
+std::uint32_t fitted(std::uint32_t used, std::uint32_t limit) {
     const std::uint32_t v = (used + kFitMargin + 9) / 10 * 10;
-    return std::min(v, sim::kMaxWorldSide);
+    return std::min(v, std::max(limit, used));
 }
 
 /// Whether a page goes back and on by the rows it shows (else by kRows).
@@ -890,8 +897,15 @@ void EditorPanel::layout_document(const EditorModel& model) {
     // What the files, the pages of the whole map and the tools are: the menu bar above the map and
     // the tool bar left of it (EditorChrome) have them, and each its key.
     const std::int32_t bottom = m_top + m_height - 4;
-    f.paragraph(Rect{m_x, y, m_w, std::max(0, std::min(5 * 20, bottom - y))}, ui::tr("editor.document.hint"), Tone::Dim,
-                20, ui::tr("editor.document.hint_short"));
+#ifdef O1602_EXPERIMENTAL_VITA
+    constexpr const char* hint = "vita.editor.hint";
+    constexpr const char* short_hint = "vita.editor.hint_short";
+#else
+    constexpr const char* hint = "editor.document.hint";
+    constexpr const char* short_hint = "editor.document.hint_short";
+#endif
+    f.paragraph(Rect{m_x, y, m_w, std::max(0, std::min(5 * 20, bottom - y))}, ui::tr(hint), Tone::Dim,
+                20, ui::tr(short_hint));
     y += 5 * 20 + kGap;
     if (!model.notice.empty() && bottom - y - 2 >= 2 * 20) {
         f.paragraph(Rect{m_x, y + 2, m_w, std::max(0, bottom - y - 2)}, model.notice,
@@ -2167,17 +2181,18 @@ void EditorPanel::layout_world_size(const EditorModel& model) {
             ui::tr("editor.size", {count(m_size_width), count(m_size_height)}));
     y += kLine + 4;
     const std::int32_t half = (m_w - kGap) / 2;
-    const auto side = [&](const char* label, Id less, Id more, std::uint32_t value, std::uint32_t used) {
+    const auto side = [&](const char* label, Id less, Id more, std::uint32_t value, std::uint32_t used,
+                          std::uint32_t limit) {
         f.label(Rect{m_x, y, m_w, kLine}, ui::tr(label));
         y += kLine;
         f.button(less, Rect{m_x, y, half, kButtonH}, ui::tr("editor.world_size.less", {count(kSizeStep)}),
                  value > std::max<std::uint32_t>(used, 1));
         f.button(more, Rect{m_x + half + kGap, y, half, kButtonH}, ui::tr("editor.world_size.more", {count(kSizeStep)}),
-                 value < sim::kMaxWorldSide);
+                 value < limit);
         y += kButtonH + kGap;
     };
-    side("editor.world_size.width", kWidthLess, kWidthMore, m_size_width, model.used_width);
-    side("editor.world_size.height", kHeightLess, kHeightMore, m_size_height, model.used_height);
+    side("editor.world_size.width", kWidthLess, kWidthMore, m_size_width, model.used_width, kMaxEditorWidth);
+    side("editor.world_size.height", kHeightLess, kHeightMore, m_size_height, model.used_height, kMaxEditorHeight);
     f.button(kFitSize, Rect{m_x, y, m_w, kButtonH}, ui::tr("editor.world_size.fit"));
     y += kButtonH + kGap;
     constexpr std::int32_t kSizeNote = 4 * 20;
@@ -2643,15 +2658,15 @@ std::optional<EditorRequest> EditorPanel::press(Id pressed, const EditorModel& m
             return std::nullopt;
         case kWidthLess:
         case kWidthMore:
-            m_size_width = size_step(m_size_width, model.used_width, *id == kWidthMore);
+            m_size_width = size_step(m_size_width, model.used_width, *id == kWidthMore, kMaxEditorWidth);
             return std::nullopt;
         case kHeightLess:
         case kHeightMore:
-            m_size_height = size_step(m_size_height, model.used_height, *id == kHeightMore);
+            m_size_height = size_step(m_size_height, model.used_height, *id == kHeightMore, kMaxEditorHeight);
             return std::nullopt;
         case kFitSize:
-            m_size_width = fitted(model.used_width);
-            m_size_height = fitted(model.used_height);
+            m_size_width = fitted(model.used_width, kMaxEditorWidth);
+            m_size_height = fitted(model.used_height, kMaxEditorHeight);
             return std::nullopt;
         case kApplySize: {
             EditorRequest r{EditorRequest::Kind::ResizeWorld};

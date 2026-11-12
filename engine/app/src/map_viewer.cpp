@@ -973,18 +973,19 @@ int MapViewer::run() {
         const auto scripted_frame=script_origin?frames-*script_origin:std::numeric_limits<std::uint32_t>::max();
         platform::vita::watch_phase("pad_poll");
         platform::vita::poll(m_window->sdl_window(),[&](int dx,int dy,float& x,float& y){
-            return !m_video->full_screen()&&m_input->grid_cursor(dx,dy,x,y);
+            return !m_editor&&!m_video->full_screen()&&m_input->grid_cursor(dx,dy,x,y);
         },[&] {
             platform::vita::PadContext c;
-            c.world=!in_menu()&&!m_video->full_screen(); c.building=m_tool.active();
-            c.road=m_tool.active()&&m_tool.selected()&&m_tool.selected()->kind==sim::kind::kRoad;
+            c.world=!in_menu()&&!m_video->full_screen(); c.building=!m_editor&&m_tool.active();
+            c.road=c.building&&m_tool.selected()&&m_tool.selected()->kind==sim::kind::kRoad;
             c.modal_active=m_hud&&m_hud->modal(); c.text_active=m_hud&&m_hud->typing();
             c.dialog=c.modal_active||c.text_active; c.loading=c.world&&(!graphics()||!m_world_presented);
             c.tool=m_tool.selected()?m_tool.selected()->id:0; c.zoom=unsigned(m_camera.view().zoom);
             c.world_id=reinterpret_cast<std::uintptr_t>(m_state.get()); c.popup=m_hud&&m_hud->build_popup_open();
             c.world_loaded=graphics()!=nullptr&&m_world_presented; c.menu_active=in_menu(); c.video_active=m_video->playing();
             c.options_active=m_hud&&m_hud->mode()==Hud::kModeOptions;
-            c.quick_allowed=c.world&&c.world_loaded&&m_hud&&!c.dialog&&!c.video_active&&!c.options_active;
+            c.editor=m_editor.has_value();
+            c.quick_allowed=c.world&&c.world_loaded&&m_hud&&!c.dialog&&!c.video_active&&!c.options_active&&!c.editor;
             return c;
         }(),script_origin.has_value());
         if(platform::vita::cache_failure()&&m_vita_cache)m_vita_cache->fail_next_prepare();
@@ -3521,14 +3522,15 @@ std::filesystem::path MapViewer::save_folder() {
     return data_folder() / "saves";
 }
 
-core::Result<std::filesystem::path> MapViewer::prepare_save(const std::filesystem::path& path) {
+core::Result<std::filesystem::path> MapViewer::prepare_save(const std::filesystem::path& path, bool scenario) {
     // The installation stays as it is: no savegame goes into it (nor into Game.dat). A path that
     // cannot be resolved is not written either.
     std::error_code ec;
 #ifdef O1602_EXPERIMENTAL_VITA
-    const std::filesystem::path target=platform::vita::save_path(path,ec);
-    if(ec)return core::make_error(core::ErrorCode::Unsupported,"Vita saves must stay in ux0:data/open1602/saves: "+core::path_to_utf8(path));
+    const std::filesystem::path target=platform::vita::save_path(path,ec,scenario);
+    if(ec)return core::make_error(core::ErrorCode::IoError,"Vita write outside the permitted "+std::string(scenario?"scenarios":"saves")+" folder: "+core::path_to_utf8(path));
 #else
+    (void)scenario;
     const std::filesystem::path absolute = std::filesystem::absolute(path, ec);
     const std::filesystem::path target = ec ? std::filesystem::path() : std::filesystem::weakly_canonical(absolute, ec);
     std::error_code root_ec;

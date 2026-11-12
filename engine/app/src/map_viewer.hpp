@@ -194,7 +194,7 @@ private:
     core::Status save_game(const std::filesystem::path& path);
     /// Where a savegame for `path` goes (absolute), unless that lies in the game's installation
     /// or cannot be checked; the groups of this computer's player go into the world.
-    core::Result<std::filesystem::path> prepare_save(const std::filesystem::path& path);
+    core::Result<std::filesystem::path> prepare_save(const std::filesystem::path& path, bool scenario = false);
     /// Saves the game into a slot of the savegame list and names it there (slots.cfg, the panel,
     /// the menu).
     core::Status save_slot(std::size_t slot, std::string name);

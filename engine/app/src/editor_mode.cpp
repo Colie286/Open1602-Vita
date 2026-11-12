@@ -58,6 +58,12 @@ std::pair<std::uint8_t, std::uint8_t> new_island_climate(const sim::World& world
 constexpr std::string_view kScenarioEnding = ".o1602";
 /// The folder of own islands (the editor's "Save island"), in the data folder.
 constexpr std::string_view kOwnIslandsFolder = "islands";
+#ifdef O1602_EXPERIMENTAL_VITA
+// Leave room for the map, cached sprites and a test game beside its document.
+constexpr std::size_t kUndoMemory = 16U * 1024U * 1024U;
+#else
+constexpr std::size_t kUndoMemory = editor::History::kDefaultLimit;
+#endif
 
 std::string lower(std::string text) {
     std::transform(text.begin(), text.end(), text.begin(),
@@ -294,7 +300,7 @@ core::Status MapViewer::enter_editor(sim::World world, const std::filesystem::pa
     if (slot && *slot < m_slots.size() && !m_slots.names[*slot].empty()) {
         name = m_slots.names[*slot];
     }
-    m_editor.emplace(EditorSession{editor::Document::edit(m_state->world),
+    m_editor.emplace(EditorSession{editor::Document::edit(m_state->world, kUndoMemory),
                                    own_file(file) && !slot ? file : std::filesystem::path(),
                                    std::move(name),
                                    {},
@@ -474,7 +480,7 @@ bool MapViewer::editor_save(const std::filesystem::path& file) {
     if (!m_editor) {
         return false;
     }
-    const auto target = prepare_save(file);
+    const auto target = prepare_save(file, true);
     if (!target) {
         editor_notice(ui::tr("editor.save_failed", {ui::error_text(target.error(), "editor")}), true,
                       target.error().message);
@@ -2263,6 +2269,12 @@ EditorChromeModel MapViewer::editor_chrome() const {
         key(EditorCommand::TestPlay, ui::KeyAction::EditorTestPlay);
         key(EditorCommand::Find, ui::KeyAction::EditorFind);
         c.command_keys[static_cast<std::size_t>(EditorCommand::Keys)] = "F1";
+#ifdef O1602_EXPERIMENTAL_VITA
+        c.tool_keys.fill({});
+        c.command_keys.fill({});
+        c.command_keys[static_cast<std::size_t>(EditorCommand::Save)] = "SELECT";
+        c.command_keys[static_cast<std::size_t>(EditorCommand::Open)] = "START";
+#endif
         // Where the mouse is: the world tile, and the island's number and its own tile there.
         const auto mx = static_cast<std::int32_t>(m_input->mouse_x());
         const auto my = static_cast<std::int32_t>(m_input->mouse_y());

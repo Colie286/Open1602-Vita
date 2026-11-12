@@ -33,7 +33,7 @@ std::string session_profile(std::string json){
     if(json.empty()||json.back()!='}')return json;
     std::lock_guard lock(data_mutex);json.pop_back();
     if(json.size()>1)json+=',';
-    json+="\"session\":{\"id\":"+json_text(vita_boot_session())+",\"version\":\"1.00\",\"commit\":\"" O1602_VITA_COMMIT "\",\"completed\":"+(completed.load()?"true":"false")+
+    json+="\"session\":{\"id\":"+json_text(vita_boot_session())+",\"version\":\"1.10\",\"commit\":\"" O1602_VITA_COMMIT "\",\"completed\":"+(completed.load()?"true":"false")+
         ",\"elapsed_ms\":"+std::to_string(sceKernelGetProcessTimeWide()/1000)+",\"edition\":"+json_text(edition)+",\"data_root\":"+json_text(data_root)+
         ",\"requested_zoom\":"+std::to_string(requested_zoom.load())+",\"first_world_zoom\":"+std::to_string(first_zoom.load())+",\"first_world_wait_ms\":"+std::to_string(first_wait.load())+
         ",\"warm_cache\":"+(warm.load()<0?"null":warm.load()?"true":"false")+"}}";return json;

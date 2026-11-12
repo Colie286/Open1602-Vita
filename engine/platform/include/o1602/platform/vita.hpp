@@ -48,7 +48,7 @@ std::uint32_t random_u32();
 void test_timing(unsigned frame_ms,unsigned writer_ms);
 bool grid_enabled();
 using GridCursor = std::function<bool(int,int,float&,float&)>;
-struct PadContext { bool world=false, building=false, road=false, dialog=false, loading=false; std::uint32_t tool=0,zoom=0; std::uintptr_t world_id=0; bool popup=false; bool quick_allowed=false; bool world_loaded=false,menu_active=false,modal_active=false,text_active=false,video_active=false,options_active=false; };
+struct PadContext { bool world=false, building=false, road=false, dialog=false, loading=false; std::uint32_t tool=0,zoom=0; std::uintptr_t world_id=0; bool popup=false; bool quick_allowed=false; bool world_loaded=false,menu_active=false,modal_active=false,text_active=false,video_active=false,options_active=false; bool editor=false; };
 void poll(SDL_Window* window,const GridCursor& grid={},PadContext context={},bool scripts_ready=true);
 void wait_for_world_scripts();
 bool scripts_wait_for_world();
@@ -73,5 +73,5 @@ void cache_fail_at(unsigned);
 bool cache_failure();
 bool frame_hash_requested(unsigned frame);
 void frame(unsigned frames, bool menu, std::uint64_t tick, std::uint64_t hash);
-std::filesystem::path save_path(const std::filesystem::path& path,std::error_code& error);
+std::filesystem::path save_path(const std::filesystem::path& path,std::error_code& error,bool scenario=false);
 }

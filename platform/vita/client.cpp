@@ -4,6 +4,7 @@
 #include <fstream>
 // Platform bindings only. All menus, actions, rendering, media and simulation are upstream.
 #include "o1602/platform/vita.hpp"
+#include "o1602/platform/vita_paths.hpp"
 #include "startup.h"
 #include "o1602/ui/localization.hpp"
 #include "o1602/core/profile.hpp"
@@ -110,7 +111,7 @@ void write_analog_snapshot(const char* path){
     {std::lock_guard lock(analog_mutex);copy=analog_snapshot;count=analog_snapshot_count;}
     if(FILE* f=std::fopen(path,"w")){
         std::fprintf(f,
-                     "session=%s version=1.00 commit=%s; raw=-1 means SDL virtual/external; thresholds .30/.22; no "
+                     "session=%s version=1.10 commit=%s; raw=-1 means SDL virtual/external; thresholds .30/.22; no "
                      "diagnosis of hardware defect\n",
                      vita_boot_session(), O1602_VITA_COMMIT);
         for(unsigned i=0;i<count;++i){const auto& a=copy[i];std::fprintf(f,"ms=%llu raw=%d,%d,%d,%d sdl=%d,%d,%d,%d norm=%.4f,%.4f direction=%d,%d mode=%u tool=%u cursor=%.2f,%.2f tile=%u,%u event=%llu step=%llu touch=%u buttons=%u\n",(unsigned long long)a.ms,a.raw[0],a.raw[1],a.raw[2],a.raw[3],a.sdl[0],a.sdl[1],a.sdl[2],a.sdl[3],a.x,a.y,a.dx,a.dy,a.mode,a.tool,a.cx,a.cy,a.tile_x,a.tile_y,(unsigned long long)a.event,(unsigned long long)a.step,a.touch,a.buttons);}
@@ -238,8 +239,8 @@ void setup() {
           thread_result<0?0:unsigned(thread.stackSize),sceKernelGetThreadStackFreeSize(sceKernelGetThreadId()),thread.currentPriority,thread.currentCpuAffinityMask,thread.currentCpuId);
     diagnostic_frame_hashes=vita_boot_logging()&&std::filesystem::exists("ux0:data/open1602/frame-hashes.flag");
     trace("FRAME_HASH_POLICY enabled=%d opt_in=frame-hashes.flag network_fingerprints=unchanged",diagnostic_frame_hashes);
-    trace("SESSION id=%s version=1.00 commit=%s", vita_boot_session(), O1602_VITA_COMMIT);
-    std::fprintf(stderr, "SESSION id=%s version=1.00 commit=%s\n", vita_boot_session(), O1602_VITA_COMMIT);
+    trace("SESSION id=%s version=1.10 commit=%s", vita_boot_session(), O1602_VITA_COMMIT);
+    std::fprintf(stderr, "SESSION id=%s version=1.10 commit=%s\n", vita_boot_session(), O1602_VITA_COMMIT);
     trace("ANALOG_CAPTURE enabled=%d thresholds=.30/.22 grid_delay=%u grid_repeat=%u",analog_debug,fast_grid?170U:200U,fast_grid?68U:80U);
     trace("BOOT full_client=1 upstream=3fde8d11 pointer_bits=%u",unsigned(sizeof(void*)*8));
     trace("NETWORK deferred=1 enabled=%d",
@@ -423,6 +424,7 @@ void poll(SDL_Window* window,const GridCursor& grid,PadContext context,bool scri
             trace("SELECT_CONTEXT button_received=1 world_loaded=%d world_visible=%d menu_active=%d modal_active=%d text_input_active=%d video_active=%d options_active=%d native_dialog=%d quick_menu_open=%d block_reason=%s",
                 context.world_loaded,context.world,context.menu_active,context.modal_active,text,context.video_active,context.options_active,native_dialog,actions_open,reason);
         }
+        if(pressed(SDL_GAMEPAD_BUTTON_BACK)&&context.editor&&!context.dialog&&!native_dialog&&!SDL_TextInputActive(window))key(SDLK_S,SDL_KMOD_CTRL);
         if(pressed(SDL_GAMEPAD_BUTTON_BACK)&&context.quick_allowed&&!native_dialog&&!SDL_TextInputActive(window)){cancel_drag();actions_open=!actions_open;help_open=false;cursor_state.interrupt();camera_state.interrupt();cursor_repeat.reset();menu_repeat.reset();filtered.fill(0);trace("QUICK_MENU open=%d",actions_open);}
 
         if(actions_open){
@@ -471,10 +473,13 @@ void poll(SDL_Window* window,const GridCursor& grid,PadContext context,bool scri
             }
             if(pressed(SDL_GAMEPAD_BUTTON_EAST)){key(SDLK_ESCAPE);if(road_latched){mouse(window,SDL_BUTTON_LEFT,false);road_latched=false;trace("ROAD_CANCEL");}build_browse=false;focus_pending=false;}
             if(pressed(SDL_GAMEPAD_BUTTON_NORTH)&&context.world&&!context.dialog){
-                cancel_drag();map_x=std::min(cursor_x,760.f);map_y=std::clamp(cursor_y,40.f,480.f);
-                build_browse=true;focus_pending=false;key(SDLK_B);position_cursor(window,850,425);
-                SDL_Event e{};e.type=SDL_EVENT_MOUSE_MOTION;e.motion.x=cursor_x;e.motion.y=cursor_y;SDL_PushEvent(&e);
-                trace("BUILD_FOCUS hud=1");
+                if(context.editor)key(SDLK_R);
+                else {
+                    cancel_drag();map_x=std::min(cursor_x,760.f);map_y=std::clamp(cursor_y,40.f,480.f);
+                    build_browse=true;focus_pending=false;key(SDLK_B);position_cursor(window,850,425);
+                    SDL_Event e{};e.type=SDL_EVENT_MOUSE_MOTION;e.motion.x=cursor_x;e.motion.y=cursor_y;SDL_PushEvent(&e);
+                    trace("BUILD_FOCUS hud=1");
+                }
             }
             if(pressed(SDL_GAMEPAD_BUTTON_SOUTH)&&!front_down){
                 if(SDL_TextInputActive(window))key(SDLK_RETURN);
@@ -484,7 +489,7 @@ void poll(SDL_Window* window,const GridCursor& grid,PadContext context,bool scri
             if(!button(SDL_GAMEPAD_BUTTON_SOUTH)&&previous[SDL_GAMEPAD_BUTTON_SOUTH]&&!road_latched&&mouse_down[SDL_BUTTON_LEFT])mouse(window,SDL_BUTTON_LEFT,false);
             if(pressed(SDL_GAMEPAD_BUTTON_WEST)&&!front_down){if(context.building&&!build_browse)key(SDLK_R);else mouse(window,SDL_BUTTON_RIGHT,true);}
             if(!button(SDL_GAMEPAD_BUTTON_WEST)&&previous[SDL_GAMEPAD_BUTTON_WEST]&&mouse_down[SDL_BUTTON_RIGHT])mouse(window,SDL_BUTTON_RIGHT,false);
-            if(pressed(SDL_GAMEPAD_BUTTON_START)){cancel_drag();key(SDLK_F10);}
+            if(pressed(SDL_GAMEPAD_BUTTON_START)&&(!context.editor||!context.dialog)){cancel_drag();if(context.editor)key(SDLK_O,SDL_KMOD_CTRL);else key(SDLK_F10);}
             if(pressed(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER))key(SDLK_PAGEDOWN);
             if(pressed(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER))key(SDLK_PAGEUP);
         }
@@ -787,20 +792,8 @@ void frame(unsigned frames, bool menu,std::uint64_t tick,std::uint64_t hash) {
         if(core::profile::capture())snapshot_ready.store(true,std::memory_order_release);
     }
 }
-std::filesystem::path save_path(const std::filesystem::path& path,std::error_code& error) {
-    // libstdc++ treats Vita mount names as relative, and Vita stat supplies no unique
-    // inode identity. Never use host absolute()/equivalent() for mounted Vita paths.
-    std::string text=path.generic_string();
-    std::replace(text.begin(),text.end(),'\\','/');
-    if(text.starts_with("ux0:data/"))text.insert(4,"/");
-    const auto normal=std::filesystem::path(text).lexically_normal();
-    const std::string value=normal.generic_string();
-    constexpr std::string_view allowed="ux0:/data/open1602/saves/";
-    if(!value.starts_with(allowed)||value.size()<=allowed.size()) {
-        error=std::make_error_code(std::errc::permission_denied);
-        return {};
-    }
-    error.clear();return normal;
+std::filesystem::path save_path(const std::filesystem::path& path,std::error_code& error,bool scenario) {
+    return checked_save_path(path,error,scenario);
 }
 }
 
