@@ -6,9 +6,6 @@
 
 This is a native Vita port of [Open1602](https://github.com/x4rd4s/open1602), the open-source engine for Anno 1602. It brings the familiar game interface and original graphics to the handheld, with controller and touchscreen support.
 
-The current source is based on **Open1602 0.5.0**. This update has passed PC and
-Vita3K regression tests; its real-hardware validation is still pending.
-
 **You need your own original game files. No commercial game assets are included in this repository or the VPK.**
 
 ## Features
