@@ -83,10 +83,20 @@ bool SdlSpriteRenderer::draw_checker(const DrawCommand& c, std::int32_t height, 
     if (m_checker_failed || m_atlas == nullptr) {
         return false;
     }
-    const AtlasRect& r = m_atlas->rect(c.sprite);
+    // Paged atlases draw from relocated cache slots, not the original disk pages.
+    const AtlasRect& r = m_cache ? m_cache->rect(c.sprite) : m_atlas->rect(c.sprite);
+    SDL_Texture* page = m_cache ? m_cache->texture(r.page) : m_pages[r.page];
+    if (page == nullptr) {
+        return false;
+    }
     const int w = std::max(m_atlas->max_sprite_width(), 1);
     const int h = std::max(m_atlas->max_sprite_height(), 1);
     if (m_checker == nullptr) {
+#ifdef O1602_EXPERIMENTAL_VITA
+        platform::vita::trace("BUILD_PREVIEW_CHECKER paged=%d sprite=%u source_page=%u texture_page=%u",
+                              m_cache != nullptr, unsigned(c.sprite), unsigned(m_atlas->rect(c.sprite).page),
+                              unsigned(r.page));
+#endif
         m_checker_pattern = SDL_CreateTexture(m_renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, w + 1, h);
         m_checker = SDL_CreateTexture(m_renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, w, h);
         if (m_checker_pattern == nullptr || m_checker == nullptr) {
@@ -111,7 +121,6 @@ bool SdlSpriteRenderer::draw_checker(const DrawCommand& c, std::int32_t height, 
     const SDL_BlendMode mask =
         SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_SRC_ALPHA, SDL_BLENDOPERATION_ADD,
                                    SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
-    SDL_Texture* page = m_pages[r.page];
     SDL_Texture* screen = SDL_GetRenderTarget(m_renderer);
     if (!SDL_SetRenderTarget(m_renderer, m_checker)) {
         m_checker_failed = true;

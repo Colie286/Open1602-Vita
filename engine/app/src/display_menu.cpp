@@ -267,7 +267,9 @@ void DisplayMenu::layout(const DisplayModel& model) {
     }
     const std::int32_t below = kRowY + static_cast<std::int32_t>(row) * kRowH + 4;
     if (!model.fixed_window) f.paragraph(Rect{24, below, kWidth - 48, kHeight - below - 60}, ui::tr("display.hint"), Tone::Dim);
-    f.button(kKeysButton, Rect{24, kHeight - 54, 260, 40}, ui::tr("display.keys"));
+    if (!model.fixed_window) {
+        f.button(kKeysButton, Rect{24, kHeight - 54, 260, 40}, ui::tr("display.keys"));
+    }
     f.button(kClose, Rect{kWidth - 24 - 180, kHeight - 54, 180, 40}, ui::tr("display.close"));
 }
 
