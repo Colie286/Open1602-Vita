@@ -166,7 +166,7 @@ When reporting a problem, include the port version, console model, steps to repr
 
 ## AI-assisted development
 
-AI tools were used to assist with complex programming tasks, bug investigation, code review and code quality checks.
+AI tools helped with complex programming tasks, bug investigation, code reviews, code comments and code quality checks. They were also used to refactor manually written code and develop build tools. The original Open1602 project also uses AI-assisted development.
 
 Changes were checked through builds, automated tests, emulator testing and user testing on real hardware. These checks do not guarantee that every bug has been found.
 
