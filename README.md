@@ -193,11 +193,11 @@ This port builds on the work of the original [Open1602 project](https://github.c
 | Librempeg-derived video decoder code | GPL-3.0-or-later |
 | FFmpeg-derived audio and transform code | LGPL-2.1-or-later, incorporated into this GPL port |
 | Upstream Open1602 window and UI icons | CC0 1.0 |
-| Project logo and LiveArea artwork | Supplied for redistribution under GPL-3.0-or-later; see NOTICE |
+| Project logo and LiveArea artwork | GPL-3.0-or-later |
 | SDK runtime components | Various licenses; see the bundled notices |
 | CapUnlocker, optional and not bundled | MIT |
 
-See [LICENSE](LICENSE), [NOTICE](NOTICE) and the files under [platform/vita/licenses](platform/vita/licenses) for attribution, full notices and dependency source references.
+See [LICENSE](LICENSE) and the files under [platform/vita/licenses](platform/vita/licenses) for attribution, full notices and dependency source references.
 
 ## Release sources and redistribution
 
@@ -209,7 +209,7 @@ Each prebuilt VPK release is accompanied on the same [Releases page](https://git
 - A corresponding-source bundle containing the port sources, required bundled and submodule library sources, applied patches and build scripts.
 - The relevant license and copyright notices, plus SDK/dependency version references and instructions or materials needed to rebuild and relink the statically linked LGPL components with modified versions.
 
-The VPK contains license notices under `licenses/`. Source provenance and dependency notices are also available in [NOTICE](NOTICE), [platform/vita/licenses/ThirdParty.txt](platform/vita/licenses/ThirdParty.txt) and [platform/vita/licenses/SOURCES.txt](platform/vita/licenses/SOURCES.txt).
+The VPK contains license notices under `licenses/`. Dependency notices and source references are also available in [platform/vita/licenses/ThirdParty.txt](platform/vita/licenses/ThirdParty.txt) and [platform/vita/licenses/SOURCES.txt](platform/vita/licenses/SOURCES.txt).
 
 Use the corresponding-source bundle linked with the particular VPK release. GitHub's automatically generated source archives do not include submodule contents and are not a substitute for that complete bundle.
 
