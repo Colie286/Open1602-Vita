@@ -285,8 +285,14 @@ void Window::set_mouse_grab(bool on) {
 }
 
 bool Window::mouse_confined() const {
+#ifdef O1602_EXPERIMENTAL_VITA
+    // The handheld cursor is clamped to the display. SDL's Vita driver has no
+    // desktop mouse grab and does not assign mouse focus to virtual pad events.
+    return (SDL_GetWindowFlags(m_window) & SDL_WINDOW_INPUT_FOCUS) != 0;
+#else
     constexpr SDL_WindowFlags kFocus = SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_MOUSE_FOCUS;
     return SDL_GetWindowMouseGrab(m_window) && (SDL_GetWindowFlags(m_window) & kFocus) == kFocus;
+#endif
 }
 
 bool Window::maximized() const {

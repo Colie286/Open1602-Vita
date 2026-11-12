@@ -173,7 +173,7 @@ AI tools were used to assist with complex programming tasks, bug investigation, 
 
 Changes were checked through builds, automated tests, emulator testing and user testing on real hardware. These checks do not guarantee that every bug has been found.
 
-The project logo and LiveArea artwork were also generated with AI and supplied for redistribution with the project.
+The project logo was also generated with AI. The logo and LiveArea artwork were supplied by the project owner for redistribution with the project; see NOTICE.
 
 ## Credits, dependencies and licenses
 

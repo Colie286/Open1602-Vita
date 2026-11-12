@@ -30,6 +30,7 @@ bool SdlMapCanvas::begin(const RenderPlan& plan) {
     if (plan.direct) {
         return true;
     }
+    core::profile::Scope setup(core::profile::MapCanvasSetup);
     const bool fixed=m_capacity_width>0&&m_capacity_height>0;
     if(fixed&&(m_allocation_failed||plan.width>m_capacity_width||plan.height>m_capacity_height))return false;
     // Grown by an eighth at a time, so that resizing the window or zooming does not make a new
@@ -70,6 +71,7 @@ void SdlMapCanvas::end() {
     if (!m_active) {
         return;
     }
+    core::profile::Scope resolve(core::profile::MapCanvasResolve);
     SDL_SetRenderViewport(m_renderer, nullptr);
     SDL_SetRenderTarget(m_renderer, nullptr);
     const SDL_FRect src{0.0F, 0.0F, static_cast<float>(m_plan.width), static_cast<float>(m_plan.height)};

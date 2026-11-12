@@ -143,6 +143,11 @@ MapInput::MapInput(const Parts& parts)
     setup_keys();
 #ifdef O1602_EXPERIMENTAL_VITA
     m_ground_cache_enabled=!std::filesystem::exists("ux0:data/open1602/performance-uncached.flag");
+    // No SDL mouse event has arrived yet; the handheld pointer starts in the centre.
+    std::int32_t width=0, height=0;
+    m_window.output_size(width,height);
+    m_mouse_x=width/2.0;
+    m_mouse_y=height/2.0;
 #endif
 }
 

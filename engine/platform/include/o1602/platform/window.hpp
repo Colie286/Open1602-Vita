@@ -95,7 +95,7 @@ public:
     /// program gets the focus and takes it again when the window gets it back). Cheap to call
     /// every frame: SDL is only asked when the wish changes.
     void set_mouse_grab(bool on);
-    /// The mouse is kept inside the window now and is over it: it cannot leave it.
+    /// The focused cursor cannot leave the window (a mouse grab on desktop, the fixed display on Vita).
     [[nodiscard]] bool mouse_confined() const;
     /// Frames wait for the screen (vertical sync); kept when the renderer is made again.
     void set_vsync(bool on);

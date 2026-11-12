@@ -37,7 +37,11 @@ struct DisplaySettings {
     bool free_zoom = true;
     /// A magnification between whole scales is drawn sharp and smooth (render::SdlMapCanvas);
     /// off: straight with uneven pixels (cheapest).
+#ifdef O1602_EXPERIMENTAL_VITA
+    bool smooth_zoom = false;  ///< direct pixels by default; the smooth canvas remains selectable
+#else
     bool smooth_zoom = true;
+#endif
     std::int32_t vita_left_stick = 100; ///< speed percent, 25..300; original response at 100
     std::int32_t vita_right_stick = 100;
     bool chat_button = true; ///< handheld multiplayer chat shortcut; presentation only

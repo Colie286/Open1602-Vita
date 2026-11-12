@@ -1222,7 +1222,9 @@ int MapViewer::run() {
         platform::vita::frame(frames,m_hud&&m_hud->menu_active(),m_state->simulation.next_tick(),diagnostic_hash);
         if(platform::vita::logging_enabled()&&(frames==1||frames%120==0)) {
             double cx=0,cy=0;m_camera.screen_origin(cx,cy);
-            platform::vita::trace("CAMERA x=%.1f y=%.1f zoom=%u",cx,cy,unsigned(m_camera.view().zoom));
+            platform::vita::trace("CAMERA x=%.1f y=%.1f zoom=%u confined=%d edge=%d smooth=%d scale=%.3f canvas=%d",
+                cx,cy,unsigned(m_camera.view().zoom),m_window->mouse_confined(),m_app_settings.display.edge_scroll,
+                m_app_settings.display.smooth_zoom,m_camera.scale(),m_map_canvas&&m_map_canvas->used());
             if(const auto t=m_input->grid_tile())platform::vita::trace("GRID_ANCHOR frame=%u tile=%u,%u zoom=%u rotation=%u dragging=%d",frames,t->x,t->y,unsigned(m_camera.view().zoom),unsigned(m_camera.view().rotation),m_tool.dragging());
         }
 #endif
@@ -2771,12 +2773,16 @@ void MapViewer::draw_map(ZoomGraphics& graphics) {
         if (m_map_canvas) {
             m_map_canvas->begin(render::RenderPlan{});  // nothing went through it this frame
         }
+        core::profile::Scope direct(core::profile::MapDirectDraw);
         m_sprites_drawn = graphics.renderer->draw(m_commands, ox, oy, m_camera.scale());
         m_batches_drawn = graphics.renderer->batches();
     } else {
-    m_sprites_drawn = graphics.renderer->draw(m_commands, plan.origin_x, plan.origin_y, plan.scale);
-    m_batches_drawn = graphics.renderer->batches();
-    m_map_canvas->end();
+        {
+            core::profile::Scope canvas(core::profile::MapCanvasDraw);
+            m_sprites_drawn = graphics.renderer->draw(m_commands, plan.origin_x, plan.origin_y, plan.scale);
+            m_batches_drawn = graphics.renderer->batches();
+        }
+        m_map_canvas->end();
     }
 #ifdef O1602_EXPERIMENTAL_VITA
     if(!graphics.renderer->error().empty()) {
