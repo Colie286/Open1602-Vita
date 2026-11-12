@@ -110,7 +110,7 @@ void write_analog_snapshot(const char* path){
     {std::lock_guard lock(analog_mutex);copy=analog_snapshot;count=analog_snapshot_count;}
     if(FILE* f=std::fopen(path,"w")){
         std::fprintf(f,
-                     "session=%s version=1.60 commit=%s; raw=-1 means SDL virtual/external; thresholds .30/.22; no "
+                     "session=%s version=1.00 commit=%s; raw=-1 means SDL virtual/external; thresholds .30/.22; no "
                      "diagnosis of hardware defect\n",
                      vita_boot_session(), O1602_VITA_COMMIT);
         for(unsigned i=0;i<count;++i){const auto& a=copy[i];std::fprintf(f,"ms=%llu raw=%d,%d,%d,%d sdl=%d,%d,%d,%d norm=%.4f,%.4f direction=%d,%d mode=%u tool=%u cursor=%.2f,%.2f tile=%u,%u event=%llu step=%llu touch=%u buttons=%u\n",(unsigned long long)a.ms,a.raw[0],a.raw[1],a.raw[2],a.raw[3],a.sdl[0],a.sdl[1],a.sdl[2],a.sdl[3],a.x,a.y,a.dx,a.dy,a.mode,a.tool,a.cx,a.cy,a.tile_x,a.tile_y,(unsigned long long)a.event,(unsigned long long)a.step,a.touch,a.buttons);}
@@ -238,8 +238,8 @@ void setup() {
           thread_result<0?0:unsigned(thread.stackSize),sceKernelGetThreadStackFreeSize(sceKernelGetThreadId()),thread.currentPriority,thread.currentCpuAffinityMask,thread.currentCpuId);
     diagnostic_frame_hashes=vita_boot_logging()&&std::filesystem::exists("ux0:data/open1602/frame-hashes.flag");
     trace("FRAME_HASH_POLICY enabled=%d opt_in=frame-hashes.flag network_fingerprints=unchanged",diagnostic_frame_hashes);
-    trace("SESSION id=%s version=1.60 commit=%s", vita_boot_session(), O1602_VITA_COMMIT);
-    std::fprintf(stderr, "SESSION id=%s version=1.60 commit=%s\n", vita_boot_session(), O1602_VITA_COMMIT);
+    trace("SESSION id=%s version=1.00 commit=%s", vita_boot_session(), O1602_VITA_COMMIT);
+    std::fprintf(stderr, "SESSION id=%s version=1.00 commit=%s\n", vita_boot_session(), O1602_VITA_COMMIT);
     trace("ANALOG_CAPTURE enabled=%d thresholds=.30/.22 grid_delay=%u grid_repeat=%u",analog_debug,fast_grid?170U:200U,fast_grid?68U:80U);
     trace("BOOT full_client=1 upstream=3fde8d11 pointer_bits=%u",unsigned(sizeof(void*)*8));
     trace("NETWORK deferred=1 enabled=%d",

@@ -34,7 +34,7 @@ void observe(){
         SceKernelThreadInfo info{};info.size=sizeof(info);
         const int result=sceKernelGetThreadInfo(main_id,&info);
         char text[640];const int n=std::snprintf(text,sizeof(text),
-            "%s session=%s version=1.60 commit=%s frame=%u tick_low32=%u zoom=%u no_frame_ms=%u phase=%s "
+            "%s session=%s version=1.00 commit=%s frame=%u tick_low32=%u zoom=%u no_frame_ms=%u phase=%s "
             "thread=%d info_rc=%d status=%u wait_type=%u wait_id=%d cpu=%d priority=%d affinity=%d "
             "run_clocks=%llu stack_bytes=%d stack_free=%d observer_ms=%u\n",
             age>=5000?"FREEZE_SUSPECT":"FRAME_PROGRESS_RESUMED",vita_boot_session(),O1602_VITA_COMMIT,

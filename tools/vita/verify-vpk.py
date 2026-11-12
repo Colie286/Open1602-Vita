@@ -25,7 +25,7 @@ with zipfile.ZipFile(path) as z:
     if app_version>='00.03':
         assert 'client.self' in z.namelist(), 'hardware test must retain the full client'
     if app_version>='01.00':
-        brand=b'Open1602' if app_version>='01.50' else b'Anno 1602'
+        brand=b'Open1602' if custom_launch or app_version>='01.50' else b'Anno 1602'
         assert entries['TITLE']==brand+(b' Worker QA' if qa else b'')
         assert extra<=set(z.namelist())
         for name,size in art.items():
@@ -47,7 +47,7 @@ with zipfile.ZipFile(path) as z:
             assert template.findtext('gate/startup-image')=='startup.png'
             assert template.find('.//target') is None
         assert template.findtext('livearea-background/image')=='bg0.png'
-    if app_version>='01.50':
+    if custom_launch or app_version>='01.50':
         source=pathlib.Path(__file__).resolve().parents[2]
         for member,filename in [('sce_sys/icon0.png','icon0.png'),('sce_sys/livearea/contents/bg0.png','bg0.png'),('sce_sys/livearea/contents/startup.png','startup.png')]:
             assert z.read(member)==(source/'platform/vita/livearea/assets'/filename).read_bytes(), 'unexpected current LiveArea artwork'
