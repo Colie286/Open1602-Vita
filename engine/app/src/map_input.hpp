@@ -161,6 +161,8 @@ public:
     void set_blueprint_mode(bool enabled);
     /// Every frame: the map scrolls while its keys are held.
     void scroll_with_keys(std::uint32_t delta_ms);
+    /// Continue a released touch swipe; hiding the world cancels any remaining glide.
+    void scroll_touch(std::uint32_t delta_ms, bool world_visible = true);
     /// Every frame with edge scrolling on: the map scrolls at `speed_percent` of the keys' speed
     /// while the mouse rests at the screen's edge, where it cannot leave the window
     /// (Window::mouse_confined), and no window or menu takes the mouse.
@@ -203,7 +205,7 @@ public:
     void reset_game();
     /// The editor runs (ADR 0013): the map scrolls, turns and zooms, but takes no selection, tool
     /// or order, and of the keys only the view's, the program's and the editor's count.
-    void set_editor(bool on) noexcept { m_editor = on; }
+    void set_editor(bool on) noexcept { if (on != m_editor) cancel_touch(); m_editor = on; }
     [[nodiscard]] bool editor() const noexcept { return m_editor; }
     /// Whether a key's action counts in the editor.
     [[nodiscard]] static bool editor_key(ui::KeyAction action) noexcept;
@@ -343,6 +345,9 @@ private:
     LeftPress m_press;  ///< the left button pressed on the map
     MapDrag m_drag;     ///< the map dragged with the right or middle button
     TouchPress m_touch;
+    TouchScroll m_touch_scroll;
+    bool m_touch_pan_cursor = false;
+    bool m_touch_brake = false; ///< a contact that stopped a glide must not also give a tap order
     bool m_touch_controls = false;
     bool m_touch_move_buildings = false;
     bool m_touch_moving = false;

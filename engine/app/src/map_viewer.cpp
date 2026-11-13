@@ -1129,6 +1129,7 @@ int MapViewer::run() {
 #endif
         update_cursor(video && m_video->full_screen());
         follow_mouse_grab(video && m_video->full_screen());
+        if ((video && m_video->full_screen()) || in_menu() || !graphics()) m_input->scroll_touch(0, false);
         if (video && m_video->full_screen()) {
             core::profile::scene(core::profile::VideoScene);
             // The game stands still while a video fills the screen (the original's main loop
@@ -1432,6 +1433,7 @@ void MapViewer::update(std::uint32_t delta_ms) {
 #endif
     animate_zoom(delta_ms);
     m_input->scroll_with_keys(delta_ms);
+    m_input->scroll_touch(delta_ms);
     if (m_app_settings.display.edge_scroll) {
         m_input->scroll_at_edges(delta_ms, m_app_settings.display.edge_speed);
     }

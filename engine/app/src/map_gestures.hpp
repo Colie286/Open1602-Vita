@@ -33,6 +33,22 @@ private:
     std::uint64_t m_started = 0;
 };
 
+/// Recent finger velocity and a short, exponentially braked camera glide.
+/// Distances are screen pixels; only the camera consumes them.
+class TouchScroll {
+public:
+    void begin(double x, double y, std::uint64_t ms) noexcept;
+    void sample(double x, double y, std::uint64_t ms) noexcept;
+    void release(std::uint64_t ms) noexcept;
+    [[nodiscard]] std::pair<double, double> advance(std::uint32_t delta_ms) noexcept;
+    void reset() noexcept { m_tracking = m_active = false; m_vx = m_vy = 0; }
+    [[nodiscard]] bool active() const noexcept { return m_active; }
+private:
+    double m_x = 0, m_y = 0, m_vx = 0, m_vy = 0;
+    std::uint64_t m_ms = 0;
+    bool m_tracking = false, m_active = false;
+};
+
 /// The left button pressed on the map: a click, or a selection rectangle once the mouse moved
 /// 5 pixels.
 class LeftPress {

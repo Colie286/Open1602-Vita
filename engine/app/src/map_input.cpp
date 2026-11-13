@@ -694,13 +694,26 @@ void MapInput::scroll_with_keys(std::uint32_t delta_ms) {
     dy -= held(ui::KeyAction::ScrollUp);
     dy += held(ui::KeyAction::ScrollDown);
     if (dx != 0.0 || dy != 0.0) {
+        m_touch_scroll.reset();
         const double distance = kScrollSpeed * (fast ? 3.0 : 1.0) * delta_ms / 1000.0;
         m_camera.scroll(dx * distance, dy * distance);
     }
 }
 
+void MapInput::scroll_touch(std::uint32_t delta_ms, bool world_visible) {
+    bool blocked = !world_visible || !m_touch_controls || m_editor || m_tool.active() ||
+                   (m_hud && (m_hud->modal() || m_hud->typing() || m_hud->menu_active() || m_hud->picking()));
+#ifdef O1602_EXPERIMENTAL_VITA
+    blocked = blocked || platform::vita::quick_menu_state().open;
+#endif
+    if (blocked) { m_touch_scroll.reset(); return; }
+    if (m_touch.kind() != TouchPress::Kind::Idle) return;
+    const auto [dx, dy] = m_touch_scroll.advance(delta_ms);
+    if (dx != 0.0 || dy != 0.0) m_camera.scroll(dx, dy);
+}
+
 bool MapInput::edge_scroll_paused() const noexcept {
-    return m_touch.kind() != TouchPress::Kind::Idle ||
+    return m_touch_pan_cursor || m_touch_scroll.active() || m_touch.kind() != TouchPress::Kind::Idle ||
            (m_hud != nullptr && (m_hud->modal() || m_hud->typing() || m_hud->menu_active()));
 }
 
@@ -1144,6 +1157,8 @@ void MapInput::set_touch_controls(bool enabled, bool move_buildings) noexcept {
 }
 
 void MapInput::cancel_touch() noexcept {
+    m_touch_scroll.reset();
+    m_touch_brake = false;
     if (m_touch.kind() != TouchPress::Kind::Idle) {
         m_touch_discard = true; // Consume the corresponding release, even after closing a dialog.
         m_press.reset();
@@ -1173,13 +1188,17 @@ bool MapInput::handle_map_touch(const SDL_Event& e) {
     const bool covered = m_hud && (m_hud->modal() || m_hud->typing() || m_hud->menu_active() ||
                                    m_hud->covers(static_cast<int>(x), static_cast<int>(y)));
     if (down) {
+        const bool braking = m_touch_scroll.active();
         cancel_touch();
         m_touch_discard = false;
+        m_touch_pan_cursor = braking;
         if (!m_touch_controls || m_editor || m_tool.active() || covered ||
             (m_hud && m_hud->picking()) || m_left_down) return false;
         m_grid_on = false;
         m_grid_tile.reset();
         m_touch.press(x, y, e.common.timestamp / 1000000);
+        m_touch_scroll.begin(x, y, e.common.timestamp / 1000000);
+        m_touch_brake = braking;
         m_touch_x = m_mouse_x = x;
         m_touch_y = m_mouse_y = y;
 #ifdef O1602_EXPERIMENTAL_VITA
@@ -1198,6 +1217,7 @@ bool MapInput::handle_map_touch(const SDL_Event& e) {
         return true;
     }
     const auto before = m_touch.kind();
+    m_touch_scroll.sample(x, y, e.common.timestamp / 1000000);
     const auto kind = m_touch.move(x, y, e.common.timestamp / 1000000);
 #ifdef O1602_EXPERIMENTAL_VITA
     if (kind != before) platform::vita::trace("MAP_TOUCH gesture=%s", kind == TouchPress::Kind::Pan ? "pan" : "hold");
@@ -1205,6 +1225,7 @@ bool MapInput::handle_map_touch(const SDL_Event& e) {
     m_mouse_x = x;
     m_mouse_y = y;
     if (kind == TouchPress::Kind::Pan) {
+        m_touch_pan_cursor = true;
         const auto origin = m_touch.origin();
         m_camera.scroll((before == TouchPress::Kind::Pending ? origin.first : m_touch_x) - x,
                         (before == TouchPress::Kind::Pending ? origin.second : m_touch_y) - y);
@@ -1241,7 +1262,7 @@ bool MapInput::handle_map_touch(const SDL_Event& e) {
             }
         } else if (kind == TouchPress::Kind::Hold) {
             map_left_up(x, y, 0, 1);
-        } else if (kind == TouchPress::Kind::Pending) {
+        } else if (kind == TouchPress::Kind::Pending && !m_touch_brake) {
             const auto hit = unit_at(x, y);
             const bool own_selection = !m_units.empty() && m_units.owner(world()) == local();
             // A soldier group taps a friendly ship to board it. Another friendly
@@ -1254,7 +1275,15 @@ bool MapInput::handle_map_touch(const SDL_Event& e) {
 #ifdef O1602_EXPERIMENTAL_VITA
         platform::vita::trace("MAP_TOUCH end kind=%u moving=%d selected=%u", unsigned(kind), m_touch_moving, unsigned(m_units.size()));
 #endif
-        cancel_touch();
+        if (kind == TouchPress::Kind::Pan) {
+            m_touch.reset();
+            m_touch_scroll.release(e.common.timestamp / 1000000);
+#ifdef O1602_EXPERIMENTAL_VITA
+            platform::vita::trace("MAP_TOUCH glide=%d", m_touch_scroll.active());
+#endif
+        } else {
+            cancel_touch();
+        }
         m_touch_discard = false;
     }
     return true;
@@ -1262,6 +1291,12 @@ bool MapInput::handle_map_touch(const SDL_Event& e) {
 
 void MapInput::handle_event(const SDL_Event& raw) {
     if (raw.type == SDL_EVENT_WINDOW_FOCUS_LOST || raw.type == SDL_EVENT_KEY_DOWN) cancel_touch();
+    if ((raw.type == SDL_EVENT_MOUSE_MOTION && raw.motion.which != SDL_TOUCH_MOUSEID) ||
+        (raw.type == SDL_EVENT_MOUSE_BUTTON_DOWN && raw.button.which != SDL_TOUCH_MOUSEID) ||
+        raw.type == SDL_EVENT_MOUSE_WHEEL) {
+        m_touch_scroll.reset();
+        m_touch_pan_cursor = false;
+    }
     if (handle_map_touch(raw)) return;
     SDL_Event event=raw;
 #ifdef O1602_EXPERIMENTAL_VITA

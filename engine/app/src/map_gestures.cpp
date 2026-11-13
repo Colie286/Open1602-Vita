@@ -22,6 +22,49 @@ TouchPress::Kind TouchPress::move(double x, double y, std::uint64_t ms) noexcept
     return m_kind;
 }
 
+void TouchScroll::begin(double x, double y, std::uint64_t ms) noexcept {
+    reset();
+    m_x = x; m_y = y; m_ms = ms;
+    m_tracking = true;
+}
+
+void TouchScroll::sample(double x, double y, std::uint64_t ms) noexcept {
+    if (!m_tracking || ms <= m_ms || (x == m_x && y == m_y)) return;
+    const double dt = static_cast<double>(ms - m_ms);
+    double vx = (m_x - x) * 1000.0 / dt, vy = (m_y - y) * 1000.0 / dt;
+    const double speed = std::hypot(vx, vy);
+    if (speed > 1800.0) { vx *= 1800.0 / speed; vy *= 1800.0 / speed; }
+    // A reversal must not leave the camera gliding against the latest swipe.
+    if (dt > 150.0 || vx * m_vx + vy * m_vy < 0.0) m_vx = m_vy = 0;
+    const double weight = 1.0 - std::exp(-dt / 35.0);
+    m_vx += (vx - m_vx) * weight;
+    m_vy += (vy - m_vy) * weight;
+    m_x = x; m_y = y; m_ms = ms;
+}
+
+void TouchScroll::release(std::uint64_t ms) noexcept {
+    if (!m_tracking || ms < m_ms || ms - m_ms > 100) { reset(); return; }
+    // Holding still before lifting the finger deliberately ends the swipe.
+    const double decay = std::exp(-static_cast<double>(ms - m_ms) / 40.0);
+    m_vx *= decay; m_vy *= decay;
+    m_tracking = false;
+    m_active = std::hypot(m_vx, m_vy) >= 60.0;
+}
+
+std::pair<double, double> TouchScroll::advance(std::uint32_t delta_ms) noexcept {
+    if (!m_active || delta_ms == 0) return {};
+    // Resume or a long loading frame must not throw the camera across the map.
+    if (delta_ms > 150) { reset(); return {}; }
+    constexpr double tau = 0.35, stop_speed = 8.0;
+    const double remaining = tau * std::log(std::hypot(m_vx, m_vy) / stop_speed);
+    const double dt = std::min(static_cast<double>(delta_ms) / 1000.0, remaining);
+    const double decay = std::exp(-dt / tau);
+    const std::pair<double, double> distance{m_vx * tau * (1.0 - decay), m_vy * tau * (1.0 - decay)};
+    m_vx *= decay; m_vy *= decay;
+    if (dt >= remaining) reset();
+    return distance;
+}
+
 void LeftPress::move(double x, double y) {
     if (!m_at) {
         return;

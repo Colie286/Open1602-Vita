@@ -27,7 +27,7 @@ These features are part of the engine and port. Not every gameplay situation has
 
 FPS drops and short stutters can still occur, particularly when moving across developed islands, changing zoom levels or opening certain windows. A constant 60 FPS is not guaranteed.
 
-Some missions, advanced gameplay systems, long sessions and multiplayer edge cases still need further testing. Bugs, freezes or crashes may still occur.
+Some missions, advanced gameplay systems, long sessions and multiplayer edge cases still need further testing. Bugs may still occur.
 
 LAN and Ad-hoc have been tested on real Vitas during development. Online play across different Internet connections still needs broader testing.
 
@@ -149,7 +149,7 @@ master_server = off
 
 The server software and its instructions are available on the [masterserver branch](https://github.com/Colie286/Open1602-Vita/tree/masterserver).
 
-LAN, Ad-hoc and Direct-IP remain available without a master server. Use compatible Open1602 Vita builds and matching game data on all participating devices. This source uses game protocol **27** and cannot join older protocol-19 Vita builds; update every player's client together.
+LAN, Ad-hoc and Direct-IP remain available without a master server. Use compatible Open1602 Vita builds and matching game data on all participating devices. This source uses game protocol 27 like the original open1602 v0.5. Connecting older version will not work, keep the game updated.
 
 ## Settings and bug reports
 
