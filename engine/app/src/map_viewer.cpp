@@ -2812,6 +2812,9 @@ void MapViewer::toggle_fullscreen() {
 DisplayModel MapViewer::display_model() const {
     DisplayModel model;
     model.settings = m_app_settings.display;
+#ifdef O1602_EXPERIMENTAL_VITA
+    model.settings.blueprint_mode = m_tool.blueprint();
+#endif
     model.chat_available=m_hud&&m_hud->chat_available();
     m_window->window_size(model.window.width, model.window.height);
     std::int32_t uw = 0;
@@ -2847,6 +2850,8 @@ void MapViewer::apply_display(const DisplaySettings& input) {
 #ifdef O1602_EXPERIMENTAL_VITA
     m_app_settings.display.window_width=960; m_app_settings.display.window_height=544;
     platform::vita::stick_sensitivity(display.vita_left_stick,display.vita_right_stick);
+    m_input->set_touch_controls(true, display.touch_move_buildings);
+    m_input->set_blueprint_mode(display.blueprint_mode);
     if(display.vita_cpu_mhz!=before.vita_cpu_mhz&&!platform::vita::cpu_profile(unsigned(display.vita_cpu_mhz))){
         m_events.notify(ui::tr("vita.display.cpu_failed"),"vita.cpu_failed",platform::ticks_ms());
     }
@@ -3630,6 +3635,8 @@ void MapViewer::load_options() {
 #ifdef O1602_EXPERIMENTAL_VITA
     normalize_vita_display(m_app_settings.display);
     platform::vita::stick_sensitivity(m_app_settings.display.vita_left_stick,m_app_settings.display.vita_right_stick);
+    m_input->set_touch_controls(true, m_app_settings.display.touch_move_buildings);
+    m_input->set_blueprint_mode(m_app_settings.display.blueprint_mode);
     m_window->set_vsync(m_app_settings.display.vsync);
     if(!platform::vita::cpu_profile(unsigned(m_app_settings.display.vita_cpu_mhz))){
         m_events.notify(ui::tr("vita.display.cpu_failed"),"vita.cpu_failed",platform::ticks_ms());
@@ -3712,6 +3719,7 @@ void MapViewer::remember_player_id(std::uint64_t id) {
 
 void MapViewer::save_settings() {
 #ifdef O1602_EXPERIMENTAL_VITA
+    m_app_settings.display.blueprint_mode = m_tool.blueprint();
     const auto read_text=[&](const char* name){
         auto bytes=core::read_file(data_folder()/name);
         return bytes?std::string(reinterpret_cast<const char*>(bytes->data()),bytes->size()):std::string{};

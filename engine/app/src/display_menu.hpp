@@ -49,9 +49,11 @@ public:
         VitaCpu,
         LeftStick,
         RightStick,
-        ChatButton
+        ChatButton,
+        BlueprintMode,
+        TouchMoveBuildings
     };
-    static constexpr std::size_t kItems = 19;
+    static constexpr std::size_t kItems = 21;
     /// The window's size in design units (it is centred over the map).
     static constexpr std::int32_t kWidth = 640;
     static constexpr std::int32_t kHeight = 756;  // fifteen rows, the hint and the button within 768

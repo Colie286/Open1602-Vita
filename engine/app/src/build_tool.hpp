@@ -162,6 +162,7 @@ public:
     /// when the tool changes.
     [[nodiscard]] bool blueprint() const noexcept { return m_blueprint; }
     void set_blueprint(bool on) noexcept { m_blueprint = on; }
+    [[nodiscard]] bool plans_blueprints() const noexcept { return m_blueprint && places() && !m_ship; }
     /// The order of the current drag (or a click at `spot`) as blueprints: build_order() placed as
     /// sim::BlueprintOrder::Kind::Place. Nothing for a Kontor founded from a ship.
     [[nodiscard]] std::optional<sim::BlueprintOrder> blueprint_order(const sim::World& world, sim::PlayerId player,

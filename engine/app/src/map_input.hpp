@@ -155,7 +155,10 @@ public:
     /// Input events but the window's (mouse positions in output pixels).
     void handle_event(const SDL_Event& event);
     /// The left button went up while a video took the input.
-    void release_left() noexcept { m_left_down = false; }
+    void release_left() noexcept;
+    /// Handheld gestures apply only to touch-generated mouse events on the game map.
+    void set_touch_controls(bool enabled, bool move_buildings = false) noexcept;
+    void set_blueprint_mode(bool enabled);
     /// Every frame: the map scrolls while its keys are held.
     void scroll_with_keys(std::uint32_t delta_ms);
     /// Every frame with edge scrolling on: the map scrolls at `speed_percent` of the keys' speed
@@ -241,6 +244,8 @@ public:
     [[nodiscard]] std::string key_of(ui::KeyAction action) const;
 
 private:
+    bool handle_map_touch(const SDL_Event& event);
+    void cancel_touch() noexcept;
     /// The keys of ADR 0010.
     void setup_keys();
     [[nodiscard]] static ui::KeyBindings default_keys();
@@ -337,6 +342,12 @@ private:
     Pick m_pick = Pick::None;
     LeftPress m_press;  ///< the left button pressed on the map
     MapDrag m_drag;     ///< the map dragged with the right or middle button
+    TouchPress m_touch;
+    bool m_touch_controls = false;
+    bool m_touch_move_buildings = false;
+    bool m_touch_moving = false;
+    bool m_touch_discard = false;
+    double m_touch_x = 0, m_touch_y = 0;
     GroupKey m_group_key;
     std::optional<std::size_t> m_last_city;            ///< the city the key N went to last (World::cities())
     std::size_t m_formation = 0;                       ///< the next formation of the F key

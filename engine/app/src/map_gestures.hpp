@@ -16,6 +16,23 @@
 
 namespace o1602::app {
 
+// A swipe pans; holding before moving starts a box selection or building drag.
+// Once chosen, the gesture keeps its meaning until release.
+class TouchPress {
+public:
+    enum class Kind { Idle, Pending, Pan, Hold };
+    static constexpr std::uint64_t kHoldMs = 350;
+    void press(double x, double y, std::uint64_t ms) noexcept;
+    Kind move(double x, double y, std::uint64_t ms) noexcept;
+    void reset() noexcept { m_kind = Kind::Idle; }
+    [[nodiscard]] Kind kind() const noexcept { return m_kind; }
+    [[nodiscard]] std::pair<double, double> origin() const noexcept { return m_origin; }
+private:
+    Kind m_kind = Kind::Idle;
+    std::pair<double, double> m_origin{};
+    std::uint64_t m_started = 0;
+};
+
 /// The left button pressed on the map: a click, or a selection rectangle once the mouse moved
 /// 5 pixels.
 class LeftPress {

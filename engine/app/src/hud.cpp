@@ -2479,9 +2479,9 @@ void Hud::draw(const sim::World& world, const assets::BuildingTable& buildings, 
         form.label({24,8,742,36},ui::tr(quick.help?"vita.help.title":"vita.quick.title"),ui::Align::Centre,ui::Form::Tone::Heading);
         form.swatch({24,44,742,1},style.frame);
         if(quick.help){
-            constexpr const char* lines[]={"vita.help.left","vita.help.right","vita.help.confirm","vita.help.road","vita.help.rotate","vita.help.cancel","vita.help.menu","vita.help.touch"};
+            constexpr const char* lines[]={"vita.help.left","vita.help.right","vita.help.blueprints","vita.help.confirm","vita.help.road","vita.help.rotate","vita.help.cancel","vita.help.menu","vita.help.touch"};
             for(unsigned i=0;i<std::size(lines);++i)
-                form.label({24,56+int(i)*46,742,42},ui::tr(lines[i]));
+                form.label({24,56+int(i)*42,742,38},ui::tr(lines[i]));
         }else{
             for(unsigned i=0;i<quick.count;++i)
                 form.button(int(i),{5,50+int(i)*28,780,28},ui::tr(platform::vita::quick_action_label(i)),true,i==quick.selected);

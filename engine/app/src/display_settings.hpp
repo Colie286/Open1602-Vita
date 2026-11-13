@@ -45,6 +45,12 @@ struct DisplaySettings {
     std::int32_t vita_left_stick = 100; ///< speed percent, 25..300; original response at 100
     std::int32_t vita_right_stick = 100;
     bool chat_button = true; ///< handheld multiplayer chat shortcut; presentation only
+#ifdef O1602_EXPERIMENTAL_VITA
+    bool blueprint_mode = true;
+#else
+    bool blueprint_mode = false;
+#endif
+    bool touch_move_buildings = false; ///< hold and drag with the existing move tool
     bool vsync = true;  ///< frames wait for the screen
     // Handheld presentation preferences. Desktop behavior stays unchanged.
     bool vita_legacy_cap = false; ///< migration only; never persisted

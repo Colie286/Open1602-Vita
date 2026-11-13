@@ -397,7 +397,9 @@ void poll(SDL_Window* window,const GridCursor& grid,PadContext context,bool scri
     if(!sample_valid)pad_buttons_armed=false;
     else if(!pad_buttons_armed){bool down=false;for(int b=0;b<SDL_GAMEPAD_BUTTON_COUNT;++b)down|=physical_button(static_cast<SDL_GamepadButton>(b));if(!down)pad_buttons_armed=true;}
     const auto button=[&](SDL_GamepadButton b){return sample_valid&&pad_buttons_armed&&physical_button(b);};
-    const auto [left_x,left_y]=cursor_state.sample(axes[0]+(!legacy?int(button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT))-int(button(SDL_GAMEPAD_BUTTON_DPAD_LEFT)):0),axes[1]+(!legacy?int(button(SDL_GAMEPAD_BUTTON_DPAD_DOWN))-int(button(SDL_GAMEPAD_BUTTON_DPAD_UP)):0),sample_valid);
+    const bool view_buttons = !legacy && context.world && !context.dialog && !context.editor && !actions_open;
+    const bool cursor_dpad = !legacy && !view_buttons;
+    const auto [left_x,left_y]=cursor_state.sample(axes[0]+(cursor_dpad?int(button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT))-int(button(SDL_GAMEPAD_BUTTON_DPAD_LEFT)):0),axes[1]+(cursor_dpad?int(button(SDL_GAMEPAD_BUTTON_DPAD_DOWN))-int(button(SDL_GAMEPAD_BUTTON_DPAD_UP)):0),sample_valid);
     const auto [right_x,right_y]=camera_state.sample(axes[2],axes[3],sample_valid);
     std::array<float,4> filtered{left_x,left_y,right_x,right_y};
     const auto axis=[&](SDL_GamepadAxis a){return filtered[unsigned(a)];};
@@ -490,8 +492,17 @@ void poll(SDL_Window* window,const GridCursor& grid,PadContext context,bool scri
             if(pressed(SDL_GAMEPAD_BUTTON_WEST)&&!front_down){if(context.building&&!build_browse)key(SDLK_R);else mouse(window,SDL_BUTTON_RIGHT,true);}
             if(!button(SDL_GAMEPAD_BUTTON_WEST)&&previous[SDL_GAMEPAD_BUTTON_WEST]&&mouse_down[SDL_BUTTON_RIGHT])mouse(window,SDL_BUTTON_RIGHT,false);
             if(pressed(SDL_GAMEPAD_BUTTON_START)&&(!context.editor||!context.dialog)){cancel_drag();if(context.editor)key(SDLK_O,SDL_KMOD_CTRL);else key(SDLK_F10);}
-            if(pressed(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER))key(SDLK_PAGEDOWN);
-            if(pressed(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER))key(SDLK_PAGEUP);
+            if (view_buttons) {
+                if(pressed(SDL_GAMEPAD_BUTTON_DPAD_UP))key(SDLK_PAGEUP);
+                if(pressed(SDL_GAMEPAD_BUTTON_DPAD_DOWN))key(SDLK_PAGEDOWN);
+                if(pressed(SDL_GAMEPAD_BUTTON_DPAD_LEFT))key(SDLK_Q);
+                if(pressed(SDL_GAMEPAD_BUTTON_DPAD_RIGHT))key(SDLK_E);
+                if(pressed(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER))key(SDLK_U);
+                if(pressed(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER))key(SDLK_U,SDL_KMOD_SHIFT);
+            } else {
+                if(pressed(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER))key(SDLK_PAGEDOWN);
+                if(pressed(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER))key(SDLK_PAGEUP);
+            }
         }
         if(analog_debug){
             const auto now=SDL_GetTicks();auto& a=analog_ring[analog_at++%analog_ring.size()];analog_count=std::min(analog_count+1,unsigned(analog_ring.size()));

@@ -6,6 +6,22 @@
 
 namespace o1602::app {
 
+void TouchPress::press(double x, double y, std::uint64_t ms) noexcept {
+    m_origin = {x, y};
+    m_started = ms;
+    m_kind = Kind::Pending;
+}
+
+TouchPress::Kind TouchPress::move(double x, double y, std::uint64_t ms) noexcept {
+    if (m_kind == Kind::Pending) {
+        const double dx = x - m_origin.first, dy = y - m_origin.second;
+        if (dx * dx + dy * dy >= 64.0) {
+            m_kind = ms - m_started >= kHoldMs ? Kind::Hold : Kind::Pan;
+        }
+    }
+    return m_kind;
+}
+
 void LeftPress::move(double x, double y) {
     if (!m_at) {
         return;

@@ -700,7 +700,8 @@ void MapInput::scroll_with_keys(std::uint32_t delta_ms) {
 }
 
 bool MapInput::edge_scroll_paused() const noexcept {
-    return m_hud != nullptr && (m_hud->modal() || m_hud->typing() || m_hud->menu_active());
+    return m_touch.kind() != TouchPress::Kind::Idle ||
+           (m_hud != nullptr && (m_hud->modal() || m_hud->typing() || m_hud->menu_active()));
 }
 
 void MapInput::scroll_at_edges(std::uint32_t delta_ms, std::int32_t speed_percent) {
@@ -1136,7 +1137,132 @@ void MapInput::run_action(const ui::KeyBinding& b) {
     }
 }
 
+void MapInput::set_touch_controls(bool enabled, bool move_buildings) noexcept {
+    if (enabled != m_touch_controls || move_buildings != m_touch_move_buildings) cancel_touch();
+    m_touch_controls = enabled;
+    m_touch_move_buildings = move_buildings;
+}
+
+void MapInput::cancel_touch() noexcept {
+    if (m_touch.kind() != TouchPress::Kind::Idle) {
+        m_touch_discard = true; // Consume the corresponding release, even after closing a dialog.
+        m_press.reset();
+        m_left_down = false;
+    }
+    if (m_touch_moving) {
+        m_tool.release();
+        m_tool.set_mode(BuildTool::Mode::Off);
+        m_touch_moving = false;
+    }
+    m_touch.reset();
+}
+
+void MapInput::release_left() noexcept {
+    cancel_touch();
+    m_left_down = false;
+    m_press.reset();
+}
+
+bool MapInput::handle_map_touch(const SDL_Event& e) {
+    const bool motion = e.type == SDL_EVENT_MOUSE_MOTION;
+    const bool down = e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT;
+    const bool up = e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT;
+    if (!(motion || down || up) || (motion ? e.motion.which : e.button.which) != SDL_TOUCH_MOUSEID)
+        return false;
+    const double x = motion ? e.motion.x : e.button.x, y = motion ? e.motion.y : e.button.y;
+    const bool covered = m_hud && (m_hud->modal() || m_hud->typing() || m_hud->menu_active() ||
+                                   m_hud->covers(static_cast<int>(x), static_cast<int>(y)));
+    if (down) {
+        cancel_touch();
+        m_touch_discard = false;
+        if (!m_touch_controls || m_editor || m_tool.active() || covered ||
+            (m_hud && m_hud->picking()) || m_left_down) return false;
+        m_grid_on = false;
+        m_grid_tile.reset();
+        m_touch.press(x, y, e.common.timestamp / 1000000);
+        m_touch_x = m_mouse_x = x;
+        m_touch_y = m_mouse_y = y;
+#ifdef O1602_EXPERIMENTAL_VITA
+        platform::vita::trace("MAP_TOUCH begin x=%.1f y=%.1f", x, y);
+#endif
+        return true;
+    }
+    if (m_touch_discard) {
+        if (up) m_touch_discard = false;
+        return true;
+    }
+    if (m_touch.kind() == TouchPress::Kind::Idle) return false;
+    if (covered || m_editor || (!m_touch_moving && m_tool.active())) {
+        cancel_touch();
+        if (up) m_touch_discard = false;
+        return true;
+    }
+    const auto before = m_touch.kind();
+    const auto kind = m_touch.move(x, y, e.common.timestamp / 1000000);
+#ifdef O1602_EXPERIMENTAL_VITA
+    if (kind != before) platform::vita::trace("MAP_TOUCH gesture=%s", kind == TouchPress::Kind::Pan ? "pan" : "hold");
+#endif
+    m_mouse_x = x;
+    m_mouse_y = y;
+    if (kind == TouchPress::Kind::Pan) {
+        const auto origin = m_touch.origin();
+        m_camera.scroll((before == TouchPress::Kind::Pending ? origin.first : m_touch_x) - x,
+                        (before == TouchPress::Kind::Pending ? origin.second : m_touch_y) - y);
+    } else if (kind == TouchPress::Kind::Hold) {
+        if (before == TouchPress::Kind::Pending) {
+            const auto [ox, oy] = m_touch.origin();
+            if (m_touch_move_buildings && !unit_at(ox, oy)) {
+                m_mouse_x = ox;
+                m_mouse_y = oy;
+                // Pick by the visible building, just as the original move tool does.
+                const auto hit = building_tile_at(ox, oy, [](std::uint16_t, const sim::SubTile& t) {
+                    return t.building != nullptr && sim::destroyable(*t.building, true);
+                });
+                if (hit) {
+                    m_tool.set_mode(BuildTool::Mode::Move);
+                    (void)m_tool.take_move(world(), m_buildings, local(),
+                                          {hit->island, hit->local_x, hit->local_y});
+                    m_touch_moving = m_tool.move_hand().has_value();
+                    if (!m_touch_moving) m_tool.set_mode(BuildTool::Mode::Off);
+                }
+                m_mouse_x = x;
+                m_mouse_y = y;
+            }
+            if (!m_touch_moving) m_press.press(ox, oy);
+        }
+        if (!m_touch_moving) m_press.move(x, y);
+    }
+    m_touch_x = x;
+    m_touch_y = y;
+    if (up) {
+        if (m_touch_moving) {
+            if (const auto spot = spot_at_mouse()) {
+                if (auto order = m_tool.move_order(local(), *spot)) m_commands.submit(std::move(*order));
+            }
+        } else if (kind == TouchPress::Kind::Hold) {
+            map_left_up(x, y, 0, 1);
+        } else if (kind == TouchPress::Kind::Pending) {
+            const auto hit = unit_at(x, y);
+            const bool own_selection = !m_units.empty() && m_units.owner(world()) == local();
+            // A soldier group taps a friendly ship to board it. Another friendly
+            // unit of the same kind becomes the selection instead of an order target.
+            const bool select = hit && ui::unit_owner(world(), *hit) == local() &&
+                                (!own_selection || hit->kind == m_units.kind());
+            if (own_selection && !select) map_order(x, y, false);
+            else map_left_up(x, y, 0, 1);
+        }
+#ifdef O1602_EXPERIMENTAL_VITA
+        platform::vita::trace("MAP_TOUCH end kind=%u moving=%d selected=%u", unsigned(kind), m_touch_moving, unsigned(m_units.size()));
+#endif
+        cancel_touch();
+        m_touch_discard = false;
+    }
+    return true;
+}
+
 void MapInput::handle_event(const SDL_Event& raw) {
+    if (raw.type == SDL_EVENT_WINDOW_FOCUS_LOST || raw.type == SDL_EVENT_KEY_DOWN) cancel_touch();
+    if (handle_map_touch(raw)) return;
     SDL_Event event=raw;
 #ifdef O1602_EXPERIMENTAL_VITA
     const bool motion=event.type==SDL_EVENT_MOUSE_MOTION;
@@ -1351,7 +1477,7 @@ void MapInput::handle_event(const SDL_Event& raw) {
                         m_commands.submit(std::move(*order));
                         m_tool.drop_move();
                     }
-                } else if (spot && m_tool.blueprint() && m_tool.places()) {
+                } else if (spot && m_tool.plans_blueprints()) {
                     // Blueprint mode: the buildings become blueprints, paid for when built.
                     if (auto order = m_tool.blueprint_order(world(), local(), *spot)) {
                         m_commands.submit(std::move(*order));
@@ -1463,6 +1589,7 @@ void MapInput::leave_military_mode() {
 }
 
 void MapInput::reset_game() {
+    cancel_touch();
     m_grid_on=false;m_grid_tile.reset();
     m_units.reset();
     m_pending_orders.clear();
@@ -2028,13 +2155,18 @@ void MapInput::map_left_up(double x, double y, std::uint16_t mod, int clicks) {
 }
 
 void MapInput::toggle_blueprint() {
-    m_tool.set_blueprint(!m_tool.blueprint());
+    set_blueprint_mode(!m_tool.blueprint());
+    if (m_hud && m_tool.blueprint() && m_hud->mode() != Hud::kModeBuild) set_mode(Hud::kModeBuild);
+}
+
+void MapInput::set_blueprint_mode(bool enabled) {
+    m_tool.set_blueprint(enabled);
     if (m_hud) {
         m_hud->set_blueprint_in_build_menu(m_tool.blueprint());
-        if (m_tool.blueprint() && m_hud->mode() != Hud::kModeBuild) {
-            set_mode(Hud::kModeBuild);
-        }
     }
+#ifdef O1602_EXPERIMENTAL_VITA
+    platform::vita::trace("BLUEPRINT_MODE enabled=%d", enabled);
+#endif
 }
 
 void MapInput::build_blueprints() {

@@ -17,8 +17,8 @@ using ui::Align;
 using ui::Rect;
 
 constexpr Id kItem = 1;  // + Item
-constexpr Id kClose = 20;
-constexpr Id kKeysButton = 21;
+constexpr Id kClose = 100;
+constexpr Id kKeysButton = 101;
 
 constexpr std::int32_t kRowY = 64;
 constexpr std::int32_t kRowH = 36;
@@ -29,7 +29,7 @@ constexpr std::int32_t kValueW = 266;
 constexpr std::array<std::string_view, DisplayMenu::kItems> kLabels = {
     "display.mode",       "display.size",        "display.ui_scale",     "display.zoom",       "display.zoom_drawing",
     "display.vsync",      "display.edge_scroll", "display.edge_speed",   "display.grab_mouse", "display.goods_trend",
-    "display.rival_wars", "display.event_speed", "display.plant_fields", "display.graphics",   "display.autosave", "vita.display.cpu", "vita.display.left_stick", "vita.display.right_stick", "vita.display.chat_button"};
+    "display.rival_wars", "display.event_speed", "display.plant_fields", "display.graphics",   "display.autosave", "vita.display.cpu", "vita.display.left_stick", "vita.display.right_stick", "vita.display.chat_button", "vita.display.blueprints", "vita.display.touch_move"};
 
 std::string on_off(bool on) {
     return ui::tr(on ? "display.on" : "display.off");
@@ -73,6 +73,10 @@ std::string DisplayMenu::value_text(const DisplayModel& model, Item item) {
             return on_off(s.grab_mouse);
         case Item::ChatButton:
             return on_off(s.chat_button);
+        case Item::BlueprintMode:
+            return on_off(s.blueprint_mode);
+        case Item::TouchMoveBuildings:
+            return on_off(s.touch_move_buildings);
         case Item::GoodsTrend:
             return on_off(s.goods_trend);
         case Item::RivalWars:
@@ -157,6 +161,12 @@ bool DisplayMenu::choose(DisplayModel& model, Item item, bool forward) {
         case Item::ChatButton:
             if(!model.fixed_window||!model.chat_available)return false;
             s.chat_button=!s.chat_button;return true;
+        case Item::BlueprintMode:
+            if (!model.fixed_window) return false;
+            s.blueprint_mode = !s.blueprint_mode; return true;
+        case Item::TouchMoveBuildings:
+            if (!model.fixed_window) return false;
+            s.touch_move_buildings = !s.touch_move_buildings; return true;
         case Item::GoodsTrend:
             s.goods_trend = !s.goods_trend;
             return true;
@@ -242,13 +252,15 @@ void DisplayMenu::layout(const DisplayModel& model) {
         if(item==Item::VitaCpu)continue;
         if(!model.fixed_window&&(item==Item::LeftStick||item==Item::RightStick))continue;
         if(item==Item::ChatButton&&(!model.fixed_window||!model.chat_available))continue;
-        const std::int32_t y = kRowY + static_cast<std::int32_t>(row++) * kRowH;
+        if(!model.fixed_window&&(item==Item::BlueprintMode||item==Item::TouchMoveBuildings))continue;
+        const std::int32_t row_h = kRowH;
+        const std::int32_t y = kRowY + static_cast<std::int32_t>(row++) * row_h;
         const bool used = !(item == Item::WindowSize && model.settings.fullscreen) &&
                           !(item == Item::ZoomDrawing && !model.settings.free_zoom) &&
                           !(item == Item::EdgeSpeed && !model.settings.edge_scroll);
-        f.label(Rect{24, y, kLabelW, kRowH - 4}, ui::tr(kLabels[i]), Align::Left, used ? Tone::Normal : Tone::Dim);
+        f.label(Rect{24, y, kLabelW, row_h - 4}, ui::tr(kLabels[i]), Align::Left, used ? Tone::Normal : Tone::Dim);
         const Id id = kItem + static_cast<Id>(i);
-        const Rect value{kWidth - 24 - kValueW, y, kValueW, kRowH - 6};
+        const Rect value{kWidth - 24 - kValueW, y, kValueW, row_h - 6};
         if (item == Item::EdgeSpeed || item == Item::Autosave || item == Item::LeftStick || item == Item::RightStick) {
             // A slider, with its value beside it; while it is dragged the value it would take.
             DisplayModel shown = model;

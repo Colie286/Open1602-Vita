@@ -235,6 +235,8 @@ bool read_display_line(DisplaySettings& s, std::string_view key, std::string_vie
     if (key == "vita_left_stick") return read_number(value,25,300,s.vita_left_stick);
     if (key == "vita_right_stick") return read_number(value,25,300,s.vita_right_stick);
     if (key == "chat_button") return read_flag(value,s.chat_button);
+    if (key == "blueprint_mode") return read_flag(value,s.blueprint_mode);
+    if (key == "touch_move_buildings") return read_flag(value,s.touch_move_buildings);
     if (key == "goods_trend") {
         return read_flag(value, s.goods_trend);
     }
@@ -297,6 +299,8 @@ std::string write_display(const DisplaySettings& s) {
     out += std::string("display.grab_mouse = ") + on_off(s.grab_mouse) + "\n";
     out += "# Under each good of a Kontor's stock how much more comes in or goes out per minute\n";
     out += std::string("display.chat_button = ") + on_off(s.chat_button) + "\n";
+    out += std::string("display.blueprint_mode = ") + on_off(s.blueprint_mode) + "\n";
+    out += std::string("display.touch_move_buildings = ") + on_off(s.touch_move_buildings) + "\n";
     out += std::string("display.goods_trend = ") + on_off(s.goods_trend) + "\n";
     out += "# Tell when two other players go to war or make peace\n";
     out += std::string("display.rival_wars = ") + on_off(s.rival_wars) + "\n";
