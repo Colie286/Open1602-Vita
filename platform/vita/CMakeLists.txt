@@ -55,7 +55,7 @@ if(NOT O1602_VITA_DIAGNOSTIC)
             message(FATAL_ERROR "Missing LiveArea build asset: ${asset}")
         endif()
     endforeach()
-    vita_create_vpk(open1602.vpk O1602VITA launcher.self VERSION 01.10 NAME "${vita_package_name}"
+    vita_create_vpk(open1602.vpk O1602VITA launcher.self VERSION 01.11 NAME "${vita_package_name}"
         FILE "${O1602_VITA_ARTWORK_DIR}/icon0.png" "sce_sys/icon0.png"
         FILE "${O1602_VITA_ARTWORK_DIR}/bg0.png" "sce_sys/livearea/contents/bg0.png"
         FILE "${O1602_VITA_ARTWORK_DIR}/startup.png" "sce_sys/livearea/contents/startup.png"
