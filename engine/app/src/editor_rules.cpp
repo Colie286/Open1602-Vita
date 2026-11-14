@@ -136,8 +136,10 @@ void MapViewer::editor_roll() {
     m_editor->selection.reset();
     m_editor->notice.clear();
     editor_islands_changed();
-    std::fprintf(stderr, "editor: dice preview, roll %u, %zu islands, %zu warnings\n",
-                 static_cast<unsigned>(m_editor->preview_rolls), m_state->world.islands().size(), warnings.size());
+    std::fprintf(stderr, "editor: dice preview, roll %u, %llu islands, %llu warnings\n",
+                 static_cast<unsigned>(m_editor->preview_rolls),
+                 static_cast<unsigned long long>(m_state->world.islands().size()),
+                 static_cast<unsigned long long>(warnings.size()));
 }
 
 void MapViewer::editor_end_preview() {
@@ -179,7 +181,8 @@ void MapViewer::editor_rules_request(const EditorRequest& request) {
         }
         m_editor->document.perform(std::move(op).value());
         m_editor->notice.clear();
-        std::fprintf(stderr, "editor: random element %zu now %u at random\n", request.index,
+        std::fprintf(stderr, "editor: random element %llu now %u at random\n",
+                     static_cast<unsigned long long>(request.index),
                      static_cast<unsigned>(count));
         return;
     }

@@ -592,15 +592,16 @@ void Engine::task_mine(AiPlayer& p) {
     pop(p);
     refund(p);
     const Search s = p.search;
-    log(p, "mine search ware %u: best %d at %d,%d segments %zu", b->ware, s.best, s.best_x1, s.best_y1,
-        p.segments.size());
+    log(p, "mine search ware %u: best %d at %d,%d segments %llu", b->ware, s.best, s.best_x1, s.best_y1,
+        static_cast<unsigned long long>(p.segments.size()));
     std::vector<BuildItem> path;
     if (s.best < 1 && (classic() || !mine_path(p, b->ware, path))) {
         slot_fail(p, s.slot);
         return;
     }
     if (!path.empty()) {
-        log(p, "mine road of %zu tiles to %d,%d", path.size(), p.search.best_x1, p.search.best_y1);
+        log(p, "mine road of %llu tiles to %d,%d", static_cast<unsigned long long>(path.size()),
+            p.search.best_x1, p.search.best_y1);
         build(p, std::move(path), false);
     } else if (s.extra > 0) {
         // The road from the road to the slope first.

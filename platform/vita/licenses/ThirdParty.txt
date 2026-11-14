@@ -5,7 +5,7 @@ Copyright (c) 2014 Konstantin Shishkov; Copyright (c) 2019 Paul B Mahol.
 Bink Audio/inverse transforms derive from FFmpeg (LGPL-2.1-or-later),
 Copyright (c) 2007-2011 Peter Ross; Copyright (c) 2009 Daniel Verkamp;
 Copyright (c) 2009 Alex Converse. Original source attribution is retained.
-See engine/video/src/bink2_video.hpp, bink_audio.hpp and docs/formats/bk2.md.
+See engine/video/src/bink2_video.hpp and engine/video/src/bink_audio.hpp.
 
 
 === stb_vorbis ===

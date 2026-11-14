@@ -428,13 +428,14 @@ void EventPresenter::command_results(const std::vector<sim::CommandResult>& resu
     for (const sim::CommandResult& r : results) {
         if (!r.build) {
             if (r.demolished != 0) {
-                std::fprintf(stderr, "demolished %zu, back: %lld gold, %u t tools, %u t wood, %u t bricks\n",
-                             r.demolished, static_cast<long long>(r.refund.money), r.refund.tools / 32,
+                std::fprintf(stderr, "demolished %llu, back: %lld gold, %u t tools, %u t wood, %u t bricks\n",
+                             static_cast<unsigned long long>(r.demolished), static_cast<long long>(r.refund.money), r.refund.tools / 32,
                              r.refund.wood / 32, r.refund.bricks / 32);
             }
             continue;
         }
-        std::fprintf(stderr, "built %zu of %zu", r.build->placed, r.build->items.size());
+        std::fprintf(stderr, "built %llu of %llu", static_cast<unsigned long long>(r.build->placed),
+                     static_cast<unsigned long long>(r.build->items.size()));
         for (const sim::PlannedBuild& item : r.build->items) {
             if (!item.ok()) {
                 std::fprintf(stderr, " - %s", sim::refusal_name(item.refusal));

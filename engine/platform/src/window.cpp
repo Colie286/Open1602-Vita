@@ -57,7 +57,7 @@ core::Result<std::unique_ptr<SdlSystem>> SdlSystem::init() {
 #ifdef O1602_EXPERIMENTAL_VITA
     vita::phase("BEGIN SDL video init");
 #endif
-    SDL_SetAppMetadata("Open1602", "0.1.0", "org.open1602.Open1602");
+    SDL_SetAppMetadata("Open1602", O1602_VERSION, "org.open1602.Open1602");
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         return sdl_error("SDL_Init");
     }

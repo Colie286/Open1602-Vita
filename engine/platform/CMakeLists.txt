@@ -25,6 +25,7 @@ add_library(o1602_platform
 add_library(o1602::platform ALIAS o1602_platform)
 
 target_include_directories(o1602_platform PUBLIC include)
+target_compile_definitions(o1602_platform PRIVATE O1602_VERSION="${PROJECT_VERSION}")
 target_link_libraries(o1602_platform PUBLIC o1602::core SDL3::SDL3)
 o1602_set_warnings(o1602_platform)
 

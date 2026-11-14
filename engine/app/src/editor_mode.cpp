@@ -331,9 +331,9 @@ core::Status MapViewer::enter_editor(sim::World world, const std::filesystem::pa
             }
         }
     }
-    std::fprintf(stderr, "editor: %s, %ux%u, %zu islands\n",
+    std::fprintf(stderr, "editor: %s, %ux%u, %llu islands\n",
                  file.empty() ? "new map" : core::path_to_utf8(file).c_str(), m_state->world.width(),
-                 m_state->world.height(), m_state->world.islands().size());
+                 m_state->world.height(), static_cast<unsigned long long>(m_state->world.islands().size()));
     return core::Ok{};
 }
 

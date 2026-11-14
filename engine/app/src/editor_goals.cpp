@@ -201,7 +201,8 @@ void MapViewer::editor_goals_request(const EditorRequest& request) {
     }
     m_editor->document.perform(std::move(op).value());
     m_editor->notice.clear();
-    std::fprintf(stderr, "editor: missions changed (%zu)\n", m_editor->document.world().missions().size());
+    std::fprintf(stderr, "editor: missions changed (%llu)\n",
+                 static_cast<unsigned long long>(m_editor->document.world().missions().size()));
 }
 
 namespace {
